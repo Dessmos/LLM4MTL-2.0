@@ -1,0 +1,78 @@
+module Make2Ant;
+
+create OUT : Ant from IN : Make;
+
+helper context Make!Makefile def: macros() : Sequence(Make!Macro) =
+  self.elements->select(e | e.oclIsKindOf(Make!Macro))->collect(e | e.oclAsType(Make!Macro));
+
+helper context Make!Makefile def: rules() : Sequence(Make!Rule) =
+  self.elements->select(e | e.oclIsKindOf(Make!Rule))->collect(e | e.oclAsType(Make!Rule));
+
+helper context Make!Makefile def: firstRule() : Make!Rule =
+  if self.rules()->isEmpty() then
+    OclUndefined
+  else
+    self.rules()->first()
+  endif;
+
+helper context Make!Rule def: ruleDependencies() : Sequence(Make!Rule) =
+  self.dependencies
+    ->select(d | d.oclIsKindOf(Make!RuleDep))
+    ->collect(d | d.oclAsType(Make!RuleDep).ruledep);
+
+rule Makefile2Project {
+  from
+    mf : Make!Makefile
+  to
+    p : Ant!Project (
+      name <- mf.name,
+      description <- if mf.comment.oclIsUndefined() then OclUndefined else mf.comment.text endif,
+      properties <- mf.macros()->collect(m | thisModule.resolveTemp(m, 'pv')),
+      targets <- mf.rules()->collect(r | thisModule.resolveTemp(r, 't')),
+      default <- if mf.firstRule().oclIsUndefined() then thisModule.resolveTemp(mf.rules()->first(), 't') else thisModule.resolveTemp(mf.firstRule(), 't') endif
+    )
+}
+
+rule Macro2Property {
+  from
+    m : Make!Macro
+  to
+    pv : Ant!PropertyValue (
+      name <- m.name,
+      value <- m.value
+    )
+}
+
+rule Rule2Target {
+  from
+    r : Make!Rule
+  to
+    t : Ant!Target (
+      name <- r.name,
+      depends <- r.ruleDependencies()->collect(rd | thisModule.resolveTemp(rd, 't')),
+      tasks <- r.shellLines->collect(sl | thisModule.resolveTemp(sl, if sl.display then 'echo' else 'exec' endif))
+    )
+}
+
+rule ShellLine2Task_Display {
+  from
+    sl : Make!ShellLine (sl.display = true)
+  to
+    echo : Ant!Echo (
+      message <- sl.command,
+      taskname <- 'echo',
+      description <- sl.command
+    )
+}
+
+rule ShellLine2Task_NoDisplay {
+  from
+    sl : Make!ShellLine (sl.display = false)
+  to
+    exec : Ant!Exec (
+      executable <- sl.command,
+      dir <- '.',
+      taskname <- 'exec',
+      description <- sl.command
+    )
+}

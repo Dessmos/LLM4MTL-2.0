@@ -1,0 +1,227 @@
+module CPL2SPL;
+create OUT : SPL from IN : CPL;
+
+helper def: statement : SPL!Statement =
+  SPL!CompoundStat {
+    location <- 'generated',
+    statements <- Sequence{}
+  };
+
+helper context CPL!NodeContainer def: locations() : Sequence(SPL!URIConstant) =
+  if self.contents->select(e | e.oclIsKindOf(CPL!Location))->isEmpty()
+  then Sequence{}
+  else self.contents->select(e | e.oclIsKindOf(CPL!Location))->collect(l | thisModule.Location2URIConstant(l.oclAsType(CPL!Location)))
+  endif;
+
+helper context CPL!Proxy def: isSimple() : Boolean =
+  (self.busy.oclIsUndefined() or self.busy.contents->isEmpty()) and
+  (self.noAnswer.oclIsUndefined() or self.noAnswer.contents->isEmpty()) and
+  (self.redirection.oclIsUndefined() or self.redirection.contents->isEmpty()) and
+  (self.failure.oclIsUndefined() or self.failure.contents->isEmpty()) and
+  (self.default.oclIsUndefined() or self.default.contents->isEmpty());
+
+rule Location2URIConstant(l : CPL!Location) {
+  to u : SPL!URIConstant (
+    location <- 'generated',
+    uri <- l.url
+  )
+}
+
+rule CPL2Program {
+  from c : CPL!CPL
+  to p : SPL!Program (
+    location <- 'generated',
+    service <- s
+  ),
+  s : SPL!Service (
+    location <- 'generated',
+    name <- 'Service',
+    declarations <- c.subActions->collect(sa | thisModule.SubAction2Function(sa)),
+    sessions <- Sequence{ thisModule.Incoming2Method(c.incoming) }
+  )
+}
+
+rule SubAction2Function(sa : CPL!SubAction) {
+  to f : SPL!LocalFunctionDeclaration (
+    location <- 'generated',
+    name <- sa.id,
+    returnType <- rt,
+    arguments <- Sequence{},
+    statements <- if sa.contents->isEmpty() then Sequence{ thisModule.statement } else sa.contents->collect(n | thisModule.Node2Statement(n)) endif
+  ),
+  rt : SPL!SimpleType (
+    location <- 'generated',
+    type <- #void
+  )
+}
+
+rule Incoming2Method(inc : CPL!Incoming) {
+  to m : SPL!Method (
+    location <- 'generated',
+    type <- mt,
+    direction <- #in,
+    methodName <- mn,
+    arguments <- Sequence{},
+    statements <- if inc.contents->isEmpty() then Sequence{ thisModule.statement } else inc.contents->collect(n | thisModule.Node2Statement(n)) endif,
+    branches <- Sequence{ db }
+  ),
+  mt : SPL!SimpleType (
+    location <- 'generated',
+    type <- #void
+  ),
+  mn : SPL!SIPMethodName (
+    location <- 'generated',
+    name <- #INVITE
+  ),
+  db : SPL!DefaultBranch (
+    location <- 'generated',
+    statements <- Sequence{ thisModule.statement }
+  )
+}
+
+rule Node2Statement(n : CPL!Node) {
+  to st : SPL!Statement (
+    location <- 'generated'
+  )
+}
+
+rule Proxy2Return {
+  from pr : CPL!Proxy (pr.isSimple())
+  to r : SPL!ReturnStat (
+    location <- 'generated',
+    returnedValue <- ce
+  ),
+  ce : SPL!ConstantExp (
+    location <- 'generated',
+    value <- sc
+  ),
+  sc : SPL!SequenceConstant (
+    location <- 'generated',
+    values <- pr.locations()
+  )
+}
+
+rule Proxy2Select {
+  from pr : CPL!Proxy (not pr.isSimple())
+  to sel : SPL!SelectStat (
+    location <- 'generated',
+    matchedExp <- re,
+    selectCases <- Sequence{
+      thisModule.Busy2SelectCase(pr.busy),
+      thisModule.NoAnswer2SelectCase(pr.noAnswer),
+      thisModule.Redirection2SelectCase(pr.redirection)
+    }->select(e | not e.oclIsUndefined()),
+    selectDefault <- thisModule.Default2SelectDefault(pr.default)
+  ),
+  re : SPL!ReasonExp (
+    location <- 'generated'
+  )
+}
+
+rule Busy2SelectCase(b : CPL!Busy) {
+  to c : SPL!SelectCase (
+    location <- 'generated',
+    values <- Sequence{ rc },
+    statements <- if b.oclIsUndefined() or b.contents->isEmpty() then Sequence{ thisModule.statement } else b.contents->collect(n | thisModule.Node2Statement(n)) endif
+  ),
+  rc : SPL!StringConstant (
+    location <- 'generated',
+    value <- 'busy'
+  )
+}
+
+rule NoAnswer2SelectCase(na : CPL!NoAnswer) {
+  to c : SPL!SelectCase (
+    location <- 'generated',
+    values <- Sequence{ rc },
+    statements <- if na.oclIsUndefined() or na.contents->isEmpty() then Sequence{ thisModule.statement } else na.contents->collect(n | thisModule.Node2Statement(n)) endif
+  ),
+  rc : SPL!StringConstant (
+    location <- 'generated',
+    value <- 'noAnswer'
+  )
+}
+
+rule Redirection2SelectCase(rd : CPL!Redirection) {
+  to c : SPL!SelectCase (
+    location <- 'generated',
+    values <- Sequence{ rc },
+    statements <- if rd.oclIsUndefined() or rd.contents->isEmpty() then Sequence{ thisModule.statement } else rd.contents->collect(n | thisModule.Node2Statement(n)) endif
+  ),
+  rc : SPL!StringConstant (
+    location <- 'generated',
+    value <- 'redirection'
+  )
+}
+
+rule Default2SelectDefault(d : CPL!Default) {
+  to def : SPL!SelectDefault (
+    location <- 'generated',
+    statements <- if d.oclIsUndefined() or d.contents->isEmpty() then Sequence{ thisModule.statement } else d.contents->collect(n | thisModule.Node2Statement(n)) endif
+  )
+}
+
+rule SubCall2Return {
+  from sc : CPL!SubCall
+  to r : SPL!ReturnStat (
+    location <- 'generated',
+    returnedValue <- fce
+  ),
+  fce : SPL!FunctionCallExp (
+    location <- 'generated',
+    functionCall <- fc
+  ),
+  fc : SPL!FunctionCall (
+    location <- 'generated',
+    function <- CPL!SubAction.allInstances()->any(sa | sa.id = sc.ref)->asSequence()->first().oclAsType(CPL!SubAction).resolveTemp(thisModule.SubAction2Function, 'f'),
+    parameters <- Sequence{}
+  )
+}
+
+rule Redirect2Return {
+  from red : CPL!Redirect
+  to r : SPL!ReturnStat (
+    location <- 'generated',
+    returnedValue <- ce
+  ),
+  ce : SPL!ConstantExp (
+    location <- 'generated',
+    value <- sc
+  ),
+  sc : SPL!SequenceConstant (
+    location <- 'generated',
+    values <- Sequence{}
+  )
+}
+
+rule AddressSwitch2SelectStat {
+  from sw : CPL!AddressSwitch
+  to sel : SPL!SelectStat (
+    location <- 'generated',
+    matchedExp <- me,
+    selectCases <- sw.addresses->collect(a | thisModule.SwitchedAddress2SelectCase(a)),
+    selectDefault <- thisModule.Otherwise2SelectDefault(sw.otherwise)
+  ),
+  me : SPL!RequestURIExp (
+    location <- 'generated'
+  )
+}
+
+rule SwitchedAddress2SelectCase(a : CPL!SwitchedAddress) {
+  to c : SPL!SelectCase (
+    location <- 'generated',
+    values <- Sequence{ v }->select(e | not e.oclIsUndefined()),
+    statements <- if a.contents->isEmpty() then Sequence{ thisModule.statement } else a.contents->collect(n | thisModule.Node2Statement(n)) endif
+  ),
+  v : SPL!StringConstant (
+    location <- 'generated',
+    value <- if not a.is.oclIsUndefined() then a.is else if not a.contains.oclIsUndefined() then a.contains else if not a.subDomainOf.oclIsUndefined() then a.subDomainOf else '' endif endif endif
+  )
+}
+
+rule Otherwise2SelectDefault(o : CPL!Otherwise) {
+  to def : SPL!SelectDefault (
+    location <- 'generated',
+    statements <- if o.oclIsUndefined() or o.contents->isEmpty() then Sequence{ thisModule.statement } else o.contents->collect(n | thisModule.Node2Statement(n)) endif
+  )
+}

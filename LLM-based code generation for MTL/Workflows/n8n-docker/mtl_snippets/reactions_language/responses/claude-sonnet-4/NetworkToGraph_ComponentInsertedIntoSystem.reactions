@@ -1,0 +1,33 @@
+import ecore "http://vitruv.tools/methodologisttemplate/network"
+import ecore "http://vitruv.tools/methodologisttemplate/graph"
+
+transformation networkToGraph {
+
+  model network "http://vitruv.tools/methodologisttemplate/network"
+  model graph "http://vitruv.tools/methodologisttemplate/graph"
+
+  persistence network {
+    baseUri "http://vitruv.tools/methodologisttemplate/network"
+  }
+
+  persistence graph {
+    baseUri "http://vitruv.tools/methodologisttemplate/graph"
+  }
+
+  reaction ComponentInsertedIntoSystem {
+    after system: network::System.components += component: network::Component
+    call createAndInsertEntity(system, component)
+  }
+
+  routine createAndInsertEntity(system: network::System, component: network::Component) {
+    guard {
+      not corresponds component to graph::Entity
+    }
+    val root: graph::Root = retrieve graph::Root for system
+    create entity: graph::Entity {
+      name = component.name
+    }
+    update root.entities += entity
+    correspond component with entity
+  }
+}

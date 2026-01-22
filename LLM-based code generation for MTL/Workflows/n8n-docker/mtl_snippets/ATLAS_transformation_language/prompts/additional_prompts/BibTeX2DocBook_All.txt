@@ -1,0 +1,3 @@
+Create an ATL transformation module named **BibTeX2DocBook** that converts a **BibTeX** model into a **DocBook** model.  
+Include helper functions **authorSet**, **titledEntrySet**, **articleSet**, and **buildEntryPara()** to collect distinct elements and format entry information.  
+Define transformation rules **Main**, **Author**, **UntitledEntry**, **TitledEntry_Title_NoArticle**, **TitledEntry_NoTitle_NoArticle**, **Article_Title_Journal**, **Article_NoTitle_Journal**, **Article_Title_NoJournal**, and **Article_NoTitle_NoJournal** to generate the corresponding DocBook structure (books, articles, sections, and paragraphs) organized by references, authors, titles, and journals.

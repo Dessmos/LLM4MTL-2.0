@@ -1,0 +1,73 @@
+import amalthea "http://vitruv.tools/methodologisttemplate/amalthea"
+import ascet "http://vitruv.tools/methodologisttemplate/ascet"
+import xtend ui.AscetTaskSelection
+
+transformation amaltheaToAscet {
+  persistence amalthea "http://vitruv.tools/methodologisttemplate/amalthea"
+  persistence ascet "http://vitruv.tools/methodologisttemplate/ascet"
+  reactions {
+    reaction TaskCreated {
+      after insert task: amalthea!Task into container: amalthea!ComponentContainer.tasks {
+        call createAscetTask(task, container)
+      }
+    }
+  }
+  routines {
+    routine createAscetTask(task: amalthea!Task, container: amalthea!ComponentContainer) {
+      val choice = AscetTaskSelection.selectTaskType(#["InterruptTask","PeriodicTask","SoftwareTask","TimeTableTask"])
+      if (choice == null) { return }
+      if (choice == "InterruptTask") { call createInterruptTask(task, container) }
+      else if (choice == "PeriodicTask") { call createPeriodicTask(task, container) }
+      else if (choice == "SoftwareTask") { call createSoftwareTask(task, container) }
+      else if (choice == "TimeTableTask") { call createTimeTableTask(task, container) }
+    }
+    routine createInterruptTask(task: amalthea!Task, container: amalthea!ComponentContainer) {
+      guard {
+        getCorrespondingElement(task, ascet!InterruptTask, false, false) == null
+      }
+      create {
+        val module = getCorrespondingElement(container, ascet!AscetModule, false, false)
+        if (module == null) { return }
+        val newTask = new ascet!InterruptTask
+        module.tasks += newTask
+        link task <-> newTask
+      }
+    }
+    routine createPeriodicTask(task: amalthea!Task, container: amalthea!ComponentContainer) {
+      guard {
+        getCorrespondingElement(task, ascet!PeriodicTask, false, false) == null
+      }
+      create {
+        val module = getCorrespondingElement(container, ascet!AscetModule, false, false)
+        if (module == null) { return }
+        val newTask = new ascet!PeriodicTask
+        module.tasks += newTask
+        link task <-> newTask
+      }
+    }
+    routine createSoftwareTask(task: amalthea!Task, container: amalthea!ComponentContainer) {
+      guard {
+        getCorrespondingElement(task, ascet!SoftwareTask, false, false) == null
+      }
+      create {
+        val module = getCorrespondingElement(container, ascet!AscetModule, false, false)
+        if (module == null) { return }
+        val newTask = new ascet!SoftwareTask
+        module.tasks += newTask
+        link task <-> newTask
+      }
+    }
+    routine createTimeTableTask(task: amalthea!Task, container: amalthea!ComponentContainer) {
+      guard {
+        getCorrespondingElement(task, ascet!TimeTableTask, false, false) == null
+      }
+      create {
+        val module = getCorrespondingElement(container, ascet!AscetModule, false, false)
+        if (module == null) { return }
+        val newTask = new ascet!TimeTableTask
+        module.tasks += newTask
+        link task <-> newTask
+      }
+    }
+  }
+}

@@ -1,0 +1,245 @@
+module CPL2SPL;
+create OUT : SPL from IN : CPL;
+
+helper def: statement : SPL!Statement =
+  thisModule.defaultCompoundStat();
+
+helper def: locations : Sequence(SPL!URIConstant) =
+  Sequence{};
+
+helper context CPL!Proxy def: isSimple : Boolean =
+  (self.busy.oclIsUndefined() or self.busy.contents->isEmpty()) and
+  (self.noAnswer.oclIsUndefined() or self.noAnswer.contents->isEmpty()) and
+  (self.redirection.oclIsUndefined() or self.redirection.contents->isEmpty()) and
+  (self.failure.oclIsUndefined() or self.failure.contents->isEmpty()) and
+  (self.default.oclIsUndefined() or self.default.contents->isEmpty());
+
+helper def: defaultCompoundStat() : SPL!CompoundStat =
+  SPL!CompoundStat.newInstance().setLocation('generated').setStatements(Sequence{});
+
+helper def: emptyUriSequenceConstant() : SPL!SequenceConstant =
+  SPL!SequenceConstant.newInstance().setLocation('generated').setValues(Sequence{});
+
+helper def: uriConstantFromString(u : String) : SPL!URIConstant =
+  SPL!URIConstant.newInstance().setLocation('generated').setUri(u);
+
+helper def: stringConstantFromString(s : String) : SPL!StringConstant =
+  SPL!StringConstant.newInstance().setLocation('generated').setValue(s);
+
+helper def: constantExpFromConstant(c : SPL!Constant) : SPL!ConstantExp =
+  SPL!ConstantExp.newInstance().setLocation('generated').setValue(c);
+
+helper def: methodNameFromIncoming() : SPL!SIPMethodName =
+  SPL!SIPMethodName.newInstance().setLocation('generated').setName(#INVITE);
+
+helper def: defaultMethodType() : SPL!SimpleType =
+  SPL!SimpleType.newInstance().setLocation('generated').setType(#void);
+
+helper def: defaultReturnTypeUriSeq() : SPL!SequenceType =
+  SPL!SequenceType.newInstance().setLocation('generated').setType(#uri);
+
+helper def: newSelectStat(matchExp : SPL!Expression, cases : Sequence(SPL!SelectCase), deflt : SPL!SelectDefault) : SPL!SelectStat =
+  SPL!SelectStat.newInstance().setLocation('generated').setMatchedExp(matchExp).setSelectCases(cases).setSelectDefault(deflt);
+
+helper def: newSelectCase(vals : Sequence(SPL!Constant), stats : Sequence(SPL!Statement)) : SPL!SelectCase =
+  SPL!SelectCase.newInstance().setLocation('generated').setValues(vals).setStatements(stats);
+
+helper def: newSelectDefault(stats : Sequence(SPL!Statement)) : SPL!SelectDefault =
+  SPL!SelectDefault.newInstance().setLocation('generated').setStatements(stats);
+
+helper def: newReturnStat(exp : SPL!Expression) : SPL!ReturnStat =
+  SPL!ReturnStat.newInstance().setLocation('generated').setReturnedValue(exp);
+
+helper def: requestUriExp() : SPL!RequestURIExp =
+  SPL!RequestURIExp.newInstance().setLocation('generated');
+
+helper def: locationsSeqConstantFromProxy(p : CPL!Proxy) : SPL!SequenceConstant =
+  SPL!SequenceConstant.newInstance().setLocation('generated').setValues(
+    p.contents->select(e | e.oclIsKindOf(CPL!Location))->collect(l | thisModule.Location2URIConstant(l.oclAsType(CPL!Location)))
+  );
+
+rule Location2URIConstant(l : CPL!Location) {
+  to c : SPL!URIConstant (
+    location <- 'generated',
+    uri <- l.url
+  )
+}
+
+rule CPL2Program {
+  from c : CPL!CPL
+  to p : SPL!Program (
+    location <- 'generated',
+    service <- s
+  ),
+  s : SPL!Service (
+    location <- 'generated',
+    name <- 'CPLService',
+    declarations <- c.subActions->collect(sa | thisModule.resolveTemp(sa, 'f'))->asSequence(),
+    sessions <- Sequence{ thisModule.resolveTemp(c.incoming, 'm') }
+  )
+}
+
+rule SubAction2Function {
+  from sa : CPL!SubAction
+  to f : SPL!LocalFunctionDeclaration (
+    location <- 'generated',
+    name <- sa.id,
+    returnType <- thisModule.defaultReturnTypeUriSeq(),
+    arguments <- Sequence{},
+    statements <- if sa.contents->isEmpty() then Sequence{ thisModule.defaultCompoundStat() } else sa.contents->collect(n | thisModule.statementFromNode(n))->asSequence()
+  )
+}
+
+rule Incoming2Method {
+  from i : CPL!Incoming
+  to m : SPL!Method (
+    location <- 'generated',
+    type <- thisModule.defaultMethodType(),
+    direction <- #in,
+    methodName <- thisModule.methodNameFromIncoming(),
+    arguments <- Sequence{},
+    statements <- if i.contents->isEmpty() then Sequence{ thisModule.defaultCompoundStat() } else i.contents->collect(n | thisModule.statementFromNode(n))->asSequence(),
+    branches <- Sequence{ db }
+  ),
+  db : SPL!DefaultBranch (
+    location <- 'generated',
+    statements <- Sequence{ thisModule.defaultCompoundStat() }
+  )
+}
+
+helper def: statementFromNode(n : CPL!Node) : SPL!Statement =
+  if n.oclIsKindOf(CPL!Proxy) then
+    if n.oclAsType(CPL!Proxy).isSimple then
+      thisModule.resolveTemp(n, 'r')
+    else
+      thisModule.resolveTemp(n, 's')
+    endif
+  else
+    if n.oclIsKindOf(CPL!SubCall) then
+      thisModule.resolveTemp(n, 'r')
+    else
+      if n.oclIsKindOf(CPL!Redirect) then
+        thisModule.resolveTemp(n, 'r')
+      else
+        if n.oclIsKindOf(CPL!AddressSwitch) then
+          thisModule.resolveTemp(n, 'ss')
+        else
+          thisModule.defaultCompoundStat()
+        endif
+      endif
+    endif
+  endif;
+
+rule Proxy2Return {
+  from p : CPL!Proxy (p.isSimple)
+  to r : SPL!ReturnStat (
+    location <- 'generated',
+    returnedValue <- thisModule.constantExpFromConstant(thisModule.locationsSeqConstantFromProxy(p))
+  )
+}
+
+rule Proxy2Select {
+  from p : CPL!Proxy (not p.isSimple)
+  to s : SPL!SelectStat (
+    location <- 'generated',
+    matchedExp <- thisModule.requestUriExp(),
+    selectCases <- Sequence{
+      if p.busy.oclIsUndefined() then OclUndefined else thisModule.resolveTemp(p.busy, 'sc') endif,
+      if p.noAnswer.oclIsUndefined() then OclUndefined else thisModule.resolveTemp(p.noAnswer, 'sc') endif,
+      if p.redirection.oclIsUndefined() then OclUndefined else thisModule.resolveTemp(p.redirection, 'sc') endif
+    }->select(x | not x.oclIsUndefined())->asSequence(),
+    selectDefault <- if p.default.oclIsUndefined() then thisModule.resolveTemp(p, 'sd0') else thisModule.resolveTemp(p.default, 'sd') endif
+  ),
+  sd0 : SPL!SelectDefault (
+    location <- 'generated',
+    statements <- Sequence{ thisModule.newReturnStat(thisModule.constantExpFromConstant(thisModule.locationsSeqConstantFromProxy(p))) }
+  )
+}
+
+rule Busy2SelectCase {
+  from b : CPL!Busy
+  to sc : SPL!SelectCase (
+    location <- 'generated',
+    values <- Sequence{ thisModule.stringConstantFromString('busy') },
+    statements <- if b.contents->isEmpty() then Sequence{ thisModule.defaultCompoundStat() } else b.contents->collect(n | thisModule.statementFromNode(n))->asSequence() endif
+  )
+}
+
+rule NoAnswer2SelectCase {
+  from n : CPL!NoAnswer
+  to sc : SPL!SelectCase (
+    location <- 'generated',
+    values <- Sequence{ thisModule.stringConstantFromString('noAnswer') },
+    statements <- if n.contents->isEmpty() then Sequence{ thisModule.defaultCompoundStat() } else n.contents->collect(x | thisModule.statementFromNode(x))->asSequence() endif
+  )
+}
+
+rule Redirection2SelectCase {
+  from r : CPL!Redirection
+  to sc : SPL!SelectCase (
+    location <- 'generated',
+    values <- Sequence{ thisModule.stringConstantFromString('redirection') },
+    statements <- if r.contents->isEmpty() then Sequence{ thisModule.defaultCompoundStat() } else r.contents->collect(x | thisModule.statementFromNode(x))->asSequence() endif
+  )
+}
+
+rule Default2SelectDefault {
+  from d : CPL!Default
+  to sd : SPL!SelectDefault (
+    location <- 'generated',
+    statements <- if d.contents->isEmpty() then Sequence{ thisModule.defaultCompoundStat() } else d.contents->collect(x | thisModule.statementFromNode(x))->asSequence() endif
+  )
+}
+
+rule SubCall2Return {
+  from sc : CPL!SubCall
+  to r : SPL!ReturnStat (
+    location <- 'generated',
+    returnedValue <- thisModule.constantExpFromConstant(thisModule.emptyUriSequenceConstant())
+  )
+}
+
+rule Redirect2Return {
+  from rd : CPL!Redirect
+  to r : SPL!ReturnStat (
+    location <- 'generated',
+    returnedValue <- thisModule.constantExpFromConstant(thisModule.emptyUriSequenceConstant())
+  )
+}
+
+rule AddressSwitch2SelectStat {
+  from sw : CPL!AddressSwitch
+  to ss : SPL!SelectStat (
+    location <- 'generated',
+    matchedExp <- thisModule.requestUriExp(),
+    selectCases <- sw.addresses->collect(a | thisModule.resolveTemp(a, 'sc'))->asSequence(),
+    selectDefault <- if sw.otherwise.oclIsUndefined() then thisModule.resolveTemp(sw, 'sd0') else thisModule.resolveTemp(sw.otherwise, 'sd') endif
+  ),
+  sd0 : SPL!SelectDefault (
+    location <- 'generated',
+    statements <- Sequence{ thisModule.defaultCompoundStat() }
+  )
+}
+
+rule SwitchedAddress2SelectCase {
+  from a : CPL!SwitchedAddress
+  to sc : SPL!SelectCase (
+    location <- 'generated',
+    values <- Sequence{ thisModule.stringConstantFromString(
+      if not a.is.oclIsUndefined() and a.is <> '' then a.is
+      else if not a.contains.oclIsUndefined() and a.contains <> '' then a.contains
+      else if not a.subDomainOf.oclIsUndefined() and a.subDomainOf <> '' then a.subDomainOf
+      else ''
+      endif endif endif
+    ) },
+    statements <- if a.contents->isEmpty() then Sequence{ thisModule.defaultCompoundStat() } else a.contents->collect(n | thisModule.statementFromNode(n))->asSequence() endif
+  )
+}
+
+rule Otherwise2SelectDefault {
+  from o : CPL!Otherwise
+  to sd : SPL!SelectDefault (
+    location <- 'generated',
+    statements <- if o.contents->isEmpty() then Sequence{ thisModule.defaultCompoundStat() } else o.contents->collect(n | thisModule.statementFromNode(n))->asSequence() endif
+  )
+}

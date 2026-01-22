@@ -1,0 +1,14 @@
+import metamodel "http://vitruv.tools/methodologisttemplate/families"
+import metamodel "http://vitruv.tools/methodologisttemplate/persons"
+transformation familiesToPersons {
+  persistences {
+    families: "http://vitruv.tools/methodologisttemplate/families"
+    persons: "http://vitruv.tools/methodologisttemplate/persons"
+  }
+  reaction InsertedDaughter {
+    after inserted families::Member newDaughter into families::Family::daughters {
+      call createOrFindFemale(newDaughter)
+      call updateNameAndCorrespondencesOfCorrespondingPerson(newDaughter)
+    }
+  }
+}

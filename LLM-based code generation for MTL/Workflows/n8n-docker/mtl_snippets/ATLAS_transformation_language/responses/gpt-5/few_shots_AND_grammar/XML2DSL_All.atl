@@ -1,0 +1,227 @@
+module XML2DSL;
+create OUT : DSL from IN : XML;
+
+helper def : getAttrVal(e : XML!Element, n : String) : String =
+	if e.children->select(c | c.oclIsKindOf(XML!Attribute) and c.name = n)->size() > 0
+	then e.children->select(c | c.oclIsKindOf(XML!Attribute) and c.name = n)->first().oclAsType(XML!Attribute).value
+	else ''
+	endif;
+
+helper def : getAttrBool(e : XML!Element, n : String) : Boolean =
+	let v : String = thisModule.getAttrVal(e, n) in
+	if v = 'true' or v = '1' then true else false endif;
+
+helper def : hasAttr(e : XML!Element, n : String) : Boolean =
+	e.children->exists(c | c.oclIsKindOf(XML!Attribute) and c.name = n);
+
+helper def : get(child : XML!Element, n : String) : Sequence(XML!Element) =
+	child.children->select(c | c.oclIsKindOf(XML!Element) and c.name = n)->collect(x | x.oclAsType(XML!Element));
+
+helper def : hasChildren(e : XML!Element, n : String) : Boolean =
+	e.children->exists(c | c.oclIsKindOf(XML!Element) and c.name = n);
+
+helper def : getText(e : XML!Element) : String =
+	if e.children->select(c | c.oclIsKindOf(XML!Text))->size() > 0
+	then e.children->select(c | c.oclIsKindOf(XML!Text))->first().oclAsType(XML!Text).value
+	else ''
+	endif;
+
+helper def : getSeq(e : XML!Element, n : String) : Sequence(XML!Element) =
+	thisModule.get(e, n);
+
+helper def : isAbstract(ec : XML!Element) : Boolean =
+	thisModule.getAttrBool(ec, 'abstract') or thisModule.getAttrBool(ec, 'isAbstract');
+
+helper def : getContainment(ref : XML!Element) : Boolean =
+	thisModule.getAttrBool(ref, 'containment');
+
+helper def : getEnumId(e : XML!Element) : String =
+	let id0 : String = thisModule.getAttrVal(e, 'xmi:id') in
+	if id0 <> '' then id0 else thisModule.getAttrVal(e, 'id') endif;
+
+helper def : dslElementsById(id : String) : OclAny =
+	OUT!NamedElement.allInstances()->select(ne | ne.identity = id)->any(true);
+
+helper def : findType(ownerPkg : XML!Element, t : String) : XML!Element =
+	XML!Element.allInstances()
+		->select(e | e.name = 'eClassifiers' and thisModule.getAttrVal(e, 'name') = t)
+		->any(true);
+
+helper def : getType(ownerPkg : XML!Element, t : String) : OUT!Type =
+	if t = 'EString' or t = 'String' then OUT!SimpleType.allInstances()->select(st | st.name = 'String')->any(true)
+	else if t = 'EInt' or t = 'EInteger' or t = 'Integer' then OUT!SimpleType.allInstances()->select(st | st.name = 'Integer')->any(true)
+	else if t = 'EBoolean' or t = 'Boolean' then OUT!SimpleType.allInstances()->select(st | st.name = 'Boolean')->any(true)
+	else if t = 'EDouble' or t = 'Double' or t = 'Real' then OUT!SimpleType.allInstances()->select(st | st.name = 'Double')->any(true)
+	else
+		let hit : OclAny = thisModule.dslElementsById(t) in
+		if hit.oclIsUndefined()
+		then OUT!Enumeration.allInstances()->select(et | et.name = t)->any(true)
+		else hit.oclAsType(OUT!Type)
+		endif
+	endif endif endif endif;
+
+helper def : getSubTypes(c : OUT!Classifier) : Sequence(OUT!Classifier) =
+	OUT!Classifier.allInstances()->select(x | not x.superType.oclIsUndefined() and x.superType = c);
+
+rule DomainModel {
+	from p : XML!Element (p.name = 'ecore:EPackage' or p.name = 'EPackage')
+	to dm : OUT!DomainModel (
+		name <- thisModule.getAttrVal(p, 'name'),
+		identity <- thisModule.getAttrVal(p, 'nsURI'),
+		namespace <- thisModule.getAttrVal(p, 'nsURI'),
+		isLoaded <- true,
+		types <- Sequence {
+			thisModule.SimpleTypeString(),
+			thisModule.SimpleTypeInteger(),
+			thisModule.SimpleTypeBoolean(),
+			thisModule.SimpleTypeDouble()
+		}->union(
+			p.children->select(c | c.oclIsKindOf(XML!Element) and c.oclAsType(XML!Element).name = 'eClassifiers' and thisModule.getAttrVal(c.oclAsType(XML!Element), 'xsi:type') = 'ecore:EEnum')
+				->collect(e | thisModule.Enumeration(e.oclAsType(XML!Element)))
+		),
+		classifiers <- p.children->select(c | c.oclIsKindOf(XML!Element) and c.oclAsType(XML!Element).name = 'eClassifiers' and thisModule.getAttrVal(c.oclAsType(XML!Element), 'xsi:type') = 'ecore:EClass')
+			->collect(e |
+				if e.oclAsType(XML!Element).children->select(ch | ch.oclIsKindOf(XML!Element) and ch.oclAsType(XML!Element).name = 'eStructuralFeatures' and thisModule.getAttrVal(ch.oclAsType(XML!Element), 'xsi:type') = 'ecore:EReference' and ch.oclAsType(XML!Element).children->exists(x | x.oclIsKindOf(XML!Attribute) and x.name = 'eOpposite'))->size() > 0
+				then thisModule.Relationship(e.oclAsType(XML!Element))
+				else thisModule.Class(e.oclAsType(XML!Element))
+				endif
+			)
+	)
+	do {
+		for (cl in dm.classifiers) {
+			if (not cl.superType.oclIsUndefined()) then {
+				cl.superType.subTypes <- cl.superType.subTypes->including(cl);
+			} else { } endif;
+		}
+	}
+}
+
+unique lazy rule SimpleTypeString {
+	from s : XML!Root
+	to t : OUT!SimpleType (
+		name <- 'String',
+		identity <- 'PrimitiveTypes/String',
+		namespace <- 'PrimitiveTypes',
+		isLoaded <- true
+	)
+}
+
+unique lazy rule SimpleTypeInteger {
+	from s : XML!Root
+	to t : OUT!SimpleType (
+		name <- 'Integer',
+		identity <- 'PrimitiveTypes/Integer',
+		namespace <- 'PrimitiveTypes',
+		isLoaded <- true
+	)
+}
+
+unique lazy rule SimpleTypeBoolean {
+	from s : XML!Root
+	to t : OUT!SimpleType (
+		name <- 'Boolean',
+		identity <- 'PrimitiveTypes/Boolean',
+		namespace <- 'PrimitiveTypes',
+		isLoaded <- true
+	)
+}
+
+unique lazy rule SimpleTypeDouble {
+	from s : XML!Root
+	to t : OUT!SimpleType (
+		name <- 'Double',
+		identity <- 'PrimitiveTypes/Double',
+		namespace <- 'PrimitiveTypes',
+		isLoaded <- true
+	)
+}
+
+unique lazy rule Class {
+	from ec : XML!Element (ec.name = 'eClassifiers' and thisModule.getAttrVal(ec, 'xsi:type') = 'ecore:EClass')
+	to c : OUT!Class (
+		name <- thisModule.getAttrVal(ec, 'name'),
+		identity <- thisModule.getAttrVal(ec, 'name'),
+		isLoaded <- true,
+		isAbstract <- thisModule.isAbstract(ec),
+		properties <- ec.children->select(sf | sf.oclIsKindOf(XML!Element) and sf.oclAsType(XML!Element).name = 'eStructuralFeatures' and thisModule.getAttrVal(sf.oclAsType(XML!Element), 'xsi:type') = 'ecore:EAttribute')
+			->collect(a | thisModule.ValueProperty(a.oclAsType(XML!Element))),
+		superType <- if thisModule.getAttrVal(ec, 'eSuperTypes') <> ''
+			then thisModule.dslElementsById(thisModule.getAttrVal(ec, 'eSuperTypes')).oclAsType(OUT!Classifier)
+			else OclUndefined
+			endif,
+		subTypes <- Sequence {}
+	)
+}
+
+unique lazy rule Relationship {
+	from ec : XML!Element (ec.name = 'eClassifiers' and thisModule.getAttrVal(ec, 'xsi:type') = 'ecore:EClass')
+	to r : OUT!Relationship (
+		name <- thisModule.getAttrVal(ec, 'name'),
+		identity <- thisModule.getAttrVal(ec, 'name'),
+		isLoaded <- true,
+		isAbstract <- thisModule.isAbstract(ec),
+		isEmbedding <- ec.children->select(sf | sf.oclIsKindOf(XML!Element) and sf.oclAsType(XML!Element).name = 'eStructuralFeatures' and thisModule.getAttrVal(sf.oclAsType(XML!Element), 'name') = 'roles')->size() > 0
+			and thisModule.getContainment(ec.children->select(sf | sf.oclIsKindOf(XML!Element) and sf.oclAsType(XML!Element).name = 'eStructuralFeatures' and thisModule.getAttrVal(sf.oclAsType(XML!Element), 'name') = 'roles')->first().oclAsType(XML!Element)),
+		properties <- ec.children->select(sf | sf.oclIsKindOf(XML!Element) and sf.oclAsType(XML!Element).name = 'eStructuralFeatures' and thisModule.getAttrVal(sf.oclAsType(XML!Element), 'xsi:type') = 'ecore:EAttribute')
+			->collect(a | thisModule.ValueProperty(a.oclAsType(XML!Element))),
+		roles <- ec.children->select(sf | sf.oclIsKindOf(XML!Element) and sf.oclAsType(XML!Element).name = 'eStructuralFeatures' and thisModule.getAttrVal(sf.oclAsType(XML!Element), 'xsi:type') = 'ecore:EReference')
+			->collect(er | thisModule.Role(er.oclAsType(XML!Element))),
+		superType <- if thisModule.getAttrVal(ec, 'eSuperTypes') <> ''
+			then thisModule.dslElementsById(thisModule.getAttrVal(ec, 'eSuperTypes')).oclAsType(OUT!Classifier)
+			else OclUndefined
+			endif,
+		subTypes <- Sequence {}
+	)
+	do {
+		for (ro in r.roles) {
+			ro.relation <- r;
+		}
+	}
+}
+
+unique lazy rule Role {
+	from er : XML!Element (er.name = 'eStructuralFeatures' and thisModule.getAttrVal(er, 'xsi:type') = 'ecore:EReference')
+	to ro : OUT!Role (
+		name <- thisModule.getAttrVal(er, 'name'),
+		identity <- thisModule.getAttrVal(er, 'name'),
+		min <- if thisModule.getAttrVal(er, 'lowerBound') = '' then 0 else thisModule.getAttrVal(er, 'lowerBound').toInteger() endif,
+		max <- if thisModule.getAttrVal(er, 'upperBound') = '' then 1 else thisModule.getAttrVal(er, 'upperBound').toInteger() endif,
+		isUnbounded <- thisModule.getAttrVal(er, 'upperBound') = '-1',
+		accepts <- thisModule.getAttrVal(er, 'eType'),
+		isOrdered <- thisModule.getAttrBool(er, 'ordered'),
+		isNavigableFrom <- true,
+		isPropertyGenerator <- thisModule.getContainment(er),
+		source <- OclUndefined,
+		type <- if thisModule.getAttrVal(er, 'eType') <> '' then thisModule.dslElementsById(thisModule.getAttrVal(er, 'eType')).oclAsType(OUT!Classifier) else OclUndefined endif
+	)
+}
+
+unique lazy rule ValueProperty {
+	from ea : XML!Element (ea.name = 'eStructuralFeatures' and thisModule.getAttrVal(ea, 'xsi:type') = 'ecore:EAttribute')
+	to vp : OUT!ValueProperty (
+		name <- thisModule.getAttrVal(ea, 'name'),
+		identity <- thisModule.getAttrVal(ea, 'name'),
+		type <- thisModule.getType(OclUndefined, thisModule.getAttrVal(ea, 'eType'))
+	)
+}
+
+unique lazy rule Enumeration {
+	from en : XML!Element (en.name = 'eClassifiers' and thisModule.getAttrVal(en, 'xsi:type') = 'ecore:EEnum')
+	to e : OUT!Enumeration (
+		name <- thisModule.getAttrVal(en, 'name'),
+		identity <- thisModule.getEnumId(en),
+		namespace <- 'Types',
+		isLoaded <- true,
+		literals <- en.children->select(l | l.oclIsKindOf(XML!Element) and l.oclAsType(XML!Element).name = 'eLiterals')
+			->collect(l | thisModule.EnumerationLiteral(l.oclAsType(XML!Element)))
+	)
+}
+
+unique lazy rule EnumerationLiteral {
+	from lit : XML!Element (lit.name = 'eLiterals')
+	to l : OUT!EnumerationLiteral (
+		name <- thisModule.getAttrVal(lit, 'name'),
+		identity <- thisModule.getAttrVal(lit, 'name'),
+		value <- if thisModule.getAttrVal(lit, 'value') = '' then 0 else thisModule.getAttrVal(lit, 'value').toInteger() endif
+	)
+}

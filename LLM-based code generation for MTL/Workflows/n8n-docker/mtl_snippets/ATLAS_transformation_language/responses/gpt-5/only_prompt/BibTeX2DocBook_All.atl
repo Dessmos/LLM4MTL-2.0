@@ -1,0 +1,209 @@
+module BibTeX2DocBook;
+
+create OUT : DocBook from IN : BibTeX;
+
+helper context BibTeX!BibTeXFile def: authorSet : Set(BibTeX!Author) =
+	self.entries->select(e | e.oclIsKindOf(BibTeX!AuthoredEntry))
+		->collect(e | e.oclAsType(BibTeX!AuthoredEntry).authors)
+		->flatten()
+		->asSet();
+
+helper context BibTeX!BibTeXFile def: titledEntrySet : Set(BibTeX!TitledEntry) =
+	self.entries->select(e | e.oclIsKindOf(BibTeX!TitledEntry))
+		->collect(e | e.oclAsType(BibTeX!TitledEntry))
+		->asSet();
+
+helper context BibTeX!BibTeXFile def: articleSet : Set(BibTeX!Article) =
+	self.entries->select(e | e.oclIsKindOf(BibTeX!Article))
+		->collect(e | e.oclAsType(BibTeX!Article))
+		->asSet();
+
+helper context BibTeX!BibTeXEntry def: buildEntryPara() : DocBook!Para =
+	thisModule.buildParaFromEntry(self);
+
+helper def: buildParaFromEntry(e : BibTeX!BibTeXEntry) : DocBook!Para =
+	DocBook!Para.newInstance().tap(p |
+		p.content <- thisModule.entryToString(e)
+	);
+
+helper def: entryToString(e : BibTeX!BibTeXEntry) : String =
+	if e.oclIsKindOf(BibTeX!Article) then
+		let a : BibTeX!Article = e.oclAsType(BibTeX!Article) in
+		'@' + a.id +
+		(if a.title.oclIsUndefined() then '' else ' - ' + a.title endif) +
+		(if a.journal.oclIsUndefined() then '' else ' (' + a.journal + ')' endif) +
+		' - ' + a.year
+	else if e.oclIsKindOf(BibTeX!TitledEntry) then
+		let t : BibTeX!TitledEntry = e.oclAsType(BibTeX!TitledEntry) in
+		'@' + t.id + ' - ' + t.title
+	else
+		'@' + e.id
+	endif endif;
+
+helper context BibTeX!AuthoredEntry def: authorNames : String =
+	self.authors->collect(a | a.author)->asSequence()->sep(', ');
+
+helper def: selectEntriesByAuthor(f : BibTeX!BibTeXFile, a : BibTeX!Author) : Sequence(BibTeX!BibTeXEntry) =
+	f.entries
+		->select(e | e.oclIsKindOf(BibTeX!AuthoredEntry) and e.oclAsType(BibTeX!AuthoredEntry).authors->exists(x | x.author = a.author))
+		->asSequence();
+
+helper def: untitledEntries(s : Sequence(BibTeX!BibTeXEntry)) : Sequence(BibTeX!BibTeXEntry) =
+	s->select(e | not e.oclIsKindOf(BibTeX!TitledEntry) and not e.oclIsKindOf(BibTeX!Article))->asSequence();
+
+helper def: titledEntriesNoArticle(s : Sequence(BibTeX!BibTeXEntry)) : Sequence(BibTeX!TitledEntry) =
+	s->select(e | e.oclIsKindOf(BibTeX!TitledEntry) and not e.oclIsKindOf(BibTeX!Article))
+	 ->collect(e | e.oclAsType(BibTeX!TitledEntry))
+	 ->asSequence();
+
+helper def: articles(s : Sequence(BibTeX!BibTeXEntry)) : Sequence(BibTeX!Article) =
+	s->select(e | e.oclIsKindOf(BibTeX!Article))->collect(e | e.oclAsType(BibTeX!Article))->asSequence();
+
+helper def: hasTitle(t : BibTeX!TitledEntry) : Boolean =
+	not t.title.oclIsUndefined() and t.title <> '';
+
+helper def: hasJournal(a : BibTeX!Article) : Boolean =
+	not a.journal.oclIsUndefined() and a.journal <> '';
+
+rule Main {
+	from
+		f : BibTeX!BibTeXFile
+	to
+		db : DocBook!DocBook (
+			books <- Sequence{
+				DocBook!Book (
+					articles <- Sequence{
+						DocBook!Article (
+							title <- 'References',
+							sections_1 <- Sequence{
+								DocBook!Sect1 (
+									title <- 'By author',
+									sections_2 <- f.authorSet->asSequence()->collect(a | thisModule.resolveTemp(a, 's2'))
+								)
+							}
+						)
+					}
+				}
+			)
+		)
+}
+
+rule Author {
+	from
+		a : BibTeX!Author
+	to
+		s2 : DocBook!Sect2 (
+			title <- a.author,
+			paras <- Sequence{ DocBook!Para (content <- 'Entries by ' + a.author) }
+		),
+		s1 : DocBook!Sect1 (
+			title <- a.author,
+			paras <- Sequence{},
+			sections_2 <- Sequence{
+				thisModule.resolveTemp(a, 's2_untitled'),
+				thisModule.resolveTemp(a, 's2_titled_noarticle'),
+				thisModule.resolveTemp(a, 's2_article')
+			}
+		),
+		s2_untitled : DocBook!Sect2 (
+			title <- 'Untitled entries',
+			paras <- Sequence{}
+		),
+		s2_titled_noarticle : DocBook!Sect2 (
+			title <- 'Titled entries (non-article)',
+			paras <- Sequence{},
+			-- nested grouping by title/no-title
+			-- implemented as paras blocks created by separate rules using unique source patterns
+			-- (resolved via lazy rule application)
+			paras <- Sequence{}
+		),
+		s2_article : DocBook!Sect2 (
+			title <- 'Articles',
+			paras <- Sequence{}
+		)
+	do {
+		var f : BibTeX!BibTeXFile;
+		f := BibTeX!BibTeXFile.allInstances()->any(true);
+
+		s2_untitled.paras <- thisModule.untitledEntries(thisModule.selectEntriesByAuthor(f, a))->collect(e | e.buildEntryPara());
+		s2_titled_noarticle.paras <- thisModule.titledEntriesNoArticle(thisModule.selectEntriesByAuthor(f, a))->collect(e | e.buildEntryPara());
+		s2_article.paras <- thisModule.articles(thisModule.selectEntriesByAuthor(f, a))->collect(e | e.buildEntryPara());
+	}
+}
+
+rule UntitledEntry {
+	from
+		e : BibTeX!BibTeXEntry (
+			not e.oclIsKindOf(BibTeX!TitledEntry) and not e.oclIsKindOf(BibTeX!Article)
+		)
+	to
+		p : DocBook!Para (
+			content <- thisModule.entryToString(e)
+		)
+}
+
+rule TitledEntry_Title_NoArticle {
+	from
+		t : BibTeX!TitledEntry (
+			thisModule.hasTitle(t) and not t.oclIsKindOf(BibTeX!Article)
+		)
+	to
+		p : DocBook!Para (
+			content <- thisModule.entryToString(t)
+		)
+}
+
+rule TitledEntry_NoTitle_NoArticle {
+	from
+		t : BibTeX!TitledEntry (
+			not thisModule.hasTitle(t) and not t.oclIsKindOf(BibTeX!Article)
+		)
+	to
+		p : DocBook!Para (
+			content <- thisModule.entryToString(t)
+		)
+}
+
+rule Article_Title_Journal {
+	from
+		a : BibTeX!Article (
+			thisModule.hasTitle(a) and thisModule.hasJournal(a)
+		)
+	to
+		p : DocBook!Para (
+			content <- thisModule.entryToString(a)
+		)
+}
+
+rule Article_NoTitle_Journal {
+	from
+		a : BibTeX!Article (
+			not thisModule.hasTitle(a) and thisModule.hasJournal(a)
+		)
+	to
+		p : DocBook!Para (
+			content <- thisModule.entryToString(a)
+		)
+}
+
+rule Article_Title_NoJournal {
+	from
+		a : BibTeX!Article (
+			thisModule.hasTitle(a) and not thisModule.hasJournal(a)
+		)
+	to
+		p : DocBook!Para (
+			content <- thisModule.entryToString(a)
+		)
+}
+
+rule Article_NoTitle_NoJournal {
+	from
+		a : BibTeX!Article (
+			not thisModule.hasTitle(a) and not thisModule.hasJournal(a)
+		)
+	to
+		p : DocBook!Para (
+			content <- thisModule.entryToString(a)
+		)
+}

@@ -1,0 +1,4 @@
+Create an ATL transformation module named **DSL2KM3** that converts models conforming to the **DSL** metamodel into models conforming to the **KM3** metamodel.  
+Include helpers: **needTurnOnClass**, **getRoles**, and **isEmbedding** to determine when relationships should be converted to classes and how roles are handled.  
+Define transformation rules: **Metamodel**, **Class**, **Relation2Class**, **SimpleReference**, **ComplexReference**, **Attribute**, **Enumeration**, **EnumLiteral**, and **DataType**.  
+Each rule must construct the matching KM3 elements, copying structural, type, and multiplicity information from the corresponding DSL elements.

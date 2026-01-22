@@ -1,0 +1,17 @@
+import epackage "http://vitruv.tools/methodologisttemplate/amalthea" as amalthea
+import epackage "http://vitruv.tools/methodologisttemplate/ascet" as ascet
+transformation amaltheaToAscet {
+  reactTo amalthea executeIn ascet
+  reaction TaskDeleted {
+    after amalthea::Task aTask deleted {
+      call deleteTask(aTask)
+    }
+  }
+  routine deleteTask(aTask: amalthea::Task) {
+    val ascet::Task correspondingTask = getCorrespondingElement(aTask, typeof(ascet::Task))
+    if (correspondingTask != null) {
+      delete correspondingTask
+      removeCorrespondence(aTask, correspondingTask)
+    }
+  }
+}

@@ -1,0 +1,56 @@
+module Grafcet2PetriNet;
+create OUT : PetriNet from IN : Grafcet;
+
+helper context Grafcet!Grafcet def: steps() : Sequence(Grafcet!Step) = self.elements->select(e | e.oclIsKindOf(Grafcet!Step))->collect(e | e.oclAsType(Grafcet!Step));
+helper context Grafcet!Grafcet def: transitions() : Sequence(Grafcet!Transition) = self.elements->select(e | e.oclIsKindOf(Grafcet!Transition))->collect(e | e.oclAsType(Grafcet!Transition));
+helper context Grafcet!Grafcet def: stepToTransitions() : Sequence(Grafcet!StepToTransition) = self.connections->select(c | c.oclIsKindOf(Grafcet!StepToTransition))->collect(c | c.oclAsType(Grafcet!StepToTransition));
+helper context Grafcet!Grafcet def: transitionToSteps() : Sequence(Grafcet!TransitionToStep) = self.connections->select(c | c.oclIsKindOf(Grafcet!TransitionToStep))->collect(c | c.oclAsType(Grafcet!TransitionToStep));
+
+helper context Grafcet!NamedElement def: pnName(prefix : String) : String = if self.name.oclIsUndefined() or self.name = '' then prefix else self.name endif;
+helper context Grafcet!Connection def: pnArcName(prefix : String) : String = if self.name.oclIsUndefined() or self.name = '' then prefix else self.name endif;
+
+rule PetriNet {
+	from g : Grafcet!Grafcet
+	to   pn : PetriNet!PetriNet (
+		name     <- g.name,
+		location <- g.location,
+		elements <- g.steps()->collect(s | thisModule.resolveTemp(s, 'p'))->union(g.transitions()->collect(t | thisModule.resolveTemp(t, 't'))),
+		arcs     <- g.stepToTransitions()->collect(c | thisModule.resolveTemp(c, 'a'))->union(g.transitionToSteps()->collect(c | thisModule.resolveTemp(c, 'a')))
+	)
+}
+
+rule Place {
+	from s : Grafcet!Step
+	to   p : PetriNet!Place (
+		name     <- s.pnName('P'),
+		location <- s.location
+	)
+}
+
+rule Transition {
+	from tr : Grafcet!Transition
+	to   t : PetriNet!Transition (
+		name     <- tr.pnName('T'),
+		location <- tr.location
+	)
+}
+
+rule PlaceToTransition {
+	from c : Grafcet!StepToTransition
+	to   a : PetriNet!PlaceToTransition (
+		name   <- c.pnArcName('P2T'),
+		weight <- 1,
+		from   <- thisModule.resolveTemp(c.from, 'p'),
+		to     <- thisModule.resolveTemp(c.to, 't')
+	)
+}
+
+rule TransitionToPlace {
+	from c : Grafcet!TransitionToStep
+	to   a : PetriNet!TransitionToPlace (
+		name   <- c.pnArcName('T2P'),
+		weight <- 1,
+		from   <- thisModule.resolveTemp(c.from, 't'),
+		to     <- thisModule.resolveTemp(c.to, 'p')
+	)
+}

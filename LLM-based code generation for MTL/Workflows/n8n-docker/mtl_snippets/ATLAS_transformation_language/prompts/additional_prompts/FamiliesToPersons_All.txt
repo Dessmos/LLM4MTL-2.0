@@ -1,0 +1,10 @@
+Create a transformation module **FamiliesToPersons_All** that converts a **Families** model into a **Persons** model.  
+
+Define helper functions on **Member**:  
+- **familyLastName()** to determine the last name from father, mother, son, or daughter.  
+- **isFemale()** to check if the member is a mother or daughter.  
+- **isMale()** to check if the member is a father or son.  
+
+Add two transformation rules:  
+- **Member2Male**: map a male **Member** to a **Male** with fullName as firstName + familyLastName.  
+- **Member2Female**: map a female **Member** to a **Female** with the same fullName logic.

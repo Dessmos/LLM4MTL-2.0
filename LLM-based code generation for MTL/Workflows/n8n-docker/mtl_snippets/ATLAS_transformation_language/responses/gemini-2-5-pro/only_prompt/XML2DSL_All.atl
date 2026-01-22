@@ -1,0 +1,156 @@
+module XML2DSL;
+create OUT : DSL from IN : XML;
+
+uses "http://vitruv.tools/methodologisttemplate/DSL";
+uses "http://vitruv.tools/methodologisttemplate/XML";
+
+helper context XML!Element def : getAttrVal(attrName : String) : String =
+	self.children->select(c | c.oclIsTypeOf(XML!Attribute) and c.name = attrName)->first().value;
+
+helper context XML!Element def : hasAttr(attrName : String) : Boolean =
+	self.children->exists(c | c.oclIsTypeOf(XML!Attribute) and c.name = attrName);
+
+helper context XML!Element def : getAttrBool(attrName : String) : Boolean =
+	if self.hasAttr(attrName) then self.getAttrVal(attrName) = 'true' else false endif;
+
+helper context XML!Element def : get(childName : String) : XML!Element =
+	self.children->select(c | c.oclIsTypeOf(XML!Element) and c.name = childName)->first();
+
+helper context XML!Element def : getSeq(childName : String) : Sequence(XML!Element) =
+	self.children->select(c | c.oclIsTypeOf(XML!Element) and c.name = childName)->asSequence();
+
+helper context XML!Element def : hasChildren(childName : String) : Boolean =
+	self.children->exists(c | c.oclIsTypeOf(XML!Element) and c.name = childName);
+
+helper context XML!Element def : getText() : String =
+	self.children->select(c | c.oclIsTypeOf(XML!Text))->first().value;
+
+helper context XML!Element def : isAbstract() : Boolean =
+	self.getAttrBool('abstract');
+
+helper context XML!Element def : getType() : String =
+	self.getAttrVal('type');
+
+helper context XML!Element def : getEnumId() : String =
+	self.getAttrVal('enumId');
+	
+helper context XML!Element def : getContainment() : Boolean =
+	self.parent.getAttrBool('isEmbedding');
+
+helper def : findType(id : String) : XML!Element =
+	XML!Element.allInstances()->select(e | (e.name = 'Class' or e.name = 'Relationship' or e.name = 'Enumeration') and e.hasAttr('id') and e.getAttrVal('id') = id)->first();
+	
+helper context XML!Element def : getSubTypes() : Sequence(XML!Element) =
+	let superId = self.getAttrVal('id') in
+	XML!Element.allInstances()->select(e | (e.name = 'Class' or e.name = 'Relationship') and e.hasAttr('superId') and e.getAttrVal('superId') = superId);
+
+helper def: findSimpleType(name : String) : DSL!SimpleType =
+	DSL!SimpleType.allInstances()->select(t | t.name = name)->first();
+
+helper def : dslElementsById : Map(String, DSL!NamedElement) = OclUndefined;
+
+rule DomainModel {
+	from s : XML!Element (s.name = 'DomainModel')
+	to t : DSL!DomainModel (
+		name <- s.getAttrVal('name'),
+		identity <- s.getAttrVal('id'),
+		namespace <- s.getAttrVal('namespace'),
+		isLoaded <- true,
+		classifiers <- s.children->select(c | c.name = 'Class' or c.name = 'Relationship'),
+		types <- s.children->select(c | c.name = 'Enumeration')->union(Sequence{ts, ti, tb})
+	),
+	ts : DSL!SimpleType (
+		name <- 'String',
+		namespace <- 'PrimitiveTypes'
+	),
+	ti : DSL!SimpleType (
+		name <- 'Integer',
+		namespace <- 'PrimitiveTypes'
+	),
+	tb : DSL!SimpleType (
+		name <- 'Boolean',
+		namespace <- 'PrimitiveTypes'
+	)
+}
+
+rule Class {
+	from s : XML!Element (s.name = 'Class')
+	to t : DSL!Class (
+		name <- s.getAttrVal('name'),
+		identity <- s.getAttrVal('id'),
+		namespace <- s.parent.getAttrVal('namespace'),
+		isLoaded <- true,
+		isAbstract <- s.isAbstract(),
+		properties <- s.getSeq('ValueProperty'),
+		superType <- if s.hasAttr('superId') then thisModule.findType(s.getAttrVal('superId')) else OclUndefined endif,
+		subTypes <- s.getSubTypes(),
+		domainModel <- s.parent
+	)
+}
+
+rule Relationship {
+	from s : XML!Element (s.name = 'Relationship')
+	to t : DSL!Relationship (
+		name <- s.getAttrVal('name'),
+		identity <- s.getAttrVal('id'),
+		namespace <- s.parent.getAttrVal('namespace'),
+		isLoaded <- true,
+		isAbstract <- s.isAbstract(),
+		isEmbedding <- s.getAttrBool('isEmbedding'),
+		properties <- s.getSeq('ValueProperty'),
+		roles <- s.getSeq('Role'),
+		superType <- if s.hasAttr('superId') then thisModule.findType(s.getAttrVal('superId')) else OclUndefined endif,
+		subTypes <- s.getSubTypes(),
+		domainModel <- s.parent
+	)
+}
+
+rule Role {
+	from s : XML!Element (s.name = 'Role')
+	to t : DSL!Role (
+		name <- s.getAttrVal('name'),
+		identity <- s.getAttrVal('id'),
+		min <- s.getAttrVal('min').toInteger(),
+		max <- if s.getAttrVal('max') = '*' then -1 else s.getAttrVal('max').toInteger() endif,
+		isUnbounded <- s.getAttrVal('max') = '*',
+		isOrdered <- s.getAttrBool('isOrdered'),
+		isNavigableFrom <- s.getAttrBool('isNavigableFrom'),
+		isPropertyGenerator <- s.getAttrBool('isPropertyGenerator'),
+		source <- thisModule.findType(s.parent.getSeq('Role')->excluding(self)->first().getType()),
+		type <- thisModule.findType(s.getType()),
+		relation <- s.parent
+	)
+}
+
+rule ValueProperty {
+	from s : XML!Element (s.name = 'ValueProperty')
+	to t : DSL!ValueProperty (
+		name <- s.getAttrVal('name'),
+		identity <- s.getAttrVal('id'),
+		owner <- s.parent,
+		type <- if s.hasAttr('enumId') then
+					thisModule.findType(s.getEnumId())
+				else
+					thisModule.findSimpleType(s.getType())
+				endif
+	)
+}
+
+rule Enumeration {
+	from s : XML!Element (s.name = 'Enumeration')
+	to t : DSL!Enumeration (
+		name <- s.getAttrVal('name'),
+		identity <- s.getAttrVal('id'),
+		namespace <- s.parent.getAttrVal('namespace'),
+		literals <- s.getSeq('Literal')
+	)
+}
+
+rule EnumerationLiteral {
+	from s : XML!Element (s.name = 'Literal')
+	to t : DSL!EnumerationLiteral (
+		name <- s.getAttrVal('name'),
+		identity <- s.getAttrVal('id'),
+		value <- s.getAttrVal('value').toInteger()
+	)
+}

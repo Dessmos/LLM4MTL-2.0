@@ -1,0 +1,176 @@
+module DSL2KM3;
+
+create OUT : KM3 from IN : DSL;
+
+helper context DSL!Relationship def: isEmbedding() : Boolean = self.isEmbedding;
+
+helper context DSL!Relationship def: getRoles() : Sequence(DSL!Role) =
+	if self.roles->size() = 2 then
+		Sequence{ self.roles->first(), self.roles->last() }
+	else
+		self.roles
+	endif;
+
+helper context DSL!Relationship def: needTurnOnClass() : Boolean =
+	self.isEmbedding() or
+	self.roles->exists(r | r.isNavigableFrom = false) or
+	self.roles->exists(r | r.isPropertyGenerator = false);
+
+helper context DSL!Role def: km3Lower() : Integer = self.min;
+
+helper context DSL!Role def: km3Upper() : Integer =
+	if self.isUnbounded then -1 else self.max endif;
+
+helper context DSL!Classifier def: km3Name() : String = self.name;
+
+helper context DSL!Type def: km3Name() : String = self.name;
+
+helper def: defaultLocation() : String = 'unknown';
+
+rule Metamodel {
+	from
+		s : DSL!DomainModel
+	to
+		mm : KM3!Metamodel (
+			location <- thisModule.defaultLocation(),
+			contents <- Sequence{ p }
+		),
+		p : KM3!Package (
+			location <- thisModule.defaultLocation(),
+			name <- s.name,
+			metamodel <- mm,
+			contents <- s.types->collect(t | thisModule.resolveTemp(t, 'out'))->
+				union(s.classifiers->select(c | c.oclIsKindOf(DSL!Class))->collect(c | thisModule.resolveTemp(c, 'out'))) ->
+				union(s.classifiers->select(c | c.oclIsKindOf(DSL!Relationship) and c.oclAsType(DSL!Relationship).needTurnOnClass())->collect(r | thisModule.resolveTemp(r, 'out')))
+		)
+}
+
+rule Class {
+	from
+		s : DSL!Class
+	to
+		out : KM3!Class (
+			location <- thisModule.defaultLocation(),
+			name <- s.km3Name(),
+			isAbstract <- s.isAbstract,
+			supertypes <- if s.superType.oclIsUndefined() then
+								Sequence{}
+						  else
+								Sequence{ thisModule.resolveTemp(s.superType, 'out') }
+						  endif,
+			structuralFeatures <- s.properties->collect(vp | thisModule.resolveTemp(vp, 'out'))
+		)
+}
+
+rule Relation2Class {
+	from
+		s : DSL!Relationship (s.needTurnOnClass())
+	to
+		out : KM3!Class (
+			location <- thisModule.defaultLocation(),
+			name <- s.km3Name(),
+			isAbstract <- s.isAbstract,
+			supertypes <- if s.superType.oclIsUndefined() then
+								Sequence{}
+						  else
+								Sequence{ thisModule.resolveTemp(s.superType, 'out') }
+						  endif,
+			structuralFeatures <- s.properties->collect(vp | thisModule.resolveTemp(vp, 'out'))->
+				union(s.getRoles()->select(r | r.isNavigableFrom)->collect(r | thisModule.resolveTemp(r, 'out')))
+		)
+}
+
+rule SimpleReference {
+	from
+		r : DSL!Role (
+			r.isNavigableFrom and
+			not r.relation.needTurnOnClass()
+		)
+	to
+		out : KM3!Reference (
+			location <- thisModule.defaultLocation(),
+			name <- r.name,
+			package <- thisModule.resolveTemp(r.relation.domainModel, 'p'),
+			owner <- thisModule.resolveTemp(r.source, 'out'),
+			type <- thisModule.resolveTemp(r.type, 'out'),
+			lower <- r.km3Lower(),
+			upper <- r.km3Upper(),
+			isOrdered <- r.isOrdered,
+			isUnique <- true,
+			isContainer <- r.relation.isEmbedding(),
+			opposite <- thisModule.resolveTemp(r.relation.getRoles()->select(rr | rr <> r)->first(), 'out')
+		)
+}
+
+rule ComplexReference {
+	from
+		r : DSL!Role (
+			r.isNavigableFrom and
+			r.relation.needTurnOnClass()
+		)
+	to
+		out : KM3!Reference (
+			location <- thisModule.defaultLocation(),
+			name <- r.name,
+			package <- thisModule.resolveTemp(r.relation.domainModel, 'p'),
+			owner <- thisModule.resolveTemp(r.source, 'out'),
+			type <- thisModule.resolveTemp(r.relation, 'out'),
+			lower <- r.km3Lower(),
+			upper <- r.km3Upper(),
+			isOrdered <- r.isOrdered,
+			isUnique <- true,
+			isContainer <- r.relation.isEmbedding(),
+			opposite <- OclUndefined
+		)
+}
+
+rule Attribute {
+	from
+		s : DSL!ValueProperty
+	to
+		out : KM3!Attribute (
+			location <- thisModule.defaultLocation(),
+			name <- s.name,
+			package <- thisModule.resolveTemp(s.owner.domainModel, 'p'),
+			owner <- thisModule.resolveTemp(s.owner, 'out'),
+			type <- thisModule.resolveTemp(s.type, 'out'),
+			lower <- 0,
+			upper <- 1,
+			isOrdered <- false,
+			isUnique <- true
+		)
+}
+
+rule Enumeration {
+	from
+		s : DSL!Enumeration
+	to
+		out : KM3!Enumeration (
+			location <- thisModule.defaultLocation(),
+			name <- s.km3Name(),
+			package <- thisModule.resolveTemp(s.eContainer().oclAsType(DSL!DomainModel), 'p'),
+			literals <- s.literals->collect(l | thisModule.resolveTemp(l, 'out'))
+		)
+}
+
+rule EnumLiteral {
+	from
+		s : DSL!EnumerationLiteral
+	to
+		out : KM3!EnumLiteral (
+			location <- thisModule.defaultLocation(),
+			name <- s.name,
+			package <- thisModule.resolveTemp(s.eContainer().eContainer().oclAsType(DSL!DomainModel), 'p')
+		)
+}
+
+rule DataType {
+	from
+		s : DSL!SimpleType
+	to
+		out : KM3!DataType (
+			location <- thisModule.defaultLocation(),
+			name <- s.km3Name(),
+			package <- thisModule.resolveTemp(s.eContainer().oclAsType(DSL!DomainModel), 'p')
+		)
+}

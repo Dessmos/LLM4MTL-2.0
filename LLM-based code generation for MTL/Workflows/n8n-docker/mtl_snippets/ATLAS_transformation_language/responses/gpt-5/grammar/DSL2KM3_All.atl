@@ -1,0 +1,162 @@
+module DSL2KM3;
+create OUT : KM3 from IN : DSL;
+
+helper context DSL!Relationship def: needTurnOnClass() : Boolean =
+	self.isEmbedding or self.roles->exists(r | r.isPropertyGenerator);
+
+helper context DSL!Relationship def: getRoles() : Sequence(DSL!Role) =
+	if self.roles->size() = 2 then
+		self.roles
+	else
+		Sequence{}
+	endif;
+
+helper context DSL!Relationship def: isEmbedding() : Boolean =
+	self.isEmbedding;
+
+helper context DSL!Role def: lowerBound() : Integer =
+	self.min;
+
+helper context DSL!Role def: upperBound() : Integer =
+	if self.isUnbounded then -1 else self.max endif;
+
+helper context DSL!DomainModel def: rootPackageName() : String =
+	if self.name.oclIsUndefined() or self.name = '' then 'Root' else self.name endif;
+
+rule Metamodel {
+	from
+		dm : DSL!DomainModel
+	to
+		mm : KM3!Metamodel (
+			location <- 'http://vitruv.tools/methodologisttemplate/DomainModel',
+			contents <- Sequence{pkg}
+		),
+		pkg : KM3!Package (
+			name <- dm.rootPackageName(),
+			location <- 'http://vitruv.tools/methodologisttemplate/Package',
+			contents <- dm.classifiers->select(c | c.oclIsTypeOf(DSL!Class))->collect(c | thisModule.resolveTemp(c, 'outClass'))
+				->union(
+					dm.classifiers->select(c | c.oclIsTypeOf(DSL!Relationship) and not c.oclAsType(DSL!Relationship).needTurnOnClass())->collect(r | thisModule.resolveTemp(r, 'outRelRef'))
+				)
+				->union(
+					dm.classifiers->select(c | c.oclIsTypeOf(DSL!Relationship) and c.oclAsType(DSL!Relationship).needTurnOnClass())->collect(r | thisModule.resolveTemp(r, 'outRelClass'))
+				)
+				->union(
+					dm.types->select(t | t.oclIsTypeOf(DSL!Enumeration))->collect(t | thisModule.resolveTemp(t, 'outEnum'))
+				)
+				->union(
+					dm.types->select(t | t.oclIsTypeOf(DSL!SimpleType))->collect(t | thisModule.resolveTemp(t, 'outDT'))
+				)
+		)
+}
+
+rule Class {
+	from
+		c : DSL!Class
+	to
+		outClass : KM3!Class (
+			name <- c.name,
+			location <- 'http://vitruv.tools/methodologisttemplate/Class',
+			isAbstract <- c.isAbstract,
+			supertypes <- if c.superType.oclIsUndefined() then Sequence{} else Sequence{thisModule.resolveTemp(c.superType, 'outClass')} endif,
+			structuralFeatures <- c.properties->collect(p | thisModule.resolveTemp(p, 'outAttr'))
+		)
+}
+
+rule Relation2Class {
+	from
+		r : DSL!Relationship (r.needTurnOnClass())
+	to
+		outRelClass : KM3!Class (
+			name <- r.name,
+			location <- 'http://vitruv.tools/methodologisttemplate/Relation2Class',
+			isAbstract <- r.isAbstract,
+			supertypes <- if r.superType.oclIsUndefined() then Sequence{} else Sequence{thisModule.resolveTemp(r.superType, 'outRelClass')} endif,
+			structuralFeatures <- Sequence{
+				thisModule.resolveTemp(r.getRoles()->first(), 'outComplexRef'),
+				thisModule.resolveTemp(r.getRoles()->last(), 'outComplexRef')
+			}
+		)
+}
+
+rule SimpleReference {
+	from
+		r : DSL!Relationship (not r.needTurnOnClass())
+	to
+		outRelRef : KM3!Reference (
+			name <- r.name,
+			location <- 'http://vitruv.tools/methodologisttemplate/SimpleReference',
+			lower <- 0,
+			upper <- 1,
+			isOrdered <- false,
+			isUnique <- true,
+			isContainer <- r.isEmbedding(),
+			owner <- thisModule.resolveTemp(r.getRoles()->first().source, 'outClass'),
+			type <- thisModule.resolveTemp(r.getRoles()->first().type, 'outClass'),
+			opposite <- thisModule.resolveTemp(r.getRoles()->last(), 'outComplexRef')
+		)
+}
+
+rule ComplexReference {
+	from
+		role : DSL!Role
+	to
+		outComplexRef : KM3!Reference (
+			name <- role.name,
+			location <- 'http://vitruv.tools/methodologisttemplate/ComplexReference',
+			lower <- role.lowerBound(),
+			upper <- role.upperBound(),
+			isOrdered <- role.isOrdered,
+			isUnique <- true,
+			isContainer <- role.relation.isEmbedding() and role.isPropertyGenerator,
+			owner <- if role.relation.needTurnOnClass() then thisModule.resolveTemp(role.relation, 'outRelClass') else thisModule.resolveTemp(role.source, 'outClass') endif,
+			type <- thisModule.resolveTemp(role.type, 'outClass')
+		)
+}
+
+rule Attribute {
+	from
+		p : DSL!ValueProperty
+	to
+		outAttr : KM3!Attribute (
+			name <- p.name,
+			location <- 'http://vitruv.tools/methodologisttemplate/Attribute',
+			lower <- 0,
+			upper <- 1,
+			isOrdered <- false,
+			isUnique <- true,
+			owner <- thisModule.resolveTemp(p.owner, 'outClass'),
+			type <- if p.type.oclIsTypeOf(DSL!Enumeration) then thisModule.resolveTemp(p.type, 'outEnum') else thisModule.resolveTemp(p.type, 'outDT') endif
+		)
+}
+
+rule Enumeration {
+	from
+		e : DSL!Enumeration
+	to
+		outEnum : KM3!Enumeration (
+			name <- e.name,
+			location <- 'http://vitruv.tools/methodologisttemplate/Enumeration',
+			literals <- e.literals->collect(l | thisModule.resolveTemp(l, 'outLit'))
+		)
+}
+
+rule EnumLiteral {
+	from
+		l : DSL!EnumerationLiteral
+	to
+		outLit : KM3!EnumLiteral (
+			name <- l.name,
+			location <- 'http://vitruv.tools/methodologisttemplate/EnumLiteral'
+		)
+}
+
+rule DataType {
+	from
+		t : DSL!SimpleType
+	to
+		outDT : KM3!DataType (
+			name <- t.name,
+			location <- 'http://vitruv.tools/methodologisttemplate/DataType'
+		)
+}

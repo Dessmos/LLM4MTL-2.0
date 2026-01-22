@@ -1,0 +1,203 @@
+module CPL2SPL;
+create OUT : SPL from IN : CPL;
+
+helper def: statement: SPL!Statement =
+  OclUndefined;
+
+helper def: locations: Sequence(CPL!Location) =
+  Sequence{};
+
+helper context CPL!Proxy def: isSimple: Boolean =
+  true;
+
+rule CPL2Program {
+  from
+    s : CPL!CPL
+  to
+    t : SPL!Program (
+      service <- service
+    ),
+    service : SPL!Service (
+      name <- 'CPLService',
+      declarations <- s.subActions->collect(e | thisModule.SubAction2Function(e)),
+      sessions <- Sequence{dialog}
+    ),
+    dialog : SPL!Dialog (
+      methods <- Sequence{method}
+    ),
+    method : SPL!Method (
+      type <- returnType,
+      direction <- #inout,
+      methodName <- methodName,
+      statements <- Sequence{thisModule.statement},
+      branches <- Sequence{branch}
+    ),
+    returnType : SPL!SimpleType (
+      type <- #void
+    ),
+    methodName : SPL!SIPMethodName (
+      name <- #INVITE
+    ),
+    branch : SPL!DefaultBranch
+}
+
+rule SubAction2Function {
+  from
+    s : CPL!SubAction
+  to
+    t : SPL!LocalFunctionDeclaration (
+      name <- s.id,
+      returnType <- returnType,
+      statements <- Sequence{thisModule.statement}
+    ),
+    returnType : SPL!SimpleType (
+      type <- #void
+    )
+}
+
+rule Incoming2Method {
+  from
+    s : CPL!Incoming
+  to
+    t : SPL!Method (
+      type <- returnType,
+      direction <- #in,
+      methodName <- methodName,
+      statements <- Sequence{thisModule.statement},
+      branches <- Sequence{branch}
+    ),
+    returnType : SPL!SimpleType (
+      type <- #void
+    ),
+    methodName : SPL!SIPMethodName (
+      name <- #INVITE
+    ),
+    branch : SPL!DefaultBranch
+}
+
+rule Proxy2Return {
+  from
+    s : CPL!Proxy (s.isSimple)
+  to
+    t : SPL!ReturnStat
+}
+
+rule Proxy2Select {
+  from
+    s : CPL!Proxy (not s.isSimple)
+  to
+    t : SPL!SelectStat (
+      matchedExp <- matchedExp,
+      selectCases <- Sequence{},
+      selectDefault <- selectDefault
+    ),
+    matchedExp : SPL!ConstantExp (
+      value <- stringConstant
+    ),
+    stringConstant : SPL!StringConstant (
+      value <- 'default'
+    ),
+    selectDefault : SPL!SelectDefault
+}
+
+rule Busy2SelectCase {
+  from
+    s : CPL!Busy
+  to
+    t : SPL!SelectCase (
+      values <- Sequence{constant}
+    ),
+    constant : SPL!StringConstant (
+      value <- 'busy'
+    )
+}
+
+rule NoAnswer2SelectCase {
+  from
+    s : CPL!NoAnswer
+  to
+    t : SPL!SelectCase (
+      values <- Sequence{constant}
+    ),
+    constant : SPL!StringConstant (
+      value <- 'noanswer'
+    )
+}
+
+rule Redirection2SelectCase {
+  from
+    s : CPL!Redirection
+  to
+    t : SPL!SelectCase (
+      values <- Sequence{constant}
+    ),
+    constant : SPL!StringConstant (
+      value <- 'redirection'
+    )
+}
+
+rule Default2SelectDefault {
+  from
+    s : CPL!Default
+  to
+    t : SPL!SelectDefault
+}
+
+rule SubCall2Return {
+  from
+    s : CPL!SubCall
+  to
+    t : SPL!ReturnStat
+}
+
+rule Redirect2Return {
+  from
+    s : CPL!Redirect
+  to
+    t : SPL!ReturnStat
+}
+
+rule AddressSwitch2SelectStat {
+  from
+    s : CPL!AddressSwitch
+  to
+    t : SPL!SelectStat (
+      matchedExp <- matchedExp,
+      selectCases <- s.addresses->collect(e | thisModule.SwitchedAddress2SelectCase(e)),
+      selectDefault <- if s.otherwise.oclIsUndefined() then OclUndefined else thisModule.Otherwise2SelectDefault(s.otherwise) endif
+    ),
+    matchedExp : SPL!ConstantExp (
+      value <- stringConstant
+    ),
+    stringConstant : SPL!StringConstant (
+      value <- s.field
+    )
+}
+
+rule SwitchedAddress2SelectCase {
+  from
+    s : CPL!SwitchedAddress
+  to
+    t : SPL!SelectCase (
+      values <- Sequence{constant}
+    ),
+    constant : SPL!StringConstant (
+      value <- if s.is.oclIsUndefined() then 'default' else s.is endif
+    )
+}
+
+rule Otherwise2SelectDefault {
+  from
+    s : CPL!Otherwise
+  to
+    t : SPL!SelectDefault
+}
+
+lazy rule Location2URIConstant {
+  from
+    s : CPL!Location
+  to
+    t : SPL!URIConstant (
+      uri <- s.url
+    )
+}

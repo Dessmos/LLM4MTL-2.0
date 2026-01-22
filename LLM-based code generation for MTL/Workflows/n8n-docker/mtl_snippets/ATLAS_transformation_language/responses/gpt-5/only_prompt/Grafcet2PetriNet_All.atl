@@ -1,0 +1,78 @@
+module Grafcet2PetriNet;
+
+create OUT : PetriNet from IN : Grafcet;
+
+helper context Grafcet!Step def: toPlaceName() : String =
+	if self.name.oclIsUndefined() or self.name = '' then 'Place_' + self.location else self.name endif;
+
+helper context Grafcet!Transition def: toTransitionName() : String =
+	if self.name.oclIsUndefined() or self.name = '' then 'Transition_' + self.location else self.name endif;
+
+helper context Grafcet!Connection def: toArcName() : String =
+	if self.name.oclIsUndefined() or self.name = '' then 'Arc_' + self.location else self.name endif;
+
+rule PetriNet {
+	from
+		g : Grafcet!Grafcet
+	to
+		n : PetriNet!PetriNet (
+			name <- g.name,
+			location <- g.location,
+			elements <- g.elements->collect(e |
+				if e.oclIsKindOf(Grafcet!Step) then e.oclAsType(Grafcet!Step)
+				else e.oclAsType(Grafcet!Transition)
+				endif
+			),
+			arcs <- g.connections
+		)
+}
+
+rule Place {
+	from
+		s : Grafcet!Step
+	to
+		p : PetriNet!Place (
+			name <- s.toPlaceName(),
+			location <- s.location,
+			net <- s.grafcet
+		)
+}
+
+rule Transition {
+	from
+		tg : Grafcet!Transition
+	to
+		tp : PetriNet!Transition (
+			name <- tg.toTransitionName(),
+			location <- tg.location,
+			net <- tg.grafcet
+		)
+}
+
+rule PlaceToTransition {
+	from
+		c : Grafcet!StepToTransition
+	to
+		a : PetriNet!PlaceToTransition (
+			name <- c.toArcName(),
+			location <- c.location,
+			weight <- 1,
+			net <- c.grafcet,
+			from <- c.from,
+			to <- c.to
+		)
+}
+
+rule TransitionToPlace {
+	from
+		c : Grafcet!TransitionToStep
+	to
+		a : PetriNet!TransitionToPlace (
+			name <- c.toArcName(),
+			location <- c.location,
+			weight <- 1,
+			net <- c.grafcet,
+			from <- c.from,
+			to <- c.to
+		)
+}

@@ -1,0 +1,130 @@
+module XML2DSL;
+create OUT : DSL from IN : XML;
+
+helper def: getAttrBool(element : XML!Element, name : String) : Boolean =
+    if element.children->select(n | n.oclIsTypeOf(XML!Attribute) and n.name = name)->notEmpty() then
+        element.children->select(n | n.oclIsTypeOf(XML!Attribute) and n.name = name)->first().value = 'true'
+    else
+        false
+    endif;
+
+helper def: getAttrVal(element : XML!Element, name : String) : String =
+    if element.children->select(n | n.oclIsTypeOf(XML!Attribute) and n.name = name)->notEmpty() then
+        element.children->select(n | n.oclIsTypeOf(XML!Attribute) and n.name = name)->first().value
+    else
+        ''
+    endif;
+
+helper def: get(element : XML!Element, name : String) : XML!Element =
+    element.children->select(n | n.oclIsTypeOf(XML!Element) and n.name = name)->first();
+
+helper def: getType(element : XML!Element) : String =
+    thisModule.getAttrVal(element, 'eType');
+
+helper def: getEnumId(element : XML!Element) : String =
+    thisModule.getAttrVal(element, 'value');
+
+helper def: getText(element : XML!Element) : String =
+    if element.children->select(n | n.oclIsTypeOf(XML!Text))->notEmpty() then
+        element.children->select(n | n.oclIsTypeOf(XML!Text))->first().value
+    else
+        ''
+    endif;
+
+helper def: getSeq(element : XML!Element, name : String) : Sequence(XML!Element) =
+    element.children->select(n | n.oclIsTypeOf(XML!Element) and n.name = name);
+
+helper def: hasChildren(element : XML!Element) : Boolean =
+    element.children->select(n | n.oclIsTypeOf(XML!Element))->notEmpty();
+
+helper def: hasAttr(element : XML!Element, name : String) : Boolean =
+    element.children->select(n | n.oclIsTypeOf(XML!Attribute) and n.name = name)->notEmpty();
+
+helper def: isAbstract(element : XML!Element) : Boolean =
+    thisModule.getAttrBool(element, 'abstract');
+
+helper def: dslElementsById : Map(String, DSL!NamedElement) =
+    Map{};
+
+helper def: getContainment(element : XML!Element) : Boolean =
+    thisModule.getAttrBool(element, 'containment');
+
+helper def: getSubTypes(element : XML!Element) : Sequence(XML!Element) =
+    XML!Element.allInstances()->select(e | thisModule.getAttrVal(e, 'eSuperTypes') = thisModule.getAttrVal(element, 'href'));
+
+helper def: findType(typeRef : String) : DSL!Type =
+    if typeRef.endsWith('String') then
+        DSL!SimpleType.allInstances()->select(t | t.name = 'String')->first()
+    else if typeRef.endsWith('Integer') then
+        DSL!SimpleType.allInstances()->select(t | t.name = 'Integer')->first()
+    else if typeRef.endsWith('Boolean') then
+        DSL!SimpleType.allInstances()->select(t | t.name = 'Boolean')->first()
+    else if typeRef.endsWith('Double') then
+        DSL!SimpleType.allInstances()->select(t | t.name = 'Double')->first()
+    else
+        DSL!Type.allInstances()->select(t | t.identity = typeRef)->first()
+    endif endif endif endif;
+
+rule DomainModel {
+    from src : XML!Element (src.name = 'EPackage')
+    to dst : DSL!DomainModel (
+        name <- thisModule.getAttrVal(src, 'name'),
+        identity <- thisModule.getAttrVal(src, 'nsURI'),
+        namespace <- thisModule.getAttrVal(src, 'nsPrefix'),
+        isLoaded <- true,
+        classifiers <- thisModule.getSeq(src, 'eClassifiers')->select(c | thisModule.getAttrVal(c, 'xsi:type') = 'ecore:EClass'),
+        types <- Sequence{
+            thisModule.StringType(),
+            thisModule.IntegerType(),
+            thisModule.BooleanType(),
+            thisModule.DoubleType()
+        }->union(thisModule.getSeq(src, 'eClassifiers')->select(c | thisModule.getAttrVal(c, 'xsi:type') = 'ecore:EEnum'))
+    )
+}
+
+rule Class {
+    from src : XML!Element (src.name = 'eClassifiers' and thisModule.getAttrVal(src, 'xsi:type') = 'ecore:EClass' and not thisModule.hasAttr(src, 'eSuperTypes'))
+    to dst : DSL!Class (
+        name <- thisModule.getAttrVal(src, 'name'),
+        identity <- thisModule.getAttrVal(src, 'name'),
+        namespace <- '',
+        isLoaded <- true,
+        isAbstract <- thisModule.isAbstract(src),
+        properties <- thisModule.getSeq(src, 'eStructuralFeatures')->select(f | thisModule.getAttrVal(f, 'xsi:type') = 'ecore:EAttribute')
+    )
+}
+
+rule Relationship {
+    from src : XML!Element (src.name = 'eClassifiers' and thisModule.getAttrVal(src, 'xsi:type') = 'ecore:EClass' and thisModule.hasAttr(src, 'eSuperTypes'))
+    to dst : DSL!Relationship (
+        name <- thisModule.getAttrVal(src, 'name'),
+        identity <- thisModule.getAttrVal(src, 'name'),
+        namespace <- '',
+        isLoaded <- true,
+        isAbstract <- thisModule.isAbstract(src),
+        isEmbedding <- thisModule.getContainment(src),
+        properties <- thisModule.getSeq(src, 'eStructuralFeatures')->select(f | thisModule.getAttrVal(f, 'xsi:type') = 'ecore:EAttribute'),
+        roles <- thisModule.getSeq(src, 'eStructuralFeatures')->select(f | thisModule.getAttrVal(f, 'xsi:type') = 'ecore:EReference')
+    )
+}
+
+rule Role {
+    from src : XML!Element (src.name = 'eStructuralFeatures' and thisModule.getAttrVal(src, 'xsi:type') = 'ecore:EReference')
+    to dst : DSL!Role (
+        name <- thisModule.getAttrVal(src, 'name'),
+        identity <- thisModule.getAttrVal(src, 'name'),
+        min <- if thisModule.hasAttr(src, 'lowerBound') then thisModule.getAttrVal(src, 'lowerBound').toInteger() else 0 endif,
+        max <- if thisModule.hasAttr(src, 'upperBound') then thisModule.getAttrVal(src, 'upperBound').toInteger() else 1 endif,
+        isUnbounded <- thisModule.getAttrVal(src, 'upperBound') = '-1',
+        accepts <- thisModule.getType(src),
+        isOrdered <- thisModule.getAttrBool(src, 'ordered'),
+        isNavigableFrom <- true,
+        isPropertyGenerator <- false
+    )
+}
+
+rule ValueProperty {
+    from src : XML!Element (src.name = 'eStructuralFeatures' and thisModule.getAttrVal(src, 'xsi:type') = 'ecore:EAttribute')
+    to dst : DSL!ValueProperty (
+        name <- thisModule.getAttrVal(src, 'name'),
+        identity <- thisModule.getAttrVal(src, '

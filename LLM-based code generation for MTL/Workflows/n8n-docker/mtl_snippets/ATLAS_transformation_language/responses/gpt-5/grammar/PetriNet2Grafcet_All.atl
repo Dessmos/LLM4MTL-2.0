@@ -1,0 +1,73 @@
+module PetriNet2Grafcet;
+create OUT : Grafcet from IN : PetriNet;
+
+helper context PetriNet!PetriNet def: allPlaces : Set(PetriNet!Place) = self.elements->select(e | e.oclIsKindOf(PetriNet!Place))->collect(e | e.oclAsType(PetriNet!Place))->asSet();
+helper context PetriNet!PetriNet def: allTransitions : Set(PetriNet!Transition) = self.elements->select(e | e.oclIsKindOf(PetriNet!Transition))->collect(e | e.oclAsType(PetriNet!Transition))->asSet();
+
+rule Grafcet {
+	from
+		n : PetriNet!PetriNet
+	to
+		g : Grafcet!Grafcet (
+			name <- n.name,
+			location <- n.location,
+			elements <- n.elements,
+			connections <- n.arcs
+		)
+}
+
+rule Step {
+	from
+		p : PetriNet!Place
+	to
+		s : Grafcet!Step (
+			name <- p.name,
+			location <- p.location,
+			grafcet <- p.net,
+			isInitial <- false,
+			isActive <- false,
+			action <- '',
+			incomingConnections <- p.incomingArc,
+			outgoingConnections <- p.outgoingArc
+		)
+}
+
+rule Transition {
+	from
+		t : PetriNet!Transition
+	to
+		tr : Grafcet!Transition (
+			name <- t.name,
+			location <- t.location,
+			grafcet <- t.net,
+			condition <- '',
+			incomingConnections <- t.incomingArc,
+			outgoingConnections <- t.outgoingArc
+		)
+}
+
+rule StepToTransition {
+	from
+		a : PetriNet!PlaceToTransition
+	to
+		c : Grafcet!StepToTransition (
+			name <- a.name,
+			location <- a.location,
+			grafcet <- a.net,
+			from <- a.from,
+			to <- a.to
+		)
+}
+
+rule TransitionToStep {
+	from
+		a : PetriNet!TransitionToPlace
+	to
+		c : Grafcet!TransitionToStep (
+			name <- a.name,
+			location <- a.location,
+			grafcet <- a.net,
+			from <- a.from,
+			to <- a.to
+		)
+}

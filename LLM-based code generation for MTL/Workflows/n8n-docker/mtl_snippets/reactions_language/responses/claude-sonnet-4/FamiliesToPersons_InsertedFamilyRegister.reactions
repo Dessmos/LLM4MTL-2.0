@@ -1,0 +1,32 @@
+import metamodel families "http://vitruv.tools/methodologisttemplate/families"
+import metamodel persons "http://vitruv.tools/methodologisttemplate/persons"
+
+transformation familiesToPersons {
+  model Families {
+    metamodel families
+    role source
+    persistence project "http://vitruv.tools/methodologisttemplate/families"
+  }
+
+  model Persons {
+    metamodel persons
+    role target
+    persistence project "http://vitruv.tools/methodologisttemplate/persons"
+  }
+
+  reaction InsertedFamilyRegister {
+    after {
+      inserted root families::FamilyRegister fr in Families
+    }
+    call createPersonRegister(fr)
+  }
+
+  routine createPersonRegister(fr: families::FamilyRegister) {
+    guard not exists persons::PersonRegister correspondingTo fr
+    create {
+      create persons::PersonRegister pr
+      persist pr in Persons
+      correspond fr <-> pr
+    }
+  }
+}

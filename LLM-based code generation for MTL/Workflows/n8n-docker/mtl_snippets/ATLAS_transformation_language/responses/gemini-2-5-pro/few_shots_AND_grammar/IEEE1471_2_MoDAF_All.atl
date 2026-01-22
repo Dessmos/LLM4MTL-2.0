@@ -1,0 +1,165 @@
+module IEEE1471_2_MoDAF;
+create OUT : MoDAF from IN : IEEE1471;
+
+helper context IEEE1471!IEEE1471Model def: rationale() : String =
+	self.rationale.name + ': ' + self.rationale.content;
+
+lazy rule CreateTheTaxonomy {
+	from src : IEEE1471!IEEE1471Model
+	to dst : MoDAF!Taxonomy (
+		name <- 'Default Taxonomy',
+		content <- 'Auto-generated default taxonomy.',
+		date <- 'N/A',
+		url <- 'N/A',
+		version <- '1.0'
+	)
+}
+
+lazy rule UndefinedFramework {
+	from src : IEEE1471!IEEE1471Model
+	to dst : MoDAF!ArchitecturalFramework (
+		name <- 'Undefined Architectural Framework',
+		content <- 'Contains viewpoints with no defined source framework.',
+		ownedMember <- IEEE1471!Viewpoint.allInstances()->select(v | v.hasSource.oclIsUndefined())
+	)
+}
+
+rule IEEE1471Model2MoDAFModel {
+	from src : IEEE1471!IEEE1471Model
+	to dst : MoDAF!MoDAFModel (
+		name <- src.name,
+		content <- src.content,
+		enterprise <- src.system,
+		environment <- src.environment,
+		operationalMissions <- src.missions,
+		architectures <- src.architecture,
+		architecturalDescription <- src.architecturalDescription,
+		stakeholders <- src.stakeholders,
+		architecturalFrameworks <- src.libraryViewpoints->union(Sequence{thisModule.UndefinedFramework(src)})
+	)
+}
+
+rule System2Enterprise {
+	from src : IEEE1471!System
+	to dst : MoDAF!Enterprise (
+		name <- src.name,
+		content <- src.content,
+		fulfills <- src.fulfills,
+		inhabits <- src.inhabits
+	)
+}
+
+rule Environment2Environment {
+	from src : IEEE1471!Environment
+	to dst : MoDAF!Environment (
+		name <- src.name,
+		content <- src.content,
+		influences <- src.influences,
+		taxonomy <- thisModule.CreateTheTaxonomy(src.oclContainer())
+	)
+}
+
+rule Mission2OperationalMission {
+	from src : IEEE1471!Mission
+	to dst : MoDAF!OperationalMission (
+		name <- src.name,
+		content <- src.content
+	)
+}
+
+rule Architecture2Architecture {
+	from src : IEEE1471!Architecture
+	to dst : MoDAF!Architecture (
+		name <- src.name,
+		content <- src.content,
+		describedBy <- src.describedBy,
+		enterprise <- IEEE1471!System.allInstances()->select(s | s.hasAn = src)->first()
+	)
+}
+
+rule AD2AD {
+	from src : IEEE1471!ArchitecturalDescription
+	to dst : MoDAF!ArchitecturalDescription (
+		name <- src.name,
+		content <- src.content,
+		approvialAuthority <- 'Undefined',
+		architect <- 'Undefined',
+		assumptionAndConstraints <- 'Undefined',
+		creatingOrganisation <- 'Undefined',
+		dateCompleted <- 'Undefined',
+		purpose <- src.oclContainer().rationale(),
+		recommendations <- 'Undefined',
+		summaryOfFindings <- 'Undefined',
+		tollsUsed <- 'Undefined',
+		viewpoints <- src.selects,
+		products <- src.organizedBy,
+		taxonomy <- thisModule.CreateTheTaxonomy(src.oclContainer())
+	)
+}
+
+rule Stakeholder2Stakeholder {
+	from src : IEEE1471!Stakeholder
+	to dst : MoDAF!Stakeholder (
+		name <- src.name,
+		content <- src.content
+	)
+}
+
+rule Viewpoint2View {
+	from src : IEEE1471!Viewpoint
+	to dst : MoDAF!View (
+		name <- src.name,
+		content <- src.content,
+		framework <- 'Undefined',
+		frameworkWebsite <- 'Undefined',
+		viewCode <- 'Undefined',
+		viewDescription <- 'Undefined',
+		viewName <- src.name,
+		usedToCover <- src.usedToCover
+	)
+}
+
+rule View2ArchitecturalProduct {
+	from src : IEEE1471!View
+	to dst : MoDAF!ArchitecturalProduct (
+		name <- src.name,
+		content <- src.content,
+		description <- 'Undefined',
+		architecturalElements <- src.consitsOf,
+		definingView <- src.conformsTo,
+		addresses <- src.conformsTo.usedToCover
+	)
+}
+
+rule Model2Element {
+	from src : IEEE1471!Model
+	to dst : MoDAF!Elements (
+		name <- src.name,
+		content <- src.content
+	)
+}
+
+rule Concern2Concern {
+	from src : IEEE1471!Concern
+	to dst : MoDAF!Concern (
+		name <- src.name,
+		content <- src.content
+	)
+}
+
+rule LibraryViewpoint2ArchitecturalFramework {
+	from src : IEEE1471!LibraryViewpoint
+	to dst : MoDAF!ArchitecturalFramework (
+		name <- src.name,
+		content <- src.content,
+		ownedMember <- IEEE1471!Viewpoint.allInstances()->select(v | v.hasSource = src)
+	)
+}
+
+rule StakeholderHasConcern {
+	from c : IEEE1471!Concern
+	to shc : distinct MoDAF!StakeholderHasConcern foreach (s in c.isImportantTo) (
+		client <- s,
+		supplier <- c
+	)
+}

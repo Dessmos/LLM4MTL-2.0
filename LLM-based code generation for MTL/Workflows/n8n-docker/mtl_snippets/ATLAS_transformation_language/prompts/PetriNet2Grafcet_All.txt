@@ -1,0 +1,7 @@
+Create an ATL transformation module named **PetriNet2Grafcet** that converts models conforming to the **PetriNet** metamodel into models of the **Grafcet** metamodel.  
+Define the following transformation rules:  
+
+- **Grafcet**: build a Grafcet element from a PetriNet, copying its name, location, and mapping its sets of elements and arcs to Grafcet elements and connections.  
+- **Step**: transform each Place into a Step, setting its name, location, and linking incoming and outgoing connections accordingly.  
+- **Transition**: transform each Transition similarly, keeping connectivity.  
+- **StepToTransition** and **TransitionToStep**: map corresponding arc types, preserving names, references, and graphical attributes.

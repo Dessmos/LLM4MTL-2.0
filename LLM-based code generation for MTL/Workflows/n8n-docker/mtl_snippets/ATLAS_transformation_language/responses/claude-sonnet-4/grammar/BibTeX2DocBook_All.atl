@@ -1,0 +1,169 @@
+module BibTeX2DocBook;
+create OUT : DocBook from IN : BibTeX;
+
+helper def: authorSet : Set(BibTeX!Author) = BibTeX!Author.allInstances();
+
+helper def: titledEntrySet : Set(BibTeX!TitledEntry) = BibTeX!TitledEntry.allInstances();
+
+helper def: articleSet : Set(BibTeX!Article) = BibTeX!Article.allInstances();
+
+helper def: buildEntryPara(entry : BibTeX!BibTeXEntry) : String =
+	if entry.oclIsKindOf(BibTeX!AuthoredEntry) then
+		entry.authors->collect(a | a.author)->first() + ': ' + entry.id
+	else
+		entry.id
+	endif;
+
+rule Main {
+	from
+		s : BibTeX!BibTeXFile
+	to
+		t : DocBook!DocBook (
+			books <- Set{referencesBook}
+		),
+		referencesBook : DocBook!Book (
+			title <- 'References',
+			articles <- Set{authorsArticle, titlesArticle, journalsArticle}
+		),
+		authorsArticle : DocBook!Article (
+			title <- 'Authors',
+			sections_1 <- thisModule.authorSet->collect(a | thisModule.Author(a))
+		),
+		titlesArticle : DocBook!Article (
+			title <- 'Titles',
+			sections_1 <- thisModule.titledEntrySet->collect(e | 
+				if thisModule.articleSet->includes(e) then
+					OclUndefined
+				else
+					if e.oclIsUndefined() = false then
+						thisModule.TitledEntry_Title_NoArticle(e)
+					else
+						OclUndefined
+					endif
+				endif
+			)->select(s | s.oclIsUndefined() = false)
+		),
+		journalsArticle : DocBook!Article (
+			title <- 'Journals',
+			sections_1 <- thisModule.articleSet->collect(a |
+				if a.title.oclIsUndefined() = false and a.journal.oclIsUndefined() = false then
+					thisModule.Article_Title_Journal(a)
+				else
+					if a.title.oclIsUndefined() and a.journal.oclIsUndefined() = false then
+						thisModule.Article_NoTitle_Journal(a)
+					else
+						if a.title.oclIsUndefined() = false and a.journal.oclIsUndefined() then
+							thisModule.Article_Title_NoJournal(a)
+						else
+							thisModule.Article_NoTitle_NoJournal(a)
+						endif
+					endif
+				endif
+			)
+		)
+}
+
+rule Author {
+	from
+		s : BibTeX!Author
+	to
+		t : DocBook!Sect1 (
+			title <- s.author,
+			paras <- Set{para},
+			sections_2 <- Set{}
+		),
+		para : DocBook!Para (
+			content <- 'Author: ' + s.author
+		)
+}
+
+rule UntitledEntry {
+	from
+		s : BibTeX!BibTeXEntry (s.oclIsKindOf(BibTeX!TitledEntry) = false)
+	to
+		t : DocBook!Para (
+			content <- thisModule.buildEntryPara(s)
+		)
+}
+
+rule TitledEntry_Title_NoArticle {
+	from
+		s : BibTeX!TitledEntry (s.oclIsKindOf(BibTeX!Article) = false)
+	to
+		t : DocBook!Sect1 (
+			title <- s.title,
+			paras <- Set{para},
+			sections_2 <- Set{}
+		),
+		para : DocBook!Para (
+			content <- thisModule.buildEntryPara(s)
+		)
+}
+
+rule TitledEntry_NoTitle_NoArticle {
+	from
+		s : BibTeX!TitledEntry (s.oclIsKindOf(BibTeX!Article) = false and s.title.oclIsUndefined())
+	to
+		t : DocBook!Para (
+			content <- thisModule.buildEntryPara(s)
+		)
+}
+
+rule Article_Title_Journal {
+	from
+		s : BibTeX!Article (s.title.oclIsUndefined() = false and s.journal.oclIsUndefined() = false)
+	to
+		t : DocBook!Sect1 (
+			title <- s.journal,
+			paras <- Set{},
+			sections_2 <- Set{sect2}
+		),
+		sect2 : DocBook!Sect2 (
+			title <- s.title,
+			paras <- Set{para}
+		),
+		para : DocBook!Para (
+			content <- thisModule.buildEntryPara(s)
+		)
+}
+
+rule Article_NoTitle_Journal {
+	from
+		s : BibTeX!Article (s.title.oclIsUndefined() and s.journal.oclIsUndefined() = false)
+	to
+		t : DocBook!Sect1 (
+			title <- s.journal,
+			paras <- Set{para},
+			sections_2 <- Set{}
+		),
+		para : DocBook!Para (
+			content <- thisModule.buildEntryPara(s)
+		)
+}
+
+rule Article_Title_NoJournal {
+	from
+		s : BibTeX!Article (s.title.oclIsUndefined() = false and s.journal.oclIsUndefined())
+	to
+		t : DocBook!Sect1 (
+			title <- 'No Journal',
+			paras <- Set{},
+			sections_2 <- Set{sect2}
+		),
+		sect2 : DocBook!Sect2 (
+			title <- s.title,
+			paras <- Set{para}
+		),
+		para : DocBook!Para (
+			content <- thisModule.buildEntryPara(s)
+		)
+}
+
+rule Article_NoTitle_NoJournal {
+	from
+		s : BibTeX!Article (s.title.oclIsUndefined() and s.journal.oclIsUndefined())
+	to
+		t : DocBook!Para (
+			content <- thisModule.buildEntryPara(s)
+		)
+}

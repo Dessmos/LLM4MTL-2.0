@@ -1,0 +1,168 @@
+module IEEE1471_2_MoDAF;
+create OUT : MoDAF from IN : IEEE1471;
+
+helper def : rationale : String =
+	if IEEE1471!IEEE1471Model.allInstances()->first().rationale.oclIsUndefined() then
+		'No rationale provided'
+	else
+		let r : IEEE1471!Rationale = IEEE1471!IEEE1471Model.allInstances()->first().rationale in
+		r.name + ': ' + if r.content.oclIsUndefined() then '' else r.content endif
+	endif;
+
+rule IEEE1471Model2MoDAFModel {
+	from
+		s : IEEE1471!IEEE1471Model
+	to
+		t : MoDAF!MoDAFModel (
+			name <- s.name,
+			content <- s.content
+		)
+}
+
+rule System2Enterprise {
+	from
+		s : IEEE1471!System
+	to
+		t : MoDAF!Enterprise (
+			name <- s.name,
+			content <- s.content
+		)
+}
+
+rule Environment2Environment {
+	from
+		s : IEEE1471!Environment
+	to
+		t : MoDAF!Environment (
+			name <- s.name,
+			content <- s.content
+		)
+}
+
+rule Mission2OperationalMission {
+	from
+		s : IEEE1471!Mission
+	to
+		t : MoDAF!OperationalMission (
+			name <- s.name,
+			content <- s.content
+		)
+}
+
+rule Architecture2Architecture {
+	from
+		s : IEEE1471!Architecture
+	to
+		t : MoDAF!Architecture (
+			name <- s.name,
+			content <- s.content
+		)
+}
+
+rule AD2AD {
+	from
+		s : IEEE1471!ArchitecturalDescription
+	to
+		t : MoDAF!ArchitecturalDescription (
+			name <- s.name,
+			content <- s.content,
+			approvialAuthority <- '',
+			architect <- '',
+			assumptionAndConstraints <- '',
+			creatingOrganisation <- '',
+			dateCompleted <- '',
+			purpose <- '',
+			recommendations <- '',
+			summaryOfFindings <- '',
+			tollsUsed <- ''
+		)
+}
+
+rule Stakeholder2Stakeholder {
+	from
+		s : IEEE1471!Stakeholder
+	to
+		t : MoDAF!Stakeholder (
+			name <- s.name,
+			content <- s.content
+		)
+}
+
+rule Viewpoint2View {
+	from
+		s : IEEE1471!Viewpoint
+	to
+		t : MoDAF!View (
+			name <- s.name,
+			content <- s.content,
+			framework <- if s.hasSource.oclIsUndefined() then 'Unknown Framework' else s.hasSource.name endif,
+			frameworkWebsite <- '',
+			viewCode <- s.name,
+			viewDescription <- if s.content.oclIsUndefined() then '' else s.content endif,
+			viewName <- s.name
+		)
+}
+
+rule View2ArchitecturalProduct {
+	from
+		s : IEEE1471!View
+	to
+		t : MoDAF!ArchitecturalProduct (
+			name <- s.name,
+			content <- s.content,
+			description <- if s.content.oclIsUndefined() then '' else s.content endif
+		)
+}
+
+rule Model2Element {
+	from
+		s : IEEE1471!Model
+	to
+		t : MoDAF!Elements (
+			name <- s.name,
+			content <- s.content
+		)
+}
+
+rule Concern2Concern {
+	from
+		s : IEEE1471!Concern
+	to
+		t : MoDAF!Concern (
+			name <- s.name,
+			content <- s.content
+		)
+}
+
+rule LibraryViewpoint2ArchitecturalFramework {
+	from
+		s : IEEE1471!LibraryViewpoint
+	to
+		t : MoDAF!ArchitecturalFramework (
+			name <- s.name,
+			content <- s.content
+		)
+}
+
+rule StakeholderHasConcern {
+	from
+		s : IEEE1471!Stakeholder,
+		c : IEEE1471!Concern (
+			c.isImportantTo->includes(s)
+		)
+	to
+		t : MoDAF!StakeholderHasConcern (
+			client <- s,
+			supplier <- c
+		)
+}
+
+lazy rule UndefinedArchitecturalFramework {
+	from
+		dummy : IEEE1471!Element
+	to
+		t : MoDAF!ArchitecturalFramework (
+			name <- 'Undefined Architectural Framework',
+			content <- 'Default framework for viewpoints without a source'
+		)
+}

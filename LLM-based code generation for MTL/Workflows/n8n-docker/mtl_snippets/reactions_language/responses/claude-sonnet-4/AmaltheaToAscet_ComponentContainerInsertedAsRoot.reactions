@@ -1,0 +1,16 @@
+imports {
+  metamodel amalthea "http://vitruv.tools/methodologisttemplate/amalthea"
+  metamodel ascet "http://vitruv.tools/methodologisttemplate/ascet"
+}
+transformation amaltheaToAscet {
+  reaction ComponentContainerInsertedAsRoot {
+    after elementInserted as root cc: amalthea::ComponentContainer
+    call createAndRegisterRootComponentContainer(cc)
+  }
+  routine createAndRegisterRootComponentContainer(cc: amalthea::ComponentContainer) {
+    guard not exists correspondence cc -> ascet::AscetModule
+    create module: ascet::AscetModule {}
+    persist module at "ascet/modules"
+    correspondence cc <-> module
+  }
+}
