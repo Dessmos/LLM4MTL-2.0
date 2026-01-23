@@ -1,0 +1,41 @@
+-- @atlcompiler emftvm
+module FamiliesToPersons_All;
+create OUT : Persons from IN : Families;
+
+helper context Families!Member def: familyLastName() : String =
+	if not self.familyFather.oclIsUndefined() then
+		self.familyFather.lastName
+	else if not self.familyMother.oclIsUndefined() then
+		self.familyMother.lastName
+	else if not self.familySon.oclIsUndefined() then
+		self.familySon.lastName
+	else
+		self.familyDaughter.lastName
+	endif endif endif;
+
+helper context Families!Member def: isFemale() : Boolean =
+	not self.familyMother.oclIsUndefined() or not self.familyDaughter.oclIsUndefined();
+
+helper context Families!Member def: isMale() : Boolean =
+	not self.familyFather.oclIsUndefined() or not self.familySon.oclIsUndefined();
+
+rule FamilyRegister2PersonRegister {
+	from s : Families!FamilyRegister
+	to t : Persons!PersonRegister (
+		persons <- s.families.father->union(s.families.mother)->union(s.families.sons->flatten())->union(s.families.daughters->flatten())
+	)
+}
+
+rule Member2Male {
+	from s : Families!Member (s.isMale())
+	to t : Persons!Male (
+		fullName <- s.firstName + ' ' + s.familyLastName()
+	)
+}
+
+rule Member2Female {
+	from s : Families!Member (s.isFemale())
+	to t : Persons!Female (
+		fullName <- s.firstName + ' ' + s.familyLastName()
+	)
+}

@@ -1,0 +1,29 @@
+module NetworkToGraph_All;
+create OUT : Graph from IN : Network;
+
+rule Component2Entity {
+	from
+		s : Network!Component
+	to
+		t : Graph!Entity (
+			name <- s.name
+		)
+}
+
+rule System2Root {
+	from
+		s : Network!System
+	to
+		t : Graph!Root (
+			entities <- s.components
+		)
+}
+
+rule Link2Link {
+	from
+		s : Network!Link
+	to
+		t : Graph!Link (
+			Entitys <- s.components
+		)
+}

@@ -1,0 +1,17 @@
+-------------------------------------------------------------------------------
+Test set: com.example.atlparser.AtlParserTest
+-------------------------------------------------------------------------------
+Tests run: 1, Failures: 1, Errors: 0, Skipped: 0, Time elapsed: 4.745 s <<< FAILURE! -- in com.example.atlparser.AtlParserTest
+com.example.atlparser.AtlParserTest.testParseAllAtlFiles -- Time elapsed: 4.585 s <<< FAILURE!
+org.opentest4j.AssertionFailedError: 
+Files with syntax errors:
+  AmaltheaToAscet_All.atl (1 errors)
+  CPL2SPL_All.atl (3 errors)
+  XML2DSL_All.atl (1 errors)
+	at org.junit.jupiter.api.AssertionUtils.fail(AssertionUtils.java:38)
+	at org.junit.jupiter.api.Assertions.fail(Assertions.java:134)
+	at com.example.atlparser.AtlParserTest.testParseAllAtlFiles(AtlParserTest.java:57)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:568)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1511)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1511)
+
