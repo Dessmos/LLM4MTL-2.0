@@ -125,7 +125,9 @@ public class IEEE1471_2_MoDAFAllExecutionTest {
         // Register the IEEE1471 metamodel in the global package registry.
         // The ATL injector will use this to resolve the namespace when loading the input XMI.
         EPackage.Registry.INSTANCE.put(ieee1471Pkg.getNsURI(), ieee1471Pkg);
-        
+        // Also register the output metamodel for loading the output XMI
+        EPackage.Registry.INSTANCE.put(modafPkg.getNsURI(), modafPkg);
+
         // Execute the transformation
         Resource outRes = executeAtl(asm, "IEEE1471ConceptualModel.ecore", "MoDAF-AV.ecore", "IEEE1471", "MoDAF", input);
         

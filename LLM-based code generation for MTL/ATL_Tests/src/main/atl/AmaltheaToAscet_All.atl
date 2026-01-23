@@ -1,10 +1,7 @@
--- ATL transformation module to convert Amalthea models to Ascet models.
 module AmaltheaToAscet_All;
 
 create OUT : Ascet from IN : Amalthea;
 
--- Main rule to transform Amalthea ComponentContainer elements into
--- AscetModule elements. 
 rule ComponentContainer2AscetModule {
   from cc : Amalthea!ComponentContainer
   to   m  : Ascet!AscetModule (
@@ -12,8 +9,6 @@ rule ComponentContainer2AscetModule {
   )
 }
 
--- Rule to transform Amalthea tasks that are at the root level (i.e.,
--- not contained in a ComponentContainer) into Ascet SoftwareTask elements.
 rule TaskRoot2SoftwareTask {
   from t : Amalthea!Task (t.eContainer().oclIsUndefined())
   to   s : Ascet!SoftwareTask (
@@ -21,8 +16,6 @@ rule TaskRoot2SoftwareTask {
   )
 }
 
--- Lazy rule to transform Amalthea tasks contained in a ComponentContainer
--- into Ascet SoftwareTask elements.
 lazy rule Task2SoftwareTask {
   from t : Amalthea!Task
   to   s : Ascet!SoftwareTask (

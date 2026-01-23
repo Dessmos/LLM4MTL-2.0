@@ -77,13 +77,29 @@ public class CPL2SPLAllExecutionTest {
     }
 
     // Load an Ecore metamodel from the given path and register it in the
-    // package registry of the given resource set.  Returns the loaded EPackage.
+    // package registry of the given resource set. Returns the main EPackage (matching filename or first valid).
     private EPackage loadAndRegisterEcore(ResourceSet rs, String ecorePath) {
         URI uri = URI.createFileURI(new File(ecorePath).getAbsolutePath());
         Resource res = rs.getResource(uri, true);
-        EPackage pkg = (EPackage) res.getContents().get(0);
-        rs.getPackageRegistry().put(pkg.getNsURI(), pkg);
-        return pkg;
+        EPackage result = null;
+        // Extract expected package name from filename (e.g., "SPL.ecore" -> "SPL")
+        String expectedName = new File(ecorePath).getName().replace(".ecore", "");
+        // Register all packages in the resource
+        for (org.eclipse.emf.ecore.EObject obj : res.getContents()) {
+            if (obj instanceof EPackage) {
+                EPackage pkg = (EPackage) obj;
+                if (pkg.getNsURI() != null) {
+                    rs.getPackageRegistry().put(pkg.getNsURI(), pkg);
+                    // Prefer package matching the filename
+                    if (pkg.getName().equals(expectedName)) {
+                        result = pkg;
+                    } else if (result == null && !pkg.getName().equals("PrimitiveTypes") && !pkg.getName().equals("Enum")) {
+                        result = pkg;
+                    }
+                }
+            }
+        }
+        return result != null ? result : (EPackage) res.getContents().get(0);
     }
 
     // Execute the given ATL transformation and return the output resource.
@@ -125,7 +141,9 @@ public class CPL2SPLAllExecutionTest {
         // Register the CPL metamodel in the global package registry.
         // The ATL injector will use this to resolve the namespace when loading the input XMI.
         EPackage.Registry.INSTANCE.put(cplPkg.getNsURI(), cplPkg);
-        
+        // Also register the output metamodel for loading the output XMI
+        EPackage.Registry.INSTANCE.put(splPkg.getNsURI(), splPkg);
+
         // Execute the transformation
         Resource outRes = executeAtl(asm, "CPL.ecore", "SPL.ecore", "CPL", "SPL", input);
         
@@ -154,10 +172,9 @@ public class CPL2SPLAllExecutionTest {
         assertEquals(1, serviceCount, "Expected one SPL Service");
         assertNotNull(program, "Program is null");
         
-        // Verify Program contains service
-        @SuppressWarnings("unchecked")
-        EList<EObject> services = (EList<EObject>) program.eGet(programCls.getEStructuralFeature("service"));
-        assertEquals(1, services.size(), "Program should contain one service");
+        // Verify Program contains service (service is a single-valued reference, not a list)
+        EObject service = (EObject) program.eGet(programCls.getEStructuralFeature("service"));
+        assertNotNull(service, "Program should contain a service");
     }
 }
 
