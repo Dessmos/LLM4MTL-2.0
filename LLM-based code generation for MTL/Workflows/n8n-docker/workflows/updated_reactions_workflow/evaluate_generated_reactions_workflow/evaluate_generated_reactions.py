@@ -8,17 +8,48 @@ from fastchrf import aggregate_chrf, pairwise_chrf
 import numpy as np
 
 
+
+
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+
+JAR_PATH = os.path.join(
+    SCRIPT_DIR,
+    "../../../../../"
+    "Reactions_Langauge_Parser",
+    "parser",
+    "target",
+    "tools.vitruv.reactionsparser.parser-0.1.0-SNAPSHOT-all.jar"
+)
+
+REACTIONS_RESPONSE_DIRECTORY = os.path.join(
+    SCRIPT_DIR,
+    "../../../",
+    "mtl_snippets",
+    "reactions_language",
+    "responses"
+)
+
+REFERENCE_REACTIONS_DIRECTORY = os.path.join(
+    SCRIPT_DIR,
+    "../../../",
+    "mtl_snippets",
+    "reactions_language",
+    "references"
+)
+
 reactions_response_paths = []
+
 
 def get_all_reactions_response():
     global reactions_response_paths
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    search_path = os.path.abspath(os.path.join(script_dir, 'Workflows/n8n-docker/mtl_snippets/reactions_language/responses'))
+    search_path = REACTIONS_RESPONSE_DIRECTORY
     reactions_response_paths = [os.path.abspath(f) for f in glob.glob(os.path.join(search_path, '**/*.reactions'), recursive=True)]
     return reactions_response_paths
 
 def check_parsed_rate(input_reactions, output_xmi):
-    result = subprocess.call(['java', '-jar', 'Reactions_Langauge_Parser/parser/target/tools.vitruv.reactionsparser.parser-0.1.0-SNAPSHOT-all.jar', input_reactions, output_xmi, 'Workflows/n8n-docker/models'])
+    if not os.path.isfile(JAR_PATH):
+        raise FileNotFoundError(f"JAR not found: {JAR_PATH}")
+    result = subprocess.call(['java', '-jar', JAR_PATH, input_reactions, output_xmi, 'Workflows/n8n-docker/models'])
     return result == 0  # Return True if successful (exit code 0), False otherwise
 
 def extract_metadata_from_path(file_path):
@@ -45,6 +76,7 @@ def create_csv_report(output_csv='parsed_rate_report.csv'):
         if llm and strategy:
             # For now, we'll mark as 'unknown' - update with actual parsing results
             csv_data.append({
+                'ReactionFile': reaction_file,
                 'LLM': llm,
                 'Strategy': strategy,
                 'Parsed': parsed
@@ -65,8 +97,7 @@ def create_csv_report(output_csv='parsed_rate_report.csv'):
     
 def get_all_reactions_references():
     """Get all reference files from the references folder."""
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    search_path = os.path.abspath(os.path.join(script_dir, 'Workflows/n8n-docker/mtl_snippets/reactions_language/references'))
+    search_path = REFERENCE_REACTIONS_DIRECTORY
     references = [os.path.abspath(f) for f in glob.glob(os.path.join(search_path, '**/*.reactions'), recursive=True)]
     return references
 
