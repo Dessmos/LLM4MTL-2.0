@@ -1,0 +1,2 @@
+fastchrf==0.1.0
+numpy==2.2.6
