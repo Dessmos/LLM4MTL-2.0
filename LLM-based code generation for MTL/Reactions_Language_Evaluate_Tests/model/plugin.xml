@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?eclipse version="3.0"?>
+
+<!--
+-->
+
+<plugin>
+
+   <extension point="org.eclipse.emf.ecore.generated_package">
+      <!-- @generated model -->
+      <package
+            uri="http://vitruv.tools/methodologisttemplate/network"
+            class="tools.vitruv.methodologisttemplate.model.network.NetworkPackage"
+            genModel="src/main/ecore/network.genmodel"/>
+   </extension>
+
+   <extension point="org.eclipse.emf.ecore.generated_package">
+      <!-- @generated model2 -->
+      <package
+            uri="http://vitruv.tools/methodologisttemplate/graph"
+            class="tools.vitruv.methodologisttemplate.model.graph.GraphPackage"
+            genModel="src/main/ecore/graph.genmodel"/>
+   </extension>
+
+   <extension point="org.eclipse.emf.ecore.generated_package">
+      <!-- @generated persons -->
+      <package
+            uri="http://vitruv.tools/methodologisttemplate/persons"
+            class="tools.vitruv.methodologisttemplate.model.persons.PersonsPackage"
+            genModel="src/main/ecore/persons.genmodel"/>
+   </extension>
+
+   <extension point="org.eclipse.emf.ecore.generated_package">
+      <!-- @generated families -->
+      <package
+            uri="http://vitruv.tools/methodologisttemplate/families"
+            class="tools.vitruv.methodologisttemplate.model.families.FamiliesPackage"
+            genModel="src/main/ecore/families.genmodel"/>
+   </extension>
+
+   <extension point="org.eclipse.emf.ecore.generated_package">
+      <!-- @generated ascet -->
+      <package
+            uri="http://vitruv.tools/methodologisttemplate/ascet"
+            class="tools.vitruv.methodologisttemplate.model.ascet.AscetPackage"
+            genModel="src/main/ecore/ascet.genmodel"/>
+   </extension>
+
+   <extension point="org.eclipse.emf.ecore.generated_package">
+      <!-- @generated amalthea -->
+      <package
+            uri="http://vitruv.tools/methodologisttemplate/amalthea"
+            class="tools.vitruv.methodologisttemplate.model.amalthea.AmaltheaPackage"
+            genModel="src/main/ecore/amalthea.genmodel"/>
+   </extension>
+
+</plugin>
