@@ -1,7 +1,7 @@
 import "http://vitruv.tools/methodologisttemplate/ascet" as ascet
 import "http://vitruv.tools/methodologisttemplate/amalthea" as amalthea
 
-reactions: amaltheaToAscet
+reactions: amaltheaToAscet_ComponentContainerInsertedAsRoot
 in reaction to changes in amalthea
 execute actions in ascet
 

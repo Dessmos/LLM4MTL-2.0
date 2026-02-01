@@ -1,7 +1,7 @@
 import "http://vitruv.tools/methodologisttemplate/families" as families
 import "http://vitruv.tools/methodologisttemplate/persons" as persons
 
-reactions: familiesToPersons
+reactions: familiesToPersons_InsertedFamilyRegister
 in reaction to changes in families
 execute actions in persons
 

@@ -1,7 +1,7 @@
 import "http://vitruv.tools/methodologisttemplate/network" as network
 import "http://vitruv.tools/methodologisttemplate/graph" as graph
 
-reactions: networkToGraph
+reactions: networkToGraph_ComponentDeleted
 in reaction to changes in network
 execute actions in graph
 
