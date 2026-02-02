@@ -1,0 +1,5 @@
+Create an ATL transformation module named **Make2Ant** that converts models conforming to the **Make** metamodel into models conforming to the **Ant** metamodel.  
+Define a transformation that generates an **Ant Project** from a **Makefile** in rule **Makefile2Project**, mapping its name, properties, targets, and default target.  
+Add rule **Macro2Property** to translate **Macro** elements into **PropertyValue** elements.  
+Include rule **Rule2Target** to create **Target** elements with tasks and dependencies.  
+Finally, add rules **ShellLine2Task_Display** and **ShellLine2Task_NoDisplay** to generate **Echo** and **Exec** tasks depending on the display attribute.

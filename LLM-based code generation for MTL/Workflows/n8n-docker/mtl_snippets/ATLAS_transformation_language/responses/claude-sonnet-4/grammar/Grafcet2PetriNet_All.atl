@@ -1,0 +1,60 @@
+module Grafcet2PetriNet;
+create OUT : PetriNet from IN : Grafcet;
+
+rule PetriNet {
+    from
+        g : Grafcet!Grafcet
+    to
+        pn : PetriNet!PetriNet (
+            name <- g.name,
+            location <- g.location,
+            elements <- g.elements->select(e | e.oclIsTypeOf(Grafcet!Step))->collect(e | thisModule.Place(e))->union(g.elements->select(e | e.oclIsTypeOf(Grafcet!Transition))->collect(e | thisModule.Transition(e))),
+            arcs <- g.connections->select(c | c.oclIsTypeOf(Grafcet!StepToTransition))->collect(c | thisModule.PlaceToTransition(c))->union(g.connections->select(c | c.oclIsTypeOf(Grafcet!TransitionToStep))->collect(c | thisModule.TransitionToPlace(c)))
+        )
+}
+
+rule Place {
+    from
+        s : Grafcet!Step
+    to
+        p : PetriNet!Place (
+            name <- s.name,
+            location <- s.location
+        )
+}
+
+rule Transition {
+    from
+        t : Grafcet!Transition
+    to
+        tr : PetriNet!Transition (
+            name <- t.name,
+            location <- t.location
+        )
+}
+
+rule PlaceToTransition {
+    from
+        st : Grafcet!StepToTransition
+    to
+        pt : PetriNet!PlaceToTransition (
+            name <- st.name,
+            location <- st.location,
+            weight <- 1,
+            from <- st.from,
+            to <- st.to
+        )
+}
+
+rule TransitionToPlace {
+    from
+        ts : Grafcet!TransitionToStep
+    to
+        tp : PetriNet!TransitionToPlace (
+            name <- ts.name,
+            location <- ts.location,
+            weight <- 1,
+            from <- ts.from,
+            to <- ts.to
+        )
+}

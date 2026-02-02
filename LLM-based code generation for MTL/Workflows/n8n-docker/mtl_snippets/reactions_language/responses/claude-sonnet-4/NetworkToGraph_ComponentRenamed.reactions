@@ -1,0 +1,23 @@
+transformation networkToGraph {
+  metamodel network "http://vitruv.tools/methodologisttemplate/network"
+  metamodel graph "http://vitruv.tools/methodologisttemplate/graph"
+  persistence network "http://vitruv.tools/methodologisttemplate/network"
+  persistence graph "http://vitruv.tools/methodologisttemplate/graph"
+  correspondence "http://vitruv.tools/methodologisttemplate/network-graph-correspondence"
+
+  reaction ComponentRenamed {
+    after attributeReplaced network::Component.name
+    extract {
+      affectedElement component
+      newValue newName
+    }
+    call renameEntity(component, newName)
+  }
+
+  routine renameEntity(component: network::Component, newName: String) {
+    retrieve entity: graph::Entity from component
+    update {
+      entity.name = newName
+    }
+  }
+}

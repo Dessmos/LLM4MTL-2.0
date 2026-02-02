@@ -1,0 +1,4 @@
+-------------------------------------------------------------------------------
+Test set: org.example.DSL2KM3AllExecutionTest
+-------------------------------------------------------------------------------
+Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 1.381 s - in org.example.DSL2KM3AllExecutionTest

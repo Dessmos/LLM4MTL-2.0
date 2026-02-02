@@ -1,0 +1,69 @@
+import metamodel families "http://vitruv.tools/methodologisttemplate/families"
+import metamodel persons "http://vitruv.tools/methodologisttemplate/persons"
+
+transformation familiesToPersons
+
+persistence families "http://vitruv.tools/methodologisttemplate/families"
+persistence persons "http://vitruv.tools/methodologisttemplate/persons"
+
+correspondences
+  families.FamilyRegister <-> persons.PersonRegister
+  families.Member <-> persons.Person
+end
+
+reaction CreatedFather
+  after replace reference families.Family.father
+  guard newValue != null
+  do
+    val fam = affectedEObject as families.Family
+    val newMem = newValue as families.Member
+    call updateNameAndCorrespondencesOfCorrespondingPerson(newMem, fam)
+    call createMaleFromNewMember(newMem, fam)
+  end
+end
+
+routine updateNameAndCorrespondencesOfCorrespondingPerson(member : families.Member, family : families.Family)
+  do
+    val p = getCorresponding<persons.Person>(member)
+    if (p != null) then
+      set p.fullName := member.firstName + " " + family.lastName
+      ensureCorrespondence(member, p)
+      val famReg = family.eContainer as families.FamilyRegister
+      val perReg = call getOrCreatePersonRegisterForFamily(family)
+      ensureCorrespondence(famReg, perReg)
+    end
+  end
+end
+
+routine createMaleFromNewMember(member : families.Member, family : families.Family)
+  do
+    val p = getCorresponding<persons.Person>(member)
+    if (p == null) then
+      call createMale(member, family)
+    end
+  end
+end
+
+routine createMale(member : families.Member, family : families.Family) : persons.Male
+  create male : persons.Male
+  do
+    set male.fullName := member.firstName + " " + family.lastName
+    val reg = call getOrCreatePersonRegisterForFamily(family)
+    add male to reg.persons
+    ensureCorrespondence(member, male)
+    return male
+  end
+end
+
+routine getOrCreatePersonRegisterForFamily(family : families.Family) : persons.PersonRegister
+  do
+    val famReg = family.eContainer as families.FamilyRegister
+    var perReg = getCorresponding<persons.PersonRegister>(famReg)
+    if (perReg == null) then
+      create perReg : persons.PersonRegister
+      ensureCorrespondence(famReg, perReg)
+      persist perReg in persons
+    end
+    return perReg
+  end
+end

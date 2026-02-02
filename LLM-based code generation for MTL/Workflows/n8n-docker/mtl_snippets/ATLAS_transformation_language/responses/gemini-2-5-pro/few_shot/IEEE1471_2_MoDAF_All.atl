@@ -1,0 +1,160 @@
+module IEEE1471_2_MoDAF;
+create OUT : MoDAF from IN : IEEE1471;
+
+helper context IEEE1471!IEEE1471Model def : rationale() : String =
+	self.rationale.name + ' - ' + self.rationale.content;
+
+rule IEEE1471Model2MoDAFModel {
+	from s : IEEE1471!IEEE1471Model
+	using {
+		undefinedFW : MoDAF!ArchitecturalFramework = (
+			t_fw : MoDAF!ArchitecturalFramework |
+			t_fw.name <- 'Undefined Architectural Framework',
+			t_fw.content <- 'A default framework for viewpoints without a defined source.',
+			t_fw.ownedMember <- IEEE1471!Viewpoint.allInstances()->select(v | v.hasSource.oclIsUndefined())
+		)
+	}
+	to t : MoDAF!MoDAFModel (
+		name <- s.name,
+		content <- s.content,
+		enterprise <- s.system,
+		environment <- s.environment,
+		operationalMissions <- s.missions,
+		architectures <- Sequence{s.architecture},
+		architecturalDescription <- Sequence{s.architecturalDescription},
+		stakeholders <- s.stakeholders,
+		architecturalFrameworks <- s.libraryViewpoints->union(Sequence{undefinedFW}),
+		stakeholderHasConcerns <- IEEE1471!Stakeholder.allInstances()->collect(st |
+			st.has->collect(c | thisModule.StakeholderHasConcern(st, c))
+		)->flatten()
+	)
+}
+
+rule System2Enterprise {
+	from s : IEEE1471!System
+	to t : MoDAF!Enterprise (
+		name <- s.name,
+		content <- s.content,
+		fulfills <- s.fulfills,
+		inhabits <- s.inhabits
+	)
+}
+
+rule Environment2Environment {
+	from s : IEEE1471!Environment
+	to t : MoDAF!Environment (
+		name <- s.name,
+		content <- s.content,
+		influences <- s.influences
+	)
+}
+
+rule Mission2OperationalMission {
+	from s : IEEE1471!Mission
+	to t : MoDAF!OperationalMission (
+		name <- s.name,
+		content <- s.content
+	)
+}
+
+rule Architecture2Architecture {
+	from s : IEEE1471!Architecture
+	to t : MoDAF!Architecture (
+		name <- s.name,
+		content <- s.content,
+		describedBy <- s.describedBy,
+		enterprise <- IEEE1471!System.allInstances()->first()
+	)
+}
+
+rule AD2AD {
+	from s : IEEE1471!ArchitecturalDescription
+	to t : MoDAF!ArchitecturalDescription (
+		name <- s.name,
+		content <- s.content,
+		purpose <- s.oclContainer().oclAsType(IEEE1471!IEEE1471Model).rationale(),
+		approvialAuthority <- '',
+		architect <- '',
+		assumptionAndConstraints <- '',
+		creatingOrganisation <- '',
+		dateCompleted <- '',
+		recommendations <- '',
+		summaryOfFindings <- '',
+		tollsUsed <- '',
+		viewpoints <- s.selects,
+		products <- s.organizedBy
+	)
+}
+
+rule Stakeholder2Stakeholder {
+	from s : IEEE1471!Stakeholder
+	to t : MoDAF!Stakeholder (
+		name <- s.name,
+		content <- s.content
+	)
+}
+
+rule Viewpoint2View {
+	from s : IEEE1471!Viewpoint
+	to t : MoDAF!View (
+		name <- s.name,
+		content <- s.content,
+		usedToCover <- s.usedToCover,
+		definingFramework <- if s.hasSource.oclIsUndefined() then
+				MoDAF!ArchitecturalFramework.allInstances()->select(f | f.name = 'Undefined Architectural Framework')->first()
+			else
+				s.hasSource
+			endif,
+		framework <- if s.hasSource.oclIsUndefined() then 'Undefined' else s.hasSource.name endif,
+		frameworkWebsite <- '',
+		viewCode <- '',
+		viewDescription <- s.content,
+		viewName <- s.name
+	)
+}
+
+rule View2ArchitecturalProduct {
+	from s : IEEE1471!View
+	to t : MoDAF!ArchitecturalProduct (
+		name <- s.name,
+		content <- s.content,
+		description <- s.content,
+		architecturalElements <- s.consitsOf,
+		definingView <- s.conformsTo,
+		addresses <- s.conformsTo.usedToCover
+	)
+}
+
+rule Model2Element {
+	from s : IEEE1471!Model
+	to t : MoDAF!Elements (
+		name <- s.name,
+		content <- s.content
+	)
+}
+
+rule Concern2Concern {
+	from s : IEEE1471!Concern
+	to t : MoDAF!Concern (
+		name <- s.name,
+		content <- s.content
+	)
+}
+
+rule LibraryViewpoint2ArchitecturalFramework {
+	from s : IEEE1471!LibraryViewpoint
+	to t : MoDAF!ArchitecturalFramework (
+		name <- s.name,
+		content <- s.content,
+		ownedMember <- IEEE1471!Viewpoint.allInstances()->select(vp | vp.hasSource = s)
+	)
+}
+
+lazy rule StakeholderHasConcern {
+	from st : IEEE1471!Stakeholder, c : IEEE1471!Concern
+	to t : MoDAF!StakeholderHasConcern (
+		client <- st,
+		supplier <- c,
+		owner <- MoDAF!MoDAFModel.allInstances()->first()
+	)
+}

@@ -1,0 +1,25 @@
+import metamodel network "http://vitruv.tools/methodologisttemplate/network"
+import metamodel graph "http://vitruv.tools/methodologisttemplate/graph"
+transformation networkToGraph {
+  source network
+  target graph
+  reaction SystemInsertedAsRoot {
+    after network::System inserted as root system {
+      call createAndRegisterRoot(system)
+    }
+  }
+  routine createAndRegisterRoot(system: network::System) {
+    guard {
+      not existsCorrespondence(system, graph::Root)
+    }
+    create {
+      create graph::Root as root
+    }
+    persist {
+      persist root to "graph/Root.xmi" in project
+    }
+    correspondence {
+      establish system <-> root
+    }
+  }
+}

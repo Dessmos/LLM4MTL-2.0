@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xmi:XMI xmi:version="2.0" xmlns:xmi="http://www.omg.org/XMI" xmlns:XML="XML">
+  <XML:Root xmi:id="root1" name="dmd" startLine="1" startColumn="1" endLine="100" endColumn="10">
+    <children xmi:type="XML:Element" xmi:id="model1" name="model" parent="root1" startLine="2" startColumn="3" endLine="90" endColumn="10">
+      <children xmi:type="XML:Attribute" xmi:id="attr1" name="name" value="TestModel" parent="model1"/>
+      <children xmi:type="XML:Attribute" xmi:id="attr2" name="identity" value="test-model-1" parent="model1"/>
+      <children xmi:type="XML:Attribute" xmi:id="attr3" name="namespace" value="com.test" parent="model1"/>
+      <children xmi:type="XML:Attribute" xmi:id="attr4" name="isLoaded" value="true" parent="model1"/>
+      <children xmi:type="XML:Element" xmi:id="concepts" name="concepts" parent="model1">
+        <children xmi:type="XML:Element" xmi:id="concept1" name="concept" parent="concepts">
+          <children xmi:type="XML:Attribute" xmi:id="ca1" name="id" value="c1" parent="concept1"/>
+          <children xmi:type="XML:Attribute" xmi:id="ca2" name="name" value="TestConcept" parent="concept1"/>
+          <children xmi:type="XML:Attribute" xmi:id="ca3" name="identity" value="concept-1" parent="concept1"/>
+          <children xmi:type="XML:Attribute" xmi:id="ca4" name="namespace" value="com.test" parent="concept1"/>
+          <children xmi:type="XML:Attribute" xmi:id="ca5" name="isLoaded" value="true" parent="concept1"/>
+          <children xmi:type="XML:Element" xmi:id="mdfmeta1" name="mdfmetadata" parent="concept1">
+            <children xmi:type="XML:Attribute" xmi:id="mdf1" name="classmodifier" value="concrete" parent="mdfmeta1"/>
+          </children>
+          <children xmi:type="XML:Element" xmi:id="valueProps1" name="valueProperties" parent="concept1">
+            <children xmi:type="XML:Element" xmi:id="prop1" name="property" parent="valueProps1">
+              <children xmi:type="XML:Attribute" xmi:id="pa1" name="name" value="title" parent="prop1"/>
+              <children xmi:type="XML:Attribute" xmi:id="pa2" name="identity" value="prop-title" parent="prop1"/>
+              <children xmi:type="XML:Element" xmi:id="propInfo1" name="propertyInfo" parent="prop1">
+                <children xmi:type="XML:Attribute" xmi:id="pi1" name="xsi:type" value="StringProperty" parent="propInfo1"/>
+              </children>
+            </children>
+          </children>
+        </children>
+      </children>
+      <children xmi:type="XML:Element" xmi:id="relationships" name="relationships" parent="model1"/>
+      <children xmi:type="XML:Element" xmi:id="enumerations" name="enumerations" parent="model1"/>
+    </children>
+  </XML:Root>
+</xmi:XMI>

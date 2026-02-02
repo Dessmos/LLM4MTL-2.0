@@ -1,0 +1,162 @@
+module IEEE1471_2_MoDAF;
+create OUT : MoDAF from IN : IEEE1471;
+
+helper def : rationale() : String =
+	if IN!Rationale.allInstances()->notEmpty() then
+		let r : IN!Rationale = IN!Rationale.allInstances()->first() in
+		r.name + ' - ' + r.content
+	else
+		'No rationale provided'
+	endif;
+
+rule IEEE1471Model2MoDAFModel {
+	from
+		s : IN!IEEE1471Model
+	to
+		t : OUT!MoDAFModel (
+			name <- s.name,
+			content <- s.content
+		)
+}
+
+rule System2Enterprise {
+	from
+		s : IN!System
+	to
+		t : OUT!Enterprise (
+			name <- s.name,
+			content <- s.content
+		)
+}
+
+rule Environment2Environment {
+	from
+		s : IN!Environment
+	to
+		t : OUT!Environment (
+			name <- s.name,
+			content <- s.content
+		)
+}
+
+rule Mission2OperationalMission {
+	from
+		s : IN!Mission
+	to
+		t : OUT!OperationalMission (
+			name <- s.name,
+			content <- s.content
+		)
+}
+
+rule Architecture2Architecture {
+	from
+		s : IN!Architecture
+	to
+		t : OUT!Architecture (
+			name <- s.name,
+			content <- s.content
+		)
+}
+
+rule AD2AD {
+	from
+		s : IN!ArchitecturalDescription
+	to
+		t : OUT!ArchitecturalDescription (
+			name <- s.name,
+			content <- s.content,
+			approvialAuthority <- 'Default Authority',
+			architect <- 'Default Architect',
+			assumptionAndConstraints <- 'Default Constraints',
+			creatingOrganisation <- 'Default Organization',
+			dateCompleted <- 'TBD',
+			purpose <- 'Default Purpose',
+			recommendations <- 'Default Recommendations',
+			summaryOfFindings <- 'Default Summary',
+			tollsUsed <- 'Default Tools'
+		)
+}
+
+rule Stakeholder2Stakeholder {
+	from
+		s : IN!Stakeholder
+	to
+		t : OUT!Stakeholder (
+			name <- s.name,
+			content <- s.content
+		)
+}
+
+rule Viewpoint2View {
+	from
+		s : IN!Viewpoint
+	to
+		t : OUT!View (
+			name <- s.name,
+			content <- s.content,
+			framework <- if s.hasSource.oclIsUndefined() then 'Undefined Architectural Framework' else s.hasSource.name endif,
+			frameworkWebsite <- 'http://example.com',
+			viewCode <- s.name,
+			viewDescription <- s.content,
+			viewName <- s.name
+		)
+}
+
+rule View2ArchitecturalProduct {
+	from
+		s : IN!View
+	to
+		t : OUT!ArchitecturalProduct (
+			name <- s.name,
+			content <- s.content,
+			description <- s.content
+		)
+}
+
+rule Model2Element {
+	from
+		s : IN!Model
+	to
+		t : OUT!Elements (
+			name <- s.name,
+			content <- s.content
+		)
+}
+
+rule Concern2Concern {
+	from
+		s : IN!Concern
+	to
+		t : OUT!Concern (
+			name <- s.name,
+			content <- s.content
+		)
+}
+
+rule LibraryViewpoint2ArchitecturalFramework {
+	from
+		s : IN!LibraryViewpoint
+	to
+		t : OUT!ArchitecturalFramework (
+			name <- s.name,
+			content <- s.content
+		),
+		undefinedFramework : OUT!ArchitecturalFramework (
+			name <- 'Undefined Architectural Framework',
+			content <- 'Framework for viewpoints without a defined source'
+		)
+}
+
+rule StakeholderHasConcern {
+	from
+		s : IN!Stakeholder,
+		c : IN!Concern (
+			c.isImportantTo->includes(s)
+		)
+	to
+		t : OUT!StakeholderHasConcern (
+			client <- s,
+			supplier <- c
+		)
+}

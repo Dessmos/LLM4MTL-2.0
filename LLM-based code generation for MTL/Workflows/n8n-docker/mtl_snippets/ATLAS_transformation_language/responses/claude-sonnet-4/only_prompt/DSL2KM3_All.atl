@@ -1,0 +1,139 @@
+module DSL2KM3;
+create OUT : KM3 from IN : DSL;
+
+helper def: needTurnOnClass(r : DSL!Relationship) : Boolean =
+	not r.isEmbedding and r.roles->exists(role | role.min > 1 or role.max > 1 or role.isUnbounded);
+
+helper def: getRoles(r : DSL!Relationship) : Sequence(DSL!Role) =
+	r.roles->asSequence();
+
+helper def: isEmbedding(r : DSL!Relationship) : Boolean =
+	r.isEmbedding;
+
+rule Metamodel {
+	from
+		s : DSL!DomainModel
+	to
+		t : KM3!Metamodel (
+			location <- 'generated',
+			contents <- Sequence{p}
+		),
+		p : KM3!Package (
+			name <- s.name,
+			location <- 'generated',
+			package <- t
+		)
+}
+
+rule Class {
+	from
+		s : DSL!Class
+	to
+		t : KM3!Class (
+			name <- s.name,
+			location <- 'generated',
+			isAbstract <- s.isAbstract,
+			supertypes <- if s.superType.oclIsUndefined() then Sequence{} else Sequence{s.superType} endif,
+			package <- s.domainModel
+		)
+}
+
+rule Relation2Class {
+	from
+		s : DSL!Relationship (thisModule.needTurnOnClass(s))
+	to
+		t : KM3!Class (
+			name <- s.name,
+			location <- 'generated',
+			isAbstract <- s.isAbstract,
+			supertypes <- if s.superType.oclIsUndefined() then Sequence{} else Sequence{s.superType} endif,
+			package <- s.domainModel
+		)
+}
+
+rule SimpleReference {
+	from
+		s : DSL!Role (not thisModule.needTurnOnClass(s.relation) and s.isPropertyGenerator)
+	to
+		t : KM3!Reference (
+			name <- s.name,
+			location <- 'generated',
+			lower <- s.min,
+			upper <- if s.isUnbounded then -1 else s.max endif,
+			isOrdered <- s.isOrdered,
+			isUnique <- true,
+			isContainer <- thisModule.isEmbedding(s.relation),
+			type <- s.type,
+			owner <- s.source,
+			package <- s.source.domainModel
+		)
+}
+
+rule ComplexReference {
+	from
+		s : DSL!Role (thisModule.needTurnOnClass(s.relation) and s.isPropertyGenerator)
+	to
+		t : KM3!Reference (
+			name <- s.name,
+			location <- 'generated',
+			lower <- s.min,
+			upper <- if s.isUnbounded then -1 else s.max endif,
+			isOrdered <- s.isOrdered,
+			isUnique <- true,
+			isContainer <- false,
+			type <- s.relation,
+			owner <- s.source,
+			package <- s.source.domainModel
+		)
+}
+
+rule Attribute {
+	from
+		s : DSL!ValueProperty
+	to
+		t : KM3!Attribute (
+			name <- s.name,
+			location <- 'generated',
+			lower <- 1,
+			upper <- 1,
+			isOrdered <- true,
+			isUnique <- true,
+			type <- s.type,
+			owner <- s.owner,
+			package <- s.owner.domainModel
+		)
+}
+
+rule Enumeration {
+	from
+		s : DSL!Enumeration
+	to
+		t : KM3!Enumeration (
+			name <- s.name,
+			location <- 'generated',
+			literals <- s.literals,
+			package <- s
+		)
+}
+
+rule EnumLiteral {
+	from
+		s : DSL!EnumerationLiteral
+	to
+		t : KM3!EnumLiteral (
+			name <- s.name,
+			location <- 'generated',
+			package <- s
+		)
+}
+
+rule DataType {
+	from
+		s : DSL!SimpleType
+	to
+		t : KM3!DataType (
+			name <- s.name,
+			location <- 'generated',
+			package <- s
+		)
+}

@@ -1,0 +1,5 @@
+Create an ATL transformation module named **IEEE1471_2_MoDAF** that conceptually maps an **IEEE1471** architectural description model into a **MoDAF** architecture-view model.
+
+Include a helper function named **rationale** that returns a String built from the first Rationale’s name and content.
+
+Implement rules named **IEEE1471Model2MoDAFModel**, **System2Enterprise**, **Environment2Environment**, **Mission2OperationalMission**, **Architecture2Architecture**, **AD2AD**, **Stakeholder2Stakeholder**, **Viewpoint2View**, **View2ArchitecturalProduct**, **Model2Element**, **Concern2Concern**, **LibraryViewpoint2ArchitecturalFramework**, and **StakeholderHasConcern**, copying name/content and wiring references as appropriate, plus creating a default “Undefined Architectural Framework” containing Viewpoints without a source.

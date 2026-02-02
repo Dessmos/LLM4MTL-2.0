@@ -1,0 +1,34 @@
+import metamodel "http://vitruv.tools/methodologisttemplate/families" as families
+import metamodel "http://vitruv.tools/methodologisttemplate/persons" as persons
+
+transformation familiesToPersons {
+  persistence {
+    families "http://vitruv.tools/methodologisttemplate/families"
+    persons "http://vitruv.tools/methodologisttemplate/persons"
+  }
+
+  reactions {
+    reaction DeletedMember {
+      after delete families.Member member
+      call deletePerson(member)
+    }
+  }
+
+  routines {
+    routine deletePerson(families.Member member) {
+      retrieve {
+        var persons.Person person = getCorresponding persons.Person for member
+        var families.Family family = getCorresponding families.Family for person
+      }
+      update {
+        if (person != null) {
+          delete person
+          removeCorrespondence between member and person
+          if (family != null) {
+            removeCorrespondence between family and person
+          }
+        }
+      }
+    }
+  }
+}

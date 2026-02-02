@@ -1,0 +1,120 @@
+module DSL2KM3;
+create OUT : KM3 from IN : DSL;
+
+helper context DSL!Relationship def: needTurnOnClass() : Boolean =
+	self.properties->notEmpty();
+
+helper context DSL!Relationship def: getRoles() : Sequence(DSL!Role) =
+	self.roles->asSequence();
+
+helper context DSL!Role def: isEmbedding() : Boolean =
+	self.relation.isEmbedding and not self.isPropertyGenerator;
+
+helper context DSL!Classifier def: getGeneratedRoles() : Set(DSL!Role) =
+	DSL!Role.allInstances()->select(r | r.source = self and r.isPropertyGenerator and not r.relation.needTurnOnClass());
+
+rule Metamodel {
+	from dm : DSL!DomainModel
+	to mm : KM3!Metamodel (
+		contents <- Sequence{p}
+	),
+	p : KM3!Package (
+		name <- dm.name,
+		contents <- dm.classifiers->union(dm.types)
+	)
+}
+
+rule Class {
+	from c : DSL!Class
+	to kc : KM3!Class (
+		name <- c.name,
+		isAbstract <- c.isAbstract,
+		package <- c.domainModel,
+		supertypes <- if c.superType.oclIsUndefined() then Sequence{} else Sequence{c.superType} endif,
+		structuralFeatures <- c.properties->union(c.getGeneratedRoles())
+	)
+}
+
+rule Relation2Class {
+	from r : DSL!Relationship (
+		r.needTurnOnClass()
+	)
+	to kc : KM3!Class (
+		name <- r.name,
+		isAbstract <- r.isAbstract,
+		package <- r.domainModel,
+		supertypes <- if r.superType.oclIsUndefined() then Sequence{} else Sequence{r.superType} endif,
+		structuralFeatures <- r.properties->union(r.roles)
+	)
+}
+
+rule SimpleReference {
+	from r : DSL!Role (
+		not r.relation.needTurnOnClass()
+	)
+	to kr : KM3!Reference (
+		name <- r.name,
+		owner <- r.source,
+		type <- r.type,
+		lower <- r.min,
+		upper <- if r.isUnbounded then -1 else r.max endif,
+		isOrdered <- r.isOrdered,
+		isUnique <- true,
+		isContainer <- self.isEmbedding(),
+		opposite <- r.relation.roles->any(op | op <> r)
+	)
+}
+
+rule ComplexReference {
+	from r : DSL!Role (
+		r.relation.needTurnOnClass()
+	)
+	to kr : KM3!Reference (
+		name <- r.name,
+		owner <- r.relation,
+		type <- r.type,
+		lower <- r.min,
+		upper <- if r.isUnbounded then -1 else r.max endif,
+		isOrdered <- r.isOrdered,
+		isUnique <- true,
+		isContainer <- false
+	)
+}
+
+rule Attribute {
+	from p : DSL!ValueProperty
+	to ka : KM3!Attribute (
+		name <- p.name,
+		owner <- p.owner,
+		type <- p.type,
+		lower <- 1,
+		upper <- 1,
+		isOrdered <- false,
+		isUnique <- true
+	)
+}
+
+rule Enumeration {
+	from e : DSL!Enumeration
+	to ke : KM3!Enumeration (
+		name <- e.name,
+		package <- e.oclContainer(),
+		literals <- e.literals
+	)
+}
+
+rule EnumLiteral {
+	from l : DSL!EnumerationLiteral
+	to kl : KM3!EnumLiteral (
+		name <- l.name,
+		package <- l.oclContainer().oclContainer()
+	)
+}
+
+rule DataType {
+	from t : DSL!SimpleType
+	to kd : KM3!DataType (
+		name <- t.name,
+		package <- t.oclContainer()
+	)
+}

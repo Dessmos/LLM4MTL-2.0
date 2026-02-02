@@ -1,0 +1,147 @@
+module BibTeX2DocBook;
+create OUT : DocBook from IN : BibTeX;
+
+helper context BibTeX!BibTeXFile def: authorSet : Set(BibTeX!Author) =
+	self.entries->select(e | e.oclIsKindOf(BibTeX!AuthoredEntry)).authors->flatten()->asSet();
+
+helper context BibTeX!BibTeXFile def: titledEntrySet : Set(BibTeX!TitledEntry) =
+	self.entries->select(e | e.oclIsKindOf(BibTeX!TitledEntry))->asSet();
+
+helper context BibTeX!BibTeXFile def: articleSet : Set(BibTeX!Article) =
+	self.entries->select(e | e.oclIsTypeOf(BibTeX!Article))->asSet();
+
+helper context BibTeX!BibTeXEntry def: buildEntryPara() : String =
+	'ID: ' + self.id +
+	(if self.oclIsKindOf(BibTeX!AuthoredEntry) then ', Authors: ' + self.authors->collect(a | a.author)->iterate(s; acc : String = '' | if acc = '' then s else acc + ', ' + s endif) else '' endif) +
+	(if self.oclIsKindOf(BibTeX!TitledEntry) then ', Title: ' + self.title else '' endif) +
+	(if self.oclIsKindOf(BibTeX!DatedEntry) then ', Year: ' + self.year else '' endif) +
+	(if self.oclIsTypeOf(BibTeX!Article) then ', Journal: ' + self.journal else '' endif);
+
+rule Main {
+	from s : BibTeX!BibTeXFile
+	to
+		db : DocBook!DocBook (
+			books <- book
+		),
+		book : DocBook!Book (
+			articles <- Sequence{authors_art, titles_art, journals_art}
+		),
+		authors_art : DocBook!Article (
+			title <- 'References by Author',
+			sections_1 <- s.authorSet
+		),
+		titles_art : DocBook!Article (
+			title <- 'Other References',
+			sections_1 <- BibTeX!BibTeXEntry.allInstances()->select(e | not e.oclIsTypeOf(BibTeX!Article))
+		),
+		journals_art : DocBook!Article (
+			title <- 'Articles by Journal',
+			sections_1 <- s.articleSet->collect(a | a.journal)->asSet()->collect(j | thisModule.JournalSect1(j))
+		)
+}
+
+called rule JournalSect1(j : String) {
+	to
+		s1 : DocBook!Sect1 (
+			title <- if j = '' then 'Uncategorized' else j endif,
+			sections_2 <- BibTeX!Article.allInstances()->select(a | a.journal = j)
+		)
+}
+
+rule Author {
+	from a : BibTeX!Author
+	to
+		s1 : DocBook!Sect1 (
+			title <- a.author,
+			paras <- BibTeX!AuthoredEntry.allInstances()
+				->select(e | e.authors->includes(a))
+				->collect(e | p),
+			p : DocBook!Para (
+				content <- e.buildEntryPara()
+			)
+		)
+}
+
+rule UntitledEntry {
+	from e : BibTeX!BibTeXEntry (not e.oclIsKindOf(BibTeX!TitledEntry))
+	to
+		s1 : DocBook!Sect1 (
+			title <- e.id,
+			paras <- Sequence{p}
+		),
+		p : DocBook!Para (
+			content <- e.buildEntryPara()
+		)
+}
+
+rule TitledEntry_Title_NoArticle {
+	from e : BibTeX!TitledEntry (e.title <> '' and not e.oclIsTypeOf(BibTeX!Article))
+	to
+		s1 : DocBook!Sect1 (
+			title <- e.title,
+			paras <- Sequence{p}
+		),
+		p : DocBook!Para (
+			content <- e.buildEntryPara()
+		)
+}
+
+rule TitledEntry_NoTitle_NoArticle {
+	from e : BibTeX!TitledEntry (e.title = '' and not e.oclIsTypeOf(BibTeX!Article))
+	to
+		s1 : DocBook!Sect1 (
+			title <- e.id,
+			paras <- Sequence{p}
+		),
+		p : DocBook!Para (
+			content <- e.buildEntryPara()
+		)
+}
+
+rule Article_Title_Journal {
+	from a : BibTeX!Article (a.title <> '' and a.journal <> '')
+	to
+		s2 : DocBook!Sect2 (
+			title <- a.title,
+			paras <- Sequence{p}
+		),
+		p : DocBook!Para (
+			content <- a.buildEntryPara()
+		)
+}
+
+rule Article_NoTitle_Journal {
+	from a : BibTeX!Article (a.title = '' and a.journal <> '')
+	to
+		s2 : DocBook!Sect2 (
+			title <- a.id,
+			paras <- Sequence{p}
+		),
+		p : DocBook!Para (
+			content <- a.buildEntryPara()
+		)
+}
+
+rule Article_Title_NoJournal {
+	from a : BibTeX!Article (a.title <> '' and a.journal = '')
+	to
+		s2 : DocBook!Sect2 (
+			title <- a.title,
+			paras <- Sequence{p}
+		),
+		p : DocBook!Para (
+			content <- a.buildEntryPara()
+		)
+}
+
+rule Article_NoTitle_NoJournal {
+	from a : BibTeX!Article (a.title = '' and a.journal = '')
+	to
+		s2 : DocBook!Sect2 (
+			title <- a.id,
+			paras <- Sequence{p}
+		),
+		p : DocBook!Para (
+			content <- a.buildEntryPara()
+		)
+}

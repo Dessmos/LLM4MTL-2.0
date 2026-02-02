@@ -1,0 +1,71 @@
+module Make2Ant;
+create OUT : Ant from IN : Make;
+
+helper context Make!Makefile def: rules() : Sequence(Make!Rule) =
+  self.elements->select(e | e.oclIsKindOf(Make!Rule))->collect(e | e.oclAsType(Make!Rule));
+
+helper context Make!Makefile def: macros() : Sequence(Make!Macro) =
+  self.elements->select(e | e.oclIsKindOf(Make!Macro))->collect(e | e.oclAsType(Make!Macro));
+
+helper context Make!Dependency def: depRule() : Make!Rule =
+  if self.oclIsKindOf(Make!RuleDep) then self.oclAsType(Make!RuleDep).ruledep else OclUndefined endif;
+
+helper context Make!Rule def: ruleDependencies() : Sequence(Make!Rule) =
+  self.dependencies->select(d | d.oclIsKindOf(Make!RuleDep))->collect(d | d.oclAsType(Make!RuleDep).ruledep);
+
+helper context Make!Rule def: isDefaultOf(mf : Make!Makefile) : Boolean =
+  mf.rules()->notEmpty() and mf.rules()->first() = self;
+
+helper context Make!ShellLine def: isDisplay() : Boolean =
+  self.display = true;
+
+rule Makefile2Project {
+  from mf : Make!Makefile
+  to   p : Ant!Project (
+    name        <- mf.name,
+    description <- if mf.comment.oclIsUndefined() then '' else mf.comment.text endif,
+    basedir     <- '.',
+    properties  <- mf.macros()->collect(m | thisModule.Macro2Property(m)),
+    targets     <- mf.rules()->collect(r | thisModule.Rule2Target(r)),
+    default     <- thisModule.Rule2Target(mf.rules()->first())
+  )
+}
+
+lazy rule Macro2Property {
+  from m : Make!Macro
+  to   pv : Ant!PropertyValue (
+    name  <- m.name,
+    value <- m.value
+  )
+}
+
+lazy rule Rule2Target {
+  from r : Make!Rule
+  to   t : Ant!Target (
+    name        <- r.name,
+    description <- '',
+    depends     <- r.ruleDependencies()->collect(dr | thisModule.Rule2Target(dr)),
+    tasks       <- r.shellLines->collect(sl |
+      if sl.isDisplay() then thisModule.ShellLine2Task_Display(sl) else thisModule.ShellLine2Task_NoDisplay(sl) endif
+    )
+  )
+}
+
+lazy rule ShellLine2Task_Display {
+  from sl : Make!ShellLine (sl.display = true)
+  to   e : Ant!Echo (
+    taskname    <- 'echo',
+    description <- '',
+    message     <- sl.command
+  )
+}
+
+lazy rule ShellLine2Task_NoDisplay {
+  from sl : Make!ShellLine (sl.display = false)
+  to   ex : Ant!Exec (
+    taskname    <- 'exec',
+    description <- '',
+    executable  <- sl.command,
+    dir         <- '.'
+  )
+}

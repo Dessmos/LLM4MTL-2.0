@@ -1,0 +1,104 @@
+module BibTeX2DocBook;
+create OUT : DocBook from IN : BibTeX;
+
+helper context BibTeX!BibTeXFile def: authorSet : Sequence(BibTeX!Author) =
+	BibTeX!Author.allInstances()->asSet()->asSequence();
+
+helper context BibTeX!BibTeXFile def: titledEntrySet : Sequence(BibTeX!TitledEntry) =
+	BibTeX!TitledEntry.allInstances()->reject(e | e.oclIsTypeOf(BibTeX!Article));
+
+helper context BibTeX!BibTeXFile def: articleSet : Sequence(BibTeX!Article) =
+	BibTeX!Article.allInstances();
+
+helper def: journalSet : Set(String) =
+	BibTeX!Article.allInstances()->collect(a | a.journal)->asSet();
+
+helper context BibTeX!BibTeXEntry def: buildEntryPara() : String =
+	let authors : String = if self.oclIsKindOf(BibTeX!AuthoredEntry)
+		then self.authors->collect(a | a.author)->iterate(s; acc : String = '' | if acc = '' then s else acc + ', ' + s endif) + '. '
+		else ''
+		endif
+	in let title : String = if self.oclIsKindOf(BibTeX!TitledEntry)
+		then self.title + '. '
+		else ''
+		endif
+	in let journal : String = if self.oclIsKindOf(BibTeX!Article)
+		then 'In ' + self.journal + '. '
+		else ''
+		endif
+	in let year : String = if self.oclIsKindOf(BibTeX!DatedEntry)
+		then self.year + '.'
+		else ''
+		endif
+	in authors + title + journal + year;
+
+rule Main {
+	from s : BibTeX!BibTeXFile
+	to
+		t : DocBook!DocBook (
+			books <- Sequence{ book }
+		),
+		book : DocBook!Book (
+			articles <- Sequence{ authorsArticle, titlesArticle, journalsArticle }
+		),
+		authorsArticle : DocBook!Article (
+			title <- 'Bibliography organized by author',
+			sections_1 <- s.authorSet
+		),
+		titlesArticle : DocBook!Article (
+			title <- 'Bibliography organized by title',
+			sections_1 <- BibTeX!BibTeXEntry.allInstances()
+		),
+		journalsArticle : DocBook!Article (
+			title <- 'Bibliography organized by journal',
+			sections_1 <- thisModule.journalSet->collect(j | thisModule.BuildJournalSection(j))
+		)
+}
+
+rule Author {
+	from s : BibTeX!Author
+	to t : DocBook!Sect1 (
+		title <- s.author,
+		paras <- BibTeX!AuthoredEntry.allInstances()->select(e | e.authors->includes(s))
+			->collect(e | thisModule.Entry2Para(e))
+	)
+}
+
+rule UntitledEntry {
+	from s : BibTeX!BibTeXEntry (not s.oclIsKindOf(BibTeX!TitledEntry))
+	to t : DocBook!Sect1 (
+		title <- s.id,
+		paras <- Sequence{ thisModule.Entry2Para(s) }
+	)
+}
+
+rule TitledEntry_Title_NoArticle {
+	from s : BibTeX!TitledEntry (not s.oclIsTypeOf(BibTeX!Article))
+	to t : DocBook!Sect1 (
+		title <- s.title,
+		paras <- Sequence{ thisModule.Entry2Para(s) }
+	)
+}
+
+rule Article_Title_Journal {
+	from s : BibTeX!Article
+	to t : DocBook!Sect1 (
+		title <- s.title,
+		paras <- Sequence{ thisModule.Entry2Para(s) }
+	)
+}
+
+endpoint rule BuildJournalSection(journalName : String) {
+	to t : DocBook!Sect1 (
+		title <- journalName,
+		paras <- BibTeX!Article.allInstances()->select(a | a.journal = journalName)
+			->collect(a | thisModule.Entry2Para(a))
+	)
+}
+
+unique lazy rule Entry2Para {
+	from s : BibTeX!BibTeXEntry
+	to t : DocBook!Para (
+		content <- s.buildEntryPara()
+	)
+}

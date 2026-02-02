@@ -1,10 +1,1 @@
-Create a transformation module **FamiliesToPersons_All** that converts a **Families** model into a **Persons** model.  
-
-Define helper functions on **Member**:  
-- **familyLastName()** to determine the last name from father, mother, son, or daughter.  
-- **isFemale()** to check if the member is a mother or daughter.  
-- **isMale()** to check if the member is a father or son.  
-
-Add two transformation rules:  
-- **Member2Male**: map a male **Member** to a **Male** with fullName as firstName + familyLastName.  
-- **Member2Female**: map a female **Member** to a **Female** with the same fullName logic.
+Create an ATL transformation module named **ClassDiagram2Relational**, defining a transformation from a model of **Classes** to a model of **Relational** elements. Include a rule **Class2Table** that converts each **Class** into a **Table**, mapping its name and attributes accordingly. Add a rule **Attribute2Column** that turns each **Attribute** into a **Column**, translating its type to an appropriate column type. Also define a helper **getSQLType** that maps class attribute types to SQL data types such as INTEGER, VARCHAR, etc.

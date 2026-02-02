@@ -1,0 +1,189 @@
+module DSL2KM3;
+create OUT : KM3 from IN : DSL;
+
+helper context DSL!Relationship def: isEmbedding : Boolean = self.isEmbedding;
+
+helper context DSL!Relationship def: getRoles() : Sequence(DSL!Role) =
+  if self.roles->size() = 2 then
+    Sequence{self.roles->at(1), self.roles->at(2)}
+  else
+    self.roles->asSequence()
+  endif;
+
+helper context DSL!Relationship def: needTurnOnClass() : Boolean =
+  self.isEmbedding or self.roles->exists(r | r.isPropertyGenerator);
+
+helper def: toUpperBound(max : Integer, isUnbounded : Boolean) : Integer =
+  if isUnbounded then -1 else max endif;
+
+helper def: defaultLocation() : String = '';
+
+rule Metamodel {
+  from dm : DSL!DomainModel
+  to mm : KM3!Metamodel (
+    location <- thisModule.defaultLocation(),
+    contents <- Sequence{pkg}
+  ),
+  pkg : KM3!Package (
+    location <- thisModule.defaultLocation(),
+    name <- dm.name,
+    metamodel <- mm,
+    contents <- dm.classifiers->select(c | c.oclIsKindOf(DSL!Class) or (c.oclIsKindOf(DSL!Relationship) and not c.oclAsType(DSL!Relationship).needTurnOnClass()))->collect(c |
+      if c.oclIsKindOf(DSL!Class) then
+        thisModule.resolveTemp(c, 'outClass')
+      else
+        thisModule.resolveTemp(c, 'outRelationAsReference')
+      endif
+    )->flatten()->asSequence()
+    ->union(
+      dm.classifiers->select(c | c.oclIsKindOf(DSL!Relationship) and c.oclAsType(DSL!Relationship).needTurnOnClass())->collect(r | thisModule.resolveTemp(r, 'outRelationClass'))->asSequence()
+    )
+    ->union(
+      dm.types->collect(t |
+        if t.oclIsKindOf(DSL!Enumeration) then
+          thisModule.resolveTemp(t, 'outEnum')
+        else
+          thisModule.resolveTemp(t, 'outDataType')
+        endif
+      )->asSequence()
+    )
+  )
+}
+
+rule Class {
+  from c : DSL!Class
+  to outClass : KM3!Class (
+    location <- thisModule.defaultLocation(),
+    name <- c.name,
+    isAbstract <- c.isAbstract,
+    supertypes <- if c.superType.oclIsUndefined() then Sequence{} else Sequence{ thisModule.resolveTemp(c.superType, 'outClass') } endif,
+    structuralFeatures <- c.properties->collect(p | thisModule.resolveTemp(p, 'outAttribute'))->asSequence()
+  )
+}
+
+rule Relation2Class {
+  from r : DSL!Relationship (r.needTurnOnClass())
+  to outRelationClass : KM3!Class (
+    location <- thisModule.defaultLocation(),
+    name <- r.name,
+    isAbstract <- r.isAbstract,
+    supertypes <- if r.superType.oclIsUndefined() then Sequence{} else Sequence{ thisModule.resolveTemp(r.superType, 'outRelationClass') } endif,
+    structuralFeatures <- r.getRoles()->collect(ro | thisModule.resolveTemp(ro, 'outComplexRef'))->asSequence()
+  )
+}
+
+rule SimpleReference {
+  from r : DSL!Relationship (not r.needTurnOnClass())
+  to outRelationAsReference : Sequence(KM3!Reference) (
+    r.getRoles()->select(ro | ro.isNavigableFrom)->collect(ro | thisModule.resolveTemp(ro, 'outSimpleRef'))->asSequence()
+  )
+}
+
+rule ComplexReference {
+  from ro : DSL!Role
+  to outComplexRef : KM3!Reference (
+    location <- thisModule.defaultLocation(),
+    name <- ro.name,
+    lower <- ro.min,
+    upper <- thisModule.toUpperBound(ro.max, ro.isUnbounded),
+    isOrdered <- ro.isOrdered,
+    isUnique <- true,
+    owner <- thisModule.resolveTemp(ro.relation, 'outRelationClass'),
+    type <- if ro.type.oclIsKindOf(DSL!Class) then
+              thisModule.resolveTemp(ro.type, 'outClass')
+            else
+              if ro.type.oclIsKindOf(DSL!Relationship) then
+                if ro.type.oclAsType(DSL!Relationship).needTurnOnClass() then
+                  thisModule.resolveTemp(ro.type, 'outRelationClass')
+                else
+                  thisModule.resolveTemp(ro.type, 'outClass')
+                endif
+              else
+                thisModule.resolveTemp(ro.type, 'outClass')
+              endif
+            endif,
+    isContainer <- ro.relation.isEmbedding
+  )
+}
+
+rule Attribute {
+  from p : DSL!ValueProperty
+  to outAttribute : KM3!Attribute (
+    location <- thisModule.defaultLocation(),
+    name <- p.name,
+    lower <- 0,
+    upper <- 1,
+    isOrdered <- false,
+    isUnique <- true,
+    owner <- if p.owner.oclIsKindOf(DSL!Class) then
+               thisModule.resolveTemp(p.owner, 'outClass')
+             else
+               if p.owner.oclIsKindOf(DSL!Relationship) and p.owner.oclAsType(DSL!Relationship).needTurnOnClass() then
+                 thisModule.resolveTemp(p.owner, 'outRelationClass')
+               else
+                 thisModule.resolveTemp(p.owner, 'outClass')
+               endif
+             endif,
+    type <- if p.type.oclIsKindOf(DSL!Enumeration) then
+              thisModule.resolveTemp(p.type, 'outEnum')
+            else
+              thisModule.resolveTemp(p.type, 'outDataType')
+            endif
+  )
+}
+
+rule Enumeration {
+  from e : DSL!Enumeration
+  to outEnum : KM3!Enumeration (
+    location <- thisModule.defaultLocation(),
+    name <- e.name,
+    literals <- e.literals->collect(l | thisModule.resolveTemp(l, 'outLit'))->asSequence()
+  )
+}
+
+rule EnumLiteral {
+  from l : DSL!EnumerationLiteral
+  to outLit : KM3!EnumLiteral (
+    location <- thisModule.defaultLocation(),
+    name <- l.name
+  )
+}
+
+rule DataType {
+  from t : DSL!SimpleType
+  to outDataType : KM3!DataType (
+    location <- thisModule.defaultLocation(),
+    name <- t.name
+  )
+}
+
+rule RoleAsSimpleReference {
+  from ro : DSL!Role (ro.relation.oclIsKindOf(DSL!Relationship) and not ro.relation.oclAsType(DSL!Relationship).needTurnOnClass() and ro.isNavigableFrom)
+  to outSimpleRef : KM3!Reference (
+    location <- thisModule.defaultLocation(),
+    name <- ro.name,
+    lower <- ro.min,
+    upper <- thisModule.toUpperBound(ro.max, ro.isUnbounded),
+    isOrdered <- ro.isOrdered,
+    isUnique <- true,
+    owner <- if ro.source.oclIsKindOf(DSL!Class) then
+               thisModule.resolveTemp(ro.source, 'outClass')
+             else
+               if ro.source.oclIsKindOf(DSL!Relationship) and ro.source.oclAsType(DSL!Relationship).needTurnOnClass() then
+                 thisModule.resolveTemp(ro.source, 'outRelationClass')
+               else
+                 thisModule.resolveTemp(ro.source, 'outClass')
+               endif
+             endif,
+    type <- if ro.type.oclIsKindOf(DSL!Class) then
+              thisModule.resolveTemp(ro.type, 'outClass')
+            else
+              if ro.type.oclIsKindOf(DSL!Relationship) and ro.type.oclAsType(DSL!Relationship).needTurnOnClass() then
+                thisModule.resolveTemp(ro.type, 'outRelationClass')
+              else
+                thisModule.resolveTemp(ro.type, 'outClass')
+              endif
+            endif,
+    isContainer <- ro.relation.isEmbedding
+  )
+}

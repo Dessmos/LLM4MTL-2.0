@@ -1,0 +1,219 @@
+module CPL2SPL;
+create OUT : SPL from IN : CPL;
+
+helper def : statement : CPL!Node =
+	SPL!CompoundStat;
+
+helper def : locations : Sequence(CPL!Location) =
+	CPL!Location.allInstances();
+
+helper def : isSimple : CPL!Proxy -> Boolean =
+	self.busy.oclIsUndefined() and self.noAnswer.oclIsUndefined() and 
+	self.redirection.oclIsUndefined() and self.failure.oclIsUndefined() and
+	self.default.oclIsUndefined();
+
+rule CPL2Program {
+	from c : CPL!CPL
+	to p : SPL!Program (
+		service <- s
+	),
+	s : SPL!Service (
+		name <- 'CPLService',
+		declarations <- c.subActions->collect(sub | thisModule.SubAction2Function(sub)),
+		sessions <- Sequence{thisModule.Incoming2Method(c.incoming)}
+	)
+}
+
+rule SubAction2Function {
+	from s : CPL!SubAction
+	to f : SPL!LocalFunctionDeclaration (
+		name <- s.id,
+		returnType <- rt,
+		statements <- Sequence{thisModule.statement}
+	),
+	rt : SPL!SimpleType (
+		type <- #void
+	)
+}
+
+rule Incoming2Method {
+	from i : CPL!Incoming
+	to m : SPL!Method (
+		type <- t,
+		direction <- #inout,
+		methodName <- mn,
+		statements <- Sequence{thisModule.statement},
+		branches <- Sequence{b}
+	),
+	t : SPL!SimpleType (
+		type <- #request
+	),
+	mn : SPL!SIPMethodName (
+		name <- #INVITE
+	),
+	b : SPL!DefaultBranch (
+		statements <- Sequence{thisModule.statement}
+	)
+}
+
+rule Proxy2Return {
+	from p : CPL!Proxy (thisModule.isSimple(p))
+	to r : SPL!ReturnStat (
+		returnedValue <- ce
+	),
+	ce : SPL!ConstantExp (
+		value <- uc
+	),
+	uc : SPL!URIConstant (
+		uri <- 'proxy'
+	)
+}
+
+rule Proxy2Select {
+	from p : CPL!Proxy (not thisModule.isSimple(p))
+	to s : SPL!SelectStat (
+		matchedExp <- ve,
+		selectCases <- p.busy->collect(b | thisModule.Busy2SelectCase(b))->union(
+			p.noAnswer->collect(n | thisModule.NoAnswer2SelectCase(n)))->union(
+			p.redirection->collect(r | thisModule.Redirection2SelectCase(r))),
+		selectDefault <- if p.default.oclIsUndefined() then OclUndefined
+			else thisModule.Default2SelectDefault(p.default) endif
+	),
+	ve : SPL!Variable (
+		source <- vd
+	),
+	vd : SPL!VariableDeclaration (
+		name <- 'response',
+		type <- st
+	),
+	st : SPL!SimpleType (
+		type <- #response
+	)
+}
+
+rule Busy2SelectCase {
+	from b : CPL!Busy
+	to sc : SPL!SelectCase (
+		values <- Sequence{rc},
+		statements <- Sequence{thisModule.statement}
+	),
+	rc : SPL!ResponseConstant (
+		response <- cer
+	),
+	cer : SPL!ClientErrorResponse (
+		errorKind <- #BUSY_HERE
+	)
+}
+
+rule NoAnswer2SelectCase {
+	from n : CPL!NoAnswer
+	to sc : SPL!SelectCase (
+		values <- Sequence{rc},
+		statements <- Sequence{thisModule.statement}
+	),
+	rc : SPL!ResponseConstant (
+		response <- cer
+	),
+	cer : SPL!ClientErrorResponse (
+		errorKind <- #REQUEST_TIMEOUT
+	)
+}
+
+rule Redirection2SelectCase {
+	from r : CPL!Redirection
+	to sc : SPL!SelectCase (
+		values <- Sequence{rc},
+		statements <- Sequence{thisModule.statement}
+	),
+	rc : SPL!ResponseConstant (
+		response <- rer
+	),
+	rer : SPL!RedirectionErrorResponse (
+		errorKind <- #MOVED_TEMPORARILY
+	)
+}
+
+rule Default2SelectDefault {
+	from d : CPL!Default
+	to sd : SPL!SelectDefault (
+		statements <- Sequence{thisModule.statement}
+	)
+}
+
+rule SubCall2Return {
+	from s : CPL!SubCall
+	to r : SPL!ReturnStat (
+		returnedValue <- fce
+	),
+	fce : SPL!FunctionCallExp (
+		functionCall <- fc
+	),
+	fc : SPL!FunctionCall (
+		function <- fd
+	),
+	fd : SPL!LocalFunctionDeclaration (
+		name <- s.ref
+	)
+}
+
+rule Redirect2Return {
+	from r : CPL!Redirect
+	to rs : SPL!ReturnStat (
+		returnedValue <- ce
+	),
+	ce : SPL!ConstantExp (
+		value <- rc
+	),
+	rc : SPL!ResponseConstant (
+		response <- rer
+	),
+	rer : SPL!RedirectionErrorResponse (
+		errorKind <- if r.permanent = 'yes' then #MOVED_PERMANENTLY 
+			else #MOVED_TEMPORARILY endif
+	)
+}
+
+rule AddressSwitch2SelectStat {
+	from a : CPL!AddressSwitch
+	to s : SPL!SelectStat (
+		matchedExp <- ve,
+		selectCases <- a.addresses->collect(addr | thisModule.SwitchedAddress2SelectCase(addr)),
+		selectDefault <- if a.otherwise.oclIsUndefined() then OclUndefined
+			else thisModule.Otherwise2SelectDefault(a.otherwise) endif
+	),
+	ve : SPL!Variable (
+		source <- vd
+	),
+	vd : SPL!VariableDeclaration (
+		name <- a.field,
+		type <- st
+	),
+	st : SPL!SimpleType (
+		type <- #string
+	)
+}
+
+rule SwitchedAddress2SelectCase {
+	from s : CPL!SwitchedAddress
+	to sc : SPL!SelectCase (
+		values <- Sequence{uc},
+		statements <- Sequence{thisModule.statement}
+	),
+	uc : SPL!URIConstant (
+		uri <- if not s.is.oclIsUndefined() then s.is
+			else if not s.contains.oclIsUndefined() then s.contains
+			else s.subDomainOf endif
+	)
+}
+
+rule Otherwise2SelectDefault {
+	from o : CPL!Otherwise
+	to sd : SPL!SelectDefault (
+		statements <- Sequence{thisModule.statement}
+	)
+}
+
+helper rule Location2URIConstant(l : CPL!Location) : SPL!URIConstant =
+	SPL!URIConstant {
+		uri <- l.url
+	};

@@ -1,0 +1,25 @@
+import "http://vitruv.tools/methodologisttemplate/network" as network
+import "http://vitruv.tools/methodologisttemplate/graph" as graph
+
+transformation networkToGraph {
+  reactive network executes graph
+
+  persistence {
+    network "/"
+    graph "/"
+  }
+
+  reaction ComponentDeleted {
+    after delete network::Component deletedComponent {
+      call deleteEntity(deletedComponent)
+    }
+  }
+
+  routine deleteEntity(deletedComponent: network::Component) {
+    val entity = getCorresponding graph::Entity for deletedComponent
+    if (entity != null) {
+      delete entity
+      unlink deletedComponent <-> entity
+    }
+  }
+}

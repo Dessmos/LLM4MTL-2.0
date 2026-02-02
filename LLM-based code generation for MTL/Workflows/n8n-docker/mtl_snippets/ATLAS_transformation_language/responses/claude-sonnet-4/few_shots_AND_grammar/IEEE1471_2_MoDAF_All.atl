@@ -1,0 +1,177 @@
+module IEEE1471_2_MoDAF;
+create OUT : MoDAF from IN : IEEE1471;
+
+helper def : rationale(r : IEEE1471!Rationale) : String =
+	if r.oclIsUndefined() then '' 
+	else r.name + ': ' + if r.content.oclIsUndefined() then '' else r.content endif
+	endif;
+
+rule IEEE1471Model2MoDAFModel {
+	from src : IEEE1471!IEEE1471Model
+	to dst : MoDAF!MoDAFModel (
+		name <- src.name,
+		content <- src.content,
+		enterprise <- src.system,
+		environment <- src.environment,
+		operationalMissions <- src.missions,
+		architectures <- Sequence{src.architecture},
+		architecturalDescription <- Sequence{src.architecturalDescription},
+		architecturalReferences <- Sequence{},
+		architecturalFrameworks <- if src.libraryViewpoints->isEmpty() then 
+			Sequence{thisModule.CreateDefaultFramework()} 
+		else 
+			src.libraryViewpoints->collect(lv | thisModule.LibraryViewpoint2ArchitecturalFramework(lv))
+		endif,
+		architectureMetadatas <- Sequence{},
+		metaDatas <- Sequence{},
+		stakeholders <- src.stakeholders,
+		stakeholderHasConcerns <- src.stakeholders->collect(s | s.has->collect(c | thisModule.StakeholderHasConcern(s, c)))->flatten()
+	)
+}
+
+rule System2Enterprise {
+	from src : IEEE1471!System
+	to dst : MoDAF!Enterprise (
+		name <- src.name,
+		content <- src.content,
+		fulfills <- src.fulfills
+	)
+}
+
+rule Environment2Environment {
+	from src : IEEE1471!Environment
+	to dst : MoDAF!Environment (
+		name <- src.name,
+		content <- src.content
+	)
+}
+
+rule Mission2OperationalMission {
+	from src : IEEE1471!Mission
+	to dst : MoDAF!OperationalMission (
+		name <- src.name,
+		content <- src.content
+	)
+}
+
+rule Architecture2Architecture {
+	from src : IEEE1471!Architecture
+	to dst : MoDAF!Architecture (
+		name <- src.name,
+		content <- src.content,
+		enterprise <- src.system,
+		describedBy <- src.describedBy
+	)
+}
+
+rule AD2AD {
+	from src : IEEE1471!ArchitecturalDescription
+	to dst : MoDAF!ArchitecturalDescription (
+		name <- src.name,
+		content <- src.content,
+		approvialAuthority <- '',
+		architect <- '',
+		assumptionAndConstraints <- thisModule.rationale(src.rationale),
+		creatingOrganisation <- '',
+		dateCompleted <- '',
+		purpose <- '',
+		recommendations <- '',
+		summaryOfFindings <- '',
+		tollsUsed <- '',
+		viewpoints <- src.selects,
+		products <- src.organizedBy->collect(v | thisModule.View2ArchitecturalProduct(v)),
+		taxonomy <- thisModule.CreateTaxonomy()
+	)
+}
+
+rule Stakeholder2Stakeholder {
+	from src : IEEE1471!Stakeholder
+	to dst : MoDAF!Stakeholder (
+		name <- src.name,
+		content <- src.content
+	)
+}
+
+rule Viewpoint2View {
+	from src : IEEE1471!Viewpoint
+	to dst : MoDAF!View (
+		name <- src.name,
+		content <- src.content,
+		framework <- if src.hasSource.oclIsUndefined() then 'Default' else src.hasSource.name endif,
+		frameworkWebsite <- '',
+		viewCode <- '',
+		viewDescription <- src.content,
+		viewName <- src.name,
+		definingFramework <- if src.hasSource.oclIsUndefined() then thisModule.resolveTemp(thisModule, 'defaultFramework') else src.hasSource endif,
+		usedToCover <- src.usedToCover
+	)
+}
+
+rule View2ArchitecturalProduct {
+	from src : IEEE1471!View
+	to dst : MoDAF!ArchitecturalProduct (
+		name <- src.name,
+		content <- src.content,
+		description <- src.content,
+		architecturalElements <- src.consitsOf->collect(m | thisModule.Model2Element(m)),
+		definingView <- src.conformsTo,
+		addresses <- src.conformsTo.usedToCover
+	)
+}
+
+rule Model2Element {
+	from src : IEEE1471!Model
+	to dst : MoDAF!Elements (
+		name <- src.name,
+		content <- src.content
+	)
+}
+
+rule Concern2Concern {
+	from src : IEEE1471!Concern
+	to dst : MoDAF!Concern (
+		name <- src.name,
+		content <- src.content
+	)
+}
+
+rule LibraryViewpoint2ArchitecturalFramework {
+	from src : IEEE1471!LibraryViewpoint
+	to dst : MoDAF!ArchitecturalFramework (
+		name <- src.name,
+		content <- src.content,
+		ownedMember <- IEEE1471!Viewpoint.allInstances()->select(v | v.hasSource = src)
+	)
+}
+
+rule StakeholderHasConcern {
+	from s : IEEE1471!Stakeholder, c : IEEE1471!Concern
+	to rel : MoDAF!StakeholderHasConcern (
+		client <- s,
+		supplier <- c
+	)
+}
+
+lazy rule CreateDefaultFramework {
+	from dummy : OclAny
+	to framework : MoDAF!ArchitecturalFramework (
+		name <- 'Undefined Architectural Framework',
+		content <- 'Default framework for viewpoints without a source',
+		ownedMember <- IEEE1471!Viewpoint.allInstances()->select(v | v.hasSource.oclIsUndefined())
+	)
+	do {
+		thisModule.addVariable('defaultFramework', framework);
+	}
+}
+
+lazy rule CreateTaxonomy {
+	from dummy : OclAny
+	to tax : MoDAF!Taxonomy (
+		name <- 'Default Taxonomy',
+		content <- 'Default taxonomy for architectural description',
+		date <- '',
+		url <- '',
+		version <- '1.0',
+		contents <- Sequence{}
+	)
+}

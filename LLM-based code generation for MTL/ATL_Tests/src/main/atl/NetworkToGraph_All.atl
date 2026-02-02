@@ -1,33 +1,23 @@
--- 	ATL transformation module to convert Network models to Graph models.
 module NetworkToGraph_All;
 create OUT : Graph from IN : Network;
 
--- Rule to transform a Network component into a Graph entity.
-rule Component2Entity {
-	from
-		c : Network!Component
-	to
-		e : Graph!Entity (
-			name <- c.name
-		)
+unique lazy rule Component2Entity {
+  from c : Network!Component
+  to   e : Graph!Entity (
+    name <- c.name
+  )
 }
 
--- Rule to transform a Network system into a Graph root element.
 rule System2Root {
-	from
-		s : Network!System
-	to
-		r : Graph!Root (
-			entities <- s.components->collect(c | thisModule.resolveTemp(c, 'e'))
-		)
+  from s : Network!System
+  to   r : Graph!Root (
+    entities <- s.components->collect(c | thisModule.Component2Entity(c))
+  )
 }
 
--- Rule to transform a Network link into a Graph link.
 rule Link2Link {
-	from
-		l : Network!Link
-	to
-		ll : Graph!Link (
-			Entitys <- l.components->collect(c | thisModule.resolveTemp(c, 'e'))
-		)
+  from l : Network!Link
+  to   k : Graph!Link (
+    Entitys <- l.components->collect(c | thisModule.Component2Entity(c))
+  )
 }

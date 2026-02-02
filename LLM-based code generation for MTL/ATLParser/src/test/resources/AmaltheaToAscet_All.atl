@@ -1,0 +1,34 @@
+module AmaltheaToAscet_All;
+create OUT : Ascet from IN : Amalthea;
+
+using amalthea : 'http://vitruv.tools/methodologisttemplate/amalthea';
+using ascet : 'http://vitruv.tools/methodologisttemplate/ascet';
+
+rule ComponentContainer2AscetModule {
+	from
+		s : amalthea!ComponentContainer
+	to
+		t : ascet!AscetModule (
+			tasks <- s.tasks
+		)
+}
+
+rule TaskRoot2SoftwareTask {
+	from
+		s : amalthea!Task (
+			s.oclContainer().oclIsUndefined()
+		)
+	to
+		t : ascet!SoftwareTask (
+			name <- s.name
+		)
+}
+
+rule Task2SoftwareTask {
+	from
+		s : amalthea!Task
+	to
+		t : ascet!SoftwareTask (
+			name <- s.name
+		)
+}

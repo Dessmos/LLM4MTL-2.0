@@ -1,0 +1,162 @@
+module DSL2KM3;
+create OUT : KM3 from IN : DSL;
+
+helper context DSL!Relationship def: getRoles() : Sequence(DSL!Role) =
+  if self.roles->isEmpty() then
+    Sequence{}
+  else
+    self.roles->asSequence()
+  endif;
+
+helper context DSL!Relationship def: isEmbedding() : Boolean =
+  self.isEmbedding;
+
+helper context DSL!Relationship def: needTurnOnClass() : Boolean =
+  not self.isEmbedding();
+
+helper context DSL!Role def: upperBound() : Integer =
+  if self.isUnbounded then -1 else self.max endif;
+
+helper context DSL!Role def: lowerBound() : Integer =
+  self.min;
+
+helper context DSL!Role def: isContainerRef() : Boolean =
+  self.relation.isEmbedding() and self.isNavigableFrom;
+
+helper context DSL!Role def: oppositeRole() : DSL!Role =
+  self.relation.getRoles()->any(r | r <> self);
+
+helper context DSL!Role def: shouldCreateReference() : Boolean =
+  self.isNavigableFrom and not self.relation.needTurnOnClass();
+
+helper context DSL!Role def: refName() : String =
+  if self.name.oclIsUndefined() then 'ref' else self.name endif;
+
+helper context DSL!DomainModel def: packageName() : String =
+  if self.name.oclIsUndefined() then 'Default' else self.name endif;
+
+rule Metamodel {
+  from dm : DSL!DomainModel
+  to mm : KM3!Metamodel (
+    location <- 'http://vitruv.tools/methodologisttemplate/DomainModel',
+    contents <- Sequence{ thisModule.DomainModel2Package(dm) }
+  )
+}
+
+unique lazy rule DomainModel2Package {
+  from dm : DSL!DomainModel
+  to p : KM3!Package (
+    location <- 'http://vitruv.tools/methodologisttemplate/Package',
+    name <- dm.packageName(),
+    contents <- dm.classifiers->select(c | c.oclIsTypeOf(DSL!Class) or (c.oclIsTypeOf(DSL!Relationship) and c.oclAsType(DSL!Relationship).needTurnOnClass()))
+      ->collect(c |
+        if c.oclIsTypeOf(DSL!Class) then
+          thisModule.Class(c.oclAsType(DSL!Class))
+        else
+          thisModule.Relation2Class(c.oclAsType(DSL!Relationship))
+        endif
+      )
+      ->union(
+        dm.types->collect(t |
+          if t.oclIsTypeOf(DSL!Enumeration) then
+            thisModule.Enumeration(t.oclAsType(DSL!Enumeration))
+          else
+            thisModule.DataType(t.oclAsType(DSL!SimpleType))
+          endif
+        )
+      )
+  )
+}
+
+rule Class {
+  from c : DSL!Class
+  to kc : KM3!Class (
+    location <- 'http://vitruv.tools/methodologisttemplate/Class',
+    name <- c.name,
+    isAbstract <- c.isAbstract,
+    supertypes <- if c.superType.oclIsUndefined() then Sequence{} else Sequence{ thisModule.resolveTemp(c.superType, 'kc') } endif,
+    structuralFeatures <- c.properties->collect(p | thisModule.Attribute(p))
+  )
+}
+
+rule Relation2Class {
+  from r : DSL!Relationship (r.needTurnOnClass())
+  to kc : KM3!Class (
+    location <- 'http://vitruv.tools/methodologisttemplate/Relation2Class',
+    name <- r.name,
+    isAbstract <- r.isAbstract,
+    supertypes <- if r.superType.oclIsUndefined() then Sequence{} else Sequence{ thisModule.resolveTemp(r.superType, 'kc') } endif,
+    structuralFeatures <- r.getRoles()->collect(ro | thisModule.ComplexReference(ro))
+  )
+}
+
+rule SimpleReference {
+  from ro : DSL!Role (ro.shouldCreateReference())
+  to kr : KM3!Reference (
+    location <- 'http://vitruv.tools/methodologisttemplate/SimpleReference',
+    name <- ro.refName(),
+    lower <- ro.lowerBound(),
+    upper <- ro.upperBound(),
+    isOrdered <- ro.isOrdered,
+    isUnique <- true,
+    owner <- thisModule.resolveTemp(ro.source, 'kc'),
+    type <- thisModule.resolveTemp(ro.type, 'kc'),
+    isContainer <- ro.isContainerRef(),
+    opposite <- if ro.oppositeRole().shouldCreateReference() then thisModule.resolveTemp(ro.oppositeRole(), 'kr') else OclUndefined endif
+  )
+}
+
+rule ComplexReference {
+  from ro : DSL!Role
+  to kr : KM3!Reference (
+    location <- 'http://vitruv.tools/methodologisttemplate/ComplexReference',
+    name <- ro.refName(),
+    lower <- ro.lowerBound(),
+    upper <- ro.upperBound(),
+    isOrdered <- ro.isOrdered,
+    isUnique <- true,
+    owner <- thisModule.resolveTemp(ro.source, 'kc'),
+    type <- if ro.relation.needTurnOnClass() then thisModule.resolveTemp(ro.relation, 'kc') else thisModule.resolveTemp(ro.type, 'kc') endif,
+    isContainer <- ro.isContainerRef(),
+    opposite <- if ro.oppositeRole().shouldCreateReference() then thisModule.resolveTemp(ro.oppositeRole(), 'kr') else OclUndefined endif
+  )
+}
+
+rule Attribute {
+  from vp : DSL!ValueProperty
+  to ka : KM3!Attribute (
+    location <- 'http://vitruv.tools/methodologisttemplate/Attribute',
+    name <- vp.name,
+    lower <- 0,
+    upper <- 1,
+    isOrdered <- false,
+    isUnique <- true,
+    owner <- thisModule.resolveTemp(vp.owner, 'kc'),
+    type <- if vp.type.oclIsTypeOf(DSL!Enumeration) then thisModule.resolveTemp(vp.type, 'ke') else thisModule.resolveTemp(vp.type, 'kd') endif
+  )
+}
+
+rule Enumeration {
+  from e : DSL!Enumeration
+  to ke : KM3!Enumeration (
+    location <- 'http://vitruv.tools/methodologisttemplate/Enumeration',
+    name <- e.name,
+    literals <- e.literals->collect(l | thisModule.EnumLiteral(l))
+  )
+}
+
+rule EnumLiteral {
+  from l : DSL!EnumerationLiteral
+  to kl : KM3!EnumLiteral (
+    location <- 'http://vitruv.tools/methodologisttemplate/EnumLiteral',
+    name <- l.name
+  )
+}
+
+rule DataType {
+  from t : DSL!SimpleType
+  to kd : KM3!DataType (
+    location <- 'http://vitruv.tools/methodologisttemplate/DataType',
+    name <- t.name
+  )
+}

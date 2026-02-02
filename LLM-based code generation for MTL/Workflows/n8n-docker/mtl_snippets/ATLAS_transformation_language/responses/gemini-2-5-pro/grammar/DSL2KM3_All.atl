@@ -1,0 +1,131 @@
+module DSL2KM3;
+create OUT : KM3 from IN : DSL;
+
+helper context DSL!Relationship def: needTurnOnClass() : Boolean =
+	self.isEmbedding or not self.roles->at(1).isPropertyGenerator or not self.roles->at(2).isPropertyGenerator;
+
+helper context DSL!Relationship def: getRoles() : Sequence(DSL!Role) =
+	self.roles;
+
+helper context DSL!Role def: isEmbedding() : Boolean =
+	self.relation.isEmbedding and (self.relation.roles->at(1) = self);
+
+rule Metamodel {
+	from
+		s : DSL!DomainModel
+	to
+		t : KM3!Metamodel (
+			contents <- p
+		)
+	do {
+		p : KM3!Package (
+			name <- s.name,
+			metamodel <- t,
+			contents <- s.classifiers->union(s.types)
+		);
+	}
+}
+
+rule Class {
+	from
+		s : DSL!Class
+	to
+		t : KM3!Class (
+			name <- s.name,
+			isAbstract <- s.isAbstract,
+			package <- s.domainModel,
+			supertypes <- s.superType,
+			structuralFeatures <- s.properties
+		)
+}
+
+rule Relation2Class {
+	from
+		s : DSL!Relationship (s.needTurnOnClass())
+	to
+		t : KM3!Class (
+			name <- s.name,
+			isAbstract <- s.isAbstract,
+			package <- s.domainModel,
+			supertypes <- s.superType,
+			structuralFeatures <- s.roles
+		)
+}
+
+rule SimpleReference {
+	from
+		s : DSL!Role (not s.relation.needTurnOnClass() and s.isPropertyGenerator)
+	to
+		t : KM3!Reference (
+			name <- s.name,
+			lower <- s.min,
+			upper <- if s.isUnbounded then -1 else s.max endif,
+			isOrdered <- s.isOrdered,
+			isContainer <- s.isEmbedding(),
+			owner <- s.source,
+			type <- s.type,
+			opposite <- s.relation.roles->select(e | e <> s)->first()
+		)
+}
+
+rule ComplexReference {
+	from
+		s : DSL!Role (s.relation.needTurnOnClass() and s.isPropertyGenerator)
+	to
+		t : KM3!Reference (
+			name <- s.name,
+			lower <- s.min,
+			upper <- if s.isUnbounded then -1 else s.max endif,
+			isOrdered <- s.isOrdered,
+			isContainer <- s.isEmbedding(),
+			owner <- s.source,
+			type <- s.relation,
+			opposite <- s.relation.roles->select(e | e <> s)->first()
+		)
+}
+
+rule Attribute {
+	from
+		s : DSL!ValueProperty
+	to
+		t : KM3!Attribute (
+			name <- s.name,
+			lower <- 1,
+			upper <- 1,
+			isOrdered <- false,
+			isUnique <- true,
+			owner <- s.owner,
+			type <- s.type
+		)
+}
+
+rule Enumeration {
+	from
+		s : DSL!Enumeration
+	to
+		t : KM3!Enumeration (
+			name <- s.name,
+			package <- s.oclContainer(),
+			literals <- s.literals
+		)
+}
+
+rule EnumLiteral {
+	from
+		s : DSL!EnumerationLiteral
+	to
+		t : KM3!EnumLiteral (
+			name <- s.name,
+			package <- s.oclContainer().oclAsType(DSL!Enumeration).oclContainer()
+		)
+}
+
+rule DataType {
+	from
+		s : DSL!SimpleType
+	to
+		t : KM3!DataType (
+			name <- s.name,
+			package <- s.oclContainer()
+		)
+}
