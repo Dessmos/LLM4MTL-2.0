@@ -6,7 +6,7 @@ import csv
 from pathlib import Path
 from fastchrf import aggregate_chrf, pairwise_chrf
 import numpy as np
-
+from concurrent.futures import ProcessPoolExecutor, as_completed
 
 
 
@@ -37,6 +37,11 @@ REFERENCE_REACTIONS_DIRECTORY = os.path.join(
     "references"
 )
 
+ECORE_MODELS_DIRECTORY = os.path.join(
+    SCRIPT_DIR,
+    "../../../models/"
+)
+
 reactions_response_paths = []
 
 
@@ -49,7 +54,7 @@ def get_all_reactions_response():
 def check_parsed_rate(input_reactions, output_xmi):
     if not os.path.isfile(JAR_PATH):
         raise FileNotFoundError(f"JAR not found: {JAR_PATH}")
-    result = subprocess.call(['java', '-jar', JAR_PATH, input_reactions, output_xmi, 'Workflows/n8n-docker/models'])
+    result = subprocess.call(['java', '-jar', JAR_PATH, input_reactions, output_xmi, ECORE_MODELS_DIRECTORY])
     return result == 0  # Return True if successful (exit code 0), False otherwise
 
 def extract_metadata_from_path(file_path):
@@ -64,28 +69,37 @@ def extract_metadata_from_path(file_path):
     except (ValueError, IndexError):
         return None, None
 
+def process_reaction_file(reaction_file):
+    """Module-level function for parallel processing of reaction files."""
+    llm, strategy = extract_metadata_from_path(reaction_file)
+    parsed = check_parsed_rate(reaction_file, f'{llm}_{strategy}_output.xmi')
+    print(f"Processed {reaction_file}: LLM={llm}, Strategy={strategy}, Parsed={parsed}")
+    if llm and strategy:
+        return {
+            'ReactionFile': reaction_file,
+            'LLM': llm,
+            'Strategy': strategy,
+            'Parsed': parsed
+        }
+    return None
+
 def create_csv_report(output_csv='parsed_rate_report.csv'):
     """Create CSV with LLM, Strategy, and parsed status for each reaction file."""
     get_all_reactions_response()
     
     csv_data = []
-    for reaction_file in reactions_response_paths:
-        llm, strategy = extract_metadata_from_path(reaction_file)
-        parsed = check_parsed_rate(reaction_file, 'output.xmi')
-        print(f"Processed {reaction_file}: LLM={llm}, Strategy={strategy}, Parsed={parsed}")
-        if llm and strategy:
-            # For now, we'll mark as 'unknown' - update with actual parsing results
-            csv_data.append({
-                'ReactionFile': reaction_file,
-                'LLM': llm,
-                'Strategy': strategy,
-                'Parsed': parsed
-            })
+    # Parallelize subprocess calls
+    with ProcessPoolExecutor(max_workers=8) as executor:
+        futures = [executor.submit(process_reaction_file, reaction_file) for reaction_file in reactions_response_paths]
+        for future in as_completed(futures):
+            result = future.result()
+            if result:
+                csv_data.append(result)
     
     # Write to CSV
     if csv_data:
         with open(output_csv, 'w', newline='') as csvfile:
-            fieldnames = ['LLM', 'Strategy', 'Parsed']
+            fieldnames = ['ReactionFile', 'LLM', 'Strategy', 'Parsed']
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
             writer.writeheader()
             writer.writerows(csv_data)
@@ -105,53 +119,68 @@ def extract_filename_from_path(file_path):
     """Extract filename without extension from path."""
     return os.path.splitext(os.path.basename(file_path))[0]
 
+# Global for similarity processing (accessed by process_response_file_parallel)
+_reference_map = {}
+
+def process_response_file_parallel(response_file):
+    """Module-level function for parallel processing of response files."""
+    llm, strategy = extract_metadata_from_path(response_file)
+    response_filename = extract_filename_from_path(response_file)
+    
+    if llm and strategy and response_filename in _reference_map:
+        ref_file = _reference_map[response_filename]
+        
+        # Read the content of both files
+        try:
+            with open(response_file, 'r', encoding='utf-8') as f:
+                response_content = f.read()
+            with open(ref_file, 'r', encoding='utf-8') as f:
+                reference_content = f.read()
+            
+            # Calculate CHRF score
+            scores = aggregate_chrf([[response_content]], [[reference_content]])
+            score = float(scores[0][0])
+                        
+            print(f"Processed {response_filename}: LLM={llm}, Strategy={strategy}, Score={score:.4f}")
+            return {
+                'LLM': llm,
+                'Strategy': strategy,
+                'File': response_filename,
+                'Score': score
+            }
+        except Exception as e:
+            print(f"Error processing {response_file}: {e}")
+            return None
+    else:
+        if response_filename not in _reference_map:
+            print(f"Warning: No corresponding reference found for {response_filename}")
+        return None
+
 def create_similarity_report(output_csv='chrf_similarity_report.csv'):
     """Generate CHRF similarity scores between responses and references.
     
     Creates a CSV with columns: LLM, Strategy, File, Score
     """
+    global _reference_map
+
     get_all_reactions_response()
     references = get_all_reactions_references()
     
     # Create a mapping of reference filenames to their full paths
-    reference_map = {}
+    _reference_map = {}
     for ref_file in references:
         filename = extract_filename_from_path(ref_file)
-        reference_map[filename] = ref_file
+        _reference_map[filename] = ref_file
     
     csv_data = []
     
-    # Process each response file
-    for response_file in reactions_response_paths:
-        llm, strategy = extract_metadata_from_path(response_file)
-        response_filename = extract_filename_from_path(response_file)
-        
-        if llm and strategy and response_filename in reference_map:
-            ref_file = reference_map[response_filename]
-            
-            # Read the content of both files
-            try:
-                with open(response_file, 'r', encoding='utf-8') as f:
-                    response_content = f.read()
-                with open(ref_file, 'r', encoding='utf-8') as f:
-                    reference_content = f.read()
-                
-                # Calculate CHRF score
-                scores = aggregate_chrf([[response_content]], [[reference_content]])
-                score = float(scores[0][0])
-                            
-                csv_data.append({
-                    'LLM': llm,
-                    'Strategy': strategy,
-                    'File': response_filename,
-                    'Score': score
-                })
-                print(f"Processed {response_filename}: LLM={llm}, Strategy={strategy}, Score={score:.4f}")
-            except Exception as e:
-                print(f"Error processing {response_file}: {e}")
-        else:
-            if response_filename not in reference_map:
-                print(f"Warning: No corresponding reference found for {response_filename}")
+    # Parallelize file I/O and CHRF calculation
+    with ProcessPoolExecutor(max_workers=8) as executor:
+        futures = [executor.submit(process_response_file_parallel, response_file) for response_file in reactions_response_paths]
+        for future in as_completed(futures):
+            result = future.result()
+            if result:
+                csv_data.append(result)
     
     # Write to CSV
     if csv_data:
