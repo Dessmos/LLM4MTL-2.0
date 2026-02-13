@@ -1,0 +1,142 @@
+pre InitializeDatabase {
+  var db : new DB!Database;
+  db.contents = new Sequence;
+  var trace : new SimpleTrace!Trace;
+  trace.links = new Sequence;
+}
+
+post BuildTraceModel {
+  for (sourceElement in OO!PackageableElement.all) {
+    var transformedElements = sourceElement.equivalents();
+    if (transformedElements.notEmpty()) {
+      var link : new SimpleTrace!TraceLink;
+      link.description = sourceElement.eClass().name + " transformed to " + 
+                         transformedElements.collect(e|e.eClass().name).concat(", ");
+      link.sources.add(sourceElement);
+      link.targets.addAll(transformedElements);
+      trace.links.add(link);
+    }
+  }
+  for (sourceElement in OO!Feature.all) {
+    var transformedElements = sourceElement.equivalents();
+    if (transformedElements.notEmpty()) {
+      var link : new SimpleTrace!TraceLink;
+      link.description = sourceElement.eClass().name + " transformed to " + 
+                         transformedElements.collect(e|e.eClass().name).concat(", ");
+      link.sources.add(sourceElement);
+      link.targets.addAll(transformedElements);
+      trace.links.add(link);
+    }
+  }
+}
+
+rule Class2Table
+  transform c : OO!Class
+  to t : DB!Table {
+  guard : not c.isAbstract
+  t.name = c.name;
+  t.database = db;
+  db.contents.add(t);
+  var pkCol : new DB!Column;
+  pkCol.name = c.primaryKeyName();
+  pkCol.type = "INTEGER";
+  pkCol.table = t;
+  t.columns.add(pkCol);
+  t.primaryKeys.add(pkCol);
+  if (c.extends.isDefined()) {
+    var parentTable = c.extends.equivalent();
+    if (parentTable.isDefined()) {
+      var fk : new DB!ForeignKey;
+      fk.name = t.name + "_extends_" + parentTable.name;
+      fk.parent = parentTable.primaryKeys.first();
+      fk.child = pkCol;
+      fk.database = db;
+      db.contents.add(fk);
+    }
+  }
+}
+
+rule SingleValuedAttribute2Column
+  transform a : OO!Attribute
+  to c : DB!Column {
+  guard : not a.isMany and a.type.isKindOf(OO!Datatype)
+  c.name = a.name;
+  c.type = a.type.toDbType();
+  var ownerTable = a.owner.equivalent();
+  if (ownerTable.isDefined()) {
+    c.table = ownerTable;
+    ownerTable.columns.add(c);
+  }
+}
+
+rule MultiValuedAttribute2Table
+  transform a : OO!Attribute
+  to t : DB!Table {
+  guard : a.isMany and a.type.isKindOf(OO!Datatype)
+  t.name = a.owner.valuesTableName(a.name);
+  t.database = db;
+  db.contents.add(t);
+  var ownerIdCol : new DB!Column;
+  ownerIdCol.name = a.owner.name + "_id";
+  ownerIdCol.type = "INTEGER";
+  ownerIdCol.table = t;
+  t.columns.add(ownerIdCol);
+  t.primaryKeys.add(ownerIdCol);
+  var valueCol : new DB!Column;
+  valueCol.name = a.name + "_value";
+  valueCol.type = a.type.toDbType();
+  valueCol.table = t;
+  t.columns.add(valueCol);
+  t.primaryKeys.add(valueCol);
+  var ownerTable = a.owner.equivalent();
+  if (ownerTable.isDefined()) {
+    var fk : new DB!ForeignKey;
+    fk.name = t.name + "_owner_fk";
+    fk.parent = ownerTable.primaryKeys.first();
+    fk.child = ownerIdCol;
+    fk.database = db;
+    db.contents.add(fk);
+  }
+}
+
+rule Reference2ForeignKey
+  transform r : OO!Reference
+  to fk : DB!ForeignKey {
+  guard : not r.isMany and r.type.isKindOf(OO!Class)
+  fk.name = r.owner.name + "_" + r.name + "_fk";
+  fk.database = db;
+  db.contents.add(fk);
+  var ownerTable = r.owner.equivalent();
+  var refTable = r.type.equivalent();
+  if (ownerTable.isDefined() and refTable.isDefined()) {
+    var refCol : new DB!Column;
+    refCol.name = r.name + "_id";
+    refCol.type = "INTEGER";
+    refCol.table = ownerTable;
+    ownerTable.columns.add(refCol);
+    fk.parent = refTable.primaryKeys.first();
+    fk.child = refCol;
+  }
+}
+
+operation OO!Class primaryKeyName() : String {
+  return self.name + "_id";
+}
+
+operation OO!Class valuesTableName(attributeName : String) : String {
+  return self.name + "_" + attributeName;
+}
+
+operation OO!Classifier toDbType() : String {
+  if (self.name = "String") {
+    return "VARCHAR";
+  } else if (self.name = "Integer") {
+    return "INTEGER";
+  } else if (self.name = "Boolean") {
+    return "BOOLEAN";
+  } else if (self.name = "Real" or self.name = "Double" or self.name = "Float") {
+    return "REAL";
+  } else {
+    return "VARCHAR";
+  }
+}

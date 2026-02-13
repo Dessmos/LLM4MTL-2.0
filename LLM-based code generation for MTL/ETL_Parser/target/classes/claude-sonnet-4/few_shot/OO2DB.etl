@@ -1,0 +1,124 @@
+```etl
+pre {
+	var db : new DB!Database;
+	var trace : new SimpleTrace!Trace;
+}
+
+post {
+	for (sourceElement in OO!PackageableElement.all) {
+		var link : new SimpleTrace!TraceLink;
+		link.description = "Transformation link for " + sourceElement.eClass().name;
+		link.sources.add(sourceElement);
+		link.targets.addAll(sourceElement.equivalents());
+		trace.links.add(link);
+	}
+}
+
+rule Class2Table
+	transform c : OO!Class
+	to t : DB!Table, pk : DB!Column {
+
+	t.name = c.name;
+	t.database = db;
+	db.contents.add(t);
+
+	pk.name = t.primaryKeyName();
+	pk.type = "INT";
+	t.columns.add(pk);
+	t.primaryKeys.add(pk);
+
+	if (c.extends.isDefined()) {
+		var fk : new DB!ForeignKey;
+		fk.name = c.name + "_extends_" + c.extends.name;
+		fk.child = pk;
+		fk.parent ::= c.extends;
+		fk.database = db;
+		db.contents.add(fk);
+	}
+}
+
+rule SingleValuedAttribute2Column
+	transform a : OO!Attribute
+	to c : DB!Column {
+
+	guard : not a.isMany
+
+	c.name = a.name;
+	c.table ::= a.owner;
+	c.type = a.type.toDbType();
+}
+
+rule MultiValuedAttribute2Table
+	transform a : OO!Attribute
+	to t : DB!Table, valueCol : DB!Column, fkCol : DB!Column {
+
+	guard : a.isMany
+
+	t.name = a.valuesTableName();
+	t.database = db;
+	db.contents.add(t);
+
+	valueCol.name = "value";
+	valueCol.type = a.type.toDbType();
+	t.columns.add(valueCol);
+
+	fkCol.name = a.owner.name.firstToLowerCase() + "Id";
+	fkCol.type = "INT";
+	t.columns.add(fkCol);
+	t.primaryKeys.add(fkCol);
+
+	var fk : new DB!ForeignKey;
+	fk.name = t.name + "_fk";
+	fk.child = fkCol;
+	var ownerTable = a.owner.equivalent();
+	fk.parent = ownerTable.primaryKeys.first();
+	fk.database = db;
+	db.contents.add(fk);
+}
+
+rule Reference2ForeignKey
+	transform r : OO!Reference
+	to fk : DB!ForeignKey, fkCol : DB!Column {
+
+	guard : not r.isMany
+
+	var sourceTable = r.owner.equivalent();
+	fkCol.name = r.name + "Id";
+	fkCol.type = "INT";
+	sourceTable.columns.add(fkCol);
+
+	fk.name = r.owner.name + "_" + r.name + "_fk";
+	fk.child = fkCol;
+	var targetTable = r.type.equivalent();
+	fk.parent = targetTable.primaryKeys.first();
+	fk.database = db;
+	db.contents.add(fk);
+}
+
+operation DB!Table primaryKeyName() : String {
+	return self.name.firstToLowerCase() + "Id";
+}
+
+operation OO!Attribute valuesTableName() : String {
+	return self.owner.name + "_" + self.name;
+}
+
+operation OO!Classifier toDbType() : String {
+	if (self.isTypeOf(OO!Datatype)) {
+		var typeName = self.name;
+		if (typeName = "String") {
+			return "VARCHAR";
+		} else if (typeName = "Integer") {
+			return "INT";
+		} else if (typeName = "Boolean") {
+			return "BOOLEAN";
+		} else if (typeName = "Real" or typeName = "Double") {
+			return "FLOAT";
+		} else {
+			return "VARCHAR";
+		}
+	} else {
+		return "INT";
+	}
+}
+```

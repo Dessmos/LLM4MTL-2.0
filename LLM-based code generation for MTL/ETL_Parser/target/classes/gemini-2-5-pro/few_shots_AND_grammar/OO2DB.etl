@@ -1,0 +1,119 @@
+transformation OO2DB(source : OO, target : DB, trace : SimpleTrace)
+
+pre {
+	var db = new DB!Database;
+}
+
+post {
+	var traceRoot = new trace!Trace;
+	for (t in EtlTrace!Trace.all) {
+		var link = new trace!TraceLink;
+		link.sources.add(t.source);
+		link.targets.addAll(t.targets.flatten());
+		traceRoot.links.add(link);
+	}
+}
+
+operation toDbType(c : OO!Classifier) : String {
+	if (c.name = "String") return "VARCHAR(255)";
+	if (c.name = "Integer") return "INTEGER";
+	if (c.name = "Boolean") return "BOOLEAN";
+	return "VARCHAR(255)";
+}
+
+operation DB!Table primaryKeyName() : String {
+	return "id";
+}
+
+operation valuesTableName(a : OO!Attribute) : String {
+	return a.owner.name + "_" + a.name;
+}
+
+rule Class2Table
+	transform c : OO!Class
+	to t : DB!Table, pk : DB!Column {
+	
+	guard : not c.isAbstract
+
+	t.name = c.name;
+	t.database = db;
+	db.contents.add(t);
+
+	pk.name = t.primaryKeyName();
+	pk.type = "INTEGER";
+	t.columns.add(pk);
+	t.primaryKeys.add(pk);
+	
+	if (c.extends.isDefined()) {
+		var fkCol = new DB!Column;
+		fkCol.name = c.extends.name.firstToLowerCase() + "Id";
+		fkCol.type = "INTEGER";
+		fkCol.table = t;
+		
+		var fk = new DB!ForeignKey;
+		fk.name = t.name + "_" + fkCol.name + "_fkey";
+		fk.parent = fkCol;
+		fk.child ::= c.extends.equivalent(DB!Table).first().primaryKeys.first();
+		fk.database = db;
+		db.contents.add(fk);
+	}
+}
+
+rule SingleValuedAttribute2Column
+	transform a : OO!Attribute
+	to c : DB!Column {
+	
+	guard : not a.isMany
+	
+	c.name = a.name;
+	c.type = toDbType(a.type);
+	c.table ::= a.owner;
+}
+
+rule MultiValuedAttribute2Table
+	transform a : OO!Attribute
+	to t : DB!Table {
+
+	guard : a.isMany
+
+	t.name = valuesTableName(a);
+	t.database = db;
+	db.contents.add(t);
+
+	var ownerFkCol = new DB!Column;
+	ownerFkCol.name = a.owner.name.firstToLowerCase() + "Id";
+	ownerFkCol.type = "INTEGER";
+	t.columns.add(ownerFkCol);
+	
+	var valueCol = new DB!Column;
+	valueCol.name = "value";
+	valueCol.type = toDbType(a.type);
+	t.columns.add(valueCol);
+
+	t.primaryKeys.add(ownerFkCol);
+	t.primaryKeys.add(valueCol);
+	
+	var fk = new DB!ForeignKey;
+	fk.name = t.name + "_fkey";
+	fk.parent = ownerFkCol;
+	fk.child ::= a.owner.equivalent(DB!Table).first().primaryKeys.first();
+	fk.database = db;
+	db.contents.add(fk);
+}
+
+rule Reference2ForeignKey
+	transform r : OO!Reference
+	to fkCol : DB!Column, fk : DB!ForeignKey {
+	
+	guard : not r.isMany
+
+	fkCol.name = r.name + "Id";
+	fkCol.type = "INTEGER";
+	fkCol.table ::= r.owner;
+	
+	fk.name = r.owner.name + "_" + r.name + "_fkey";
+	fk.parent = fkCol;
+	fk.child ::= r.type.equivalent(DB!Table).first().primaryKeys.first();
+	fk.database = db;
+	db.contents.add(fk);
+}

@@ -1,0 +1,13 @@
+```etl
+rule Tree2Node
+transform t : Tree!Tree
+to n : Graph!Node {
+n.name = t.label;
+if (t.parent.isDefined()) {
+var parentNode : Graph!Node = t.parent.equivalent();
+var edge : new Graph!Edge;
+edge.source = parentNode;
+edge.target = n;
+}
+}
+```

@@ -1,0 +1,14 @@
+```etl
+rule Flowchart2H1
+transform f : flowchart!Flowchart
+to h : HTML!H1 {
+h.value = "Flowchart " + f.name;
+}
+
+rule Subflow2H1
+transform s : flowchart!Subflow
+to h : HTML!H1
+extends Flowchart2H1 {
+h.value = "Subflow " + h.value;
+}
+```

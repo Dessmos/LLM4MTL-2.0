@@ -1,0 +1,95 @@
+pre {
+  var RSS!Rss rssRoot := RSS!Rss.all.first();
+  var Atom!Feed atomRoot := new Atom!Feed;
+  atomRoot.setAsAtomRoot();
+  rssRoot.equivalents := Sequence{atomRoot};
+}
+
+rule Rss2Atom
+  transform rss : RSS!Rss
+  to feed : Atom!Feed {
+  
+  feed.setAsAtomRoot();
+  feed.appendEquivalentsOfChildrenOf(rss);
+  
+  for (item in rss.items) {
+    feed.entries.add(item.equivalent());
+  }
+}
+
+rule Item2Entry
+  transform item : RSS!Item
+  to entry : Atom!Entry {
+  
+  entry.appendEquivalentsOfChildrenOf(item);
+}
+
+rule Title2Title
+  transform rssTitle : RSS!Title
+  to atomTitle : Atom!Title {
+  
+  atomTitle.value := rssTitle.value;
+}
+
+rule Link2Link
+  transform rssLink : RSS!Link
+  to atomLink : Atom!Link {
+  
+  atomLink.href := rssLink.value;
+}
+
+rule Generator2Generator
+  transform rssGenerator : RSS!Generator
+  to atomGenerator : Atom!Generator {
+  
+  atomGenerator.value := rssGenerator.value;
+}
+
+rule Creator2Author
+  transform creator : RSS!Creator
+  to author : Atom!Author {
+  
+  author.name := creator.value;
+}
+
+rule Description2Summary
+  transform description : RSS!Description
+  to summary : Atom!Summary {
+  
+  summary.value := description.value;
+}
+
+rule ContentEncoded2Content
+  transform contentEncoded : RSS!ContentEncoded
+  to content : Atom!Content {
+  
+  content.value := contentEncoded.value;
+}
+
+rule PubDate2Published
+  transform pubDate : RSS!PubDate
+  to published : Atom!Published {
+  
+  published.value := pubDate.value;
+}
+
+operation Atom!Feed setAsAtomRoot() {
+  Atom!Feed.allInstances().excluding(self).clear();
+}
+
+operation Atom!Element appendChildren(children : Sequence) {
+  for (child in children) {
+    self.children.add(child);
+  }
+}
+
+operation Atom!Element appendEquivalentsOfChildrenOf(source : RSS!Element) {
+  var equivalents := new Sequence;
+  for (child in source.children) {
+    var equiv := child.equivalent();
+    if (equiv.isDefined()) {
+      equivalents.add(equiv);
+    }
+  }
+  self.appendChildren(equivalents);
+}

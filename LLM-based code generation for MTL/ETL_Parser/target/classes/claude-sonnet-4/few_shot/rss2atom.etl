@@ -1,0 +1,118 @@
+```etl
+pre {
+	"Running RSS to Atom transformation".println();
+}
+
+rule Rss2Atom
+	transform r : RSS!Rss
+	to a : Atom!Feed {
+	
+	Atom.root = a;
+	a.appendEquivalentsOfChildrenOf(r);
+	a.entries.addAll(r.items.equivalent());
+}
+
+rule Item2Entry
+	transform i : RSS!Item
+	to e : Atom!Entry {
+	
+	e.appendEquivalentsOfChildrenOf(i);
+}
+
+rule Title2Title
+	transform t : RSS!Title
+	to at : Atom!Title {
+	
+	at.value = t.value;
+}
+
+rule Link2Link
+	transform l : RSS!Link
+	to al : Atom!Link {
+	
+	al.href = l.value;
+}
+
+rule Generator2Generator
+	transform g : RSS!Generator
+	to ag : Atom!Generator {
+	
+	ag.value = g.value;
+}
+
+rule Creator2Author
+	transform c : RSS!Creator
+	to a : Atom!Author {
+	
+	a.name = c.value;
+}
+
+rule Description2Summary
+	transform d : RSS!Description
+	to s : Atom!Summary {
+	
+	s.value = d.value;
+}
+
+rule ContentEncoded2Content
+	transform ce : RSS!ContentEncoded
+	to c : Atom!Content {
+	
+	c.value = ce.value;
+}
+
+rule PubDate2Published
+	transform pd : RSS!PubDate
+	to p : Atom!Published {
+	
+	p.value = pd.value;
+}
+
+operation Atom!Feed appendChildren(children : Sequence) {
+	for (child in children) {
+		if (child.isTypeOf(Atom!Title)) {
+			self.title = child;
+		}
+		else if (child.isTypeOf(Atom!Link)) {
+			self.links.add(child);
+		}
+		else if (child.isTypeOf(Atom!Generator)) {
+			self.generator = child;
+		}
+		else if (child.isTypeOf(Atom!Author)) {
+			self.authors.add(child);
+		}
+	}
+}
+
+operation Atom!Entry appendChildren(children : Sequence) {
+	for (child in children) {
+		if (child.isTypeOf(Atom!Title)) {
+			self.title = child;
+		}
+		else if (child.isTypeOf(Atom!Link)) {
+			self.links.add(child);
+		}
+		else if (child.isTypeOf(Atom!Author)) {
+			self.authors.add(child);
+		}
+		else if (child.isTypeOf(Atom!Summary)) {
+			self.summary = child;
+		}
+		else if (child.isTypeOf(Atom!Content)) {
+			self.content = child;
+		}
+		else if (child.isTypeOf(Atom!Published)) {
+			self.published = child;
+		}
+	}
+}
+
+operation Any appendEquivalentsOfChildrenOf(source : Any) {
+	var equivalents : Sequence;
+	if (source.isDefined() and source.children.isDefined()) {
+		equivalents = source.children.equivalent();
+		self.appendChildren(equivalents);
+	}
+}
+```

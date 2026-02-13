@@ -1,0 +1,25 @@
+```etl
+rule Flowchart2Heading
+transform f : flowchart::Flowchart
+to d : HTML::DIV {
+d.children ::= f.nodes;
+}
+
+rule Action2Heading
+transform a : flowchart::Action
+to h : HTML::H1 {
+h.value = a.name;
+}
+
+rule Decision2Heading
+transform dec : flowchart::Decision
+to h : HTML::H1 {
+h.value = dec.name;
+}
+
+rule Transition2Heading
+transform t : flowchart::Transition
+to h : HTML::H1 {
+h.value = t.name;
+}
+```

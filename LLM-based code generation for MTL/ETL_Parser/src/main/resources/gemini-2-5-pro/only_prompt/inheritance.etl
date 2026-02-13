@@ -1,0 +1,20 @@
+transformation Flowchart2HTML
+
+model Flowchart driver Ecore { nsuri: "http://vitruv.tools/methodologisttemplate/flowchart" }
+model HTML driver Ecore { nsuri: "http://vitruv.tools/methodologisttemplate/HTML" }
+
+rule Flowchart2H1
+	transform f : Flowchart!Flowchart
+	to h : HTML!H1 {
+		
+	h.value = "Flowchart " + f.name;
+}
+
+rule Subflow2H1 extends Flowchart2H1
+	transform f : Flowchart!Subflow
+	to h : HTML!H1 {
+	
+	post {
+		h.value = "Subflow " + h.value;
+	}
+}

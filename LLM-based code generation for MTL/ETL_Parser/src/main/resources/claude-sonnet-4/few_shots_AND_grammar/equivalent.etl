@@ -1,0 +1,13 @@
+rule Flowchart2Div
+	transform f : Flowchart!Flowchart
+	to div : HTML!DIV {
+	
+	div.children.addAll(f.transitions.equivalent());
+}
+
+rule Transition2Heading
+	transform t : Flowchart!Transition
+	to h1 : HTML!H1 {
+	
+	h1.value = t.name;
+}
