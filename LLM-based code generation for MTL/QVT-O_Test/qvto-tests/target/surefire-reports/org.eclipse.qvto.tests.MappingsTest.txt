@@ -1,0 +1,30 @@
+-------------------------------------------------------------------------------
+Test set: org.eclipse.qvto.tests.MappingsTest
+-------------------------------------------------------------------------------
+Tests run: 3, Failures: 2, Errors: 0, Skipped: 0, Time elapsed: 1.605 s <<< FAILURE! -- in org.eclipse.qvto.tests.MappingsTest
+org.eclipse.qvto.tests.MappingsTest.outputContainsMappedClassifiers -- Time elapsed: 1.091 s <<< FAILURE!
+org.opentest4j.AssertionFailedError: Transformation failed: Compilation errors found in unit 'file:/C:/Users/10239/OneDrive/Desktop/QVT-O%20Test/qvto-tests/target/classes/transformations/Mappings.qvto' ==> expected: <0> but was: <4>
+	at org.junit.jupiter.api.AssertionFailureBuilder.build(AssertionFailureBuilder.java:151)
+	at org.junit.jupiter.api.AssertionFailureBuilder.buildAndThrow(AssertionFailureBuilder.java:132)
+	at org.junit.jupiter.api.AssertEquals.failNotEqual(AssertEquals.java:197)
+	at org.junit.jupiter.api.AssertEquals.assertEquals(AssertEquals.java:150)
+	at org.junit.jupiter.api.Assertions.assertEquals(Assertions.java:563)
+	at org.eclipse.qvto.tests.QvtoTestBase.executeTransformation(QvtoTestBase.java:74)
+	at org.eclipse.qvto.tests.MappingsTest.outputContainsMappedClassifiers(MappingsTest.java:34)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:568)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1511)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1511)
+
+org.eclipse.qvto.tests.MappingsTest.executesSuccessfully -- Time elapsed: 0.031 s <<< FAILURE!
+org.opentest4j.AssertionFailedError: Transformation failed: Compilation errors found in unit 'file:/C:/Users/10239/OneDrive/Desktop/QVT-O%20Test/qvto-tests/target/classes/transformations/Mappings.qvto' ==> expected: <0> but was: <4>
+	at org.junit.jupiter.api.AssertionFailureBuilder.build(AssertionFailureBuilder.java:151)
+	at org.junit.jupiter.api.AssertionFailureBuilder.buildAndThrow(AssertionFailureBuilder.java:132)
+	at org.junit.jupiter.api.AssertEquals.failNotEqual(AssertEquals.java:197)
+	at org.junit.jupiter.api.AssertEquals.assertEquals(AssertEquals.java:150)
+	at org.junit.jupiter.api.Assertions.assertEquals(Assertions.java:563)
+	at org.eclipse.qvto.tests.QvtoTestBase.executeTransformation(QvtoTestBase.java:74)
+	at org.eclipse.qvto.tests.MappingsTest.executesSuccessfully(MappingsTest.java:26)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:568)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1511)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1511)
+

@@ -1,0 +1,4 @@
+Create a QVT-O transformation named **t** that takes one input model and produces one output model, both conforming to the Ecore metamodel.  
+In **main**, iterate over all root EPackage elements of the input model and apply a mapping **p2p**.  
+In **p2p**, create a new EPackage with the same name and map each contained EClass through **makeClass**.  
+Define an abstract mapping **makeClassifier** that appends “1” to the classifier name, and have **makeClass** merge it, set a temporary variable “2”, and append it to the EClass name.

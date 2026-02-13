@@ -1,0 +1,148 @@
+module IEEE1471_2_MoDAF;
+create OUT : MoDAF from IN : IEEE1471;
+
+helper context IEEE1471!IEEE1471Model def: rationale() : String =
+  if self.rationales->isEmpty() then
+    ''
+  else
+    self.rationales->first().name.concat(' : ').concat(self.rationales->first().content)
+  endif;
+
+rule IEEE1471Model2MoDAFModel {
+  from src : IEEE1471!IEEE1471Model
+  to   dst : MoDAF!ArchitectureViewModel (
+    name        <- src.name,
+    description <- src.description,
+    enterprises <- src.systems->collect(e | thisModule.System2Enterprise(e)),
+    environments <- src.environments->collect(env | thisModule.Environment2Environment(env)),
+    missions    <- src.missions->collect(m | thisModule.Mission2OperationalMission(m)),
+    architectures <- src.architectures->collect(a | thisModule.Architecture2Architecture(a)),
+    stakeholders <- src.stakeholders->collect(s | thisModule.Stakeholder2Stakeholder(s)),
+    concerns    <- src.concerns->collect(c | thisModule.Concern2Concern(c)),
+    views       <- src.views->collect(v | thisModule.View2ArchitecturalProduct(v)),
+    frameworks  <- Sequence{ thisModule.DefaultArchitecturalFramework(src) }
+  )
+}
+
+unique lazy rule System2Enterprise {
+  from s : IEEE1471!System
+  to   e : MoDAF!Enterprise (
+    name        <- s.name,
+    description <- s.description,
+    missions    <- s.missions->collect(m | thisModule.Mission2OperationalMission(m)),
+    environments <- s.environments->collect(env | thisModule.Environment2Environment(env)),
+    architectures <- s.architectures->collect(a | thisModule.Architecture2Architecture(a))
+  )
+}
+
+unique lazy rule Environment2Environment {
+  from src : IEEE1471!Environment
+  to   dst : MoDAF!Environment (
+    name        <- src.name,
+    description <- src.description
+  )
+}
+
+unique lazy rule Mission2OperationalMission {
+  from src : IEEE1471!Mission
+  to   dst : MoDAF!OperationalMission (
+    name        <- src.name,
+    description <- src.description
+  )
+}
+
+unique lazy rule Architecture2Architecture {
+  from src : IEEE1471!Architecture
+  to   dst : MoDAF!Architecture (
+    name        <- src.name,
+    description <- src.description,
+    views       <- src.views->collect(v | thisModule.View2ArchitecturalProduct(v))
+  )
+}
+
+unique lazy rule AD2AD {
+  from src : IEEE1471!ArchitecturalDescription
+  to   dst : MoDAF!ArchitectureDescription (
+    name        <- src.name,
+    description <- src.description,
+    architecture <- thisModule.Architecture2Architecture(src.architecture),
+    stakeholders <- src.stakeholders->collect(s | thisModule.Stakeholder2Stakeholder(s)),
+    concerns    <- src.concerns->collect(c | thisModule.Concern2Concern(c)),
+    views       <- src.views->collect(v | thisModule.View2ArchitecturalProduct(v)),
+    rationale   <- src.rationale()
+  )
+}
+
+unique lazy rule Stakeholder2Stakeholder {
+  from src : IEEE1471!Stakeholder
+  to   dst : MoDAF!Stakeholder (
+    name        <- src.name,
+    description <- src.description,
+    concerns    <- src.concerns->collect(c | thisModule.Concern2Concern(c))
+  )
+}
+
+unique lazy rule Viewpoint2View {
+  from src : IEEE1471!Viewpoint
+  to   dst : MoDAF!View (
+    name        <- src.name,
+    description <- src.description,
+    concerns    <- src.concerns->collect(c | thisModule.Concern2Concern(c))
+  )
+}
+
+unique lazy rule View2ArchitecturalProduct {
+  from src : IEEE1471!View
+  to   dst : MoDAF!ArchitecturalProduct (
+    name        <- src.name,
+    description <- src.description,
+    architecture <- thisModule.Architecture2Architecture(src.architecture),
+    framework   <- if src.viewpoint.oclIsUndefined() then
+                     thisModule.DefaultArchitecturalFramework(src.model)
+                   else
+                     thisModule.LibraryViewpoint2ArchitecturalFramework(src.viewpoint.library)
+                   endif
+  )
+}
+
+unique lazy rule Model2Element {
+  from src : IEEE1471!Model
+  to   dst : MoDAF!Element (
+    name        <- src.name,
+    description <- src.description
+  )
+}
+
+unique lazy rule Concern2Concern {
+  from src : IEEE1471!Concern
+  to   dst : MoDAF!Concern (
+    name        <- src.name,
+    description <- src.description
+  )
+}
+
+unique lazy rule LibraryViewpoint2ArchitecturalFramework {
+  from src : IEEE1471!LibraryViewpoint
+  to   dst : MoDAF!ArchitecturalFramework (
+    name        <- src.name,
+    description <- src.description,
+    views       <- src.viewpoints->collect(vp | thisModule.Viewpoint2View(vp))
+  )
+}
+
+unique lazy rule DefaultArchitecturalFramework {
+  from src : IEEE1471!IEEE1471Model
+  to   dst : MoDAF!ArchitecturalFramework (
+    name        <- 'Undefined Architectural Framework',
+    description <- 'Container for IEEE1471 Viewpoints without a source Library',
+    views       <- src.viewpoints->select(vp | vp.library.oclIsUndefined())->collect(vp | thisModule.Viewpoint2View(vp))
+  )
+}
+
+rule StakeholderHasConcern {
+  from rel : IEEE1471!StakeholderConcern
+  to   link : MoDAF!StakeholderConcern (
+    stakeholder <- thisModule.Stakeholder2Stakeholder(rel.stakeholder),
+    concern     <- thisModule.Concern2Concern(rel.concern)
+  )
+}

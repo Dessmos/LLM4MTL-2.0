@@ -1,12 +1,16 @@
+```atl
 module NetworkToGraph_All;
 create OUT : Graph from IN : Network;
 
+uses Network : nsURI = 'http://vitruv.tools/methodologisttemplate/network';
+uses Graph : nsURI = 'http://vitruv.tools/methodologisttemplate/graph';
+
 rule Component2Entity {
 	from
-		s : Network!Component
+		c : Network!Component
 	to
-		t : Graph!Entity (
-			name <- s.name
+		e : Graph!Entity (
+			name <- c.name
 		)
 }
 
@@ -14,16 +18,17 @@ rule System2Root {
 	from
 		s : Network!System
 	to
-		t : Graph!Root (
+		r : Graph!Root (
 			entities <- s.components
 		)
 }
 
 rule Link2Link {
 	from
-		s : Network!Link
+		l_in : Network!Link
 	to
-		t : Graph!Link (
-			Entitys <- s.components
+		l_out : Graph!Link (
+			Entitys <- l_in.components
 		)
 }
+```

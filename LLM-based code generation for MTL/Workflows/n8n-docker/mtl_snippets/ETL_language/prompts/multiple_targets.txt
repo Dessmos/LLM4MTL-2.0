@@ -1,0 +1,6 @@
+Create an ETL transformation that converts a **Flowchart** model into an **HTML** representation.  
+Define two transformation rules:  
+
+- **Action2Elements** – For each Action that has at least one outgoing transition, produce a container element with a title showing the action name and a link leading to the target of the first transition.  
+
+- **Decision2Elements** – For each Decision, create a container with a title and one link for each outgoing transition, where each link’s text and destination correspond to the transition’s target node.

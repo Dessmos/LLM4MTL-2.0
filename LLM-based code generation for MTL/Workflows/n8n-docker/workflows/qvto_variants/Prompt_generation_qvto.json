@@ -1,0 +1,463 @@
+{
+  "name": "Prompt_generation_QVTO",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -2112,
+        -64
+      ],
+      "id": "81a0ec77-5fa9-45ad-a2d5-3a65eec990cf",
+      "name": "When clicking 'Execute workflow'"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Here is the code:\n\n{{ $json.data }}\n—\nGenerate the original developer request that would have produced\nthat code, following the rules in the system message.\n\nHere are the models:\n{{ $json.concatenated_model }}\n\nHere is the grammar:\n{{ $json.grammar }}\n\n",
+        "messages": {
+          "messageValues": [
+            {
+              "message": "=You are acting as a senior developer who knows the Model Transformation Language: **QVT Operational Mappings (QVT-O)** inside out.\n\nYour task is to reconstruct the NATURAL-LANGUAGE request that could have produced the code shown in the next message, as if a developer were asking an AI assistant to generate that code.\n\nRules\n\n1. You MUST explicitly state the transformation and mapping names.\n2. You MUST describe the intent at a high abstraction level.\n3. DO NOT use qualified type prefixes like 'ECORE::EPackage'; just say 'EPackage' in context.\n4. DO NOT mention technical terms like 'init block' or 'when clause'; instead, describe what the mapping achieves conceptually.\n5. When constructors or resolve expressions are involved, explicitly name them and describe their purpose.\n6. Write in the developer-to-AI voice, e.g., 'Create a QVT-O transformation that maps…'\n7. Keep the request under **100 words**."
+            }
+          ]
+        },
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.7,
+      "position": [
+        -1168,
+        320
+      ],
+      "id": "a50e92fa-d1aa-488a-a776-206797a30579",
+      "name": "Generate Prompt from Input"
+    },
+    {
+      "parameters": {
+        "fileSelector": "=/data/snippets/QVTO_language/references/*",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        -1920,
+        -64
+      ],
+      "id": "c8e8de28-a357-40e9-8773-e0fa21ab8432",
+      "name": "Read reference file",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "operation": "toText",
+        "sourceProperty": "text",
+        "binaryPropertyName": "={{ $json.text }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        -864,
+        320
+      ],
+      "id": "f69cd559-f280-453c-a306-362a212298ee",
+      "name": "Convert prompt to file"
+    },
+    {
+      "parameters": {
+        "operation": "write",
+        "fileName": "=/data/snippets/QVTO_language/prompts/{{ $node[\"Save file name\"].json.baseName }}.txt",
+        "dataPropertyName": "={{ $('Generate Prompt from Input').item.json.text }}",
+        "options": {
+          "append": false
+        }
+      },
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        -848,
+        528
+      ],
+      "id": "ca538850-e55a-48e6-b3f5-264f51e8f857",
+      "name": "Write prompt to disk"
+    },
+    {
+      "parameters": {
+        "operation": "text",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        -1664,
+        368
+      ],
+      "id": "5d0c821b-5dc0-4b85-b958-8f64b4094d97",
+      "name": "Extract text from reference file",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "21770aaf-9e99-4902-be96-60adced92708",
+              "name": "baseName",
+              "value": "={{$binary.data.fileName.split('.').slice(0,-1).join('.')}}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -1824,
+        272
+      ],
+      "id": "6408c0f3-3893-42b7-9413-5f2b424eb3b4",
+      "name": "Save file name"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -2112,
+        224
+      ],
+      "id": "7f96abcc-97c2-4f5a-bf2d-71d217cc958c",
+      "name": "Loop Over Items"
+    },
+    {
+      "parameters": {
+        "fileSelector": "/data/grammar/qvto/EBNF.txt",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        -1824,
+        496
+      ],
+      "id": "598cdfda-1a42-4e5e-a700-736612cc60b0",
+      "name": "Read Grammar"
+    },
+    {
+      "parameters": {
+        "operation": "text",
+        "destinationKey": "grammar",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        -1504,
+        496
+      ],
+      "id": "dda0c88a-18ad-47b5-8181-1732b3a5c30e",
+      "name": "Extract text from grammar"
+    },
+    {
+      "parameters": {
+        "fileSelector": "=/data/models/additional_models/QVT-O_model/*.ecore",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        -1824,
+        128
+      ],
+      "id": "54283b26-2464-4468-b499-0d9104eac6bc",
+      "name": "Read model files",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "operation": "text",
+        "destinationKey": "model",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        -1648,
+        128
+      ],
+      "id": "9075874c-1a43-4007-815f-e761c191cd36",
+      "name": "Extract text from model files"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-5-chat-latest",
+          "mode": "list",
+          "cachedResultName": "gpt-5-chat-latest"
+        },
+        "options": {
+          "topP": 1
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        -1168,
+        496
+      ],
+      "id": "62c43f67-b85c-459c-8e5b-d4573416fbf8",
+      "name": "OpenAI GPT-5-Chat-latest",
+      "credentials": {
+        "openAiApi": {
+          "id": "8mtpdiKzgoTWwPSM",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fieldsToSummarize": {
+          "values": [
+            {
+              "aggregation": "concatenate",
+              "field": "model",
+              "separateBy": "\n"
+            },
+            {
+              "aggregation": "concatenate",
+              "field": "model",
+              "includeEmpty": "=",
+              "separateBy": "\n"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.summarize",
+      "typeVersion": 1.1,
+      "position": [
+        -1472,
+        128
+      ],
+      "id": "57f0c797-0915-4ed5-8823-20d5627f2630",
+      "name": "Summarize"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "numberInputs": 3,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -1344,
+        304
+      ],
+      "id": "123e4259-33a8-4f63-ac5b-134cd1c1481a",
+      "name": "Merge models, reference and grammar",
+      "alwaysOutputData": true
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking 'Execute workflow'": {
+      "main": [
+        [
+          {
+            "node": "Read reference file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Prompt from Input": {
+      "main": [
+        [
+          {
+            "node": "Convert prompt to file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read reference file": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Convert prompt to file": {
+      "main": [
+        [
+          {
+            "node": "Write prompt to disk",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract text from reference file": {
+      "main": [
+        [
+          {
+            "node": "Merge models, reference and grammar",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Save file name": {
+      "main": [
+        [
+          {
+            "node": "Extract text from reference file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Save file name",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Extract text from reference file",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Read model files",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Read Grammar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Grammar": {
+      "main": [
+        [
+          {
+            "node": "Extract text from grammar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract text from grammar": {
+      "main": [
+        [
+          {
+            "node": "Merge models, reference and grammar",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Write prompt to disk": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read model files": {
+      "main": [
+        [
+          {
+            "node": "Extract text from model files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract text from model files": {
+      "main": [
+        [
+          {
+            "node": "Summarize",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI GPT-5-Chat-latest": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Generate Prompt from Input",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Summarize": {
+      "main": [
+        [
+          {
+            "node": "Merge models, reference and grammar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge models, reference and grammar": {
+      "main": [
+        [
+          {
+            "node": "Generate Prompt from Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "88427724-9274-462e-8b3c-b6a9786eaf8b",
+  "meta": {
+    "instanceId": "baac600b301729508052ad55e0d8a15d3b34368b7a1ed3c61d229191ca3faa41"
+  },
+  "id": "qvto_prompt_gen",
+  "tags": []
+}

@@ -1,0 +1,7 @@
+Create an ETL transformation from a **Flowchart** model to an **HTML** model.  
+Include the following rules:  
+
+- **Flowchart2Heading**: transform a Flowchart into a DIV that contains only the headings generated for its transitions.  
+- **Transition2SourceLink**: convert each Transition into an HTML link showing its source’s name and linking to that source.  
+- **Transition2TargetLink**: produce an HTML link showing the transition’s name, linking to its target.  
+- **Transition2Heading**: create an H1 heading for each Transition displaying its name as the title.

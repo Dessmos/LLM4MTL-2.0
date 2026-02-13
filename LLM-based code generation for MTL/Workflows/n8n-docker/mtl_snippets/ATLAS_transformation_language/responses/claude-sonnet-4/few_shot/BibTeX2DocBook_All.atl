@@ -1,211 +1,151 @@
+```atl
 module BibTeX2DocBook;
 create OUT : DocBook from IN : BibTeX;
 
-helper def : authorSet : Set(BibTeX!Author) = 
-	BibTeX!Author.allInstances()->asSet();
+helper context BibTeX!BibTeXEntry def: buildEntryPara() : String =
+  let id : String = self.id in
+  let type : String = self.oclType().name in
+  let title : String = if self.oclIsKindOf(BibTeX!TitledEntry) then self.title else '' endif in
+  let authors : String = if self.oclIsKindOf(BibTeX!AuthoredEntry) then self.authors->collect(a | a.author)->iterate(a; acc : String = '' | acc + if acc = '' then a else ', ' + a endif) else '' endif in
+  let year : String = if self.oclIsKindOf(BibTeX!DatedEntry) then self.year else '' endif in
+  let booktitle : String = if self.oclIsKindOf(BibTeX!BookTitledEntry) then self.booktitle else '' endif in
+  let school : String = if self.oclIsKindOf(BibTeX!ThesisEntry) then self.school else '' endif in
+  let journal : String = if self.oclIsKindOf(BibTeX!Article) then self.journal else '' endif in
+  let note : String = if self.oclIsKindOf(BibTeX!Unpublished) then self.note else '' endif in
+  let publisher : String = if self.oclIsKindOf(BibTeX!Book) then self.publisher else '' endif in
+  let chapter : String = if self.oclIsKindOf(BibTeX!InBook) then self.chapter.toString() else '' endif in
+  id + ' (' + type + ')' +
+  (if title <> '' then ' title: ' + title else '' endif) +
+  (if authors <> '' then ' authors: ' + authors else '' endif) +
+  (if year <> '' then ' year: ' + year else '' endif) +
+  (if booktitle <> '' then ' booktitle: ' + booktitle else '' endif) +
+  (if school <> '' then ' school: ' + school else '' endif) +
+  (if journal <> '' then ' journal: ' + journal else '' endif) +
+  (if note <> '' then ' note: ' + note else '' endif) +
+  (if publisher <> '' then ' publisher: ' + publisher else '' endif) +
+  (if chapter <> '' then ' chapter: ' + chapter else '' endif);
 
-helper def : titledEntrySet : Set(BibTeX!TitledEntry) = 
-	BibTeX!TitledEntry.allInstances()->asSet();
+helper def: authorSet : Set(BibTeX!Author) =
+  BibTeX!Author.allInstances()->asSet();
 
-helper def : articleSet : Set(BibTeX!Article) = 
-	BibTeX!Article.allInstances()->asSet();
+helper def: titledEntrySet : Set(BibTeX!TitledEntry) =
+  BibTeX!TitledEntry.allInstances()->select(e | e.title <> '')->asSet();
 
-helper def : buildEntryPara(entry : BibTeX!BibTeXEntry) : String =
-	'ID: ' + entry.id;
+helper def: articleSet : Set(BibTeX!Article) =
+  BibTeX!Article.allInstances()->select(a | a.journal <> '')->asSet();
 
 rule Main {
-	from src : BibTeX!BibTeXFile
-	to dst : DocBook!DocBook (
-		books <- Sequence{thisModule.ReferencesBook}
-	)
-}
-
-lazy rule ReferencesBook {
-	from src : BibTeX!BibTeXFile
-	to dst : DocBook!Book (
-		articles <- Sequence{thisModule.AuthorsArticle, thisModule.TitlesArticle, thisModule.JournalsArticle}
-	)
-}
-
-lazy rule AuthorsArticle {
-	from src : BibTeX!BibTeXFile
-	to dst : DocBook!Article (
-		title <- 'Authors',
-		sections_1 <- thisModule.authorSet->collect(e | thisModule.Author(e))
-	)
-}
-
-lazy rule TitlesArticle {
-	from src : BibTeX!BibTeXFile
-	to dst : DocBook!Article (
-		title <- 'Titles',
-		sections_1 <- thisModule.titledEntrySet->collect(e | thisModule.TitledEntry_Title_NoArticle(e))
-	)
-}
-
-lazy rule JournalsArticle {
-	from src : BibTeX!BibTeXFile
-	to dst : DocBook!Article (
-		title <- 'Journals',
-		sections_1 <- thisModule.articleSet->collect(e | thisModule.Article_Title_Journal(e))
-	)
-}
-
-rule Author {
-	from src : BibTeX!Author
-	to dst : DocBook!Sect1 (
-		title <- src.author,
-		paras <- Sequence{thisModule.AuthorPara(src)},
-		sections_2 <- Sequence{thisModule.AuthorSection(src)}
-	)
-}
-
-lazy rule AuthorPara {
-	from src : BibTeX!Author
-	to dst : DocBook!Para (
-		content <- 'Author: ' + src.author
-	)
-}
-
-lazy rule AuthorSection {
-	from src : BibTeX!Author
-	to dst : DocBook!Sect2 (
-		title <- 'Details',
-		paras <- Sequence{thisModule.AuthorDetailPara(src)}
-	)
-}
-
-lazy rule AuthorDetailPara {
-	from src : BibTeX!Author
-	to dst : DocBook!Para (
-		content <- 'Author details for: ' + src.author
-	)
+  from f : BibTeX!BibTeXFile
+  to db : DocBook!DocBook (
+    books <- Sequence{ bk }
+  ),
+  bk : DocBook!Book (
+    articles <- Sequence{ art }
+  ),
+  art : DocBook!Article (
+    title <- 'BibTeXML to DocBook',
+    sections_1 <- Sequence{ refList, authList, titleList, journalList }
+  ),
+  refList : DocBook!Sect1 (
+    title <- 'References List',
+    paras <- BibTeX!BibTeXEntry.allInstances()->sortedBy(e | e.id)->collect(e | thisModule.resolveTemp(e, 'entryPara'))
+  ),
+  authList : DocBook!Sect1 (
+    title <- 'Authors list',
+    paras <- thisModule.authorSet->asSequence()->sortedBy(a | a.author)->collect(a | thisModule.resolveTemp(a, 'authorPara'))
+  ),
+  titleList : DocBook!Sect1 (
+    title <- 'Titles List',
+    paras <- thisModule.titledEntrySet->asSequence()->sortedBy(e | e.title)->collect(e | thisModule.resolveTemp(e, 'titlePara'))
+  ),
+  journalList : DocBook!Sect1 (
+    title <- 'Journals List',
+    paras <- thisModule.articleSet->asSequence()->sortedBy(a | a.journal)->collect(a | thisModule.resolveTemp(a, 'journalPara'))
+  )
 }
 
 rule UntitledEntry {
-	from src : BibTeX!BibTeXEntry (not src.oclIsTypeOf(BibTeX!TitledEntry))
-	to dst : DocBook!Para (
-		content <- thisModule.buildEntryPara(src)
-	)
+  from e : BibTeX!BibTeXEntry (
+    not e.oclIsKindOf(BibTeX!TitledEntry)
+  )
+  to entryPara : DocBook!Para (
+    content <- e.buildEntryPara()
+  )
 }
 
 rule TitledEntry_Title_NoArticle {
-	from src : BibTeX!TitledEntry (not src.oclIsTypeOf(BibTeX!Article))
-	to dst : DocBook!Sect1 (
-		title <- src.title,
-		paras <- Sequence{thisModule.TitledEntryPara(src)},
-		sections_2 <- Sequence{thisModule.TitledEntrySection(src)}
-	)
-}
-
-lazy rule TitledEntryPara {
-	from src : BibTeX!TitledEntry
-	to dst : DocBook!Para (
-		content <- thisModule.buildEntryPara(src) + ', Title: ' + src.title
-	)
-}
-
-lazy rule TitledEntrySection {
-	from src : BibTeX!TitledEntry
-	to dst : DocBook!Sect2 (
-		title <- 'Entry Details',
-		paras <- Sequence{thisModule.TitledEntryDetailPara(src)}
-	)
-}
-
-lazy rule TitledEntryDetailPara {
-	from src : BibTeX!TitledEntry
-	to dst : DocBook!Para (
-		content <- 'Details for titled entry: ' + src.title
-	)
+  from e : BibTeX!TitledEntry (
+    thisModule.titledEntrySet->includes(e) and not e.oclIsKindOf(BibTeX!Article)
+  )
+  to entryPara : DocBook!Para (
+    content <- e.buildEntryPara()
+  ),
+  titlePara : DocBook!Para (
+    content <- e.title
+  )
 }
 
 rule TitledEntry_NoTitle_NoArticle {
-	from src : BibTeX!TitledEntry (not src.oclIsTypeOf(BibTeX!Article) and src.title.oclIsUndefined())
-	to dst : DocBook!Sect1 (
-		title <- 'Untitled Entry',
-		paras <- Sequence{thisModule.UntitledEntryPara(src)},
-		sections_2 <- Sequence{thisModule.UntitledEntrySection(src)}
-	)
-}
-
-lazy rule UntitledEntryPara {
-	from src : BibTeX!TitledEntry
-	to dst : DocBook!Para (
-		content <- thisModule.buildEntryPara(src) + ', No title'
-	)
-}
-
-lazy rule UntitledEntrySection {
-	from src : BibTeX!TitledEntry
-	to dst : DocBook!Sect2 (
-		title <- 'Entry Details',
-		paras <- Sequence{thisModule.UntitledEntryDetailPara(src)}
-	)
-}
-
-lazy rule UntitledEntryDetailPara {
-	from src : BibTeX!TitledEntry
-	to dst : DocBook!Para (
-		content <- 'Details for untitled entry'
-	)
+  from e : BibTeX!TitledEntry (
+    not thisModule.titledEntrySet->includes(e) and not e.oclIsKindOf(BibTeX!Article)
+  )
+  to entryPara : DocBook!Para (
+    content <- e.buildEntryPara()
+  )
 }
 
 rule Article_Title_Journal {
-	from src : BibTeX!Article (not src.title.oclIsUndefined() and not src.journal.oclIsUndefined())
-	to dst : DocBook!Sect1 (
-		title <- src.journal,
-		paras <- Sequence{thisModule.ArticleTitleJournalPara(src)},
-		sections_2 <- Sequence{thisModule.ArticleTitleJournalSection(src)}
-	)
-}
-
-lazy rule ArticleTitleJournalPara {
-	from src : BibTeX!Article
-	to dst : DocBook!Para (
-		content <- thisModule.buildEntryPara(src) + ', Title: ' + src.title + ', Journal: ' + src.journal
-	)
-}
-
-lazy rule ArticleTitleJournalSection {
-	from src : BibTeX!Article
-	to dst : DocBook!Sect2 (
-		title <- src.title,
-		paras <- Sequence{thisModule.ArticleTitleJournalDetailPara(src)}
-	)
-}
-
-lazy rule ArticleTitleJournalDetailPara {
-	from src : BibTeX!Article
-	to dst : DocBook!Para (
-		content <- 'Article: ' + src.title + ' in journal: ' + src.journal
-	)
+  from a : BibTeX!Article (
+    thisModule.titledEntrySet->includes(a) and thisModule.articleSet->includes(a)
+  )
+  to entryPara : DocBook!Para (
+    content <- a.buildEntryPara()
+  ),
+  titlePara : DocBook!Para (
+    content <- a.title
+  ),
+  journalPara : DocBook!Para (
+    content <- a.journal
+  )
 }
 
 rule Article_NoTitle_Journal {
-	from src : BibTeX!Article (src.title.oclIsUndefined() and not src.journal.oclIsUndefined())
-	to dst : DocBook!Sect1 (
-		title <- src.journal,
-		paras <- Sequence{thisModule.ArticleNoTitleJournalPara(src)},
-		sections_2 <- Sequence{thisModule.ArticleNoTitleJournalSection(src)}
-	)
+  from a : BibTeX!Article (
+    not thisModule.titledEntrySet->includes(a) and thisModule.articleSet->includes(a)
+  )
+  to entryPara : DocBook!Para (
+    content <- a.buildEntryPara()
+  ),
+  journalPara : DocBook!Para (
+    content <- a.journal
+  )
 }
 
-lazy rule ArticleNoTitleJournalPara {
-	from src : BibTeX!Article
-	to dst : DocBook!Para (
-		content <- thisModule.buildEntryPara(src) + ', No title, Journal: ' + src.journal
-	)
+rule Article_Title_NoJournal {
+  from a : BibTeX!Article (
+    thisModule.titledEntrySet->includes(a) and not thisModule.articleSet->includes(a)
+  )
+  to entryPara : DocBook!Para (
+    content <- a.buildEntryPara()
+  ),
+  titlePara : DocBook!Para (
+    content <- a.title
+  )
 }
 
-lazy rule ArticleNoTitleJournalSection {
-	from src : BibTeX!Article
-	to dst : DocBook!Sect2 (
-		title <- 'Untitled Article',
-		paras <- Sequence{thisModule.ArticleNoTitleJournalDetailPara(src)}
-	)
+rule Article_NoTitle_NoJournal {
+  from a : BibTeX!Article (
+    not thisModule.titledEntrySet->includes(a) and not thisModule.articleSet->includes(a)
+  )
+  to entryPara : DocBook!Para (
+    content <- a.buildEntryPara()
+  )
 }
 
-lazy rule ArticleNoTitleJournalDetailPara {
-	from src : BibTeX!Article
-	to
+rule Author {
+  from a : BibTeX!Author
+  to authorPara : DocBook!Para (
+    content <- a.author
+  )
+}
+```

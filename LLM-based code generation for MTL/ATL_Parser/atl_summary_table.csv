@@ -1,0 +1,14 @@
+LLM,Strategy,Total,Unparsed,Unparsed_Rate(%),Total_Problems
+claude-sonnet-4,few_shot,15,3,20.0,4
+claude-sonnet-4,few_shots_AND_grammar,15,2,13.3,3
+claude-sonnet-4,grammar,15,2,13.3,2
+claude-sonnet-4,only_prompt,15,3,20.0,6
+gemini-2-5-pro,few_shot,15,4,26.7,7
+gemini-2-5-pro,few_shots_AND_grammar,15,2,13.3,3
+gemini-2-5-pro,grammar,15,4,26.7,43
+gemini-2-5-pro,only_prompt,15,4,26.7,42
+gpt-5,few_shot,15,3,20.0,8
+gpt-5,few_shots_AND_grammar,15,2,13.3,6
+gpt-5,grammar,15,9,60.0,970
+gpt-5,only_prompt,15,4,26.7,18
+OVERALL,,180,42,23.3,1112

@@ -1,0 +1,83 @@
+rule Rss2Atom
+  transform s : RSS!Rss
+  to t : Atom!Feed {
+  Atom!Root.allInstances().first().feed := t;
+  t.entries.addAll(s.items.equivalent());
+  t.appendEquivalentsOfChildrenOf(s.channel);
+}
+
+rule Item2Entry
+  transform s : RSS!Item
+  to t : Atom!Entry {
+  t.appendEquivalentsOfChildrenOf(s);
+}
+
+rule Title2Title
+  transform s : RSS!Title
+  to t : Atom!Title {
+  t.text := s.text;
+}
+
+rule Link2Link
+  transform s : RSS!Link
+  to t : Atom!Link {
+  t.href := s.href;
+}
+
+rule Generator2Generator
+  transform s : RSS!Generator
+  to t : Atom!Generator {
+  t.text := s.text;
+}
+
+rule Creator2Author
+  transform s : RSS!Creator
+  to t : Atom!Author {
+  t.name := s.text;
+}
+
+rule Description2Summary
+  transform s : RSS!Description
+  to t : Atom!Summary {
+  t.text := s.text;
+}
+
+rule ContentEncoded2Content
+  transform s : RSS!ContentEncoded
+  to t : Atom!Content {
+  t.text := s.text;
+}
+
+rule PubDate2Published
+  transform s : RSS!PubDate
+  to t : Atom!Published {
+  t.value := s.text;
+}
+
+operation Atom!Feed appendChildren(children : Sequence(Atom!Element)) {
+  self.children.addAll(children);
+}
+
+operation Atom!Entry appendChildren(children : Sequence(Atom!Element)) {
+  self.children.addAll(children);
+}
+
+operation Atom!Element appendEquivalentsOfChildrenOf(src : EObject) {
+  var eqChildren : Sequence(Atom!Element) := Sequence{};
+  for (c in src.eContents()) {
+    var eq := c.equivalent();
+    if (eq.isDefined()) {
+      if (eq.isKindOf(Atom!Element)) {
+        eqChildren.add(eq);
+      }
+      else if (eq.isKindOf(Sequence)) {
+        for (e in eq) {
+          if (e.isKindOf(Atom!Element)) {
+            eqChildren.add(e);
+          }
+        }
+      }
+    }
+  }
+  self.appendChildren(eqChildren);
+}

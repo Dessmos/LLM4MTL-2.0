@@ -1,0 +1,104 @@
+module DSL2KM3;
+create OUT : KM3 from IN : DSL;
+
+helper def : needTurnOnClass(rel : DSL!Relationship) : Boolean =
+	not rel.isEmbedding;
+
+helper def : getRoles(rel : DSL!Relationship) : Sequence(DSL!Role) =
+	rel.roles->asSequence();
+
+helper def : isEmbedding(rel : DSL!Relationship) : Boolean =
+	rel.isEmbedding;
+
+rule Metamodel {
+	from src : DSL!DomainModel
+	to dst : KM3!Metamodel (
+		name <- src.name,
+		contents <- src.classifiers->select(c | c.oclIsTypeOf(DSL!Class))
+			->union(src.classifiers->select(c | c.oclIsTypeOf(DSL!Relationship) and thisModule.needTurnOnClass(c)))
+			->union(src.types->select(t | t.oclIsTypeOf(DSL!Enumeration)))
+			->union(src.types->select(t | t.oclIsTypeOf(DSL!SimpleType)))
+	)
+}
+
+rule Class {
+	from src : DSL!Class
+	to dst : KM3!Class (
+		name <- src.name,
+		isAbstract <- src.isAbstract,
+		supertypes <- if src.superType.oclIsUndefined() then Sequence{} else Sequence{src.superType} endif,
+		structuralFeatures <- src.properties->collect(p | thisModule.Attribute(p))
+			->union(src.classifiers->select(c | c.oclIsTypeOf(DSL!Relationship))
+				->collect(r | thisModule.getRoles(r))
+				->flatten()
+				->select(role | role.source = src and role.isPropertyGenerator)
+				->collect(role | if thisModule.needTurnOnClass(role.relation) then thisModule.ComplexReference(role) else thisModule.SimpleReference(role) endif))
+	)
+}
+
+rule Relation2Class {
+	from src : DSL!Relationship (thisModule.needTurnOnClass(src))
+	to dst : KM3!Class (
+		name <- src.name,
+		isAbstract <- src.isAbstract,
+		supertypes <- if src.superType.oclIsUndefined() then Sequence{} else Sequence{src.superType} endif,
+		structuralFeatures <- src.properties->collect(p | thisModule.Attribute(p))
+			->union(thisModule.getRoles(src)->collect(role | thisModule.SimpleReference(role)))
+	)
+}
+
+rule SimpleReference {
+	from src : DSL!Role (not thisModule.needTurnOnClass(src.relation) and src.isPropertyGenerator)
+	to dst : KM3!Reference (
+		name <- src.name,
+		type <- src.type,
+		lower <- src.min,
+		upper <- if src.isUnbounded then -1 else src.max endif,
+		isOrdered <- src.isOrdered
+	)
+}
+
+rule ComplexReference {
+	from src : DSL!Role (thisModule.needTurnOnClass(src.relation) and src.isPropertyGenerator)
+	to dst : KM3!Reference (
+		name <- src.name,
+		type <- src.relation,
+		lower <- src.min,
+		upper <- if src.isUnbounded then -1 else src.max endif,
+		isOrdered <- src.isOrdered
+	)
+}
+
+rule Attribute {
+	from src : DSL!ValueProperty
+	to dst : KM3!Attribute (
+		name <- src.name,
+		type <- src.type,
+		lower <- 1,
+		upper <- 1
+	)
+}
+
+rule Enumeration {
+	from src : DSL!Enumeration
+	to dst : KM3!Enumeration (
+		name <- src.name,
+		literals <- src.literals
+	)
+}
+
+rule EnumLiteral {
+	from src : DSL!EnumerationLiteral
+	to dst : KM3!EnumLiteral (
+		name <- src.name,
+		literal <- src.name,
+		value <- src.value
+	)
+}
+
+rule DataType {
+	from src : DSL!SimpleType
+	to dst : KM3!DataType (
+		name <- src.name
+	)
+}

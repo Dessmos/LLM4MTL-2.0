@@ -1,0 +1,16 @@
+-------------------------------------------------------------------------------
+Test set: org.eclipse.epsilon.examples.etl.flowchart.LazyTest
+-------------------------------------------------------------------------------
+Tests run: 1, Failures: 1, Errors: 0, Skipped: 0, Time elapsed: 1.204 s <<< FAILURE! -- in org.eclipse.epsilon.examples.etl.flowchart.LazyTest
+org.eclipse.epsilon.examples.etl.flowchart.LazyTest.testLazy -- Time elapsed: 0.851 s <<< FAILURE!
+org.opentest4j.AssertionFailedError: Should have 5 H1 elements (4 actions + 1 decision, but NOT transitions) ==> expected: <5> but was: <10>
+	at org.junit.jupiter.api.AssertionFailureBuilder.build(AssertionFailureBuilder.java:151)
+	at org.junit.jupiter.api.AssertionFailureBuilder.buildAndThrow(AssertionFailureBuilder.java:132)
+	at org.junit.jupiter.api.AssertEquals.failNotEqual(AssertEquals.java:197)
+	at org.junit.jupiter.api.AssertEquals.assertEquals(AssertEquals.java:150)
+	at org.junit.jupiter.api.Assertions.assertEquals(Assertions.java:563)
+	at org.eclipse.epsilon.examples.etl.flowchart.LazyTest.testLazy(LazyTest.java:26)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:568)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1511)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1511)
+

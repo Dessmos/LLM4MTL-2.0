@@ -1,0 +1,25 @@
+rule Flowchart2Heading
+transform f : flowchart::Flowchart
+to d : HTML::DIV {
+  d.children.addAll(f.transitions.equivalent("Transition2Heading"));
+}
+
+rule Transition2SourceLink
+transform t : flowchart::Transition
+to a : HTML::A {
+  a.value = t.source.name;
+  a.ahref = t.source.name;
+}
+
+rule Transition2TargetLink
+transform t : flowchart::Transition
+to a : HTML::A {
+  a.value = t.name;
+  a.ahref = t.target.name;
+}
+
+rule Transition2Heading
+transform t : flowchart::Transition
+to h : HTML::H1 {
+  h.value = t.name;
+}

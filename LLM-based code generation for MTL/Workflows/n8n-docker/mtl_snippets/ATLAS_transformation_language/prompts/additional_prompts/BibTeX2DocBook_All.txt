@@ -1,3 +1,16 @@
-Create an ATL transformation module named **BibTeX2DocBook** that converts a **BibTeX** model into a **DocBook** model.  
-Include helper functions **authorSet**, **titledEntrySet**, **articleSet**, and **buildEntryPara()** to collect distinct elements and format entry information.  
-Define transformation rules **Main**, **Author**, **UntitledEntry**, **TitledEntry_Title_NoArticle**, **TitledEntry_NoTitle_NoArticle**, **Article_Title_Journal**, **Article_NoTitle_Journal**, **Article_Title_NoJournal**, and **Article_NoTitle_NoJournal** to generate the corresponding DocBook structure (books, articles, sections, and paragraphs) organized by references, authors, titles, and journals.
+Create an ATL transformation module named `BibTeX2DocBook` that transforms a `BibTeXFile` into a `DocBook` model.
+
+The main rule `Main` should build a single `DocBook` containing one `Book`, one `Article` titled “BibTeXML to DocBook” and four `Sect1` sections:
+
+- “References List”: all `BibTeXEntry` instances as paragraphs, ordered by id, using a context helper `buildEntryPara()` on `BibTeXEntry` that concatenates id, type name, and available fields (title, authors, year, booktitle, school, journal, note, publisher, chapter).
+- “Authors list”: distinct `Author` objects, sorted by author name, computed by helper `authorSet`. Rule `Author` creates a `Para` per distinct author.
+- “Titles List”: distinct titled entries, sorted by title, computed by helper `titledEntrySet`, and using title paragraphs produced in rules.
+- “Journals List”: distinct `Article` journals, sorted by journal, computed by helper `articleSet`, and using journal paragraphs produced in rules.
+
+Define separate rules to generate paragraphs depending on whether a `BibTeXEntry` is titled or not, and for `Article` entries combine the presence/absence of title and journal:
+
+- `UntitledEntry` for non-`TitledEntry` entries (one content paragraph using `buildEntryPara()`).
+- `TitledEntry_Title_NoArticle` and `TitledEntry_NoTitle_NoArticle` for non-`Article` titled entries, controlled by membership in `titledEntrySet`, creating entry and/or title paragraphs.
+- `Article_Title_Journal`, `Article_NoTitle_Journal`, `Article_Title_NoJournal`, `Article_NoTitle_NoJournal` for `Article` instances, combining membership in `titledEntrySet` and `articleSet` and creating entry, title, and/or journal `Para` elements accordingly.
+
+Use `resolveTemp` where needed to reference previously created title and journal paragraphs from `Main`.

@@ -1,0 +1,13 @@
+model,strategy,total_files,parsed_ok,parse_rate,avg_problem_count,avg_chrF
+claude-sonnet-4,few_shot,10,10,100.0,0.00,0.8128
+claude-sonnet-4,few_shot_AND_grammar,10,8,80.0,0.20,0.8313
+claude-sonnet-4,grammar,10,1,10.0,1.10,0.7993
+claude-sonnet-4,only_prompt/zero_shot,10,0,0.0,2.00,0.7882
+gemini-2-5-pro,few_shot,10,9,90.0,0.20,0.7999
+gemini-2-5-pro,few_shot_AND_grammar,10,10,100.0,0.00,0.7982
+gemini-2-5-pro,grammar,10,4,40.0,1.50,0.7014
+gemini-2-5-pro,only_prompt,10,1,10.0,3.10,0.7305
+gpt-5,few_shot,10,8,80.0,0.30,0.7991
+gpt-5,few_shot_AND_grammar,10,10,100.0,0.00,0.7976
+gpt-5,grammar,10,6,60.0,2.40,0.6447
+gpt-5,only_prompt/zero_shot,10,0,0.0,5.20,0.6852

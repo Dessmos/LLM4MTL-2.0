@@ -1,0 +1,144 @@
+module CPL2SPL;
+create OUT : SPL from IN : CPL;
+
+helper def : statement : SPL!Statement =
+  OclUndefined;
+
+helper def : locations : Sequence(SPL!Location) =
+  Sequence {};
+
+helper context CPL!Proxy def : isSimple : Boolean =
+  false;
+
+rule CPL2Program {
+  from
+    c : CPL!CPL
+  to
+    p : SPL!Program (
+      name <- c.name
+    )
+}
+
+rule SubAction2Function {
+  from
+    sa : CPL!SubAction
+  to
+    f : SPL!Function (
+      name <- sa.name
+    )
+}
+
+rule Incoming2Method {
+  from
+    inc : CPL!Incoming
+  to
+    m : SPL!Method (
+      name <- inc.name
+    )
+}
+
+rule Proxy2Return {
+  from
+    p : CPL!Proxy (p.isSimple)
+  to
+    r : SPL!Return (
+      value <- thisModule.statement
+    )
+}
+
+rule Proxy2Select {
+  from
+    p : CPL!Proxy (not p.isSimple)
+  to
+    s : SPL!Select (
+      cases <- Sequence {}
+    )
+}
+
+rule Busy2SelectCase {
+  from
+    b : CPL!Busy
+  to
+    c : SPL!SelectCase (
+      condition <- thisModule.statement,
+      body <- thisModule.statement
+    )
+}
+
+rule NoAnswer2SelectCase {
+  from
+    n : CPL!NoAnswer
+  to
+    c : SPL!SelectCase (
+      condition <- thisModule.statement,
+      body <- thisModule.statement
+    )
+}
+
+rule Redirection2SelectCase {
+  from
+    r : CPL!Redirection
+  to
+    c : SPL!SelectCase (
+      condition <- thisModule.statement,
+      body <- thisModule.statement
+    )
+}
+
+rule Default2SelectDefault {
+  from
+    d : CPL!Default
+  to
+    sd : SPL!SelectDefault (
+      body <- thisModule.statement
+    )
+}
+
+rule SubCall2Return {
+  from
+    sc : CPL!SubCall
+  to
+    r : SPL!Return (
+      value <- thisModule.statement
+    )
+}
+
+rule Redirect2Return {
+  from
+    rd : CPL!Redirect
+  to
+    r : SPL!Return (
+      value <- thisModule.statement
+    )
+}
+
+rule AddressSwitch2SelectStat {
+  from
+    as : CPL!AddressSwitch
+  to
+    s : SPL!Select (
+      cases <- Sequence {}
+    )
+}
+
+rule SwitchedAddress2SelectCase {
+  from
+    sa : CPL!SwitchedAddress
+  to
+    c : SPL!SelectCase (
+      condition <- thisModule.Location2URIConstant(sa.location),
+      body <- thisModule.statement
+    )
+}
+
+rule Otherwise2SelectDefault {
+  from
+    o : CPL!Otherwise
+  to
+    sd : SPL!SelectDefault (
+      body <- thisModule.statement
+    )
+}
+
+helper def : Location2URIConstant(l : CPL!Location) : SPL!URIConstant =
+  OclUndefined;

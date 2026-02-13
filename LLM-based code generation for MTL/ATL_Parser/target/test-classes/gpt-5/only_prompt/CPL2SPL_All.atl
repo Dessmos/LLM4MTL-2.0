@@ -1,0 +1,159 @@
+module CPL2SPL;
+
+create OUT : SPL from IN : CPL;
+
+helper context CPL!Model def: statement() : SPL!Statement =
+  SPL!Statement.allInstances()->any(true);
+
+helper context CPL!Model def: locations() : Sequence(SPL!Location) =
+  SPL!Location.allInstances()->asSequence();
+
+helper context CPL!Proxy def: isSimple() : Boolean =
+  true;
+
+helper def: Location2URIConstant(loc : CPL!Location) : SPL!URIConstant =
+  SPL!URIConstant{
+    value <- loc.uri
+  };
+
+rule CPL2Program {
+  from
+    c : CPL!Model
+  to
+    p : SPL!Program (
+      name <- c.name,
+      functions <- c.subActions->collect(sa | thisModule.resolveTemp(sa, 'func'))
+    )
+}
+
+rule SubAction2Function {
+  from
+    sa : CPL!SubAction
+  to
+    f : SPL!Function (
+      name <- sa.name,
+      body <- sa.actions->collect(a | thisModule.statement())
+    )
+}
+
+rule Incoming2Method {
+  from
+    i : CPL!Incoming
+  to
+    m : SPL!Method (
+      name <- i.name,
+      parameters <- i.parameters
+    )
+}
+
+rule Proxy2Return {
+  from
+    p : CPL!Proxy (p.isSimple())
+  to
+    r : SPL!Return (
+      expression <- thisModule.Location2URIConstant(p.location)
+    )
+}
+
+rule Proxy2Select {
+  from
+    p : CPL!Proxy (not p.isSimple())
+  to
+    s : SPL!Select (
+      cases <- p.branches->collect(b | thisModule.resolveTemp(b, 'case')),
+      default <- p.branches->select(b | b.isDefault)->first()
+    )
+}
+
+rule Busy2SelectCase {
+  from
+    b : CPL!Busy
+  to
+    c : SPL!SelectCase (
+      condition <- 'busy',
+      statement <- thisModule.statement()
+    )
+}
+
+rule NoAnswer2SelectCase {
+  from
+    n : CPL!NoAnswer
+  to
+    c : SPL!SelectCase (
+      condition <- 'noanswer',
+      statement <- thisModule.statement()
+    )
+}
+
+rule Redirection2SelectCase {
+  from
+    r : CPL!Redirection
+  to
+    c : SPL!SelectCase (
+      condition <- 'redirection',
+      statement <- thisModule.statement()
+    )
+}
+
+rule Default2SelectDefault {
+  from
+    d : CPL!Default
+  to
+    s : SPL!SelectDefault (
+      statement <- thisModule.statement()
+    )
+}
+
+rule SubCall2Return {
+  from
+    sc : CPL!SubCall
+  to
+    r : SPL!Return (
+      expression <- SPL!CallExpression{
+        function <- thisModule.resolveTemp(sc.subAction, 'func')
+      }
+    )
+}
+
+rule Redirect2Return {
+  from
+    r0 : CPL!Redirect
+  to
+    r : SPL!Return (
+      expression <- thisModule.Location2URIConstant(r0.to)
+    )
+}
+
+rule AddressSwitch2SelectStat {
+  from
+    as : CPL!AddressSwitch
+  to
+    s : SPL!SelectStatement (
+      expression <- SPL!VariableRef{
+        name <- as.address.name
+      },
+      select <- SPL!Select{
+        cases <- as.switchedAddresses->collect(sa | thisModule.resolveTemp(sa, 'case')),
+        default <- thisModule.resolveTemp(as.otherwise, 'default')
+      }
+    )
+}
+
+rule SwitchedAddress2SelectCase {
+  from
+    sa : CPL!SwitchedAddress
+  to
+    c : SPL!SelectCase (
+      condition <- sa.address,
+      statement <- thisModule.statement()
+    )
+}
+
+rule Otherwise2SelectDefault {
+  from
+    o : CPL!Otherwise
+  to
+    d : SPL!SelectDefault (
+      statement <- thisModule.statement()
+    )
+}

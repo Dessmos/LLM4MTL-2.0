@@ -1,0 +1,11 @@
+org\eclipse\qvto\tests\ResolveExpressionsTest.class
+org\eclipse\qvto\tests\ConstructorsTest.class
+org\eclipse\qvto\tests\MappingExtensionDisjunctsTest.class
+org\eclipse\qvto\tests\MappingExtensionInheritsTest.class
+org\eclipse\qvto\tests\OverridingMappingsTest.class
+org\eclipse\qvto\tests\MappingExtensionMergesTest.class
+org\eclipse\qvto\tests\ModelExtentsTest.class
+org\eclipse\qvto\tests\MappingBodyTest.class
+org\eclipse\qvto\tests\QvtoTestBase.class
+org\eclipse\qvto\tests\MappingsTest.class
+org\eclipse\qvto\tests\MappingsWhenClauseTest.class

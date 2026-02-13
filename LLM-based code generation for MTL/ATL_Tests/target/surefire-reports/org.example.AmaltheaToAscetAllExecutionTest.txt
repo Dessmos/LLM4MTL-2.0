@@ -1,4 +1,7 @@
 -------------------------------------------------------------------------------
 Test set: org.example.AmaltheaToAscetAllExecutionTest
 -------------------------------------------------------------------------------
-Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 5.975 s - in org.example.AmaltheaToAscetAllExecutionTest
+Tests run: 1, Failures: 0, Errors: 1, Skipped: 0, Time elapsed: 3.7 s <<< FAILURE! - in org.example.AmaltheaToAscetAllExecutionTest
+org.example.AmaltheaToAscetAllExecutionTest.testAmaltheaToAscet  Time elapsed: 3.594 s  <<< ERROR!
+org.eclipse.m2m.atl.engine.emfvm.VMException: Could not find model amalthea
+

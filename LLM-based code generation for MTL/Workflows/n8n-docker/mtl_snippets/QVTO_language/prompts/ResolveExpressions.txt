@@ -1,0 +1,4 @@
+Create a QVT-O transformation named **t** with input and output of type **ECORE**.  
+In the **main** section, map the root **EPackage** elements from the input to the output using a mapping **p2p**.  
+Use a **resolveoneIn** expression to access the corresponding output package and update its name by combining part of the first input **EClass** name with the existing package name.  
+Define mapping **EPackage::p2p** to copy the name and map its classifiers with **EClassifier::c2c**, which should produce **EClass** elements whose names are prefixed with “mapped”.

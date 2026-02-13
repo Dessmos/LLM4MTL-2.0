@@ -1,29 +1,30 @@
+```atl
 module DSL2KM3;
 create OUT : KM3 from IN : DSL;
 
-helper context DSL!Relationship def: needTurnOnClass : Boolean =
-	self.properties->notEmpty() or self.roles->exists(r | not r.isNavigableFrom);
+helper context DSL!Relationship def: needTurnOnClass() : Boolean =
+	self.properties->notEmpty() or not self.superType.oclIsUndefined() or self.subTypes->notEmpty();
 
-helper context DSL!Relationship def: getRoles : Sequence(DSL!Role) =
-	self.roles;
+helper context DSL!Class def: getRoles() : Sequence(DSL!Role) =
+	DSL!Role.allInstances()->select(r | r.source = self and not r.relation.needTurnOnClass());
 
-helper context DSL!Role def: isEmbedding : Boolean =
-	self.relation.isEmbedding;
+helper context DSL!Role def: isEmbedding() : Boolean =
+	self.relation.isEmbedding and self.isPropertyGenerator;
 
-entrypoint rule Metamodel() {
-	to
-		t : KM3!Metamodel (
-			contents <- DSL!DomainModel.allInstances()
-		)
-}
-
-rule Package {
+rule Metamodel {
 	from
 		s : DSL!DomainModel
 	to
-		t : KM3!Package (
+		t : KM3!Metamodel (
+			contents <- Sequence{mainPackage, primitivePackage}
+		),
+		mainPackage : KM3!Package (
 			name <- s.name,
-			contents <- s.classifiers->union(s.types)
+			contents <- s.classifiers
+		),
+		primitivePackage : KM3!Package (
+			name <- 'PrimitiveTypes',
+			contents <- s.types
 		)
 }
 
@@ -33,20 +34,21 @@ rule Class {
 	to
 		t : KM3!Class (
 			name <- s.name,
-			package <- s.domainModel,
 			isAbstract <- s.isAbstract,
-			supertypes <- s.superType
+			package <- thisModule.resolveTemp(s.domainModel, 'mainPackage'),
+			supertypes <- s.superType,
+			structuralFeatures <- s.properties->union(s.getRoles())
 		)
 }
 
 rule Relation2Class {
 	from
-		s : DSL!Relationship (thisModule.needTurnOnClass(s))
+		s : DSL!Relationship (s.needTurnOnClass())
 	to
 		t : KM3!Class (
 			name <- s.name,
-			package <- s.domainModel,
 			isAbstract <- s.isAbstract,
+			package <- thisModule.resolveTemp(s.domainModel, 'mainPackage'),
 			supertypes <- s.superType,
 			structuralFeatures <- s.properties->union(s.roles)
 		)
@@ -54,30 +56,33 @@ rule Relation2Class {
 
 rule SimpleReference {
 	from
-		s : DSL!Role (s.isNavigableFrom and not thisModule.needTurnOnClass(s.relation))
+		s : DSL!Role (not s.relation.needTurnOnClass())
 	to
 		t : KM3!Reference (
 			name <- s.name,
 			owner <- s.source,
-			type <- s.type,
 			lower <- s.min,
 			upper <- if s.isUnbounded then -1 else s.max endif,
 			isOrdered <- s.isOrdered,
-			isContainer <- thisModule.isEmbedding(s),
+			isUnique <- not s.isOrdered,
+			type <- s.type,
+			isContainer <- s.isEmbedding(),
 			opposite <- s.relation.roles->any(r | r <> s)
 		)
 }
 
 rule ComplexReference {
 	from
-		s : DSL!Role (thisModule.needTurnOnClass(s.relation))
+		s : DSL!Role (s.relation.needTurnOnClass())
 	to
 		t : KM3!Reference (
 			name <- s.name,
-			type <- s.type,
+			owner <- s.relation,
 			lower <- s.min,
 			upper <- if s.isUnbounded then -1 else s.max endif,
 			isOrdered <- s.isOrdered,
+			isUnique <- not s.isOrdered,
+			type <- s.type,
 			isContainer <- false
 		)
 }
@@ -103,7 +108,7 @@ rule Enumeration {
 	to
 		t : KM3!Enumeration (
 			name <- s.name,
-			package <- s.oclContainer(),
+			package <- thisModule.resolveTemp(s.eContainer(), 'primitivePackage'),
 			literals <- s.literals
 		)
 }
@@ -114,7 +119,7 @@ rule EnumLiteral {
 	to
 		t : KM3!EnumLiteral (
 			name <- s.name,
-			package <- s.oclContainer().oclContainer()
+			package <- thisModule.resolveTemp(s.eContainer().eContainer(), 'primitivePackage')
 		)
 }
 
@@ -124,6 +129,7 @@ rule DataType {
 	to
 		t : KM3!DataType (
 			name <- s.name,
-			package <- s.oclContainer()
+			package <- thisModule.resolveTemp(s.eContainer(), 'primitivePackage')
 		)
 }
+```

@@ -1,12 +1,12 @@
+```atl
 module IEEE1471_2_MoDAF;
 create OUT : MoDAF from IN : IEEE1471;
 
-helper def : rationale() : String =
+helper def : rationale : String =
 	if IN!Rationale.allInstances()->notEmpty() then
-		let r : IN!Rationale = IN!Rationale.allInstances()->first() in
-		r.name + ' - ' + r.content
+		IN!Rationale.allInstances()->first().name + ' ' + IN!Rationale.allInstances()->first().content
 	else
-		'No rationale provided'
+		''
 	endif;
 
 rule IEEE1471Model2MoDAFModel {
@@ -15,7 +15,16 @@ rule IEEE1471Model2MoDAFModel {
 	to
 		t : OUT!MoDAFModel (
 			name <- s.name,
-			content <- s.content
+			content <- s.content,
+			enterprise <- s.system,
+			environment <- s.environment,
+			operationalMissions <- s.missions,
+			architectures <- s.architecture,
+			architecturalDescription <- s.architecturalDescription,
+			stakeholders <- s.stakeholders,
+			stakeholderHasConcerns <- IN!Stakeholder.allInstances()->collect(stk | 
+				stk.has->collect(c | thisModule.createStakeholderHasConcern(stk, c, t)))->flatten(),
+			architecturalFrameworks <- Sequence{thisModule.createDefaultFramework(s)}
 		)
 }
 
@@ -25,7 +34,9 @@ rule System2Enterprise {
 	to
 		t : OUT!Enterprise (
 			name <- s.name,
-			content <- s.content
+			content <- s.content,
+			inhabits <- s.inhabits,
+			fulfills <- s.fulfills
 		)
 }
 
@@ -35,7 +46,8 @@ rule Environment2Environment {
 	to
 		t : OUT!Environment (
 			name <- s.name,
-			content <- s.content
+			content <- s.content,
+			influences <- s.influences
 		)
 }
 
@@ -55,7 +67,9 @@ rule Architecture2Architecture {
 	to
 		t : OUT!Architecture (
 			name <- s.name,
-			content <- s.content
+			content <- s.content,
+			enterprise <- s.describedBy.identifiesS->first().has->first(),
+			describedBy <- s.describedBy
 		)
 }
 
@@ -66,15 +80,18 @@ rule AD2AD {
 		t : OUT!ArchitecturalDescription (
 			name <- s.name,
 			content <- s.content,
-			approvialAuthority <- 'Default Authority',
-			architect <- 'Default Architect',
-			assumptionAndConstraints <- 'Default Constraints',
-			creatingOrganisation <- 'Default Organization',
-			dateCompleted <- 'TBD',
-			purpose <- 'Default Purpose',
-			recommendations <- 'Default Recommendations',
-			summaryOfFindings <- 'Default Summary',
-			tollsUsed <- 'Default Tools'
+			approvialAuthority <- '',
+			architect <- '',
+			assumptionAndConstraints <- '',
+			creatingOrganisation <- '',
+			dateCompleted <- '',
+			purpose <- s.content,
+			recommendations <- '',
+			summaryOfFindings <- thisModule.rationale,
+			tollsUsed <- '',
+			viewpoints <- s.organizedBy,
+			products <- s.organizedBy,
+			taxonomy <- thisModule.createTaxonomy()
 		)
 }
 
@@ -95,11 +112,13 @@ rule Viewpoint2View {
 		t : OUT!View (
 			name <- s.name,
 			content <- s.content,
-			framework <- if s.hasSource.oclIsUndefined() then 'Undefined Architectural Framework' else s.hasSource.name endif,
-			frameworkWebsite <- 'http://example.com',
+			framework <- if s.hasSource.oclIsUndefined() then '' else s.hasSource.name endif,
+			frameworkWebsite <- '',
 			viewCode <- s.name,
 			viewDescription <- s.content,
-			viewName <- s.name
+			viewName <- s.name,
+			definingFramework <- if s.hasSource.oclIsUndefined() then OclUndefined else s.hasSource endif,
+			usedToCover <- s.usedToCover
 		)
 }
 
@@ -110,7 +129,10 @@ rule View2ArchitecturalProduct {
 		t : OUT!ArchitecturalProduct (
 			name <- s.name,
 			content <- s.content,
-			description <- s.content
+			description <- s.content,
+			architecturalElements <- s.consitsOf,
+			definingView <- s.conformsTo,
+			addresses <- s.conformsTo.usedToCover
 		)
 }
 
@@ -130,7 +152,8 @@ rule Concern2Concern {
 	to
 		t : OUT!Concern (
 			name <- s.name,
-			content <- s.content
+			content <- s.content,
+			adressedBy <- s.isImportantTo->collect(stk | stk.has->select(c | c = s))->flatten()
 		)
 }
 
@@ -140,11 +163,8 @@ rule LibraryViewpoint2ArchitecturalFramework {
 	to
 		t : OUT!ArchitecturalFramework (
 			name <- s.name,
-			content <- s.content
-		),
-		undefinedFramework : OUT!ArchitecturalFramework (
-			name <- 'Undefined Architectural Framework',
-			content <- 'Framework for viewpoints without a defined source'
+			content <- s.content,
+			ownedMember <- IN!Viewpoint.allInstances()->select(v | v.hasSource = s)
 		)
 }
 
@@ -152,11 +172,24 @@ rule StakeholderHasConcern {
 	from
 		s : IN!Stakeholder,
 		c : IN!Concern (
-			c.isImportantTo->includes(s)
+			s.has->includes(c)
 		)
 	to
 		t : OUT!StakeholderHasConcern (
 			client <- s,
-			supplier <- c
+			supplier <- c,
+			owner <- IN!IEEE1471Model.allInstances()->first()
 		)
 }
+
+helper def : createStakeholderHasConcern(stk : IN!Stakeholder, c : IN!Concern, owner : OUT!MoDAFModel) : OUT!StakeholderHasConcern =
+	OclUndefined;
+
+helper def : createDefaultFramework(s : IN!IEEE1471Model) : OUT!ArchitecturalFramework =
+	let framework : OUT!ArchitecturalFramework = OUT!ArchitecturalFramework.newInstance() in
+	framework;
+
+helper def : createTaxonomy() : OUT!Taxonomy =
+	let tax : OUT!Taxonomy = OUT!Taxonomy.newInstance() in
+	tax;
+```

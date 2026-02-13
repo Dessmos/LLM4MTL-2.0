@@ -1,0 +1,29 @@
+module FamiliesToPersons_All;
+create OUT : Persons from IN : Families;
+
+helper context Families!Member def: familyLastName() : String =
+	Families!Family.allInstances()->select(f | f.father = self or f.mother = self or f.sons->includes(self) or f.daughters->includes(self))->first().lastName;
+
+helper context Families!Member def: isFemale() : Boolean =
+	Families!Family.allInstances()->exists(f | f.mother = self or f.daughters->includes(self));
+
+helper context Families!Member def: isMale() : Boolean =
+	Families!Family.allInstances()->exists(f | f.father = self or f.sons->includes(self));
+
+rule Member2Male {
+	from
+		s : Families!Member (s.isMale())
+	to
+		t : Persons!Male (
+			fullName <- s.firstName + ' ' + s.familyLastName()
+		)
+}
+
+rule Member2Female {
+	from
+		s : Families!Member (s.isFemale())
+	to
+		t : Persons!Female (
+			fullName <- s.firstName + ' ' + s.familyLastName()
+		)
+}

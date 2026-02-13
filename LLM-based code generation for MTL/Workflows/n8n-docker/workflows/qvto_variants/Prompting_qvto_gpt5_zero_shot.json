@@ -1,0 +1,781 @@
+{
+  "name": "Prompting_QVTO_gpt5_only_prompt",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        272,
+        -560
+      ],
+      "id": "fd2b6f4f-1f53-475c-b509-875b6d4571da",
+      "name": "When clicking 'Execute workflow'"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.prompt }}\n\n-- End of request.\nHere are the models:\n{{ $json.concatenated_model }}\n\nThe models are located here:\n\"http://www.eclipse.org/emf/2002/Ecore\"\n\n{{ $('Set Parameters').item.json.Few_shot ? \"Here are some examples as guideline:\\n\" + $('Extract text from examples file').item.json.examples : \"\" }}\n\n\n{{ $('Set Parameters').item.json.Grammar ? \"Here is the grammar of the Language:\\n\" + $('Extract text from grammar').item.json.grammar : \"\"}}\n\n{{ $('Set Parameters').item.json.Helper_methods ? \"Here are helper methods you can use:\\n\" + $('Extract text from helper methods').item.json.helper_methods : \"\"}}",
+        "messages": {
+          "messageValues": [
+            {
+              "message": "You are an expert developer for the **QVT Operational Mappings (QVT-O)** (model transformation DSL).\nYour job is to translate the user's natural-language specification into a complete, syntactically valid .qvto file.\n\nRules\n1. Follow the QVT-O grammar exactly (modeltype declarations, transformation header with in/out parameters, main() entry point, mapping declarations with optional when clauses, init blocks, constructors, mapping extensions such as inherits/merges/disjuncts, resolve expressions, object literals, etc.).\n2. Use the transformation and mapping names provided by the user whenever they are specified.\n3. If a name is missing, invent a concise, CamelCase name that matches the intent.\n4. Do **not** wrap it in Markdown fences, and do **not** add commentary, explanations, or blank lines beyond what the language requires."
+            }
+          ]
+        },
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.7,
+      "position": [
+        1296,
+        -64
+      ],
+      "id": "868aa8f6-60d9-4b39-9604-1fdedcf4af7e",
+      "name": "(Re-)Generate code"
+    },
+    {
+      "parameters": {
+        "fileSelector": "=/data/examples/qvto/Examples.txt",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        736,
+        -32
+      ],
+      "id": "06da53f4-d3ab-42b7-96e9-0be3218be7f5",
+      "name": "Read few shot examples",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "operation": "write",
+        "fileName": "=/data/snippets/QVTO_language/responses/gpt-5/only_prompt/{{ $node[\"Save file name\"].json.baseName }}.qvto",
+        "dataPropertyName": "={{$node[\"(Re-)Generate code\"].json.text}}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        1632,
+        320
+      ],
+      "id": "cdb014cd-ed55-407d-b7f2-a874a1cfbbc1",
+      "name": "Write response to disk"
+    },
+    {
+      "parameters": {
+        "operation": "toText",
+        "sourceProperty": "text",
+        "binaryPropertyName": "={{ $json.text }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        1440,
+        320
+      ],
+      "id": "e1a4a2fe-85f4-48a5-9d96-a3cf748c75ed",
+      "name": "Convert response to File",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "numberInputs": 5,
+        "options": {
+          "includeUnpaired": true
+        }
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        1120,
+        -112
+      ],
+      "id": "c0a20a1d-9152-4a93-bb9f-e84875692f5b",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "operation": "text",
+        "destinationKey": "examples",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        912,
+        -32
+      ],
+      "id": "7201be23-975d-4ca1-8b23-de9c593465ac",
+      "name": "Extract text from examples file"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        304,
+        -224
+      ],
+      "id": "8d04e08c-e75a-4c64-8a75-8f5a92731b18",
+      "name": "Loop Over Items"
+    },
+    {
+      "parameters": {
+        "fileSelector": "/data/grammar/qvto/EBNF.txt",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        736,
+        128
+      ],
+      "id": "91f28f36-8666-4e6b-af2a-3a28d8ab31f8",
+      "name": "Read Grammar"
+    },
+    {
+      "parameters": {
+        "operation": "text",
+        "destinationKey": "grammar",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        912,
+        128
+      ],
+      "id": "1dc8586e-f28a-424b-9b79-ab0a636cec0a",
+      "name": "Extract text from grammar"
+    },
+    {
+      "parameters": {
+        "fileSelector": "=/data/snippets/QVTO_language/prompts/*",
+        "options": {
+          "dataPropertyName": "data"
+        }
+      },
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        448,
+        -560
+      ],
+      "id": "97046de0-f157-4f0c-b182-c253ec6294ed",
+      "name": "Read prompt files",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "operation": "text",
+        "destinationKey": "prompt",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        736,
+        -368
+      ],
+      "id": "5e573c73-bee8-4c24-986d-87e7df13255a",
+      "name": "Extract text from prompt file"
+    },
+    {
+      "parameters": {
+        "fileSelector": "=/data/models/additional_models/QVT-O_model/*.ecore",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        576,
+        -208
+      ],
+      "id": "6ad548a5-9f5e-4fee-ab73-4e47688c4008",
+      "name": "Read model files",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "operation": "text",
+        "destinationKey": "model",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        736,
+        -208
+      ],
+      "id": "0aae3a22-ab29-4a32-8409-3e5429c62bb2",
+      "name": "Extract text from model files"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "9a820e40-6d8c-43b5-b15c-624062cc54d1",
+              "leftValue": "={{ $json.Few_shot }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        576,
+        -16
+      ],
+      "id": "2d45aa13-9933-419f-a3bf-472ac393c593",
+      "name": "Few_shot"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "12f090d8-deea-4484-9d7f-87463a9376cb",
+              "leftValue": "={{ $json.Grammar }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        576,
+        144
+      ],
+      "id": "d96e3a2b-5d61-40df-ba5f-1361716bdfc6",
+      "name": "Grammar"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "030dbfa9-3984-4cac-bb2b-5acd0a3871b7",
+              "leftValue": "={{ $json.Helper_methods }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        576,
+        304
+      ],
+      "id": "059e8081-9322-4be6-a097-598d9728766f",
+      "name": "Helper_methods"
+    },
+    {
+      "parameters": {
+        "fileSelector": "/data/helper_methods//*",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        736,
+        288
+      ],
+      "id": "23a792df-af9c-40a8-b288-965c60f029a1",
+      "name": "Read helper methods"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-5",
+          "mode": "list",
+          "cachedResultName": "gpt-5"
+        },
+        "options": {
+          "timeout": 600000
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        1232,
+        128
+      ],
+      "id": "9fb54a2d-3016-40ed-8e2d-cb45f994a44d",
+      "name": "OpenAI Chat Model",
+      "credentials": {
+        "openAiApi": {
+          "id": "8mtpdiKzgoTWwPSM",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fieldsToSummarize": {
+          "values": [
+            {
+              "aggregation": "concatenate",
+              "field": "model",
+              "separateBy": "\n"
+            },
+            {
+              "aggregation": "concatenate",
+              "field": "model",
+              "includeEmpty": "=",
+              "separateBy": "\n"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.summarize",
+      "typeVersion": 1.1,
+      "position": [
+        912,
+        -208
+      ],
+      "id": "3799568e-61b7-4dec-8122-318914af11d7",
+      "name": "Summarize"
+    },
+    {
+      "parameters": {
+        "operation": "text",
+        "destinationKey": "helper_methods",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        912,
+        288
+      ],
+      "id": "145edf12-2833-4732-b9d9-bd526279317c",
+      "name": "Extract text from helper methods"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "012afcfe-e1f3-470d-a2d5-646da0d9cce9",
+              "name": "Few_shot",
+              "value": false,
+              "type": "boolean"
+            },
+            {
+              "id": "324a1923-7480-4355-9b20-368c07da2d88",
+              "name": "Grammar",
+              "value": false,
+              "type": "boolean"
+            },
+            {
+              "id": "95460973-2abd-4da1-83f7-831025d30b03",
+              "name": "Helper_methods",
+              "value": false,
+              "type": "boolean"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        336,
+        16
+      ],
+      "id": "d31123ab-7c93-4030-af6b-2ace8d3a8714",
+      "name": "Set Parameters"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "dc55a200-550f-4f40-a962-35b6dee1f38e",
+              "name": "baseName",
+              "value": "={{$binary.data.fileName.split('.').slice(0,-1).join('.')}}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        448,
+        -368
+      ],
+      "id": "0f48f3d5-d50a-4a56-a1a1-829e73003fa1",
+      "name": "Save file name"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking 'Execute workflow'": {
+      "main": [
+        [
+          {
+            "node": "Read prompt files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "(Re-)Generate code": {
+      "main": [
+        [
+          {
+            "node": "Convert response to File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read few shot examples": {
+      "main": [
+        [
+          {
+            "node": "Extract text from examples file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Convert response to File": {
+      "main": [
+        [
+          {
+            "node": "Write response to disk",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "(Re-)Generate code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract text from examples file": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Write response to disk": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Read model files",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Extract text from prompt file",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Save file name",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Set Parameters",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Grammar": {
+      "main": [
+        [
+          {
+            "node": "Extract text from grammar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract text from grammar": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 3
+          }
+        ]
+      ]
+    },
+    "Read prompt files": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract text from prompt file": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read model files": {
+      "main": [
+        [
+          {
+            "node": "Extract text from model files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract text from model files": {
+      "main": [
+        [
+          {
+            "node": "Summarize",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Few_shot": {
+      "main": [
+        [
+          {
+            "node": "Read few shot examples",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Grammar": {
+      "main": [
+        [
+          {
+            "node": "Read Grammar",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 3
+          }
+        ]
+      ]
+    },
+    "Helper_methods": {
+      "main": [
+        [
+          {
+            "node": "Read helper methods",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 4
+          }
+        ]
+      ]
+    },
+    "Read helper methods": {
+      "main": [
+        [
+          {
+            "node": "Extract text from helper methods",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "(Re-)Generate code",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Summarize": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Extract text from helper methods": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 4
+          }
+        ]
+      ]
+    },
+    "Set Parameters": {
+      "main": [
+        [
+          {
+            "node": "Helper_methods",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Grammar",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Few_shot",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save file name": {
+      "main": [
+        [
+          {
+            "node": "Extract text from prompt file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "49c8fb43-6792-4806-8822-862b154d0d7a",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "baac600b301729508052ad55e0d8a15d3b34368b7a1ed3c61d229191ca3faa41"
+  },
+  "id": "qvto_gpt5_only_prompt",
+  "tags": []
+}

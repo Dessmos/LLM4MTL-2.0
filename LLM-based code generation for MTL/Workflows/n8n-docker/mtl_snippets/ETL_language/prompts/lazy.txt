@@ -1,0 +1,4 @@
+Create an ETL transformation from a **Flowchart** model to an **HTML** model.  
+Define a rule **Flowchart2Heading** that converts each Flowchart into a DIV whose children correspond to all transformed nodes of that flowchart.  
+Add rule **Action2Heading** to convert each Action into an H1 element displaying its name, and rule **Decision2Heading** that does the same for a Decision.  
+Also include rule **Transition2Heading** converting a Transition into an H1 with its name, even though this rule is not actually invoked in the transformation.

@@ -1,0 +1,173 @@
+module IEEE1471_2_MoDAF;
+
+create OUT : MoDAF from IN : IEEE1471;
+
+helper context IEEE1471!ArchitectureDescription def: rationale() : String =
+	if self.rationales->notEmpty() then
+		self.rationales->first().name.concat(' : ').concat(self.rationales->first().content)
+	else
+		'No rationale'
+	endif;
+
+rule IEEE1471Model2MoDAFModel {
+	from
+		s : IEEE1471!ArchitectureDescription
+	to
+		t : MoDAF!ArchitectureViewModel (
+			name <- s.name,
+			content <- s.content,
+			enterprise <- s.systems->collect(e | thisModule.resolveTemp(e, 'enterprise'))->asSet(),
+			environment <- s.environment,
+			missions <- s.missions->collect(m | thisModule.resolveTemp(m, 'mission'))->asSet(),
+			architectures <- s.architectures->collect(a | thisModule.resolveTemp(a, 'architecture'))->asSet(),
+			stakeholders <- s.stakeholders->collect(st | thisModule.resolveTemp(st, 'stakeholder'))->asSet(),
+			concerns <- s.concerns->collect(c | thisModule.resolveTemp(c, 'concern'))->asSet(),
+			frameworks <- Sequence{thisModule.defaultFramework(s)}->union(
+				s.libraryViewpoints->collect(lv | thisModule.resolveTemp(lv, 'framework'))->asSet()
+			)
+		)
+}
+
+rule System2Enterprise {
+	from
+		s : IEEE1471!System
+	to
+		e : MoDAF!Enterprise (
+			name <- s.name,
+			content <- s.content,
+			environment <- if s.environment.oclIsUndefined() then null else thisModule.resolveTemp(s.environment, 'environment') endif,
+			missions <- s.missions->collect(m | thisModule.resolveTemp(m, 'mission'))->asSet()
+		)
+}
+
+rule Environment2Environment {
+	from
+		s : IEEE1471!Environment
+	to
+		e : MoDAF!Environment (
+			name <- s.name,
+			content <- s.content
+		)
+}
+
+rule Mission2OperationalMission {
+	from
+		s : IEEE1471!Mission
+	to
+		m : MoDAF!OperationalMission (
+			name <- s.name,
+			content <- s.content
+		)
+}
+
+rule Architecture2Architecture {
+	from
+		s : IEEE1471!Architecture
+	to
+		a : MoDAF!Architecture (
+			name <- s.name,
+			content <- s.content,
+			views <- s.views->collect(v | thisModule.resolveTemp(v, 'view'))->asSet()
+		)
+}
+
+rule AD2AD {
+	from
+		s : IEEE1471!ArchitectureDescription
+	to
+		a : MoDAF!ArchitectureDescription (
+			name <- s.name,
+			content <- s.content,
+			rationale <- s.rationale()
+		)
+}
+
+rule Stakeholder2Stakeholder {
+	from
+		s : IEEE1471!Stakeholder
+	to
+		t : MoDAF!Stakeholder (
+			name <- s.name,
+			content <- s.content
+		)
+}
+
+rule Viewpoint2View {
+	from
+		s : IEEE1471!Viewpoint (not s.oclIsKindOf(IEEE1471!LibraryViewpoint))
+	to
+		v : MoDAF!View (
+			name <- s.name,
+			content <- s.content,
+			concerns <- s.concerns->collect(c | thisModule.resolveTemp(c, 'concern'))->asSet(),
+			architecturalProducts <- s.views->collect(vw | thisModule.resolveTemp(vw, 'product'))->asSet(),
+			framework <- if s.libraryViewpoint.oclIsUndefined() then thisModule.defaultFramework(s.architectureDescription) else thisModule.resolveTemp(s.libraryViewpoint, 'framework') endif
+		)
+}
+
+rule View2ArchitecturalProduct {
+	from
+		s : IEEE1471!View
+	to
+		p : MoDAF!ArchitecturalProduct (
+			name <- s.name,
+			content <- s.content,
+			elements <- s.models->collect(m | thisModule.resolveTemp(m, 'element'))->asSet(),
+			view <- if s.viewpoint.oclIsUndefined() then null else thisModule.resolveTemp(s.viewpoint, 'view') endif
+		)
+}
+
+rule Model2Element {
+	from
+		s : IEEE1471!Model
+	to
+		e : MoDAF!Element (
+			name <- s.name,
+			content <- s.content
+		)
+}
+
+rule Concern2Concern {
+	from
+		s : IEEE1471!Concern
+	to
+		c : MoDAF!Concern (
+			name <- s.name,
+			content <- s.content
+		)
+}
+
+rule LibraryViewpoint2ArchitecturalFramework {
+	from
+		s : IEEE1471!LibraryViewpoint
+	to
+		f : MoDAF!ArchitecturalFramework (
+			name <- s.name,
+			content <- s.content,
+			views <- s.viewpoints->collect(vp | thisModule.resolveTemp(vp, 'view'))->asSet()
+		)
+}
+
+rule StakeholderHasConcern {
+	from
+		s : IEEE1471!StakeholderConcern
+	to
+		l : MoDAF!StakeholderConcernLink (
+			stakeholder <- thisModule.resolveTemp(s.stakeholder, 'stakeholder'),
+			concern <- thisModule.resolveTemp(s.concern, 'concern')
+		)
+}
+
+lazy rule DefaultArchitecturalFramework {
+	from
+		ad : IEEE1471!ArchitectureDescription
+	to
+		f : MoDAF!ArchitecturalFramework (
+			name <- 'Undefined Architectural Framework',
+			content <- 'Default framework for viewpoints without a source',
+			views <- ad.viewpoints->select(vp | vp.oclIsKindOf(IEEE1471!Viewpoint) and vp.oclAsType(IEEE1471!Viewpoint).libraryViewpoint.oclIsUndefined())->collect(vp2 | thisModule.resolveTemp(vp2, 'view'))->asSet()
+		)
+}
+
+helper def: defaultFramework(ad : IEEE1471!ArchitectureDescription) : MoDAF!ArchitecturalFramework =
+	thisModule.resolveTemp(ad, 'f')

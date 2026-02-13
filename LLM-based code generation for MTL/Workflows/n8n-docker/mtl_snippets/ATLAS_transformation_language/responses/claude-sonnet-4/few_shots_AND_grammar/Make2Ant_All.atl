@@ -1,44 +1,65 @@
+```atl
 module Make2Ant;
 create OUT : Ant from IN : Make;
 
 rule Makefile2Project {
-	from m : Make!Makefile
-	to p : Ant!Project (
-		name <- m.name,
-		properties <- Make!Macro.allInstances(),
-		targets <- Make!Rule.allInstances(),
-		default <- Make!Rule.allInstances()->first()
-	)
+	from
+		s : Make!Makefile
+	to
+		t : Ant!Project (
+			name <- s.name,
+			properties <- s.elements->select(e | e.oclIsTypeOf(Make!Macro)),
+			targets <- s.elements->select(e | e.oclIsTypeOf(Make!Rule)),
+			default <- s.elements->select(e | e.oclIsTypeOf(Make!Rule))->first()
+		)
 }
 
 rule Macro2Property {
-	from m : Make!Macro
-	to pv : Ant!PropertyValue (
-		name <- m.name,
-		value <- m.value
-	)
+	from
+		s : Make!Macro
+	to
+		t : Ant!PropertyValue (
+			name <- s.name,
+			value <- s.value
+		)
 }
 
 rule Rule2Target {
-	from r : Make!Rule
-	to t : Ant!Target (
-		name <- r.name,
-		tasks <- r.shellLines,
-		depends <- r.dependencies->select(d | d.oclIsTypeOf(Make!RuleDep))->collect(d | d.ruledep)
-	)
+	from
+		s : Make!Rule
+	to
+		t : Ant!Target (
+			name <- s.name,
+			tasks <- s.shellLines,
+			depends <- s.dependencies->select(d | d.oclIsTypeOf(Make!RuleDep))->collect(d | d.ruledep)
+		)
 }
 
 rule ShellLine2Task_Display {
-	from sl : Make!ShellLine (sl.display = true)
-	to e : Ant!Echo (
-		message <- sl.command
-	)
+	from
+		s : Make!ShellLine (
+			s.display = true
+		)
+	to
+		e : Ant!Echo (
+			message <- s.command,
+			target <- s.ruleShellLine
+		),
+		x : Ant!Exec (
+			executable <- s.command,
+			target <- s.ruleShellLine
+		)
 }
 
 rule ShellLine2Task_NoDisplay {
-	from sl : Make!ShellLine (sl.display = false)
-	to ex : Ant!Exec (
-		executable <- sl.command,
-		dir <- ''
-	)
+	from
+		s : Make!ShellLine (
+			s.display = false
+		)
+	to
+		t : Ant!Exec (
+			executable <- s.command,
+			target <- s.ruleShellLine
+		)
 }
+```

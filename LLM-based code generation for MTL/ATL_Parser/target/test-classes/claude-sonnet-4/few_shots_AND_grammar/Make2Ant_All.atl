@@ -1,0 +1,59 @@
+module Make2Ant;
+create OUT : Ant from IN : Make;
+
+rule Makefile2Project {
+	from
+		makefile : Make!Makefile
+	to
+		project : Ant!Project (
+			name <- makefile.name,
+			properties <- makefile.macros->collect(m | thisModule.Macro2Property(m)),
+			targets <- makefile.rules->collect(r | thisModule.Rule2Target(r)),
+			defaultTarget <- makefile.defaultRule
+		)
+}
+
+rule Macro2Property {
+	from
+		macro : Make!Macro
+	to
+		property : Ant!PropertyValue (
+			name <- macro.name,
+			value <- macro.value
+		)
+}
+
+rule Rule2Target {
+	from
+		rule : Make!Rule
+	to
+		target : Ant!Target (
+			name <- rule.name,
+			tasks <- rule.commands->collect(c | 
+				if c.display then
+					thisModule.ShellLine2Task_Display(c)
+				else
+					thisModule.ShellLine2Task_NoDisplay(c)
+				endif
+			),
+			depends <- rule.dependencies
+		)
+}
+
+rule ShellLine2Task_Display {
+	from
+		shellLine : Make!ShellCommand (shellLine.display)
+	to
+		echoTask : Ant!Echo (
+			message <- shellLine.command
+		)
+}
+
+rule ShellLine2Task_NoDisplay {
+	from
+		shellLine : Make!ShellCommand (not shellLine.display)
+	to
+		execTask : Ant!Exec (
+			executable <- shellLine.command
+		)
+}

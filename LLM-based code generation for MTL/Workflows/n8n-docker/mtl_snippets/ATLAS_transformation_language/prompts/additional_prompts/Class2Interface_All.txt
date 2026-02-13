@@ -1,0 +1,9 @@
+Create an ATL transformation module named `Class2Interface_All` that converts models conforming to the `Class` metamodel into models conforming to the `Interface` metamodel.
+
+Declare the transformation header as `create OUT : Interface from IN : Class;`.
+
+Define a rule `Class2Interface` that maps each `Class` to an `Interface`, copying the `name` and the contained `methods` reference.
+
+Define a rule `Method2Method` that maps each `Method` to an `Interface` `Method`, copying `name`, `returnType`, and `parameters`.
+
+Define a rule `Parameter2Parameter` that maps each `Parameter` to an `Interface` `Parameter`, copying `name` and `type`.

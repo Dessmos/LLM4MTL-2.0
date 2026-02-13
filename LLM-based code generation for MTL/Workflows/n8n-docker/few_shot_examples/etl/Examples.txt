@@ -1,0 +1,84 @@
+// Example 1: Tree to Graph transformation
+// Demonstrates basic rule, variable creation, ::= equivalent operator, and if-conditional
+
+rule Tree2Node
+	transform t : Tree!Tree
+	to n : Graph!Node {
+
+	n.name = t.label;
+
+	if (t.parent.isDefined()) {
+		var e : new Graph!Edge;
+		e.source ::= t.parent;
+		e.target = n;
+	}
+}
+
+// Example 2: Flowchart to HTML with lazy rules and guard
+// Demonstrates @lazy annotation, .equivalent(), guard condition, and multiple targets
+
+rule Flowchart2Div
+	transform f : Flowchart!Flowchart
+	to div : HTML!DIV {
+
+	div.children.addAll(f.nodes.equivalent());
+}
+
+@lazy
+rule Action2Heading
+	transform a : Flowchart!Action
+	to container : HTML!DIV, title : HTML!H1, link : HTML!A {
+
+	guard: a.outgoing.notEmpty()
+
+	title.value = a.name;
+	link.value = "Next steps";
+	link.ahref = a.outgoing.first.target.name;
+
+	container.children.add(title);
+	container.children.add(link);
+}
+
+@lazy
+rule Decision2Heading
+	transform d : Flowchart!Decision
+	to h1 : HTML!H1 {
+
+	h1.value = d.name;
+}
+
+// Example 3: OO to DB with pre block, operations, and rule inheritance
+// Demonstrates pre/post blocks, operation definitions, extends, and multi-target rules
+
+pre {
+	"Running OO2DB transformation".println();
+	var db : new DB!Database;
+}
+
+rule Class2Table
+	transform c : OO!Class
+	to t : DB!Table, pk : DB!Column {
+
+	t.name = c.name;
+	t.database = db;
+
+	pk.name = t.primaryKeyName();
+	pk.type = "INT";
+	t.columns.add(pk);
+	t.primaryKeys.add(pk);
+}
+
+rule SingleValuedAttribute2Column
+	transform a : OO!Attribute
+	to c : DB!Column {
+
+	guard : not a.isMany
+
+	c.name = a.name;
+	c.table ::= a.owner;
+	c.type = a.type.name;
+}
+
+operation DB!Table primaryKeyName() : String {
+	return self.name.firstToLowerCase() + "Id";
+}

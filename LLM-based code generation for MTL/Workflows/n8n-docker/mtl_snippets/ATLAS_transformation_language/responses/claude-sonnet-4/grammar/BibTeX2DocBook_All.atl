@@ -1,169 +1,196 @@
+```atl
 module BibTeX2DocBook;
 create OUT : DocBook from IN : BibTeX;
 
-helper def: authorSet : Set(BibTeX!Author) = BibTeX!Author.allInstances();
-
-helper def: titledEntrySet : Set(BibTeX!TitledEntry) = BibTeX!TitledEntry.allInstances();
-
-helper def: articleSet : Set(BibTeX!Article) = BibTeX!Article.allInstances();
-
-helper def: buildEntryPara(entry : BibTeX!BibTeXEntry) : String =
-	if entry.oclIsKindOf(BibTeX!AuthoredEntry) then
-		entry.authors->collect(a | a.author)->first() + ': ' + entry.id
+helper context BibTeX!BibTeXEntry def: buildEntryPara() : String =
+	self.id + ' (' + self.oclType().name + '): ' +
+	if self.oclIsKindOf(BibTeX!TitledEntry) then
+		'title=' + self.title + ', '
 	else
-		entry.id
+		''
+	endif +
+	if self.oclIsKindOf(BibTeX!AuthoredEntry) then
+		'authors=' + self.authors->collect(a | a.author)->sep('; ') + ', '
+	else
+		''
+	endif +
+	if self.oclIsKindOf(BibTeX!DatedEntry) then
+		'year=' + self.year + ', '
+	else
+		''
+	endif +
+	if self.oclIsKindOf(BibTeX!BookTitledEntry) then
+		'booktitle=' + self.booktitle + ', '
+	else
+		''
+	endif +
+	if self.oclIsKindOf(BibTeX!ThesisEntry) then
+		'school=' + self.school + ', '
+	else
+		''
+	endif +
+	if self.oclIsKindOf(BibTeX!Article) then
+		'journal=' + self.journal + ', '
+	else
+		''
+	endif +
+	if self.oclIsKindOf(BibTeX!Unpublished) then
+		'note=' + self.note + ', '
+	else
+		''
+	endif +
+	if self.oclIsKindOf(BibTeX!Book) then
+		'publisher=' + self.publisher + ', '
+	else
+		''
+	endif +
+	if self.oclIsKindOf(BibTeX!InBook) then
+		'chapter=' + self.chapter.toString() + ', '
+	else
+		''
 	endif;
+
+helper def: authorSet : Sequence(BibTeX!Author) =
+	BibTeX!Author.allInstances()->asSequence()->sortedBy(a | a.author);
+
+helper def: titledEntrySet : Sequence(BibTeX!TitledEntry) =
+	BibTeX!TitledEntry.allInstances()->asSequence()->sortedBy(e | e.title);
+
+helper def: articleSet : Sequence(BibTeX!Article) =
+	BibTeX!Article.allInstances()->select(a | not a.journal.oclIsUndefined())->asSequence()->sortedBy(a | a.journal);
 
 rule Main {
 	from
-		s : BibTeX!BibTeXFile
+		bf : BibTeX!BibTeXFile
 	to
-		t : DocBook!DocBook (
-			books <- Set{referencesBook}
+		db : DocBook!DocBook (
+			books <- Sequence{bk}
 		),
-		referencesBook : DocBook!Book (
-			title <- 'References',
-			articles <- Set{authorsArticle, titlesArticle, journalsArticle}
+		bk : DocBook!Book (
+			articles <- Sequence{art}
 		),
-		authorsArticle : DocBook!Article (
-			title <- 'Authors',
-			sections_1 <- thisModule.authorSet->collect(a | thisModule.Author(a))
+		art : DocBook!Article (
+			title <- 'BibTeXML to DocBook',
+			sections_1 <- Sequence{sect1, sect2, sect3, sect4}
 		),
-		titlesArticle : DocBook!Article (
-			title <- 'Titles',
-			sections_1 <- thisModule.titledEntrySet->collect(e | 
-				if thisModule.articleSet->includes(e) then
-					OclUndefined
-				else
-					if e.oclIsUndefined() = false then
-						thisModule.TitledEntry_Title_NoArticle(e)
-					else
-						OclUndefined
-					endif
-				endif
-			)->select(s | s.oclIsUndefined() = false)
+		sect1 : DocBook!Sect1 (
+			title <- 'References List',
+			paras <- bf.entries->asSequence()->sortedBy(e | e.id)->collect(e | thisModule.resolveTemp(e, 'entryPara'))
 		),
-		journalsArticle : DocBook!Article (
-			title <- 'Journals',
-			sections_1 <- thisModule.articleSet->collect(a |
-				if a.title.oclIsUndefined() = false and a.journal.oclIsUndefined() = false then
-					thisModule.Article_Title_Journal(a)
-				else
-					if a.title.oclIsUndefined() and a.journal.oclIsUndefined() = false then
-						thisModule.Article_NoTitle_Journal(a)
-					else
-						if a.title.oclIsUndefined() = false and a.journal.oclIsUndefined() then
-							thisModule.Article_Title_NoJournal(a)
-						else
-							thisModule.Article_NoTitle_NoJournal(a)
-						endif
-					endif
-				endif
-			)
-		)
-}
-
-rule Author {
-	from
-		s : BibTeX!Author
-	to
-		t : DocBook!Sect1 (
-			title <- s.author,
-			paras <- Set{para},
-			sections_2 <- Set{}
+		sect2 : DocBook!Sect1 (
+			title <- 'Authors list',
+			paras <- thisModule.authorSet->collect(a | thisModule.resolveTemp(a, 'authorPara'))
 		),
-		para : DocBook!Para (
-			content <- 'Author: ' + s.author
+		sect3 : DocBook!Sect1 (
+			title <- 'Titles List',
+			paras <- thisModule.titledEntrySet->collect(e | thisModule.resolveTemp(e, 'titlePara'))
+		),
+		sect4 : DocBook!Sect1 (
+			title <- 'Journals List',
+			paras <- thisModule.articleSet->collect(a | thisModule.resolveTemp(a, 'journalPara'))
 		)
 }
 
 rule UntitledEntry {
 	from
-		s : BibTeX!BibTeXEntry (s.oclIsKindOf(BibTeX!TitledEntry) = false)
+		e : BibTeX!BibTeXEntry (
+			not e.oclIsKindOf(BibTeX!TitledEntry)
+		)
 	to
-		t : DocBook!Para (
-			content <- thisModule.buildEntryPara(s)
+		entryPara : DocBook!Para (
+			content <- e.buildEntryPara()
 		)
 }
 
 rule TitledEntry_Title_NoArticle {
 	from
-		s : BibTeX!TitledEntry (s.oclIsKindOf(BibTeX!Article) = false)
+		e : BibTeX!TitledEntry (
+			not e.oclIsKindOf(BibTeX!Article) and thisModule.titledEntrySet->includes(e)
+		)
 	to
-		t : DocBook!Sect1 (
-			title <- s.title,
-			paras <- Set{para},
-			sections_2 <- Set{}
+		entryPara : DocBook!Para (
+			content <- e.buildEntryPara()
 		),
-		para : DocBook!Para (
-			content <- thisModule.buildEntryPara(s)
+		titlePara : DocBook!Para (
+			content <- e.title
 		)
 }
 
 rule TitledEntry_NoTitle_NoArticle {
 	from
-		s : BibTeX!TitledEntry (s.oclIsKindOf(BibTeX!Article) = false and s.title.oclIsUndefined())
+		e : BibTeX!TitledEntry (
+			not e.oclIsKindOf(BibTeX!Article) and not thisModule.titledEntrySet->includes(e)
+		)
 	to
-		t : DocBook!Para (
-			content <- thisModule.buildEntryPara(s)
+		entryPara : DocBook!Para (
+			content <- e.buildEntryPara()
 		)
 }
 
 rule Article_Title_Journal {
 	from
-		s : BibTeX!Article (s.title.oclIsUndefined() = false and s.journal.oclIsUndefined() = false)
+		e : BibTeX!Article (
+			thisModule.titledEntrySet->includes(e) and thisModule.articleSet->includes(e)
+		)
 	to
-		t : DocBook!Sect1 (
-			title <- s.journal,
-			paras <- Set{},
-			sections_2 <- Set{sect2}
+		entryPara : DocBook!Para (
+			content <- e.buildEntryPara()
 		),
-		sect2 : DocBook!Sect2 (
-			title <- s.title,
-			paras <- Set{para}
+		titlePara : DocBook!Para (
+			content <- e.title
 		),
-		para : DocBook!Para (
-			content <- thisModule.buildEntryPara(s)
+		journalPara : DocBook!Para (
+			content <- e.journal
 		)
 }
 
 rule Article_NoTitle_Journal {
 	from
-		s : BibTeX!Article (s.title.oclIsUndefined() and s.journal.oclIsUndefined() = false)
+		e : BibTeX!Article (
+			not thisModule.titledEntrySet->includes(e) and thisModule.articleSet->includes(e)
+		)
 	to
-		t : DocBook!Sect1 (
-			title <- s.journal,
-			paras <- Set{para},
-			sections_2 <- Set{}
+		entryPara : DocBook!Para (
+			content <- e.buildEntryPara()
 		),
-		para : DocBook!Para (
-			content <- thisModule.buildEntryPara(s)
+		journalPara : DocBook!Para (
+			content <- e.journal
 		)
 }
 
 rule Article_Title_NoJournal {
 	from
-		s : BibTeX!Article (s.title.oclIsUndefined() = false and s.journal.oclIsUndefined())
+		e : BibTeX!Article (
+			thisModule.titledEntrySet->includes(e) and not thisModule.articleSet->includes(e)
+		)
 	to
-		t : DocBook!Sect1 (
-			title <- 'No Journal',
-			paras <- Set{},
-			sections_2 <- Set{sect2}
+		entryPara : DocBook!Para (
+			content <- e.buildEntryPara()
 		),
-		sect2 : DocBook!Sect2 (
-			title <- s.title,
-			paras <- Set{para}
-		),
-		para : DocBook!Para (
-			content <- thisModule.buildEntryPara(s)
+		titlePara : DocBook!Para (
+			content <- e.title
 		)
 }
 
 rule Article_NoTitle_NoJournal {
 	from
-		s : BibTeX!Article (s.title.oclIsUndefined() and s.journal.oclIsUndefined())
+		e : BibTeX!Article (
+			not thisModule.titledEntrySet->includes(e) and not thisModule.articleSet->includes(e)
+		)
 	to
-		t : DocBook!Para (
-			content <- thisModule.buildEntryPara(s)
+		entryPara : DocBook!Para (
+			content <- e.buildEntryPara()
 		)
 }
+
+rule Author {
+	from
+		a : BibTeX!Author (
+			thisModule.authorSet->includes(a)
+		)
+	to
+		authorPara : DocBook!Para (
+			content <- a.author
+		)
+}
+```

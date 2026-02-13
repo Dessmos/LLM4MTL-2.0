@@ -1,0 +1,119 @@
+module DSL2KM3;
+create OUT : KM3 from IN : DSL;
+
+helper def : needTurnOnClass(r : DSL!Relationship) : Boolean =
+	not r.isEmbedding;
+
+helper def : getRoles(r : DSL!Relationship) : Sequence(DSL!Role) =
+	r.roles;
+
+helper def : isEmbedding(r : DSL!Relationship) : Boolean =
+	r.isEmbedding;
+
+rule Metamodel {
+	from src : DSL!DomainModel
+	to dst : KM3!Metamodel (
+		name <- src.name,
+		contents <- src.classifiers->select(c | c.oclIsKindOf(DSL!Class))
+			->union(src.classifiers->select(c | c.oclIsKindOf(DSL!Relationship) and thisModule.needTurnOnClass(c)))
+			->union(src.types)
+	)
+}
+
+rule Class {
+	from src : DSL!Class
+	to dst : KM3!Class (
+		name <- src.name,
+		isAbstract <- src.isAbstract,
+		supertypes <- if src.superType.oclIsUndefined() then Sequence{} else Sequence{src.superType} endif,
+		structuralFeatures <- src.properties
+			->union(thisModule.getSimpleReferences(src))
+			->union(thisModule.getComplexReferences(src))
+	)
+}
+
+rule Relation2Class {
+	from src : DSL!Relationship (thisModule.needTurnOnClass(src))
+	to dst : KM3!Class (
+		name <- src.name,
+		isAbstract <- src.isAbstract,
+		supertypes <- if src.superType.oclIsUndefined() then Sequence{} else Sequence{src.superType} endif,
+		structuralFeatures <- src.properties
+			->union(thisModule.getRoles(src)->collect(r | thisModule.Role2Reference(r)))
+	)
+}
+
+lazy rule Role2Reference {
+	from src : DSL!Role
+	to dst : KM3!Reference (
+		name <- src.name,
+		type <- src.type,
+		lower <- src.min,
+		upper <- if src.isUnbounded then -1 else src.max endif
+	)
+}
+
+helper def : getSimpleReferences(c : DSL!Class) : Sequence(DSL!Role) =
+	DSL!Relationship.allInstances()->select(r | thisModule.isEmbedding(r))
+		->collect(r | thisModule.getRoles(r))
+		->flatten()
+		->select(role | role.source = c and role.isNavigableFrom);
+
+helper def : getComplexReferences(c : DSL!Class) : Sequence(DSL!Role) =
+	DSL!Relationship.allInstances()->select(r | not thisModule.isEmbedding(r))
+		->collect(r | thisModule.getRoles(r))
+		->flatten()
+		->select(role | role.source = c and role.isNavigableFrom);
+
+rule SimpleReference {
+	from src : DSL!Role (thisModule.isEmbedding(src.relation) and src.isNavigableFrom)
+	to dst : KM3!Reference (
+		name <- src.name,
+		type <- src.type,
+		lower <- src.min,
+		upper <- if src.isUnbounded then -1 else src.max endif,
+		isContainment <- true
+	)
+}
+
+rule ComplexReference {
+	from src : DSL!Role (not thisModule.isEmbedding(src.relation) and src.isNavigableFrom)
+	to dst : KM3!Reference (
+		name <- src.name,
+		type <- src.type,
+		lower <- src.min,
+		upper <- if src.isUnbounded then -1 else src.max endif,
+		isContainment <- false
+	)
+}
+
+rule Attribute {
+	from src : DSL!ValueProperty
+	to dst : KM3!Attribute (
+		name <- src.name,
+		type <- src.type
+	)
+}
+
+rule Enumeration {
+	from src : DSL!Enumeration
+	to dst : KM3!Enumeration (
+		name <- src.name,
+		literals <- src.literals
+	)
+}
+
+rule EnumLiteral {
+	from src : DSL!EnumerationLiteral
+	to dst : KM3!EnumerationLiteral (
+		name <- src.name,
+		value <- src.value
+	)
+}
+
+rule DataType {
+	from src : DSL!SimpleType
+	to dst : KM3!DataType (
+		name <- src.name
+	)
+}

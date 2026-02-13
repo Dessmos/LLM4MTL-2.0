@@ -1,0 +1,75 @@
+transformation Rss2Atom
+
+model RSS metamodel "http://vitruv.tools/methodologisttemplate/RSS"
+model Atom metamodel "http://vitruv.tools/methodologisttemplate/Atom"
+
+@primary
+rule Rss2Atom
+  transform rss : RSS!Rss
+  to feed : Atom!Feed {
+    feed.title ::= rss.channel.title;
+    feed.link ::= rss.channel.link;
+    feed.generator ::= rss.channel.generator;
+    feed.entries.addAll(rss.channel.items.equivalent());
+}
+
+rule Item2Entry
+  transform item : RSS!Item
+  to entry : Atom!Entry {
+    entry.title ::= item.title;
+    entry.link ::= item.link;
+    entry.summary ::= item.description;
+    entry.author ::= item.creator;
+    entry.content ::= item.contentEncoded;
+    entry.published ::= item.pubDate;
+}
+
+rule Title2Title
+  transform rssTitle : RSS!Title
+  to atomTitle : Atom!Title {
+    atomTitle.text = rssTitle.text;
+}
+
+rule Link2Link
+  transform rssLink : RSS!Link
+  to atomLink : Atom!Link {
+    atomLink.text = rssLink.text;
+}
+
+rule Generator2Generator
+  transform rssGenerator : RSS!Generator
+  to atomGenerator : Atom!Generator {
+    atomGenerator.text = rssGenerator.text;
+}
+
+rule Creator2Author
+  transform rssCreator : RSS!Creator
+  to atomAuthor : Atom!Author {
+    atomAuthor.name = rssCreator.text;
+}
+
+rule Description2Summary
+  transform rssDescription : RSS!Description
+  to atomSummary : Atom!Summary {
+    atomSummary.text = rssDescription.text;
+}
+
+rule ContentEncoded2Content
+  transform rssContent : RSS!ContentEncoded
+  to atomContent : Atom!Content {
+    atomContent.text = rssContent.text;
+}
+
+rule PubDate2Published
+  transform rssPubDate : RSS!PubDate
+  to atomPublished : Atom!Published {
+    atomPublished.text = rssPubDate.text;
+}
+
+operation Any appendChildren(elements : Collection) {
+  self.children.addAll(elements);
+}
+
+operation Any appendEquivalentsOfChildrenOf(element : Any) {
+  self.appendChildren(element.children.equivalent());
+}

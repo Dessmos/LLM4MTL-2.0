@@ -1,0 +1,24 @@
+module NetworkToGraph_All;
+create OUT : XML from IN : DSL;
+
+rule Component2Entity {
+	from c : DSL!Classifier
+	to e : XML!Element (
+		name <- c.name
+	)
+}
+
+rule System2Root {
+	from s : DSL!DomainModel
+	to r : XML!Root (
+		children <- s.classifiers
+	)
+}
+
+rule Link2Link {
+	from sl : DSL!Relationship
+	to tl : XML!Element (
+		name <- sl.name,
+		children <- sl.roles->collect(r | r.type)
+	)
+}

@@ -1,0 +1,202 @@
+module IEEE1471_2_MoDAF;
+create OUT : MoDAF from IN : IEEE1471;
+
+helper context IEEE1471!ArchitecturalDescription def: rationale() : String =
+	let r : Sequence{IEEE1471!Rationale} = self.rationales in
+	if r->size() > 0 then
+		r->first().name.concat(' - ').concat(r->first().content)
+	else
+		'No rationale'
+	endif;
+
+rule IEEE1471Model2MoDAFModel {
+	from
+		s : IEEE1471!ArchitecturalDescription
+	to
+		t : MoDAF!ArchitectureViewModel (
+			name <- s.name,
+			description <- s.description,
+			enterprise <- s.system,
+			environment <- s.environment,
+			architecture <- s.architecture,
+			framework <- thisModule.getOrCreateDefaultFramework(s)
+		)
+	do {
+	}
+}
+
+rule System2Enterprise {
+	from
+		s : IEEE1471!System
+	to
+		t : MoDAF!Enterprise (
+			name <- s.name,
+			content <- s.description
+		)
+	do {
+	}
+}
+
+rule Environment2Environment {
+	from
+		s : IEEE1471!Environment
+	to
+		t : MoDAF!Environment (
+			name <- s.name,
+			content <- s.description
+		)
+	do {
+	}
+}
+
+rule Mission2OperationalMission {
+	from
+		s : IEEE1471!Mission
+	to
+		t : MoDAF!OperationalMission (
+			name <- s.name,
+			content <- s.description
+		)
+	do {
+	}
+}
+
+rule Architecture2Architecture {
+	from
+		s : IEEE1471!Architecture
+	to
+		t : MoDAF!Architecture (
+			name <- s.name,
+			content <- s.description,
+			views <- s.views
+		)
+	do {
+	}
+}
+
+rule AD2AD {
+	from
+		s : IEEE1471!ArchitecturalDescription
+	to
+		t : MoDAF!ArchitectureDescription (
+			name <- s.name,
+			content <- s.description,
+			rationale <- s.rationale()
+		)
+	do {
+	}
+}
+
+rule Stakeholder2Stakeholder {
+	from
+		s : IEEE1471!Stakeholder
+	to
+		t : MoDAF!Stakeholder (
+			name <- s.name,
+			content <- s.description
+		)
+	do {
+	}
+}
+
+rule Viewpoint2View {
+	from
+		s : IEEE1471!Viewpoint
+	to
+		t : MoDAF!View (
+			name <- s.name,
+			content <- s.description,
+			concerns <- s.concerns,
+			stakeholders <- s.stakeholders
+		)
+	do {
+	}
+}
+
+rule View2ArchitecturalProduct {
+	from
+		s : IEEE1471!View
+	to
+		t : MoDAF!ArchitecturalProduct (
+			name <- s.name,
+			content <- s.description,
+			models <- s.models,
+			viewpoint <- s.viewpoint
+		)
+	do {
+	}
+}
+
+rule Model2Element {
+	from
+		s : IEEE1471!Model
+	to
+		t : MoDAF!Element (
+			name <- s.name,
+			content <- s.description
+		)
+	do {
+	}
+}
+
+rule Concern2Concern {
+	from
+		s : IEEE1471!Concern
+	to
+		t : MoDAF!Concern (
+			name <- s.name,
+			content <- s.description
+		)
+	do {
+	}
+}
+
+rule LibraryViewpoint2ArchitecturalFramework {
+	from
+		s : IEEE1471!LibraryViewpoint
+	to
+		t : MoDAF!ArchitecturalFramework (
+			name <- s.name,
+			description <- s.description,
+			viewpoints <- s.viewpoints
+		)
+	do {
+	}
+}
+
+rule StakeholderHasConcern {
+	from
+		s : IEEE1471!Stakeholder
+	to
+		t : MoDAF!StakeholderConcern (
+			stakeholder <- s,
+			concerns <- s.concerns
+		)
+	do {
+	}
+}
+
+helper def: getOrCreateDefaultFramework(ad : IEEE1471!ArchitecturalDescription) : MoDAF!ArchitecturalFramework =
+	let existing : Sequence{MoDAF!ArchitecturalFramework} = MoDAF!ArchitecturalFramework.allInstances()->select(a | a.name = 'Undefined Architectural Framework') in
+	if existing->size() > 0 then
+		existing->first()
+	else
+		let fw : MoDAF!ArchitecturalFramework = thisModule.createUndefinedFramework(ad) in
+		fw
+	endif;
+
+rule CreateUndefinedFramework {
+	from
+		s : IEEE1471!ArchitecturalDescription
+	to
+		t : MoDAF!ArchitecturalFramework (
+			name <- 'Undefined Architectural Framework',
+			description <- 'Default framework for viewpoints without a source',
+			viewpoints <- IEEE1471!Viewpoint.allInstances()->select(vp | vp.libraryViewpoint.oclIsUndefined())
+		)
+	do {
+	}
+}
+
+helper def: createUndefinedFramework(ad : IEEE1471!ArchitecturalDescription) : MoDAF!ArchitecturalFramework =
+	MoDAF!ArchitecturalFramework.allInstances()->any(a | a.name = 'Undefined Architectural Framework');

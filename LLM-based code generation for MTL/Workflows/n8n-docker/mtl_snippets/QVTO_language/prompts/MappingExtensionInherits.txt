@@ -1,0 +1,5 @@
+Create a QVT-O transformation named **t** that takes an input and output model of type **ECORE**.  
+In the **main** operation, iterate over all root **EPackages** in the input and apply the **p2p** mapping.  
+In **p2p**, create a target **EPackage** with the same name and map each contained **EClass** using a **makeClass** mapping.  
+Define an abstract **makeClassifier** mapping that copies the name but appends "1".  
+Then, let **makeClass** inherit it, add a local variable within a constructor-like section to hold "2", and further append that to the class name.

@@ -1,0 +1,10 @@
+Create an ATL transformation module named `Item2Product_All` that maps the `item` metamodel to the `product` metamodel.
+
+The transformation should create one `Product` for each `Item`, using a rule named `Item2Product`. In that rule, copy `name`, `price`, and `description` directly. Set `inStock` to true when `quantity > 0`, otherwise false.
+
+Define a helper operation `getCategory` in the context of `Item` that returns:
+- `'Tech'` for type = `'Electronics'`
+- `'Apparel'` for type = `'Clothing'`
+- `'General'` otherwise
+
+Bind `Product.category` using `getCategory`.

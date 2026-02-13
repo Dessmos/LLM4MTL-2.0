@@ -1,0 +1,88 @@
+module BibTeX2DocBook;
+create OUT : DocBook from IN : BibTeX;
+
+helper context BibTeX!BibTeXFile def: authorSet : Sequence(BibTeX!Author) = BibTeX!Author.allInstances()->asSequence();
+helper context BibTeX!BibTeXFile def: titledEntrySet : Sequence(BibTeX!TitledEntry) = BibTeX!TitledEntry.allInstances()->asSequence();
+helper context BibTeX!BibTeXFile def: articleSet : Sequence(BibTeX!Article) = BibTeX!Article.allInstances()->asSequence();
+helper context OclAny def: isSet() : Boolean = not (self.oclIsUndefined() or (self.oclIsTypeOf(String) and self = ''));
+helper context BibTeX!AuthoredEntry def: formatAuthors() : String =
+    if self.authors->isEmpty() then '' else self.authors->collect(a | a.name)->iterate(a; acc : String = '' | acc + a + ' and ')->substring(1, acc.size() - 5) endif;
+helper context BibTeX!Entry def: buildContentString() : String = self.id;
+helper context BibTeX!AuthoredEntry def: buildContentString() : String = self.id + '. ' + self.formatAuthors() + '.';
+helper context BibTeX!TitledEntry def: buildContentString() : String = self.id + '. ' + self.formatAuthors() + ' "' + self.title + '".';
+helper context BibTeX!Article def: buildContentString() : String = self.id + '. ' + self.formatAuthors() + ' "' + self.title + '". In ' + self.journal.name + '.';
+helper context BibTeX!Entry def: buildEntryPara() : DocBook!Element = thisModule.createParaFromString(self.buildContentString());
+
+unique lazy rule createText {
+    from s : String
+    to t : DocBook!Text (value <- s)
+}
+unique lazy rule createParaFromString {
+    from s : String
+    to p : DocBook!Element (name <- 'para', children <- Sequence{thisModule.createText(s)})
+}
+lazy rule JournalSection {
+    from jName : String
+    to
+        t : DocBook!Element (
+            name <- 'sect2',
+            children <- Sequence{title} -> union(BibTeX!Article.allInstances()->select(a | a.journal.isSet() and a.journal.name = jName))
+        ),
+        title : DocBook!Element (name <- 'title', children <- Sequence{thisModule.createText(jName)})
+}
+
+rule Main {
+    from s : BibTeX!BibTeXFile
+    to
+        book : DocBook!Root (name <- 'book', children <- Sequence{book_title, authors_sect, titles_sect, journals_sect}),
+        book_title : DocBook!Element (name <- 'title', children <- Sequence{thisModule.createText('Bibliography')}),
+        authors_sect : DocBook!Element (name <- 'sect1', children <- Sequence{authors_title} -> union(s.authorSet)),
+        authors_title : DocBook!Element (name <- 'title', children <- Sequence{thisModule.createText('References by Author')}),
+        titles_sect : DocBook!Element (name <- 'sect1', children <- Sequence{titles_title} -> union(s.titledEntrySet)),
+        titles_title : DocBook!Element (name <- 'title', children <- Sequence{thisModule.createText('References by Title')}),
+        journals_sect : DocBook!Element (
+            name <- 'sect1',
+            children <- Sequence{journals_title} -> union(BibTeX!Article.allInstances()->select(a | a.journal.isSet())->collect(a | a.journal.name)->asSet()->collect(jn | thisModule.JournalSection(jn)))
+        ),
+        journals_title : DocBook!Element (name <- 'title', children <- Sequence{thisModule.createText('References by Journal')})
+}
+rule Author {
+    from s : BibTeX!Author
+    to
+        t : DocBook!Element (name <- 'sect2', children <- Sequence{title} -> union(s.entries)),
+        title : DocBook!Element (name <- 'title', children <- Sequence{thisModule.createText(s.name)})
+}
+rule UntitledEntry {
+    from s : BibTeX!Entry (not s.oclIsKindOf(BibTeX!TitledEntry))
+    to p : DocBook!Element (p <- s.buildEntryPara())
+}
+rule TitledEntry_Title_NoArticle {
+    from s : BibTeX!TitledEntry (not s.oclIsKindOf(BibTeX!Article) and s.title.isSet())
+    to
+        t : DocBook!Element (name <- 'sect2', children <- Sequence{title, s.buildEntryPara()}),
+        title : DocBook!Element (name <- 'title', children <- Sequence{thisModule.createText(s.title)})
+}
+rule TitledEntry_NoTitle_NoArticle {
+    from s : BibTeX!TitledEntry (not s.oclIsKindOf(BibTeX!Article) and not s.title.isSet())
+    to p : DocBook!Element (p <- s.buildEntryPara())
+}
+rule Article_Title_Journal {
+    from s : BibTeX!Article (s.title.isSet() and s.journal.isSet())
+    to
+        t : DocBook!Element (name <- 'sect2', children <- Sequence{title, s.buildEntryPara()}),
+        title : DocBook!Element (name <- 'title', children <- Sequence{thisModule.createText(s.title)})
+}
+rule Article_NoTitle_Journal {
+    from s : BibTeX!Article (not s.title.isSet() and s.journal.isSet())
+    to p : DocBook!Element (p <- s.buildEntryPara())
+}
+rule Article_Title_NoJournal {
+    from s : BibTeX!Article (s.title.isSet() and not s.journal.isSet())
+    to
+        t : DocBook!Element (name <- 'sect2', children <- Sequence{title, s.buildEntryPara()}),
+        title : DocBook!Element (name <- 'title', children <- Sequence{thisModule.createText(s.title)})
+}
+rule Article_NoTitle_NoJournal {
+    from s : BibTeX!Article (not s.title.isSet() and not s.journal.isSet())
+    to p : DocBook!Element (p <- s.buildEntryPara())
+}

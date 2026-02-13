@@ -1,0 +1,82 @@
+module PetriNet2Grafcet;
+create OUT : Grafcet from IN : PetriNet;
+
+rule PetriNet2Grafcet {
+  from
+    src : PetriNet!PetriNet
+  to
+    dst : Grafcet!Grafcet (
+      name        <- src.name,
+      location    <- src.location,
+      elements    <- src.elements->collect(e |
+                        if e.oclIsTypeOf(PetriNet!Place) then
+                          thisModule.Place2Step(e)
+                        else
+                          thisModule.Transition2Transition(e)
+                        endif
+                      ),
+      connections <- src.arcs->collect(a |
+                        if a.oclIsTypeOf(PetriNet!PlaceToTransition) then
+                          thisModule.PlaceToTransition2StepToTransition(a)
+                        else
+                          thisModule.TransitionToPlace2TransitionToStep(a)
+                        endif
+                      )
+    )
+}
+
+unique lazy rule Place2Step {
+  from
+    p : PetriNet!Place
+  to
+    s : Grafcet!Step (
+      name                <- p.name,
+      location            <- p.location,
+      grafcet             <- p.net,
+      isInitial           <- false,
+      isActive            <- false,
+      action              <- '',
+      incomingConnections <- p.incomingArc,
+      outgoingConnections <- p.outgoingArc
+    )
+}
+
+unique lazy rule Transition2Transition {
+  from
+    t : PetriNet!Transition
+  to
+    gt : Grafcet!Transition (
+      name                <- t.name,
+      location            <- t.location,
+      grafcet             <- t.net,
+      condition           <- '',
+      incomingConnections <- t.incomingArc,
+      outgoingConnections <- t.outgoingArc
+    )
+}
+
+unique lazy rule PlaceToTransition2StepToTransition {
+  from
+    a : PetriNet!PlaceToTransition
+  to
+    c : Grafcet!StepToTransition (
+      name    <- a.name,
+      location<- a.location,
+      grafcet <- a.net,
+      from    <- a.from,
+      to      <- a.to
+    )
+}
+
+unique lazy rule TransitionToPlace2TransitionToStep {
+  from
+    a : PetriNet!TransitionToPlace
+  to
+    c : Grafcet!TransitionToStep (
+      name    <- a.name,
+      location<- a.location,
+      grafcet <- a.net,
+      from    <- a.from,
+      to      <- a.to
+    )
+}

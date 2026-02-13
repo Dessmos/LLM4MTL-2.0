@@ -1,0 +1,31 @@
+module NetworkToGraph_All;
+create Graph : "http://vitruv.tools/methodologisttemplate/Graph" from Network : "http://vitruv.tools/methodologisttemplate/Network";
+
+rule Component2Entity {
+	from
+		c : Network!Component
+	to
+		e : Graph!Entity (
+			name <- c.name
+		)
+}
+
+rule System2Root {
+	from
+		s : Network!System
+	to
+		r : Graph!Root (
+			name <- s.name,
+			entities <- s.components
+		)
+}
+
+rule Link2Link {
+	from
+		l : Network!Link
+	to
+		tl : Graph!Link (
+			name <- l.name,
+			entities <- l.components
+		)
+}

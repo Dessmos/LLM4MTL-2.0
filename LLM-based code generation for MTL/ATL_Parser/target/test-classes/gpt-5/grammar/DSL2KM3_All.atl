@@ -1,0 +1,164 @@
+module DSL2KM3;
+create OUT : KM3 from IN : DSL;
+
+helper context DSL!Relationship def: needTurnOnClass() : Boolean =
+	self.isEmbedding;
+
+helper context DSL!Relationship def: getRoles() : Sequence(DSL!Role) =
+	self.roles;
+
+helper context DSL!Relationship def: isEmbedding() : Boolean =
+	self.isEmbedding;
+
+helper context DSL!Role def: min() : Integer =
+	self.min;
+
+helper context DSL!Role def: max() : Integer =
+	if self.isUnbounded then -1 else self.max endif;
+
+helper context DSL!Role def: isOrdered() : Boolean =
+	self.isOrdered;
+
+helper context DSL!NamedElement def: km3QualifiedName() : String =
+	self.name;
+
+helper context DSL!Classifier def: allProperties() : Sequence(DSL!ValueProperty) =
+	self.properties;
+
+helper context DSL!DomainModel def: allClassifiers() : Sequence(DSL!Classifier) =
+	self.classifiers;
+
+rule Metamodel {
+	from
+		dm : DSL!DomainModel
+	to
+		pkg : KM3!Package (
+			name <- dm.namespace,
+			nsURI <- dm.namespace,
+			nsPrefix <- dm.namespace,
+			classes <- dm.classifiers->select(c | c.oclIsKindOf(DSL!Class))->collect(c | c.oclAsType(DSL!Class)).transientLink,
+			dataTypes <- dm.types->select(t | t.oclIsKindOf(DSL!SimpleType))->collect(t | t.oclAsType(DSL!SimpleType)).transientLink,
+			enums <- dm.types->select(t | t.oclIsKindOf(DSL!Enumeration))->collect(t | t.oclAsType(DSL!Enumeration)).transientLink
+		)
+}
+
+rule Class {
+	from
+		c : DSL!Class
+	to
+		kc : KM3!Class (
+			name <- c.name,
+			isAbstract <- c.isAbstract,
+			super <- if not c.superType.oclIsUndefined() and c.superType.oclIsKindOf(DSL!Class) then
+						thisModule.resolveTemp(c.superType, 'kc')
+					else
+						OclUndefined
+					endif,
+			attributes <- c.properties->collect(p | p).transientLink,
+			references <- Sequence{}->union(
+				DSL!Relationship.allInstances()
+					->select(r | not r.needTurnOnClass())
+					->collect(r | r.getRoles()->select(ro | ro.source = c and ro.isNavigableFrom)->collect(ro | ro)).flatten().transientLink
+			)
+		)
+}
+
+rule Relation2Class {
+	from
+		r : DSL!Relationship (r.needTurnOnClass())
+	to
+		kc : KM3!Class (
+			name <- r.name,
+			isAbstract <- r.isAbstract,
+			super <- if not r.superType.oclIsUndefined() and r.superType.oclIsKindOf(DSL!Relationship) then
+						thisModule.resolveTemp(r.superType, 'kc')
+					else
+						OclUndefined
+					endif,
+			attributes <- Sequence{},
+			references <- r.roles->select(ro | ro.isNavigableFrom)->collect(ro | ro).transientLink
+		)
+}
+
+rule SimpleReference {
+	from
+		role : DSL!Role (
+			role.isPropertyGenerator and
+			not role.relation.needTurnOnClass()
+		)
+	to
+		ref : KM3!Reference (
+			name <- role.name,
+			type <- thisModule.resolveTemp(role.type, 'kc'),
+			lower <- role.min(),
+			upper <- role.max(),
+			isOrdered <- role.isOrdered(),
+			isContainer <- role.relation.isEmbedding()
+		)
+}
+
+rule ComplexReference {
+	from
+		role : DSL!Role (
+			role.isPropertyGenerator and
+			role.relation.needTurnOnClass()
+		)
+	to
+		ref : KM3!Reference (
+			name <- role.name,
+			type <- thisModule.resolveTemp(role.type, 'kc'),
+			lower <- role.min(),
+			upper <- role.max(),
+			isOrdered <- role.isOrdered(),
+			isContainer <- role.relation.isEmbedding()
+		)
+}
+
+rule Attribute {
+	from
+		p : DSL!ValueProperty
+	to
+		a : KM3!Attribute (
+			name <- p.name,
+			type <- if p.type.oclIsKindOf(DSL!SimpleType) then
+						thisModule.resolveTemp(p.type, 'dt')
+					else
+						if p.type.oclIsKindOf(DSL!Enumeration) then
+							thisModule.resolveTemp(p.type, 'en')
+						else
+							OclUndefined
+						endif
+					endif,
+			lower <- 0,
+			upper <- 1,
+			isOrdered <- false
+		)
+}
+
+rule Enumeration {
+	from
+		e : DSL!Enumeration
+	to
+		en : KM3!Enumeration (
+			name <- e.name,
+			literals <- e.literals.transientLink
+		)
+}
+
+rule EnumLiteral {
+	from
+		l : DSL!EnumerationLiteral
+	to
+		el : KM3!EnumLiteral (
+			name <- l.name
+		)
+}
+
+rule DataType {
+	from
+		t : DSL!SimpleType
+	to
+		dt : KM3!DataType (
+			name <- t.name
+		)
+}

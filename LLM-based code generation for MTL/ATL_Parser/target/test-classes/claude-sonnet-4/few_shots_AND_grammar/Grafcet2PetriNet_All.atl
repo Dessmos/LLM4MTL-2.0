@@ -1,0 +1,62 @@
+module Grafcet2PetriNet;
+create OUT : PetriNet from IN : Grafcet;
+
+rule PetriNet {
+	from g : Grafcet!Grafcet
+	to p : PetriNet!PetriNet (
+		name <- g.name,
+		location <- g.location,
+		elements <- g.elements->collect(e | 
+			if e.oclIsTypeOf(Grafcet!Step) then
+				thisModule.resolveTemp(e, 'place')
+			else
+				thisModule.resolveTemp(e, 'transition')
+			endif
+		),
+		arcs <- g.connections->collect(c |
+			if c.oclIsTypeOf(Grafcet!StepToTransition) then
+				thisModule.resolveTemp(c, 'placeToTransition')
+			else
+				thisModule.resolveTemp(c, 'transitionToPlace')
+			endif
+		)
+	)
+}
+
+rule Place {
+	from s : Grafcet!Step
+	to place : PetriNet!Place (
+		name <- s.name,
+		location <- s.location
+	)
+}
+
+rule Transition {
+	from t : Grafcet!Transition
+	to transition : PetriNet!Transition (
+		name <- t.name,
+		location <- t.location
+	)
+}
+
+rule PlaceToTransition {
+	from st : Grafcet!StepToTransition
+	to ptArc : PetriNet!PlaceToTransition (
+		name <- st.name,
+		location <- st.location,
+		weight <- 1,
+		from <- thisModule.resolveTemp(st.from, 'place'),
+		to <- thisModule.resolveTemp(st.to, 'transition')
+	)
+}
+
+rule TransitionToPlace {
+	from ts : Grafcet!TransitionToStep
+	to tpArc : PetriNet!TransitionToPlace (
+		name <- ts.name,
+		location <- ts.location,
+		weight <- 1,
+		from <- thisModule.resolveTemp(ts.from, 'transition'),
+		to <- thisModule.resolveTemp(ts.to, 'place')
+	)
+}

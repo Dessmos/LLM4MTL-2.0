@@ -1,25 +1,27 @@
+```atl
 module AmaltheaToAscet_All;
-create OUT : Ascet from IN : Amalthea;
+create OUT : ascet from IN : amalthea;
+
+helper def : Task2SoftwareTask(task : amalthea!Task) : ascet!SoftwareTask =
+  let st : ascet!SoftwareTask = ascet!SoftwareTask.newInstance() in
+  do {
+    st.name <- task.name;
+    st;
+  };
 
 rule ComponentContainer2AscetModule {
-  from cc : Amalthea!ComponentContainer
-  to   am : Ascet!AscetModule (
-    tasks <- cc.tasks->collect(t | thisModule.Task2SoftwareTask(t))
+  from src : amalthea!ComponentContainer
+  to   dst : ascet!AscetModule (
+    tasks <- src.tasks->collect(t | thisModule.Task2SoftwareTask(t))
   )
 }
 
 rule TaskRoot2SoftwareTask {
-  from t : Amalthea!Task (
-    t.refImmediateComposite().oclIsUndefined()
+  from src : amalthea!Task (
+    src.refImmediateComposite().oclIsUndefined()
   )
-  to   st : Ascet!SoftwareTask (
-    name <- t.name
-  )
-}
-
-rule Task2SoftwareTask {
-  from t : Amalthea!Task
-  to   st : Ascet!SoftwareTask (
-    name <- t.name
+  to   dst : ascet!SoftwareTask (
+    name <- src.name
   )
 }
+```

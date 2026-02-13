@@ -1,0 +1,17 @@
+modeltype ECORE uses 'http://www.eclipse.org/emf/2002/Ecore';
+
+transformation transf(in inModel : ECORE, out out1 : ECORE, out out2 : ECORE);
+
+main() {
+	object EPackage@out1 {
+		name := 'a';
+	};
+	object EPackage@out2 {
+		name := 'b';
+	};
+	inModel.rootObjects()[EPackage].eClassifiers[EClass]->map toClass();
+}
+
+mapping EClass::toClass() : EClass@out2 {
+	name := self.name;
+}

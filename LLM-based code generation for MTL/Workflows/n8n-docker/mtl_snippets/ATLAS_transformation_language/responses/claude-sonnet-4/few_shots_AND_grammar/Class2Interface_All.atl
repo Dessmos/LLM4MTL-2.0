@@ -1,0 +1,35 @@
+```atl
+module Class2Interface_All;
+create OUT : Interface from IN : Class;
+
+rule Class2Interface {
+  from
+    c : Class!Class
+  to
+    i : Interface!Interface (
+      name <- c.name,
+      methods <- c.methods
+    )
+}
+
+rule Method2Method {
+  from
+    m : Class!Method
+  to
+    im : Interface!Method (
+      name <- m.name,
+      returnType <- m.returnType,
+      parameters <- m.parameters
+    )
+}
+
+rule Parameter2Parameter {
+  from
+    p : Class!Parameter
+  to
+    ip : Interface!Parameter (
+      name <- p.name,
+      type <- p.type
+    )
+}
+```

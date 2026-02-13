@@ -1,0 +1,26 @@
+```atl
+module Document2Report_All;
+create OUT : Report from IN : Document;
+
+rule Document2Report {
+	from
+		s : Document!Document
+	to
+		t : Report!Report (
+			title <- s.title,
+			author <- s.author,
+			sections <- s.sections
+		)
+}
+
+rule Section2Section {
+	from
+		s : Document!Section
+	to
+		t : Report!Section (
+			title <- s.title,
+			content <- s.content,
+			order <- s.order
+		)
+}
+```

@@ -76,25 +76,29 @@ public class XML2DSLAllExecutionTest {
         return asmFile;
     }
 
-    // Load an Ecore metamodel from the given path and register it in the
-    // package registry of the given resource set. Returns the loaded EPackage with a valid nsURI.
+    // Load an Ecore metamodel from the given path and register all packages
+    // in the package registry of the given resource set.  Returns the EPackage
+    // whose name matches the file name (handles multi-package .ecore files).
     private EPackage loadAndRegisterEcore(ResourceSet rs, String ecorePath) {
         URI uri = URI.createFileURI(new File(ecorePath).getAbsolutePath());
         Resource res = rs.getResource(uri, true);
-        EPackage result = null;
-        // Register all packages in the resource
+        EPackage mainPkg = null;
+        String expectedName = new File(ecorePath).getName().replace(".ecore", "");
         for (org.eclipse.emf.ecore.EObject obj : res.getContents()) {
             if (obj instanceof EPackage) {
                 EPackage pkg = (EPackage) obj;
                 if (pkg.getNsURI() != null) {
                     rs.getPackageRegistry().put(pkg.getNsURI(), pkg);
-                    if (result == null) {
-                        result = pkg;
-                    }
+                }
+                if (pkg.getName().equals(expectedName)) {
+                    mainPkg = pkg;
                 }
             }
         }
-        return result != null ? result : (EPackage) res.getContents().get(0);
+        if (mainPkg == null) {
+            mainPkg = (EPackage) res.getContents().get(0);
+        }
+        return mainPkg;
     }
 
     // Execute the given ATL transformation and return the output resource.
@@ -136,9 +140,7 @@ public class XML2DSLAllExecutionTest {
         // Register the XML metamodel in the global package registry.
         // The ATL injector will use this to resolve the namespace when loading the input XMI.
         EPackage.Registry.INSTANCE.put(xmlPkg.getNsURI(), xmlPkg);
-        // Also register the output metamodel for loading the output XMI
-        EPackage.Registry.INSTANCE.put(dslPkg.getNsURI(), dslPkg);
-
+        
         // Execute the transformation
         Resource outRes = executeAtl(asm, "XML.ecore", "DSL.ecore", "XML", "DSL", input);
         

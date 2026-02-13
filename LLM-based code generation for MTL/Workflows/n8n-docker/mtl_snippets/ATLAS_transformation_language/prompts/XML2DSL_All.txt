@@ -1,5 +1,0 @@
-Create an ATL transformation module named **XML2DSL** with header `create OUT : DSL from IN : XML;` to convert an XML model describing a domain meta-model into our DSL Ecore model.
-
-Include helpers **getAttrBool**, **getAttrVal**, **get(child,name)**, **getType**, **getEnumId**, **getText**, **getSeq**, **hasChildren**, **hasAttr**, **isAbstract**, **dslElementsById**, **getContainment**, **getSubTypes**, and **findType** to extract attributes/text, compute abstractness/containment, and resolve references/types.
-
-Implement rules **DomainModel**, **Class**, **Relationship**, **Role**, **ValueProperty**, **Enumeration**, and **EnumerationLiteral** to build the corresponding DSL elements, wire supertypes/subtypes via ids, create simple types (String/Integer/Boolean/Double), populate properties/roles/literals, and set multiplicities/flags.

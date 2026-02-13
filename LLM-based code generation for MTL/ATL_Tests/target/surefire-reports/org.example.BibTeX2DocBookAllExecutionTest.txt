@@ -1,4 +1,7 @@
 -------------------------------------------------------------------------------
 Test set: org.example.BibTeX2DocBookAllExecutionTest
 -------------------------------------------------------------------------------
-Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 1.365 s - in org.example.BibTeX2DocBookAllExecutionTest
+Tests run: 1, Failures: 0, Errors: 1, Skipped: 0, Time elapsed: 3.67 s <<< FAILURE! - in org.example.BibTeX2DocBookAllExecutionTest
+org.example.BibTeX2DocBookAllExecutionTest.testBibTeX2DocBook  Time elapsed: 3.541 s  <<< ERROR!
+org.eclipse.m2m.atl.engine.emfvm.VMException: Could not find model BibTex
+

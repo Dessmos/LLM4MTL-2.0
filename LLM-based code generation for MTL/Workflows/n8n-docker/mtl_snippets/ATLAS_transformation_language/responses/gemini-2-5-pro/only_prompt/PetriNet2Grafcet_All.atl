@@ -2,55 +2,67 @@ module PetriNet2Grafcet;
 create OUT : Grafcet from IN : PetriNet;
 
 rule Grafcet {
-	from s : PetriNet!PetriNet
-	to t : Grafcet!Grafcet (
-		name <- s.name,
-		location <- s.location,
-		elements <- s.elements,
-		connections <- s.arcs
-	)
+	from
+		s : PetriNet!PetriNet
+	to
+		t : Grafcet!Grafcet (
+			location <- s.location,
+			name <- s.name,
+			elements <- s.elements,
+			connections <- s.arcs
+		)
 }
 
 rule Step {
-	from s : PetriNet!Place
-	to t : Grafcet!Step (
-		name <- s.name,
-		location <- s.location,
-		isInitial <- false,
-		isActive <- false,
-		action <- '',
-		incomingConnections <- s.incomingArc,
-		outgoingConnections <- s.outgoingArc
-	)
+	from
+		s : PetriNet!Place
+	to
+		t : Grafcet!Step (
+			location <- s.location,
+			name <- s.name,
+			grafcet <- s.net,
+			isInitial <- false,
+			isActive <- false,
+			incomingConnections <- s.incomingArc,
+			outgoingConnections <- s.outgoingArc
+		)
 }
 
 rule Transition {
-	from s : PetriNet!Transition
-	to t : Grafcet!Transition (
-		name <- s.name,
-		location <- s.location,
-		condition <- '',
-		incomingConnections <- s.incomingArc,
-		outgoingConnections <- s.outgoingArc
-	)
+	from
+		s : PetriNet!Transition
+	to
+		t : Grafcet!Transition (
+			location <- s.location,
+			name <- s.name,
+			grafcet <- s.net,
+			incomingConnections <- s.incomingArc,
+			outgoingConnections <- s.outgoingArc
+		)
 }
 
 rule StepToTransition {
-	from s : PetriNet!PlaceToTransition
-	to t : Grafcet!StepToTransition (
-		name <- s.name,
-		location <- s.location,
-		from <- s.from,
-		to <- s.to
-	)
+	from
+		s : PetriNet!PlaceToTransition
+	to
+		t : Grafcet!StepToTransition (
+			location <- s.location,
+			name <- s.name,
+			grafcet <- s.net,
+			from <- s.from,
+			to <- s.to
+		)
 }
 
 rule TransitionToStep {
-	from s : PetriNet!TransitionToPlace
-	to t : Grafcet!TransitionToStep (
-		name <- s.name,
-		location <- s.location,
-		from <- s.from,
-		to <- s.to
-	)
+	from
+		s : PetriNet!TransitionToPlace
+	to
+		t : Grafcet!TransitionToStep (
+			location <- s.location,
+			name <- s.name,
+			grafcet <- s.net,
+			from <- s.from,
+			to <- s.to
+		)
 }

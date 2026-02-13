@@ -1,0 +1,143 @@
+module DSL2KM3;
+
+create OUT : KM3 from IN : DSL;
+
+helper context DSL!Relationship def: needTurnOnClass() : Boolean =
+	self.isEmbedding;
+
+helper context DSL!Relationship def: getRoles() : Sequence(DSL!Role) =
+	self.roles;
+
+helper context DSL!Relationship def: isEmbedding() : Boolean =
+	self.isEmbedding;
+
+rule Metamodel {
+	from
+		dm : DSL!DomainModel
+	to
+		mm : KM3!Metamodel (
+			name <- dm.namespace,
+			types <- dm.classifiers->select(c | not c.oclIsKindOf(DSL!Relationship) or c.oclAsType(DSL!Relationship).needTurnOnClass())->collect(e | thisModule.resolveTemp(e, 'outType'))->union(
+				dm.types->collect(t | thisModule.resolveTemp(t, 'outType')))
+		)
+}
+
+rule Class {
+	from
+		c : DSL!Class
+	to
+		kc : KM3!Class ( 
+			name <- c.name,
+			isAbstract <- c.isAbstract,
+			supertypes <- if not c.superType.oclIsUndefined() then Sequence{thisModule.resolveTemp(c.superType, 'outType')} else Sequence{} endif,
+			structuralFeatures <- c.properties->collect(p | thisModule.resolveTemp(p, 'outProperty'))->union(
+				DSL!Relationship.allInstances()->select(r | r.roles->exists(ro | ro.isNavigableFrom and ro.source = c and not r.needTurnOnClass()))->collect(r |
+					if r.roles->first().source = c then
+						thisModule.resolveTemp(r.roles->at(2), 'outReference')
+					else
+						thisModule.resolveTemp(r.roles->at(1), 'outReference')
+					endif
+				)
+			)
+		),
+	outType : KM3!Class (
+		name <- c.name
+	)
+}
+
+rule Relation2Class {
+	from
+		r : DSL!Relationship (r.needTurnOnClass())
+	to
+		kc : KM3!Class (
+			name <- r.name,
+			isAbstract <- r.isAbstract,
+			supertypes <- if not r.superType.oclIsUndefined() then Sequence{thisModule.resolveTemp(r.superType, 'outType')} else Sequence{} endif,
+			structuralFeatures <- r.properties->collect(p | thisModule.resolveTemp(p, 'outProperty'))->union(
+				r.getRoles()->collect(ro | thisModule.resolveTemp(ro, 'outReference'))
+			)
+		),
+	outType : KM3!Class (
+		name <- r.name
+	)
+}
+
+rule SimpleReference {
+	from
+		ro : DSL!Role (ro.isNavigableFrom and not ro.relation.needTurnOnClass())
+	to
+		ref : KM3!Reference (
+			name <- ro.name,
+			type <- thisModule.resolveTemp(ro.type, 'outType'),
+			lower <- ro.min,
+			upper <- if ro.isUnbounded then -1 else ro.max endif,
+			isOrdered <- ro.isOrdered
+		),
+	outReference : KM3!Reference (
+		name <- ro.name,
+		type <- thisModule.resolveTemp(ro.type, 'outType'),
+		lower <- ro.min,
+		upper <- if ro.isUnbounded then -1 else ro.max endif,
+		isOrdered <- ro.isOrdered
+	)
+}
+
+rule ComplexReference {
+	from
+		ro : DSL!Role (ro.relation.needTurnOnClass())
+	to
+		ref : KM3!Reference (
+			name <- ro.name,
+			type <- thisModule.resolveTemp(ro.type, 'outType'),
+			lower <- ro.min,
+			upper <- if ro.isUnbounded then -1 else ro.max endif,
+			isOrdered <- ro.isOrdered
+		)
+}
+
+rule Attribute {
+	from
+		p : DSL!ValueProperty
+	to
+		att : KM3!Attribute (
+			name <- p.name,
+			type <- thisModule.resolveTemp(p.type, 'outType')
+		),
+	outProperty : KM3!StructuralFeature (
+			name <- p.name
+	)
+}
+
+rule Enumeration {
+	from
+		e : DSL!Enumeration
+	to
+		ke : KM3!Enumeration (
+			name <- e.name,
+			literals <- e.literals
+		),
+	outType : KM3!Enumeration (
+		name <- e.name
+	)
+}
+
+rule EnumLiteral {
+	from
+		l : DSL!EnumerationLiteral
+	to
+		kl : KM3!EnumLiteral (
+			name <- l.name
+		)
+}
+
+rule DataType {
+	from
+		t : DSL!SimpleType
+	to
+		dt : KM3!DataType (
+			name <- t.name
+		),
+	outType : KM3!DataType (
+		name <- t.name
+	)
+}

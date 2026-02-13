@@ -6,8 +6,8 @@ rule PetriNet {
 		s : Grafcet!Grafcet
 	to
 		t : PetriNet!PetriNet (
-			name <- s.name,
 			location <- s.location,
+			name <- s.name,
 			elements <- s.elements,
 			arcs <- s.connections
 		)
@@ -18,8 +18,11 @@ rule Place {
 		s : Grafcet!Step
 	to
 		t : PetriNet!Place (
+			location <- s.location,
 			name <- s.name,
-			location <- s.location
+			net <- s.grafcet,
+			incomingArc <- s.incomingConnections,
+			outgoingArc <- s.outgoingConnections
 		)
 }
 
@@ -28,8 +31,11 @@ rule Transition {
 		s : Grafcet!Transition
 	to
 		t : PetriNet!Transition (
+			location <- s.location,
 			name <- s.name,
-			location <- s.location
+			net <- s.grafcet,
+			incomingArc <- s.incomingConnections,
+			outgoingArc <- s.outgoingConnections
 		)
 }
 
@@ -38,9 +44,9 @@ rule PlaceToTransition {
 		s : Grafcet!StepToTransition
 	to
 		t : PetriNet!PlaceToTransition (
-			name <- s.name,
 			location <- s.location,
-			weight <- 1,
+			name <- s.name,
+			net <- s.grafcet,
 			from <- s.from,
 			to <- s.to
 		)
@@ -51,9 +57,9 @@ rule TransitionToPlace {
 		s : Grafcet!TransitionToStep
 	to
 		t : PetriNet!TransitionToPlace (
-			name <- s.name,
 			location <- s.location,
-			weight <- 1,
+			name <- s.name,
+			net <- s.grafcet,
 			from <- s.from,
 			to <- s.to
 		)

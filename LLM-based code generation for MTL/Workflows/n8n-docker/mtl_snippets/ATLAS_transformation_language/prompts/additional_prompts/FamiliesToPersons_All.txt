@@ -1,10 +1,10 @@
-Create a transformation module **FamiliesToPersons_All** that converts a **Families** model into a **Persons** model.  
+Create an ATL transformation module named `FamiliesToPersons_All` that transforms a Families model into a Persons model.
 
-Define helper functions on **Member**:  
-- **familyLastName()** to determine the last name from father, mother, son, or daughter.  
-- **isFemale()** to check if the member is a mother or daughter.  
-- **isMale()** to check if the member is a father or son.  
+The module should define three helpers in the context of `Member`:
+- `familyLastName()` returns the last name of the associated father, else mother, else son, else daughter.
+- `isFemale()` returns true when the member is a mother or daughter.
+- `isMale()` returns true when the member is a father or son.
 
-Add two transformation rules:  
-- **Member2Male**: map a male **Member** to a **Male** with fullName as firstName + familyLastName.  
-- **Member2Female**: map a female **Member** to a **Female** with the same fullName logic.
+Add two transformation rules:
+- `Member2Male` maps each `Member` where `isMale()` is true to a `Male` with `fullName = firstName + ' ' + familyLastName()`.
+- `Member2Female` maps each `Member` where `isFemale()` is true to a `Female` with the same `fullName` construction.

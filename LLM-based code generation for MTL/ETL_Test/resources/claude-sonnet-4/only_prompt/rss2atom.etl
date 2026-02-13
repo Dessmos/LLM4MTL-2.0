@@ -1,0 +1,86 @@
+rule Rss2Atom
+transform rss : RSS!Rss
+to feed : Atom!Feed {
+feed.root = true;
+rss.appendChildren(feed);
+feed.entries.addAll(rss.channel.item.equivalent());
+}
+
+rule Item2Entry
+transform item : RSS!Item
+to entry : Atom!Entry {
+item.appendChildren(entry);
+}
+
+rule Title2Title
+transform title : RSS!Title
+to atomTitle : Atom!Title {
+atomTitle.value = title.value;
+}
+
+rule Link2Link
+transform link : RSS!Link
+to atomLink : Atom!Link {
+atomLink.href = link.value;
+}
+
+rule Generator2Generator
+transform generator : RSS!Generator
+to atomGenerator : Atom!Generator {
+atomGenerator.value = generator.value;
+}
+
+rule Creator2Author
+transform creator : RSS!Creator
+to author : Atom!Author {
+author.name = creator.value;
+}
+
+rule Description2Summary
+transform description : RSS!Description
+to summary : Atom!Summary {
+summary.value = description.value;
+}
+
+rule ContentEncoded2Content
+transform content : RSS!ContentEncoded
+to atomContent : Atom!Content {
+atomContent.value = content.value;
+}
+
+rule PubDate2Published
+transform pubDate : RSS!PubDate
+to published : Atom!Published {
+published.value = pubDate.value;
+}
+
+operation RSS!Rss appendChildren(feed : Atom!Feed) {
+feed.title ::= self.channel.title;
+feed.link ::= self.channel.link;
+feed.generator ::= self.channel.generator;
+}
+
+operation RSS!Item appendChildren(entry : Atom!Entry) {
+self.appendEquivalentsOfChildrenOf(entry);
+}
+
+operation Any appendEquivalentsOfChildrenOf(target : Any) {
+for (child in self.eContents()) {
+var equiv = child.equivalent();
+if (equiv.isDefined()) {
+if (equiv.isKindOf(Atom!Title)) {
+target.title = equiv;
+} else if (equiv.isKindOf(Atom!Link)) {
+target.links.add(equiv);
+} else if (equiv.isKindOf(Atom!Author)) {
+target.authors.add(equiv);
+} else if (equiv.isKindOf(Atom!Summary)) {
+target.summary = equiv;
+} else if (equiv.isKindOf(Atom!Content)) {
+target.content = equiv;
+} else if (equiv.isKindOf(Atom!Published)) {
+target.published = equiv;
+}
+}
+}
+}

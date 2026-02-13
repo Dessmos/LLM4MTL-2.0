@@ -1,4 +1,7 @@
 -------------------------------------------------------------------------------
 Test set: org.example.IEEE1471_2_MoDAFAllExecutionTest
 -------------------------------------------------------------------------------
-Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.802 s - in org.example.IEEE1471_2_MoDAFAllExecutionTest
+Tests run: 1, Failures: 0, Errors: 1, Skipped: 0, Time elapsed: 3.161 s <<< FAILURE! - in org.example.IEEE1471_2_MoDAFAllExecutionTest
+org.example.IEEE1471_2_MoDAFAllExecutionTest.testIEEE1471_2_MoDAF  Time elapsed: 3.038 s  <<< ERROR!
+org.eclipse.m2m.atl.engine.emfvm.VMException: Trying to register several rules as default for element org.eclipse.emf.ecore.impl.DynamicEObjectImpl@36a7abe1 (eClass: org.eclipse.emf.ecore.impl.EClassImpl@894858 (name: Stakeholder) (instanceClassName: null) (abstract: false, interface: false)) : Stakeholder2Stakeholder and StakeholderHasConcern
+

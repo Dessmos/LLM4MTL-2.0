@@ -1,0 +1,139 @@
+module CPL2SPL;
+create OUT : SPL from IN : CPL;
+
+helper def: statement : SPL!Statement = thisModule.DefaultStatement();
+helper context CPL!Proxy def: locations : Sequence(SPL!Expression) = self.locations->collect(l | thisModule.Location2URIConstant(l));
+helper context CPL!Redirect def: locations : Sequence(SPL!Expression) = self.locations->collect(l | thisModule.Location2URIConstant(l));
+helper def: isSimple(p : CPL!Proxy) : Boolean =
+	p.timeout->isEmpty() and p.busy->isEmpty() and p.noanswer->isEmpty() and p.redirection->isEmpty() and p.failure->isEmpty();
+
+unique lazy rule DefaultStatement {
+	to s : SPL!ReturnStat
+}
+
+rule Location2URIConstant(l : CPL!Location) {
+	to
+		s : SPL!URIConstant (
+			uri <- l.url
+		)
+}
+
+unique lazy rule createSignal(name : String) {
+	to s : SPL!Signal (
+		name <- name
+	)
+}
+
+rule CPL2Program {
+	from s : CPL!CPL
+	to t : SPL!Program (
+		functions <- s.subactions,
+		methods <- s.incoming,
+		body <- s.outgoing.action
+	)
+}
+
+rule SubAction2Function {
+	from s : CPL!SubAction
+	to t : SPL!Function (
+		name <- s.id,
+		body <- s.action
+	)
+}
+
+rule Incoming2Method {
+	from s : CPL!Incoming
+	to t : SPL!Method (
+		body <- s.action
+	)
+}
+
+rule Proxy2Return {
+	from s : CPL!Proxy (thisModule.isSimple(s))
+	to t : SPL!ReturnStat (
+		value <- thisModule.locations(s)
+	)
+}
+
+rule Proxy2Select {
+	from s : CPL!Proxy (not thisModule.isSimple(s))
+	to t : SPL!SelectStat (
+		cases <- s.busy->union(s.noanswer)->union(s.redirection),
+		default <- s.failure
+	)
+}
+
+rule Busy2SelectCase {
+	from s : CPL!Busy
+	to t : SPL!SelectCase (
+		condition <- thisModule.createSignal('BUSY'),
+		body <- s.action
+	)
+}
+
+rule NoAnswer2SelectCase {
+	from s : CPL!NoAnswer
+	to t : SPL!SelectCase (
+		condition <- thisModule.createSignal('NOANSWER'),
+		body <- s.action
+	)
+}
+
+rule Redirection2SelectCase {
+	from s : CPL!Redirection
+	to t : SPL!SelectCase (
+		condition <- thisModule.createSignal('REDIRECTION'),
+		body <- s.action
+	)
+}
+
+rule Default2SelectDefault {
+	from s : CPL!Default
+	to t : SPL!SelectDefault (
+		body <- s.action
+	)
+}
+
+lazy rule SubCall2FunctionCall {
+	from s : CPL!SubCall
+	to t : SPL!FunctionCall (
+		function <- CPL!SubAction.allInstances()->select(sub | sub.id = s.ref)->first()
+	)
+}
+
+rule SubCall2Return {
+	from s : CPL!SubCall
+	to t : SPL!ReturnStat (
+		value <- Sequence{thisModule.SubCall2FunctionCall(s)}
+	)
+}
+
+rule Redirect2Return {
+	from s : CPL!Redirect
+	to t : SPL!ReturnStat (
+		value <- thisModule.locations(s)
+	)
+}
+
+rule AddressSwitch2SelectStat {
+	from s : CPL!AddressSwitch
+	to t : SPL!SelectStat (
+		cases <- s.addresses,
+		default <- s.otherwise
+	)
+}
+
+rule SwitchedAddress2SelectCase {
+	from s : CPL!SwitchedAddress
+	to t : SPL!SelectCase (
+		condition <- thisModule.Location2URIConstant(s.location),
+		body <- s.action
+	)
+}
+
+rule Otherwise2SelectDefault {
+	from s : CPL!Otherwise
+	to t : SPL!SelectDefault (
+		body <- s.action
+	)
+}

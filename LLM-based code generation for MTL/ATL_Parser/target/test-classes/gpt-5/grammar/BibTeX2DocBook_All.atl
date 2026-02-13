@@ -1,0 +1,235 @@
+module BibTeX2DocBook;
+create OUT : XML from IN : BibTeX;
+
+helper context BibTeX!BibTeXFile def: authorSet : Set(BibTeX!Author) =
+	BibTeX!Author.allInstances()->asSet();
+
+helper context BibTeX!BibTeXFile def: titledEntrySet : Set(BibTeX!BibTeXEntry) =
+	self.entries->select(e | not e.title.oclIsUndefined() and e.title <> '')->asSet();
+
+helper context BibTeX!BibTeXFile def: articleSet : Set(BibTeX!BibTeXEntry) =
+	self.entries->select(e | e.kind = 'article')->asSet();
+
+helper context BibTeX!BibTeXEntry def: buildEntryPara() : String =
+	(self.key + ' - ' +
+		(if self.title.oclIsUndefined() then '' else self.title endif) +
+		(if self.journal.oclIsUndefined() then '' else ' (' + self.journal + ')' endif));
+
+rule Main {
+	from
+		b : BibTeX!BibTeXFile
+	to
+		r : XML!Root (
+			name <- 'book',
+			children <- Sequence{
+				thisModule.createReferencesBook(b),
+				thisModule.createAuthorsBook(b),
+				thisModule.createTitlesBook(b),
+				thisModule.createJournalsBook(b)
+			}
+		)
+}
+
+rule Author {
+	from
+		a : BibTeX!Author
+	to
+		e : XML!Element (
+			name <- 'section',
+			children <- Sequence{
+				thisModule.createTitleText(a.name),
+				thisModule.createAuthorEntriesSection(a)
+			}
+		)
+}
+
+rule UntitledEntry {
+	from
+		e : BibTeX!BibTeXEntry (e.title.oclIsUndefined() or e.title = '')
+	to
+		p : XML!Element (
+			name <- 'para',
+			children <- Sequence{ thisModule.createTextNode(e.buildEntryPara()) }
+		)
+}
+
+rule TitledEntry_Title_NoArticle {
+	from
+		e : BibTeX!BibTeXEntry (
+			not e.title.oclIsUndefined() and e.title <> '' and e.kind <> 'article'
+		)
+	to
+		p : XML!Element (
+			name <- 'para',
+			children <- Sequence{ thisModule.createTextNode(e.buildEntryPara()) }
+		)
+}
+
+rule TitledEntry_NoTitle_NoArticle {
+	from
+		e : BibTeX!BibTeXEntry (
+			(e.title.oclIsUndefined() or e.title = '') and e.kind <> 'article'
+		)
+	to
+		p : XML!Element (
+			name <- 'para',
+			children <- Sequence{ thisModule.createTextNode(e.buildEntryPara()) }
+		)
+}
+
+rule Article_Title_Journal {
+	from
+		e : BibTeX!BibTeXEntry (
+			e.kind = 'article' and
+			not e.title.oclIsUndefined() and e.title <> '' and
+			not e.journal.oclIsUndefined() and e.journal <> ''
+		)
+	to
+		p : XML!Element (
+			name <- 'para',
+			children <- Sequence{ thisModule.createTextNode(e.buildEntryPara()) }
+		)
+}
+
+rule Article_NoTitle_Journal {
+	from
+		e : BibTeX!BibTeXEntry (
+			e.kind = 'article' and
+			(e.title.oclIsUndefined() or e.title = '') and
+			not e.journal.oclIsUndefined() and e.journal <> ''
+		)
+	to
+		p : XML!Element (
+			name <- 'para',
+			children <- Sequence{ thisModule.createTextNode(e.buildEntryPara()) }
+		)
+}
+
+rule Article_Title_NoJournal {
+	from
+		e : BibTeX!BibTeXEntry (
+			e.kind = 'article' and
+			not e.title.oclIsUndefined() and e.title <> '' and
+			(e.journal.oclIsUndefined() or e.journal = '')
+		)
+	to
+		p : XML!Element (
+			name <- 'para',
+			children <- Sequence{ thisModule.createTextNode(e.buildEntryPara()) }
+		)
+}
+
+rule Article_NoTitle_NoJournal {
+	from
+		e : BibTeX!BibTeXEntry (
+			e.kind = 'article' and
+			(e.title.oclIsUndefined() or e.title = '') and
+			(e.journal.oclIsUndefined() or e.journal = '')
+		)
+	to
+		p : XML!Element (
+			name <- 'para',
+			children <- Sequence{ thisModule.createTextNode(e.buildEntryPara()) }
+		)
+}
+
+helper def: createReferencesBook(b : BibTeX!BibTeXFile) : XML!Element =
+	let secRefs : XML!Element = thisModule.createSectionElement('References') in
+	let childrenSeq : Sequence(XML!Node) =
+		Sequence{ thisModule.createTitleText('References') }->union(
+			b.entries->collect(e |
+				thisModule.resolveEntryToPara(e)
+			)
+		)
+	in
+	thisModule.setChildren(secRefs, childrenSeq);
+
+helper def: createAuthorsBook(b : BibTeX!BibTeXFile) : XML!Element =
+	let secAuthors : XML!Element = thisModule.createSectionElement('By Author') in
+	let childrenSeq : Sequence(XML!Node) =
+		Sequence{ thisModule.createTitleText('By Author') }->union(
+			b.authorSet->collect(a |
+				thisModule.resolveAuthorSection(a)
+			)
+		)
+	in
+	thisModule.setChildren(secAuthors, childrenSeq);
+
+helper def: createTitlesBook(b : BibTeX!BibTeXFile) : XML!Element =
+	let secTitles : XML!Element = thisModule.createSectionElement('By Title') in
+	let childrenSeq : Sequence(XML!Node) =
+		Sequence{ thisModule.createTitleText('By Title') }->union(
+			b.titledEntrySet->collect(e |
+				thisModule.resolveEntryToPara(e)
+			)
+		)
+	in
+	thisModule.setChildren(secTitles, childrenSeq);
+
+helper def: createJournalsBook(b : BibTeX!BibTeXFile) : XML!Element =
+	let secJournals : XML!Element = thisModule.createSectionElement('By Journal') in
+	let journalNames : Set(String) =
+		b.articleSet->collect(e | e.journal)->asSet()
+	in
+	let childrenSeq : Sequence(XML!Node) =
+		Sequence{ thisModule.createTitleText('By Journal') }->union(
+			journalNames->collect(j |
+				thisModule.createJournalSection(j, b.articleSet->select(e | e.journal = j))
+			)
+		)
+	in
+	thisModule.setChildren(secJournals, childrenSeq);
+
+helper def: createSectionElement(title : String) : XML!Element =
+	OclUndefined;
+
+helper def: createTitleText(t : String) : XML!Element =
+	OclUndefined;
+
+helper def: createTextNode(t : String) : XML!Text =
+	OclUndefined;
+
+helper def: setChildren(e : XML!Element, ch : Sequence(XML!Node)) : XML!Element =
+	e;
+
+helper def: resolveEntryToPara(e : BibTeX!BibTeXEntry) : XML!Element =
+	if e.kind = 'article' then
+		if (not e.title.oclIsUndefined() and e.title <> '') and (not e.journal.oclIsUndefined() and e.journal <> '') then
+			thisModule.Article_Title_Journal(e)
+		else
+			if (e.title.oclIsUndefined() or e.title = '') and (not e.journal.oclIsUndefined() and e.journal <> '') then
+				thisModule.Article_NoTitle_Journal(e)
+			else
+				if (not e.title.oclIsUndefined() and e.title <> '') and (e.journal.oclIsUndefined() or e.journal = '') then
+					thisModule.Article_Title_NoJournal(e)
+				else
+					thisModule.Article_NoTitle_NoJournal(e)
+				endif
+			endif
+		endif
+	else
+		if e.title.oclIsUndefined() or e.title = '' then
+			thisModule.UntitledEntry(e)
+		else
+			thisModule.TitledEntry_Title_NoArticle(e)
+		endif
+	endif;
+
+helper def: resolveAuthorSection(a : BibTeX!Author) : XML!Element =
+	thisModule.Author(a);
+
+helper def: createAuthorEntriesSection(a : BibTeX!Author) : XML!Element =
+	let s : XML!Element = thisModule.createSectionElement('entries') in
+	let paras : Sequence(XML!Node) =
+		a.entries->collect(e | thisModule.resolveEntryToPara(e))
+	in
+	thisModule.setChildren(s, paras);
+
+helper def: createJournalSection(j : String, es : Set(BibTeX!BibTeXEntry)) : XML!Element =
+	let s : XML!Element = thisModule.createSectionElement(j) in
+	let childrenSeq : Sequence(XML!Node) =
+		Sequence{ thisModule.createTitleText(j) }->union(
+			es->collect(e | thisModule.resolveEntryToPara(e))
+		)
+	in
+	thisModule.setChildren(s, childrenSeq);

@@ -1,0 +1,4 @@
+-------------------------------------------------------------------------------
+Test set: org.eclipse.epsilon.examples.etl.Tree2GraphTest
+-------------------------------------------------------------------------------
+Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 1.681 s -- in org.eclipse.epsilon.examples.etl.Tree2GraphTest

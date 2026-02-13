@@ -1,7 +1,8 @@
+```atl
 module FamiliesToPersons_All;
-create OUT : Persons from IN : Families;
+create OUT : persons from IN : families;
 
-helper context Families!Member def: familyLastName() : String =
+helper context families!Member def: familyLastName() : String =
 	if not self.familyFather.oclIsUndefined() then
 		self.familyFather.lastName
 	else
@@ -20,22 +21,27 @@ helper context Families!Member def: familyLastName() : String =
 		endif
 	endif;
 
-helper context Families!Member def: isFemale() : Boolean =
-  (not self.familyMother.oclIsUndefined()) or (not self.familyDaughter.oclIsUndefined());
+helper context families!Member def: isFemale() : Boolean =
+	not self.familyMother.oclIsUndefined() or not self.familyDaughter.oclIsUndefined();
 
-helper context Families!Member def: isMale() : Boolean =
-  (not self.familyFather.oclIsUndefined()) or (not self.familySon.oclIsUndefined());
+helper context families!Member def: isMale() : Boolean =
+	not self.familyFather.oclIsUndefined() or not self.familySon.oclIsUndefined();
 
 rule Member2Male {
-	from m : Families!Member (m.isMale())
-	to   p : Persons!Male (
-		fullName <- m.firstName + ' ' + m.familyLastName()
-	)
+	from
+		s : families!Member (s.isMale())
+	to
+		t : persons!Male (
+			fullName <- s.firstName + ' ' + s.familyLastName()
+		)
 }
 
 rule Member2Female {
-	from m : Families!Member (m.isFemale())
-	to   p : Persons!Female (
-		fullName <- m.firstName + ' ' + m.familyLastName()
-	)
+	from
+		s : families!Member (s.isFemale())
+	to
+		t : persons!Female (
+			fullName <- s.firstName + ' ' + s.familyLastName()
+		)
 }
+```

@@ -1,0 +1,5 @@
+Create a QVT-O transformation named **t** that takes an input and output model of type **ECORE**.  
+In its **main** mapping, iterate over the root **EPackage** elements of the input model and map each to the output using a mapping named **p2p**.  
+In **p2p**, copy the package name and map all contained classifiers using a mapping called **makeClass**.  
+Define specialized **makeClass** mappings for **ENamedElement**, **EClassifier**, **EClass**, and **EDataType**, each creating a new **EClass** with a prefix reflecting its source type.  
+Also include a **c2c** mapping that prefixes classifier names with “mapped”.

@@ -1,0 +1,23 @@
+import ecore : 'http://www.eclipse.org/emf/2002/Ecore';
+
+modeltype ECORE uses ecore;
+
+transformation t(in inModel : ECORE, out outModel : ECORE);
+
+main() {
+	inModel.rootObjects()
+		->select(oclIsKindOf(ecore::EPackage))
+		->map p2p();
+}
+
+mapping ecore::EPackage::p2p() : ecore::EPackage {
+	name := self.name;
+	nestedEClassifier += object ecore::EClass {
+		init("AClass", object ecore::EOperation {});
+	};
+}
+
+constructor ecore::EClass::init(n : String, op : ecore::EOperation) {
+	self.name := n;
+	self.eOperations += op;
+}

@@ -1,0 +1,151 @@
+module XML2DSL;
+create OUT : DSL from IN : XML;
+
+helper def: getAttrBool(elem : XML!Element, name : String) : Boolean =
+	let attr : XML!Attribute = elem.children->select(c | c.oclIsTypeOf(XML!Attribute) and c.name = name)->first() in
+	if attr.oclIsUndefined() then false else attr.value = 'true' endif;
+
+helper def: getAttrVal(elem : XML!Element, name : String) : String =
+	let attr : XML!Attribute = elem.children->select(c | c.oclIsTypeOf(XML!Attribute) and c.name = name)->first() in
+	if attr.oclIsUndefined() then '' else attr.value endif;
+
+helper def: get(elem : XML!Element, name : String) : XML!Element =
+	elem.children->select(c | c.oclIsTypeOf(XML!Element) and c.name = name)->first();
+
+helper def: getType(elem : XML!Element) : String =
+	thisModule.getAttrVal(elem, 'xsi:type');
+
+helper def: getEnumId(elem : XML!Element) : String =
+	thisModule.getAttrVal(elem, 'name');
+
+helper def: getText(elem : XML!Element) : String =
+	let textNode : XML!Text = elem.children->select(c | c.oclIsTypeOf(XML!Text))->first() in
+	if textNode.oclIsUndefined() then '' else textNode.value endif;
+
+helper def: getSeq(elem : XML!Element, name : String) : Sequence(XML!Element) =
+	elem.children->select(c | c.oclIsTypeOf(XML!Element) and c.name = name);
+
+helper def: hasChildren(elem : XML!Element) : Boolean =
+	elem.children->select(c | c.oclIsTypeOf(XML!Element))->notEmpty();
+
+helper def: hasAttr(elem : XML!Element, name : String) : Boolean =
+	elem.children->select(c | c.oclIsTypeOf(XML!Attribute) and c.name = name)->notEmpty();
+
+helper def: isAbstract(elem : XML!Element) : Boolean =
+	thisModule.getAttrBool(elem, 'abstract');
+
+helper def: dslElementsById : Map(String, DSL!NamedElement) =
+	Map{};
+
+helper def: getContainment(elem : XML!Element) : Boolean =
+	thisModule.getAttrBool(elem, 'containment');
+
+helper def: getSubTypes(elem : XML!Element) : Sequence(XML!Element) =
+	Sequence{};
+
+helper def: findType(typeName : String) : DSL!Type =
+	DSL!Type.allInstances()->select(t | t.name = typeName)->first();
+
+rule DomainModel {
+	from
+		s : XML!Element (s.name = 'ecore:EPackage' and s.parent.oclIsTypeOf(XML!Root))
+	to
+		t : DSL!DomainModel (
+			name <- thisModule.getAttrVal(s, 'name'),
+			identity <- thisModule.getAttrVal(s, 'name'),
+			namespace <- thisModule.getAttrVal(s, 'nsURI'),
+			isLoaded <- true,
+			classifiers <- s.children->select(c | c.oclIsTypeOf(XML!Element) and c.name = 'eClassifiers' and thisModule.getType(c) = 'ecore:EClass'),
+			types <- Sequence{thisModule.StringType, thisModule.IntegerType, thisModule.BooleanType, thisModule.DoubleType}->union(s.children->select(c | c.oclIsTypeOf(XML!Element) and c.name = 'eClassifiers' and thisModule.getType(c) = 'ecore:EEnum'))
+		),
+		StringType : DSL!SimpleType (
+			name <- 'String',
+			identity <- 'String',
+			namespace <- 'PrimitiveTypes'
+		),
+		IntegerType : DSL!SimpleType (
+			name <- 'Integer',
+			identity <- 'Integer',
+			namespace <- 'PrimitiveTypes'
+		),
+		BooleanType : DSL!SimpleType (
+			name <- 'Boolean',
+			identity <- 'Boolean',
+			namespace <- 'PrimitiveTypes'
+		),
+		DoubleType : DSL!SimpleType (
+			name <- 'Double',
+			identity <- 'Double',
+			namespace <- 'PrimitiveTypes'
+		)
+}
+
+rule Class {
+	from
+		s : XML!Element (s.name = 'eClassifiers' and thisModule.getType(s) = 'ecore:EClass' and not s.oclIsTypeOf(XML!Root))
+	to
+		t : DSL!Class (
+			name <- thisModule.getAttrVal(s, 'name'),
+			identity <- thisModule.getAttrVal(s, 'name'),
+			namespace <- thisModule.getAttrVal(s.parent, 'name'),
+			isLoaded <- true,
+			isAbstract <- thisModule.isAbstract(s),
+			properties <- s.children->select(c | c.oclIsTypeOf(XML!Element) and c.name = 'eStructuralFeatures' and thisModule.getType(c) = 'ecore:EAttribute'),
+			superType <- if thisModule.hasAttr(s, 'eSuperTypes') then s.children->select(c | c.oclIsTypeOf(XML!Attribute) and c.name = 'eSuperTypes')->first() else OclUndefined endif
+		)
+}
+
+rule Relationship {
+	from
+		s : XML!Element (s.name = 'eStructuralFeatures' and thisModule.getType(s) = 'ecore:EReference')
+	to
+		t : DSL!Relationship (
+			name <- thisModule.getAttrVal(s, 'name'),
+			identity <- thisModule.getAttrVal(s, 'name'),
+			namespace <- thisModule.getAttrVal(s.parent.parent, 'name'),
+			isLoaded <- true,
+			isAbstract <- false,
+			isEmbedding <- thisModule.getContainment(s),
+			roles <- Sequence{sourceRole, targetRole}
+		),
+		sourceRole : DSL!Role (
+			name <- 'source',
+			identity <- 'source',
+			min <- 1,
+			max <- 1,
+			isUnbounded <- false,
+			accepts <- thisModule.getAttrVal(s.parent, 'name'),
+			isOrdered <- false,
+			isNavigableFrom <- false,
+			isPropertyGenerator <- false,
+			source <- s.parent,
+			type <- s.parent
+		),
+		targetRole : DSL!Role (
+			name <- 'target',
+			identity <- 'target',
+			min <- if thisModule.hasAttr(s, 'lowerBound') then thisModule.getAttrVal(s, 'lowerBound').toInteger() else 0 endif,
+			max <- if thisModule.hasAttr(s, 'upperBound') then if thisModule.getAttrVal(s, 'upperBound') = '-1' then -1 else thisModule.getAttrVal(s, 'upperBound').toInteger() endif else 1 endif,
+			isUnbounded <- thisModule.getAttrVal(s, 'upperBound') = '-1',
+			accepts <- thisModule.getAttrVal(s, 'eType'),
+			isOrdered <- thisModule.getAttrBool(s, 'ordered'),
+			isNavigableFrom <- true,
+			isPropertyGenerator <- true,
+			source <- s.parent,
+			type <- s
+		)
+}
+
+rule Role {
+	from
+		s : XML!Element (false)
+	to
+		t : DSL!Role
+}
+
+rule ValueProperty {
+	from
+		s : XML!Element (s.name = 'eStructuralFeatures' and thisModule.getType(s) = 'ecore:EAttribute')
+	to
+		t : DSL!ValueProperty (
+			name <-

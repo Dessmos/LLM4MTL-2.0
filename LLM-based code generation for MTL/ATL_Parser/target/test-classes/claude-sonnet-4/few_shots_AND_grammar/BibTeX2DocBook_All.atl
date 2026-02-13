@@ -1,0 +1,111 @@
+module BibTeX2DocBook;
+create OUT : DocBook from IN : BibTeX;
+
+helper def : authorSet : Set(BibTeX!Author) = BibTeX!Author.allInstances()->asSet();
+
+helper def : titledEntrySet : Set(BibTeX!Entry) = BibTeX!Entry.allInstances()->select(e | e.title <> OclUndefined)->asSet();
+
+helper def : articleSet : Set(BibTeX!Article) = BibTeX!Article.allInstances()->asSet();
+
+helper def : buildEntryPara() : String =
+	'Entry: ' + self.id + if self.title <> OclUndefined then ' - ' + self.title else '' endif +
+	if self.author <> OclUndefined then ' by ' + self.author.name else '' endif;
+
+rule Main {
+	from src : BibTeX!BibliographicDatabase
+	to tgt : DocBook!Book (
+		title <- 'Bibliography',
+		articles <- Sequence{thisModule.referencesArticle, thisModule.authorsArticle, thisModule.titlesArticle, thisModule.journalsArticle}
+	),
+	referencesArticle : DocBook!Article (
+		title <- 'References',
+		sections <- BibTeX!Entry.allInstances()->collect(e | thisModule.entrySection(e))
+	),
+	authorsArticle : DocBook!Article (
+		title <- 'Authors',
+		sections <- thisModule.authorSet->collect(a | thisModule.authorSection(a))
+	),
+	titlesArticle : DocBook!Article (
+		title <- 'Titles',
+		sections <- thisModule.titledEntrySet->collect(e | thisModule.titleSection(e))
+	),
+	journalsArticle : DocBook!Article (
+		title <- 'Journals',
+		sections <- thisModule.articleSet->select(a | a.journal <> OclUndefined)->collect(a | thisModule.journalSection(a))
+	),
+	entrySection : DocBook!Section (
+		title <- src.id,
+		paras <- Sequence{thisModule.buildEntryPara()}
+	),
+	authorSection : DocBook!Section (
+		title <- src.name,
+		paras <- src.entries->collect(e | thisModule.buildEntryPara())
+	),
+	titleSection : DocBook!Section (
+		title <- src.title,
+		paras <- Sequence{thisModule.buildEntryPara()}
+	),
+	journalSection : DocBook!Section (
+		title <- src.journal,
+		paras <- Sequence{thisModule.buildEntryPara()}
+	)
+}
+
+rule Author {
+	from src : BibTeX!Author
+	to tgt : DocBook!Author (
+		name <- src.name
+	)
+}
+
+rule UntitledEntry {
+	from src : BibTeX!Entry (src.title = OclUndefined)
+	to tgt : DocBook!Para (
+		content <- thisModule.buildEntryPara()
+	)
+}
+
+rule TitledEntry_Title_NoArticle {
+	from src : BibTeX!Entry (src.title <> OclUndefined and not src.oclIsKindOf(BibTeX!Article))
+	to tgt : DocBook!Section (
+		title <- src.title,
+		paras <- Sequence{thisModule.buildEntryPara()}
+	)
+}
+
+rule TitledEntry_NoTitle_NoArticle {
+	from src : BibTeX!Entry (src.title = OclUndefined and not src.oclIsKindOf(BibTeX!Article))
+	to tgt : DocBook!Para (
+		content <- thisModule.buildEntryPara()
+	)
+}
+
+rule Article_Title_Journal {
+	from src : BibTeX!Article (src.title <> OclUndefined and src.journal <> OclUndefined)
+	to tgt : DocBook!Section (
+		title <- src.title,
+		paras <- Sequence{thisModule.buildEntryPara()}
+	)
+}
+
+rule Article_NoTitle_Journal {
+	from src : BibTeX!Article (src.title = OclUndefined and src.journal <> OclUndefined)
+	to tgt : DocBook!Para (
+		content <- thisModule.buildEntryPara()
+	)
+}
+
+rule Article_Title_NoJournal {
+	from src : BibTeX!Article (src.title <> OclUndefined and src.journal = OclUndefined)
+	to tgt : DocBook!Section (
+		title <- src.title,
+		paras <- Sequence{thisModule.buildEntryPara()}
+	)
+}
+
+rule Article_NoTitle_NoJournal {
+	from src : BibTeX!Article (src.title = OclUndefined and src.journal = OclUndefined)
+	to tgt : DocBook!Para (
+		content <- thisModule.buildEntryPara()
+	)
+}

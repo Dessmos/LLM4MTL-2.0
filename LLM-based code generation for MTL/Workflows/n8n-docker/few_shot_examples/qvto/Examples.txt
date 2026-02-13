@@ -1,0 +1,89 @@
+// Example 1: Basic Mappings
+// Demonstrates modeltype declaration, transformation parameters, main() entry point,
+// basic mapping with property assignment (:=), collection mapping (->map), and collection appending (+=)
+
+modeltype ECORE uses 'http://www.eclipse.org/emf/2002/Ecore';
+
+transformation t(in inModel : ECORE, out outModel : ECORE);
+
+main() {
+	inModel.rootObjects()[EPackage]->map p2p();
+}
+
+mapping EPackage::p2p() : EPackage {
+	name := self.name;
+	eClassifiers += self.eClassifiers->map c2c();
+}
+
+mapping EClassifier::c2c() : EClass {
+	name := 'mapped' + self.name;
+}
+
+// Example 2: Constructor, When Clause, and Init Block
+// Demonstrates custom constructor definitions, new keyword for instantiation,
+// when guard clause on mappings, init block with conditional result assignment (if/then/else/endif)
+
+modeltype ECORE uses 'http://www.eclipse.org/emf/2002/Ecore';
+
+transformation t(in inModel : ECORE, out outModel : ECORE);
+
+main() {
+	inModel.rootObjects()[EPackage]->map p2p();
+}
+
+constructor EClass::EClass(s : String, op : EOperation) {
+	name := s;
+	eOperations += op;
+}
+
+mapping EPackage::p2p() : EPackage {
+	name := self.name;
+	eClassifiers += self.eClassifiers->map c2c();
+}
+
+mapping EClassifier::c2c() : EClassifier when {self.name = 'A'} {
+	init {
+		if (self.name = 'A') then {
+			result := new EClass(self.name, new EOperation());
+		} else {
+			result := new EDataType();
+		} endif;
+	}
+	name := 'mapped' + self.name;
+}
+
+// Example 3: Mapping Extension (inherits) and Resolve Expressions
+// Demonstrates abstract mappings, mapping inheritance with inherits,
+// resolve expressions (resolveone, resolveoneIn), ![Type] single-element selection,
+// multiple output model extents with @identifier, and object literals
+
+modeltype ECORE uses 'http://www.eclipse.org/emf/2002/Ecore';
+
+transformation transf(in inModel : ECORE, out x : ECORE, out y : ECORE);
+
+main() {
+	inModel.rootObjects()[EPackage]->map p2p();
+	var inRootPackage := inModel.rootObjects()![EPackage];
+	var outRootPackage := inRootPackage.resolveoneIn(EPackage::p2p, EPackage);
+
+	var extra := object EPackage@y {
+		name := 'extra'
+	};
+}
+
+mapping EPackage::p2p() : EPackage {
+	name := self.name;
+	eClassifiers += self.eClassifiers[EClass]->map makeClass();
+}
+
+abstract mapping EClassifier::makeClassifier() : EClassifier {
+	name := self.name + '_base';
+}
+
+mapping EClass::makeClass() : EClass@x
+		inherits EClassifier::makeClassifier {
+	init {
+		var suffix := '_derived';
+	}
+	name := name + suffix;
+}

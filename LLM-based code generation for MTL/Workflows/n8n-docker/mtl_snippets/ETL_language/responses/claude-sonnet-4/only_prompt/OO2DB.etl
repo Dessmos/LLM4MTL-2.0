@@ -1,0 +1,193 @@
+pre {
+  var db : new DB!Database;
+  DB!DatabaseElement.all.add(db);
+}
+
+post {
+  var trace : new SimpleTrace!Trace;
+  for (sourceElem in OO!PackageableElement.all) {
+    var link : new SimpleTrace!TraceLink;
+    link.description = "Transformation of " + sourceElem.eClass().name;
+    link.sources.add(sourceElem);
+    var targets = transTrace.get(sourceElem.name);
+    if (targets.isDefined()) {
+      link.targets.addAll(targets);
+    }
+    trace.links.add(link);
+  }
+}
+
+@lazy
+rule Class2Table
+  transform c : OO!Class
+  to t : DB!Table {
+  
+  guard : not c.isAbstract
+  
+  t.name = c.name;
+  t.database = db;
+  db.contents.add(t);
+  
+  var pkCol : new DB!Column;
+  pkCol.name = c.primaryKeyName();
+  pkCol.type = "INTEGER";
+  pkCol.table = t;
+  t.columns.add(pkCol);
+  t.primaryKeys.add(pkCol);
+  
+  if (c.extends.isDefined()) {
+    var parentTable = c.extends.equivalent();
+    if (parentTable.isDefined()) {
+      var fk : new DB!ForeignKey;
+      fk.name = c.name + "_extends_" + c.extends.name;
+      fk.parent = parentTable.primaryKeys.first();
+      fk.child = pkCol;
+      fk.database = db;
+      db.contents.add(fk);
+    }
+  }
+  
+  for (attr in c.features.select(f|f.isTypeOf(OO!Attribute))) {
+    if (not attr.isMany) {
+      attr.equivalent();
+    } else {
+      attr.equivalent();
+    }
+  }
+  
+  for (ref in c.features.select(f|f.isTypeOf(OO!Reference))) {
+    if (not ref.isMany) {
+      ref.equivalent();
+    }
+  }
+  
+  transTrace.put(c.name, Sequence{t});
+}
+
+@lazy
+rule SingleValuedAttribute2Column
+  transform a : OO!Attribute
+  to col : DB!Column {
+  
+  guard : not a.isMany and a.owner.isDefined() and not a.owner.isAbstract
+  
+  col.name = a.name;
+  col.type = a.type.toDbType();
+  
+  var ownerTable = a.owner.equivalent();
+  if (ownerTable.isDefined()) {
+    col.table = ownerTable;
+    ownerTable.columns.add(col);
+  }
+  
+  if (transTrace.containsKey(a.name)) {
+    transTrace.get(a.name).add(col);
+  } else {
+    transTrace.put(a.name, Sequence{col});
+  }
+}
+
+@lazy
+rule MultiValuedAttribute2Table
+  transform a : OO!Attribute
+  to t : DB!Table {
+  
+  guard : a.isMany and a.owner.isDefined() and not a.owner.isAbstract
+  
+  t.name = a.owner.name.valuesTableName(a.name);
+  t.database = db;
+  db.contents.add(t);
+  
+  var idCol : new DB!Column;
+  idCol.name = "id";
+  idCol.type = "INTEGER";
+  idCol.table = t;
+  t.columns.add(idCol);
+  t.primaryKeys.add(idCol);
+  
+  var ownerIdCol : new DB!Column;
+  ownerIdCol.name = a.owner.name.primaryKeyName();
+  ownerIdCol.type = "INTEGER";
+  ownerIdCol.table = t;
+  t.columns.add(ownerIdCol);
+  
+  var ownerTable = a.owner.equivalent();
+  if (ownerTable.isDefined()) {
+    var fk : new DB!ForeignKey;
+    fk.name = t.name + "_owner_fk";
+    fk.parent = ownerTable.primaryKeys.first();
+    fk.child = ownerIdCol;
+    fk.database = db;
+    db.contents.add(fk);
+  }
+  
+  var valueCol : new DB!Column;
+  valueCol.name = a.name;
+  valueCol.type = a.type.toDbType();
+  valueCol.table = t;
+  t.columns.add(valueCol);
+  
+  if (transTrace.containsKey(a.name)) {
+    transTrace.get(a.name).add(t);
+  } else {
+    transTrace.put(a.name, Sequence{t});
+  }
+}
+
+@lazy
+rule Reference2ForeignKey
+  transform r : OO!Reference
+  to fk : DB!ForeignKey {
+  
+  guard : not r.isMany and r.owner.isDefined() and not r.owner.isAbstract and r.type.isDefined() and r.type.isTypeOf(OO!Class) and not r.type.isAbstract
+  
+  fk.name = r.owner.name + "_" + r.name + "_fk";
+  fk.database = db;
+  db.contents.add(fk);
+  
+  var ownerTable = r.owner.equivalent();
+  var refTable = r.type.equivalent();
+  
+  if (ownerTable.isDefined() and refTable.isDefined()) {
+    var refCol : new DB!Column;
+    refCol.name = r.name + "_id";
+    refCol.type = "INTEGER";
+    refCol.table = ownerTable;
+    ownerTable.columns.add(refCol);
+    
+    fk.parent = refTable.primaryKeys.first();
+    fk.child = refCol;
+  }
+  
+  if (transTrace.containsKey(r.name)) {
+    transTrace.get(r.name).add(fk);
+  } else {
+    transTrace.put(r.name, Sequence{fk});
+  }
+}
+
+operation String primaryKeyName() : String {
+  return self + "_id";
+}
+
+operation String valuesTableName(attrName : String) : String {
+  return self + "_" + attrName;
+}
+
+operation OO!Classifier toDbType() : String {
+  if (self.isTypeOf(OO!Datatype)) {
+    var typeName = self.name.toUpperCase();
+    if (typeName = "STRING") {
+      return "VARCHAR";
+    } else if (typeName = "INT" or typeName = "INTEGER") {
+      return "INTEGER";
+    } else if (typeName = "BOOLEAN" or typeName = "BOOL") {
+      return "BOOLEAN";
+    } else if (typeName = "REAL" or typeName = "DOUBLE" or typeName = "FLOAT") {
+      return "REAL";
+    } else {
+      return "VARCHAR";
+    }
+  }
+  return "VARCHAR";
+}

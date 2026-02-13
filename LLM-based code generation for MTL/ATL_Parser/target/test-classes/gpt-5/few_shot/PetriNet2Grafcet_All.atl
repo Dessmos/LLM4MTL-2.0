@@ -1,0 +1,79 @@
+module PetriNet2Grafcet;
+
+create OUT : Grafcet from IN : PetriNet;
+
+rule PetriNet2Grafcet {
+  from
+    pn : PetriNet!PetriNet
+  to
+    g  : Grafcet!Grafcet (
+      name        <- pn.name,
+      location    <- pn.location,
+      elements    <- pn.elements->collect(e |
+                        if e.oclIsTypeOf(PetriNet!Place) then
+                          thisModule.Place2Step(e.oclAsType(PetriNet!Place))
+                        else
+                          thisModule.Transition2Transition(e.oclAsType(PetriNet!Transition))
+                        endif
+                     ),
+      connections <- pn.arcs->collect(a |
+                        if a.oclIsTypeOf(PetriNet!PlaceToTransition) then
+                          thisModule.PlaceToTransition2StepToTransition(a.oclAsType(PetriNet!PlaceToTransition))
+                        else
+                          thisModule.TransitionToPlace2TransitionToStep(a.oclAsType(PetriNet!TransitionToPlace))
+                        endif
+                     )
+    )
+}
+
+unique lazy rule Place2Step {
+  from
+    p : PetriNet!Place
+  to
+    s : Grafcet!Step (
+      name                <- p.name,
+      location            <- p.location,
+      grafcet             <- thisModule.resolveTemp(p.net, 'g'),
+      isInitial           <- false,
+      isActive            <- false,
+      action              <- ''
+    )
+}
+
+unique lazy rule Transition2Transition {
+  from
+    t : PetriNet!Transition
+  to
+    gt : Grafcet!Transition (
+      name                <- t.name,
+      location            <- t.location,
+      grafcet             <- thisModule.resolveTemp(t.net, 'g'),
+      condition           <- ''
+    )
+}
+
+unique lazy rule PlaceToTransition2StepToTransition {
+  from
+    a : PetriNet!PlaceToTransition
+  to
+    c : Grafcet!StepToTransition (
+      name     <- a.name,
+      location <- a.location,
+      grafcet  <- thisModule.resolveTemp(a.net, 'g'),
+      from     <- thisModule.Place2Step(a.from),
+      to       <- thisModule.Transition2Transition(a.to)
+    )
+}
+
+unique lazy rule TransitionToPlace2TransitionToStep {
+  from
+    a : PetriNet!TransitionToPlace
+  to
+    c : Grafcet!TransitionToStep (
+      name     <- a.name,
+      location <- a.location,
+      grafcet  <- thisModule.resolveTemp(a.net, 'g'),
+      from     <- thisModule.Transition2Transition(a.from),
+      to       <- thisModule.Place2Step(a.to)
+    )
+}

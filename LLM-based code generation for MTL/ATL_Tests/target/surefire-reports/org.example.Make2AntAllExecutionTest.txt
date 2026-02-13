@@ -1,4 +1,17 @@
 -------------------------------------------------------------------------------
 Test set: org.example.Make2AntAllExecutionTest
 -------------------------------------------------------------------------------
-Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.92 s - in org.example.Make2AntAllExecutionTest
+Tests run: 1, Failures: 0, Errors: 1, Skipped: 0, Time elapsed: 3.329 s <<< FAILURE! - in org.example.Make2AntAllExecutionTest
+org.example.Make2AntAllExecutionTest.testMake2Ant  Time elapsed: 3.17 s  <<< ERROR!
+org.eclipse.m2m.atl.engine.emfvm.VMException: Feature e does not exist on Exec
+	at ShellLine2Tasks#18(Make2Ant.atl[63:12-63:51])
+		local variables: self=Make2Ant : ASMModule, sl=IN!<unnamed>
+	at Rule2Target#40(Make2Ant.atl[33:40-33:70])
+		local variables: self=Make2Ant : ASMModule, s=IN!all, t=OUT!all, sl=IN!<unnamed>
+	at __applyMakefile2Project#72(Make2Ant.atl[12:77-12:102])
+		local variables: self=Make2Ant : ASMModule, link=TransientLink {rule = Makefile2Project, sourceElements = {s = org.eclipse.emf.ecore.impl.DynamicEObjectImpl@f325091 (eClass: org.eclipse.emf.ecore.impl.EClassImpl@52c8295b (name: Makefile) (instanceClassName: null) (abstract: false, interface: false))}, targetElements = {t = org.eclipse.emf.ecore.impl.DynamicEObjectImpl@61e3a1fd (eClass: org.eclipse.emf.ecore.impl.EClassImpl@29caf222 (name: Project) (instanceClassName: null) (abstract: false, interface: false))}, variables = {}}, s=IN!TestMakefile, t=OUT!TestMakefile, r=IN!all
+	at __exec__#8(Make2Ant.atl)
+		local variables: self=Make2Ant : ASMModule, e=TransientLink {rule = Makefile2Project, sourceElements = {s = org.eclipse.emf.ecore.impl.DynamicEObjectImpl@f325091 (eClass: org.eclipse.emf.ecore.impl.EClassImpl@52c8295b (name: Makefile) (instanceClassName: null) (abstract: false, interface: false))}, targetElements = {t = org.eclipse.emf.ecore.impl.DynamicEObjectImpl@61e3a1fd (eClass: org.eclipse.emf.ecore.impl.EClassImpl@29caf222 (name: Project) (instanceClassName: null) (abstract: false, interface: false))}, variables = {}}
+	at main#24(Make2Ant.atl)
+		local variables: self=Make2Ant : ASMModule
+

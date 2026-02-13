@@ -1,0 +1,17 @@
+module User2Account_All;
+create OUT : account from IN : user;
+
+helper context user!User def : isActive() : Boolean =
+	self.status = 'Active' or self.status = 'Enabled';
+
+rule User2Account {
+	from
+		u : user!User
+	to
+		a : account!Account (
+			username <- u.username,
+			email <- u.email,
+			createdDate <- u.registrationDate,
+			active <- u.isActive()
+		)
+}

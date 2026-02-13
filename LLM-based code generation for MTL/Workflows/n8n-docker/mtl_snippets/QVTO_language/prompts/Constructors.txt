@@ -1,0 +1,4 @@
+Create a QVT-O transformation named **t** that takes an input and an output model, both typed as **ECORE**.  
+In the **main** operation, iterate over the root **EPackage** elements of the input model and invoke a mapping called **p2p** on each.  
+In the **p2p** mapping, copy the package’s name to the target package and add a new **EClass** named “AClass” containing a single **EOperation**.  
+Also, define an **EClass** constructor that receives a string and an **EOperation**, initializing the class name and adding the operation to it.

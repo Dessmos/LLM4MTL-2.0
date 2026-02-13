@@ -1,225 +1,275 @@
+```atl
 module CPL2SPL;
 create OUT : SPL from IN : CPL;
 
-helper def: statement : SPL!Statement = OclUndefined;
+helper context CPL!Node def: statement() : CPL!Node =
+	if self.oclIsKindOf(CPL!Location) then
+		if self.contents.oclIsUndefined() then
+			self
+		else
+			self.contents.statement()
+		endif
+	else
+		self
+	endif;
 
-helper def: locations : Sequence(CPL!Location) = CPL!Location.allInstances()->select(l | true);
+helper context CPL!Element def: locations() : Sequence(CPL!Location) =
+	if self.oclIsKindOf(CPL!Location) then
+		Sequence{self}
+	else
+		if self.oclIsKindOf(CPL!NodeContainer) then
+			if self.contents.oclIsUndefined() then
+				Sequence{}
+			else
+				self.contents.locations()
+			endif
+		else
+			if self.oclIsKindOf(CPL!Switch) then
+				self.otherwise.locations()->union(
+					if self.oclIsKindOf(CPL!AddressSwitch) then
+						self.addresses->collect(a | a.locations())->flatten()
+					else
+						Sequence{}
+					endif
+				)
+			else
+				Sequence{}
+			endif
+		endif
+	endif;
 
-helper context CPL!Proxy def: isSimple : Boolean = self.busy.oclIsUndefined() and self.noAnswer.oclIsUndefined() and self.redirection.oclIsUndefined() and self.failure.oclIsUndefined() and self.default.oclIsUndefined();
+helper context CPL!Proxy def: isSimple() : Boolean =
+	self.busy.oclIsUndefined() and
+	self.noAnswer.oclIsUndefined() and
+	self.redirection.oclIsUndefined() and
+	self.failure.oclIsUndefined() and
+	self.default.oclIsUndefined();
 
 rule CPL2Program {
-  from c : CPL!CPL
-  to p : SPL!Program (
-    service <- s,
-    location <- ''
-  ),
-  s : SPL!Service (
-    name <- 'CPLService',
-    declarations <- c.subActions->collect(sa | thisModule.SubAction2Function(sa))->union(Sequence{thisModule.Incoming2Method(c.incoming)}),
-    location <- ''
-  )
+	from
+		c : CPL!CPL
+	to
+		p : SPL!Program (
+			service <- s
+		),
+		s : SPL!Service (
+			name <- 'CPLService',
+			declarations <- c.subActions,
+			sessions <- Sequence{c.incoming, c.outgoing}->select(e | not e.oclIsUndefined())
+		)
 }
 
 rule SubAction2Function {
-  from sa : CPL!SubAction
-  to f : SPL!LocalFunctionDeclaration (
-    name <- sa.id,
-    returnType <- rt,
-    statements <- Sequence{thisModule.statement},
-    location <- ''
-  ),
-  rt : SPL!SimpleType (
-    type <- #void,
-    location <- ''
-  )
+	from
+		sa : CPL!SubAction
+	to
+		f : SPL!LocalFunctionDeclaration (
+			name <- sa.id,
+			returnType <- rt,
+			statements <- sa.contents.statement()->asSequence()
+		),
+		rt : SPL!SimpleType (
+			type <- #void
+		)
 }
 
 rule Incoming2Method {
-  from i : CPL!Incoming
-  to m : SPL!Method (
-    type <- rt,
-    direction <- #inout,
-    methodName <- mn,
-    statements <- Sequence{thisModule.statement},
-    branches <- Sequence{},
-    location <- ''
-  ),
-  rt : SPL!SimpleType (
-    type <- #void,
-    location <- ''
-  ),
-  mn : SPL!SIPMethodName (
-    name <- #INVITE,
-    location <- ''
-  )
+	from
+		inc : CPL!Incoming
+	to
+		d : SPL!Dialog (
+			methods <- Sequence{m}
+		),
+		m : SPL!Method (
+			type <- t,
+			direction <- #inout,
+			methodName <- mn,
+			statements <- inc.contents.statement()->asSequence(),
+			branches <- Sequence{b}
+		),
+		t : SPL!SimpleType (
+			type <- #void
+		),
+		mn : SPL!SIPMethodName (
+			name <- #INVITE
+		),
+		b : SPL!DefaultBranch
 }
 
 rule Proxy2Return {
-  from p : CPL!Proxy (p.isSimple)
-  to rs : SPL!ReturnStat (
-    returnedValue <- ce,
-    location <- ''
-  ),
-  ce : SPL!ConstantExp (
-    value <- bc,
-    location <- ''
-  ),
-  bc : SPL!BooleanConstant (
-    value <- true,
-    location <- ''
-  )
+	from
+		p : CPL!Proxy (
+			p.isSimple() and p.locations()->notEmpty()
+		)
+	to
+		r : SPL!ReturnStat (
+			returnedValue <- fe
+		),
+		fe : SPL!ForwardExp (
+			isParallel <- p.ordering = 'parallel',
+			exp <- se
+		),
+		se : SPL!SequenceConstant (
+			values <- p.locations()->collect(loc | thisModule.Location2URIConstant(loc))
+		)
 }
 
 rule Proxy2Select {
-  from p : CPL!Proxy (not p.isSimple)
-  to ss : SPL!SelectStat (
-    matchedExp <- ve,
-    selectCases <- p.busy->union(p.noAnswer)->union(p.redirection)->collect(e | thisModule.resolveTemp(e, '')),
-    selectDefault <- if p.default.oclIsUndefined() then OclUndefined else thisModule.Default2SelectDefault(p.default) endif,
-    location <- ''
-  ),
-  ve : SPL!Variable (
-    source <- vd,
-    location <- ''
-  ),
-  vd : SPL!VariableDeclaration (
-    name <- 'status',
-    type <- st,
-    location <- ''
-  ),
-  st : SPL!SimpleType (
-    type <- #string,
-    location <- ''
-  )
+	from
+		p : CPL!Proxy (
+			not p.isSimple()
+		)
+	to
+		s : SPL!SelectStat (
+			matchedExp <- ve,
+			selectCases <- Sequence{p.busy, p.noAnswer, p.redirection}->select(e | not e.oclIsUndefined()),
+			selectDefault <- p.default
+		),
+		ve : SPL!Variable (
+			source <- vd
+		),
+		vd : SPL!VariableDeclaration (
+			name <- 'response',
+			type <- vt,
+			initExp <- fie
+		),
+		vt : SPL!SimpleType (
+			type <- #response
+		),
+		fie : SPL!ForwardExp (
+			isParallel <- p.ordering = 'parallel',
+			exp <- sc
+		),
+		sc : SPL!SequenceConstant (
+			values <- p.locations()->collect(loc | thisModule.Location2URIConstant(loc))
+		)
 }
 
 rule Busy2SelectCase {
-  from b : CPL!Busy
-  to sc : SPL!SelectCase (
-    values <- Sequence{sc_val},
-    statements <- Sequence{thisModule.statement},
-    location <- ''
-  ),
-  sc_val : SPL!StringConstant (
-    value <- 'busy',
-    location <- ''
-  )
+	from
+		b : CPL!Busy
+	to
+		sc : SPL!SelectCase (
+			values <- Sequence{rc},
+			statements <- b.contents.statement()->asSequence()
+		),
+		rc : SPL!ResponseConstant (
+			response <- cer
+		),
+		cer : SPL!ClientErrorResponse (
+			errorKind <- #BUSY_HERE
+		)
 }
 
 rule NoAnswer2SelectCase {
-  from na : CPL!NoAnswer
-  to sc : SPL!SelectCase (
-    values <- Sequence{sc_val},
-    statements <- Sequence{thisModule.statement},
-    location <- ''
-  ),
-  sc_val : SPL!StringConstant (
-    value <- 'noanswer',
-    location <- ''
-  )
+	from
+		na : CPL!NoAnswer
+	to
+		sc : SPL!SelectCase (
+			values <- Sequence{rc},
+			statements <- na.contents.statement()->asSequence()
+		),
+		rc : SPL!ResponseConstant (
+			response <- cer
+		),
+		cer : SPL!ClientErrorResponse (
+			errorKind <- #REQUEST_TIMEOUT
+		)
 }
 
 rule Redirection2SelectCase {
-  from r : CPL!Redirection
-  to sc : SPL!SelectCase (
-    values <- Sequence{sc_val},
-    statements <- Sequence{thisModule.statement},
-    location <- ''
-  ),
-  sc_val : SPL!StringConstant (
-    value <- 'redirection',
-    location <- ''
-  )
+	from
+		r : CPL!Redirection
+	to
+		sc : SPL!SelectCase (
+			values <- Sequence{rc1, rc2, rc3},
+			statements <- r.contents.statement()->asSequence()
+		),
+		rc1 : SPL!ResponseConstant (
+			response <- rer1
+		),
+		rer1 : SPL!RedirectionErrorResponse (
+			errorKind <- #MOVED_PERMANENTLY
+		),
+		rc2 : SPL!ResponseConstant (
+			response <- rer2
+		),
+		rer2 : SPL!RedirectionErrorResponse (
+			errorKind <- #MOVED_TEMPORARILY
+		),
+		rc3 : SPL!ResponseConstant (
+			response <- rer3
+		),
+		rer3 : SPL!RedirectionErrorResponse (
+			errorKind <- #USE_PROXY
+		)
 }
 
 rule Default2SelectDefault {
-  from d : CPL!Default
-  to sd : SPL!SelectDefault (
-    statements <- Sequence{thisModule.statement},
-    location <- ''
-  )
+	from
+		d : CPL!Default
+	to
+		sd : SPL!SelectDefault (
+			statements <- d.contents.statement()->asSequence()
+		)
 }
 
 rule SubCall2Return {
-  from sc : CPL!SubCall
-  to rs : SPL!ReturnStat (
-    returnedValue <- fce,
-    location <- ''
-  ),
-  fce : SPL!FunctionCallExp (
-    functionCall <- fc,
-    location <- ''
-  ),
-  fc : SPL!FunctionCall (
-    function <- thisModule.resolveTemp(CPL!SubAction.allInstances()->select(sa | sa.id = sc.ref)->first(), ''),
-    location <- ''
-  )
+	from
+		sc : CPL!SubCall
+	to
+		r : SPL!ReturnStat (
+			returnedValue <- fce
+		),
+		fce : SPL!FunctionCallExp (
+			functionCall <- fc
+		),
+		fc : SPL!FunctionCall (
+			function <- sc.ref
+		)
 }
 
 rule Redirect2Return {
-  from r : CPL!Redirect
-  to rs : SPL!ReturnStat (
-    returnedValue <- ce,
-    location <- ''
-  ),
-  ce : SPL!ConstantExp (
-    value <- bc,
-    location <- ''
-  ),
-  bc : SPL!BooleanConstant (
-    value <- false,
-    location <- ''
-  )
+	from
+		r : CPL!Redirect
+	to
+		rs : SPL!ReturnStat (
+			returnedValue <- se
+		),
+		se : SPL!SequenceConstant (
+			values <- r.locations()->collect(loc | thisModule.Location2URIConstant(loc))
+		)
 }
 
 rule AddressSwitch2SelectStat {
-  from as : CPL!AddressSwitch
-  to ss : SPL!SelectStat (
-    matchedExp <- ve,
-    selectCases <- as.addresses->collect(a | thisModule.SwitchedAddress2SelectCase(a)),
-    selectDefault <- if as.otherwise.oclIsUndefined() then OclUndefined else thisModule.Otherwise2SelectDefault(as.otherwise) endif,
-    location <- ''
-  ),
-  ve : SPL!Variable (
-    source <- vd,
-    location <- ''
-  ),
-  vd : SPL!VariableDeclaration (
-    name <- as.field,
-    type <- st,
-    location <- ''
-  ),
-  st : SPL!SimpleType (
-    type <- #string,
-    location <- ''
-  )
+	from
+		as : CPL!AddressSwitch
+	to
+		ss : SPL!SelectStat (
+			matchedExp <- ve,
+			selectCases <- as.addresses,
+			selectDefault <- as.otherwise
+		),
+		ve : SPL!Variable (
+			source <- vd
+		),
+		vd : SPL!VariableDeclaration (
+			name <- 'addressField',
+			type <- vt,
+			initExp <- shp
+		),
+		vt : SPL!SimpleType (
+			type <- #string
+		),
+		shp : SPL!SIPHeaderPlace (
+			header <- if as.field = 'origin' then #FROM else #TO endif
+		)
 }
 
 rule SwitchedAddress2SelectCase {
-  from sa : CPL!SwitchedAddress
-  to sc : SPL!SelectCase (
-    values <- Sequence{sc_val},
-    statements <- Sequence{thisModule.statement},
-    location <- ''
-  ),
-  sc_val : SPL!StringConstant (
-    value <- if sa.is.oclIsUndefined() then sa.contains else sa.is endif,
-    location <- ''
-  )
-}
-
-rule Otherwise2SelectDefault {
-  from o : CPL!Otherwise
-  to sd : SPL!SelectDefault (
-    statements <- Sequence{thisModule.statement},
-    location <- ''
-  )
-}
-
-rule Location2URIConstant {
-  from l : CPL!Location
-  to uc : SPL!URIConstant (
-    uri <- l.url,
-    location <- ''
-  )
-}
+	from
+		sa : CPL!SwitchedAddress
+	to
+		sc : SPL!SelectCase (
+			values <- Sequence{strc},
+			statements <- sa.contents.statement()->as

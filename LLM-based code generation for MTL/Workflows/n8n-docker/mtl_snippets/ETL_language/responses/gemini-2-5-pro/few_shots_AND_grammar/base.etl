@@ -1,0 +1,32 @@
+transformation Flowchart2Html
+
+model Flowchart metamodel "flowchart"
+model HTML metamodel "HTML"
+
+rule Flowchart2Heading
+	transform f : Flowchart!Flowchart
+	to h : HTML!H1 {
+	
+	h.value = f.name;
+}
+
+rule Action2Heading
+	transform a : Flowchart!Action
+	to h : HTML!H1 {
+	
+	h.value = a.name;
+}
+
+rule Decision2Heading
+	transform d : Flowchart!Decision
+	to h : HTML!H1 {
+	
+	h.value = d.name;
+}
+
+rule Transition2Heading
+	transform t : Flowchart!Transition
+	to h : HTML!H1 {
+	
+	h.value = t.name;
+}

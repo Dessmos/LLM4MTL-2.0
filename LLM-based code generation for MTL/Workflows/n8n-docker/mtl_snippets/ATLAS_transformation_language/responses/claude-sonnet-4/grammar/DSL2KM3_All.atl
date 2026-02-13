@@ -1,14 +1,21 @@
+```atl
 module DSL2KM3;
 create OUT : KM3 from IN : DSL;
 
 helper context DSL!Relationship def: needTurnOnClass() : Boolean =
-	not self.isEmbedding;
+	not self.roles->forAll(r | r.source.oclIsUndefined() and r.type.oclIsUndefined()) or
+	not self.superType.oclIsUndefined() or
+	not self.subTypes->isEmpty() or
+	not self.properties->isEmpty();
 
-helper context DSL!Relationship def: getRoles() : Sequence(DSL!Role) =
-	self.roles->asSequence();
+helper def: getRoles(c : DSL!Class) : Sequence(DSL!Role) =
+	DSL!Role.allInstances()->select(r | 
+		(r.source = c or r.type = c) and 
+		not r.relation.needTurnOnClass()
+	);
 
-helper context DSL!Relationship def: isEmbedding() : Boolean =
-	self.isEmbedding;
+helper context DSL!Role def: isEmbedding() : Boolean =
+	self.relation.isEmbedding;
 
 rule Metamodel {
 	from
@@ -16,14 +23,19 @@ rule Metamodel {
 	to
 		t : KM3!Metamodel (
 			location <- '',
-			contents <- p
+			contents <- Sequence{mainPackage, primitivesPackage}
 		),
-		p : KM3!Package (
+		mainPackage : KM3!Package (
 			location <- '',
 			name <- s.name,
-			contents <- s.classifiers->select(c | c.oclIsTypeOf(DSL!Class))
-						->union(s.classifiers->select(c | c.oclIsTypeOf(DSL!Relationship) and c.needTurnOnClass()))
-						->union(s.types)
+			package <- t,
+			metamodel <- t
+		),
+		primitivesPackage : KM3!Package (
+			location <- '',
+			name <- 'PrimitiveTypes',
+			package <- t,
+			metamodel <- t
 		)
 }
 
@@ -34,57 +46,66 @@ rule Class {
 		t : KM3!Class (
 			location <- '',
 			name <- s.name,
+			package <- s.domainModel,
 			isAbstract <- s.isAbstract,
-			supertypes <- if s.superType.oclIsUndefined() then Sequence{} else Sequence{s.superType} endif,
-			structuralFeatures <- s.properties
+			supertypes <- if s.superType.oclIsUndefined() then Sequence{} else Sequence{s.superType} endif
 		)
 }
 
 rule Relation2Class {
 	from
-		s : DSL!Relationship (s.needTurnOnClass())
+		s : DSL!Relationship (
+			s.needTurnOnClass()
+		)
 	to
 		t : KM3!Class (
 			location <- '',
 			name <- s.name,
+			package <- s.domainModel,
 			isAbstract <- s.isAbstract,
-			supertypes <- if s.superType.oclIsUndefined() then Sequence{} else Sequence{s.superType} endif,
-			structuralFeatures <- s.properties->union(s.getRoles()->collect(r |
-				thisModule.SimpleReference(r)
-			))
+			supertypes <- if s.superType.oclIsUndefined() then Sequence{} else Sequence{s.superType} endif
 		)
 }
 
-lazy rule SimpleReference {
+rule SimpleReference {
 	from
-		s : DSL!Role
+		s : DSL!Role (
+			not s.relation.needTurnOnClass()
+		)
 	to
 		t : KM3!Reference (
 			location <- '',
 			name <- s.name,
+			package <- s.source.domainModel,
+			owner <- s.source,
+			type <- s.type,
 			lower <- s.min,
-			upper <- if s.isUnbounded then -1 else s.max endif,
+			upper <- s.max,
 			isOrdered <- s.isOrdered,
 			isUnique <- true,
-			type <- s.type,
-			isContainer <- false
+			isContainer <- s.isEmbedding(),
+			opposite <- s.relation.roles->select(r | r <> s)->first()
 		)
 }
 
 rule ComplexReference {
 	from
-		s : DSL!Role (not s.relation.needTurnOnClass() and s.isPropertyGenerator)
+		s : DSL!Role (
+			s.relation.needTurnOnClass()
+		)
 	to
 		t : KM3!Reference (
 			location <- '',
 			name <- s.name,
+			package <- s.source.domainModel,
+			owner <- s.source,
+			type <- s.relation,
 			lower <- s.min,
-			upper <- if s.isUnbounded then -1 else s.max endif,
+			upper <- s.max,
 			isOrdered <- s.isOrdered,
 			isUnique <- true,
-			type <- s.type,
-			isContainer <- s.relation.isEmbedding(),
-			opposite <- s.relation.getRoles()->select(r | r <> s)->first()
+			isContainer <- s.isEmbedding(),
+			opposite <- OclUndefined
 		)
 }
 
@@ -95,11 +116,13 @@ rule Attribute {
 		t : KM3!Attribute (
 			location <- '',
 			name <- s.name,
+			package <- s.owner.domainModel,
+			owner <- s.owner,
+			type <- s.type,
 			lower <- 1,
 			upper <- 1,
 			isOrdered <- false,
-			isUnique <- true,
-			type <- s.type
+			isUnique <- true
 		)
 }
 
@@ -110,7 +133,7 @@ rule Enumeration {
 		t : KM3!Enumeration (
 			location <- '',
 			name <- s.name,
-			literals <- s.literals
+			package <- s.domainModel
 		)
 }
 
@@ -120,7 +143,8 @@ rule EnumLiteral {
 	to
 		t : KM3!EnumLiteral (
 			location <- '',
-			name <- s.name
+			name <- s.name,
+			package <- s.refImmediateComposite().domainModel
 		)
 }
 
@@ -130,6 +154,8 @@ rule DataType {
 	to
 		t : KM3!DataType (
 			location <- '',
-			name <- s.name
+			name <- s.name,
+			package <- s.domainModel
 		)
 }
+```

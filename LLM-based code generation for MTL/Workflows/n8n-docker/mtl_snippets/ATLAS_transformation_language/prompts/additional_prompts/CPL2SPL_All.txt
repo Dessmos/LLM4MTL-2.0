@@ -1,7 +1,5 @@
-Create an ATL transformation module named **CPL2SPL** that converts models conforming to the **CPL** metamodel into models conforming to the **SPL** metamodel.  
+Create an ATL transformation module named `CPL2SPL` that transforms the CPL metamodel into the SPL metamodel.
 
-Define helpers **statement**, **locations**, and **isSimple** to compute default statement nodes, location sequences, and to identify simple proxies.  
+Define helpers `statement`, `locations`, and `isSimple` exactly as in the code to derive the effective statement node, compute location sequences along containment, and classify simple proxies.
 
-Include transformation rules **CPL2Program**, **SubAction2Function**, **Incoming2Method**, **Proxy2Return**, **Proxy2Select**, **Busy2SelectCase**, **NoAnswer2SelectCase**, **Redirection2SelectCase**, **Default2SelectDefault**, **SubCall2Return**, **Redirect2Return**, **AddressSwitch2SelectStat**, **SwitchedAddress2SelectCase**, and **Otherwise2SelectDefault** implementing the corresponding structural mappings.  
-
-Also define helper rule **Location2URIConstant** to map a Location to an SPL URI constant.
+Add rules `CPL2Program`, `SubAction2Function`, `Incoming2Method`, `Proxy2Return`, `Proxy2Select`, `Busy2SelectCase`, `NoAnswer2SelectCase`, `Redirection2SelectCase`, `Default2SelectDefault`, `SubCall2Return`, `Redirect2Return`, `AddressSwitch2SelectStat`, `SwitchedAddress2SelectCase`, `Otherwise2SelectDefault`, and a helper-based rule `Location2URIConstant`, implementing the precise CPL‑to‑SPL mappings and OCL conditions shown.

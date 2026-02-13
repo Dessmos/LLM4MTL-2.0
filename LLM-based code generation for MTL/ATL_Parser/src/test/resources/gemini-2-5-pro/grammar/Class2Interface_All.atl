@@ -1,0 +1,33 @@
+module Class2Interface_All;
+create OUT : Interface from IN : Class;
+
+rule Class2Interface {
+	from
+		s : Class!Class
+	to
+		t : Interface!Interface (
+			name <- s.name,
+			methods <- s.methods
+		)
+}
+
+rule Method2Method {
+	from
+		s : Class!Method
+	to
+		t : Interface!Method (
+			name <- s.name,
+			returnType <- s.returnType,
+			parameters <- s.parameters
+		)
+}
+
+rule Parameter2Parameter {
+	from
+		s : Class!Parameter
+	to
+		t : Interface!Parameter (
+			name <- s.name,
+			type <- s.type
+		)
+}

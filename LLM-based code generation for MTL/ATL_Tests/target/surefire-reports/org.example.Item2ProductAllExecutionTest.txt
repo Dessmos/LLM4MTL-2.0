@@ -1,0 +1,7 @@
+-------------------------------------------------------------------------------
+Test set: org.example.Item2ProductAllExecutionTest
+-------------------------------------------------------------------------------
+Tests run: 1, Failures: 0, Errors: 1, Skipped: 0, Time elapsed: 2.821 s <<< FAILURE! - in org.example.Item2ProductAllExecutionTest
+org.example.Item2ProductAllExecutionTest.testItem2Product  Time elapsed: 2.706 s  <<< ERROR!
+org.eclipse.m2m.atl.engine.emfvm.VMException: Could not find model item
+

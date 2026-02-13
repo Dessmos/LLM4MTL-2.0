@@ -1,0 +1,152 @@
+module XML2DSL;
+create OUT : DSL from IN : XML;
+
+helper context XML!Element def: getAttrBool(name : String) : Boolean =
+	self.children->select(c | c.oclIsTypeOf(XML!Attribute) and c.name = name)->first().value = 'true';
+
+helper context XML!Element def: getAttrVal(name : String) : String =
+	self.children->select(c | c.oclIsTypeOf(XML!Attribute) and c.name = name)->first().value;
+
+helper context XML!Element def: get(childName : String, attrName : String) : String =
+	self.children->select(c | c.oclIsTypeOf(XML!Element) and c.name = childName)->first().getAttrVal(attrName);
+
+helper context XML!Element def: getType() : String =
+	if self.hasAttr('type') then self.getAttrVal('type') else 'String' endif;
+
+helper context XML!Element def: getEnumId() : String =
+	self.getAttrVal('id');
+
+helper context XML!Element def: getText() : String =
+	self.children->select(c | c.oclIsTypeOf(XML!Text))->first().value;
+
+helper context XML!Element def: getSeq(childName : String) : Sequence(XML!Element) =
+	self.children->select(c | c.oclIsTypeOf(XML!Element) and c.name = childName);
+
+helper context XML!Element def: hasChildren() : Boolean =
+	self.children->exists(c | c.oclIsTypeOf(XML!Element));
+
+helper context XML!Element def: hasAttr(name : String) : Boolean =
+	self.children->exists(c | c.oclIsTypeOf(XML!Attribute) and c.name = name);
+
+helper context XML!Element def: isAbstract() : Boolean =
+	if self.hasAttr('abstract') then self.getAttrBool('abstract') else false endif;
+
+helper def: dslElementsById : Map(String, DSL!Classifier) =
+	XML!Element.allInstances()->select(e | e.name = 'class' or e.name = 'relationship')
+		->iterate(e; acc : Map(String, DSL!Classifier) = Map{} |
+			acc.including(e.getAttrVal('id'), thisModule.resolveTemp(e, 'classifier')));
+
+helper context XML!Element def: getContainment() : Boolean =
+	if self.hasAttr('containment') then self.getAttrBool('containment') else false endif;
+
+helper context XML!Element def: getSubTypes() : Sequence(DSL!Classifier) =
+	self.getSeq('subtype')->collect(st | thisModule.dslElementsById.get(st.getAttrVal('idref')));
+
+helper context XML!Element def: findType(typeName : String) : DSL!Type =
+	thisModule.resolveTemp(XML!Element.allInstances()->select(e | e.name = 'type' and e.getAttrVal('name') = typeName)->first(), 'type');
+
+rule DomainModel {
+	from src : XML!Element (src.name = 'model')
+	to dst : DSL!DomainModel (
+		name <- src.getAttrVal('name'),
+		identity <- src.getAttrVal('id'),
+		namespace <- src.getAttrVal('namespace'),
+		isLoaded <- true,
+		classifiers <- src.getSeq('class')->union(src.getSeq('relationship')),
+		types <- src.getSeq('type')->union(src.getSeq('enumeration'))->union(Sequence{stringType, integerType, booleanType, doubleType})
+	),
+	stringType : DSL!SimpleType (
+		name <- 'String',
+		identity <- 'String',
+		namespace <- 'PrimitiveTypes'
+	),
+	integerType : DSL!SimpleType (
+		name <- 'Integer',
+		identity <- 'Integer',
+		namespace <- 'PrimitiveTypes'
+	),
+	booleanType : DSL!SimpleType (
+		name <- 'Boolean',
+		identity <- 'Boolean',
+		namespace <- 'PrimitiveTypes'
+	),
+	doubleType : DSL!SimpleType (
+		name <- 'Double',
+		identity <- 'Double',
+		namespace <- 'PrimitiveTypes'
+	)
+}
+
+rule Class {
+	from src : XML!Element (src.name = 'class')
+	to classifier : DSL!Class (
+		name <- src.getAttrVal('name'),
+		identity <- src.getAttrVal('id'),
+		namespace <- src.getAttrVal('namespace'),
+		isLoaded <- true,
+		isAbstract <- src.isAbstract(),
+		properties <- src.getSeq('property'),
+		superType <- if src.hasAttr('supertype') then thisModule.dslElementsById.get(src.getAttrVal('supertype')) else OclUndefined endif,
+		subTypes <- src.getSubTypes(),
+		domainModel <- thisModule.resolveTemp(XML!Element.allInstances()->select(e | e.name = 'model')->first(), 'dst')
+	)
+}
+
+rule Relationship {
+	from src : XML!Element (src.name = 'relationship')
+	to classifier : DSL!Relationship (
+		name <- src.getAttrVal('name'),
+		identity <- src.getAttrVal('id'),
+		namespace <- src.getAttrVal('namespace'),
+		isLoaded <- true,
+		isAbstract <- src.isAbstract(),
+		isEmbedding <- src.getContainment(),
+		properties <- src.getSeq('property'),
+		roles <- src.getSeq('role'),
+		superType <- if src.hasAttr('supertype') then thisModule.dslElementsById.get(src.getAttrVal('supertype')) else OclUndefined endif,
+		subTypes <- src.getSubTypes(),
+		domainModel <- thisModule.resolveTemp(XML!Element.allInstances()->select(e | e.name = 'model')->first(), 'dst')
+	)
+}
+
+rule Role {
+	from src : XML!Element (src.name = 'role')
+	to role : DSL!Role (
+		name <- src.getAttrVal('name'),
+		identity <- src.getAttrVal('id'),
+		min <- src.getAttrVal('min').toInteger(),
+		max <- src.getAttrVal('max').toInteger(),
+		isUnbounded <- src.getAttrVal('max') = '*',
+		accepts <- src.getAttrVal('type'),
+		isOrdered <- if src.hasAttr('ordered') then src.getAttrBool('ordered') else false endif,
+		isNavigableFrom <- if src.hasAttr('navigable') then src.getAttrBool('navigable') else true endif,
+		isPropertyGenerator <- if src.hasAttr('generator') then src.getAttrBool('generator') else false endif,
+		source <- thisModule.dslElementsById.get(src.getAttrVal('source')),
+		type <- thisModule.dslElementsById.get(src.getAttrVal('type')),
+		relation <- thisModule.resolveTemp(src.parent, 'classifier')
+	)
+}
+
+rule ValueProperty {
+	from src : XML!Element (src.name = 'property')
+	to prop : DSL!ValueProperty (
+		name <- src.getAttrVal('name'),
+		identity <- src.getAttrVal('id'),
+		owner <- thisModule.resolveTemp(src.parent, 'classifier'),
+		type <- thisModule.findType(src.getType())
+	)
+}
+
+rule Enumeration {
+	from src : XML!Element (src.name = 'enumeration')
+	to type : DSL!Enumeration (
+		name <- src.getAttrVal('name'),
+		identity <- src.getAttrVal('id'),
+		namespace <- src.getAttrVal('namespace'),
+		literals <- src.getSeq('literal')
+	)
+}
+
+rule EnumerationLiteral {
+	from src : XML!Element (src.name = 'literal')
+	to literal : DSL!Enumer

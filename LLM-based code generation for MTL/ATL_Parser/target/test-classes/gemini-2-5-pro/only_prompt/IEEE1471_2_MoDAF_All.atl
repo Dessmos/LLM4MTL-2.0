@@ -1,0 +1,178 @@
+```atl
+module IEEE1471_2_MoDAF;
+create OUT : MoDAF from IN : IEEE1471;
+uses IEEE1471 from "http://vitruv.tools/methodologisttemplate/IEEE1471";
+uses MoDAF from "http://vitruv.tools/methodologisttemplate/MoDAF";
+
+helper context IEEE1471!ADElement def: rationale(): String =
+	if self.rationales->notEmpty() then
+		self.rationales->first().name + ': ' + self.rationales->first().content
+	else
+		''
+	endif;
+
+rule IEEE1471Model2MoDAFModel {
+	from
+		s : IEEE1471!Model
+	to
+		t : MoDAF!Model (
+			name <- s.name,
+			architectures <- s.architectures,
+			enterprise <- s.system
+		)
+}
+
+rule System2Enterprise {
+	from
+		s : IEEE1471!System
+	to
+		t : MoDAF!Enterprise (
+			name <- s.name,
+			description <- thisModule.rationale(s),
+			stakeholders <- s.stakeholders,
+			missions <- s.missions,
+			environment <- s.environment
+		)
+}
+
+rule Environment2Environment {
+	from
+		s : IEEE1471!Environment
+	to
+		t : MoDAF!Environment (
+			name <- s.name,
+			description <- thisModule.rationale(s)
+		)
+}
+
+rule Mission2OperationalMission {
+	from
+		s : IEEE1471!Mission
+	to
+		t : MoDAF!OperationalMission (
+			name <- s.name,
+			description <- thisModule.rationale(s)
+		)
+}
+
+rule Architecture2Architecture {
+	from
+		s : IEEE1471!Architecture
+	to
+		t : MoDAF!Architecture (
+			name <- s.name,
+			description <- thisModule.rationale(s),
+			governedBy <- s.AD,
+			stakeholders <- s.stakeholders,
+			views <- s.views
+		)
+}
+
+rule AD2AD {
+	from
+		s : IEEE1471!AD
+	to
+		t : MoDAF!AD (
+			name <- s.name,
+			description <- thisModule.rationale(s),
+			governs <- s.architecture,
+			views <- s.views,
+			concerns <- s.concerns,
+			viewpoints <- s.viewpoints
+		)
+}
+
+rule Stakeholder2Stakeholder {
+	from
+		s : IEEE1471!Stakeholder (s.concerns->isEmpty())
+	to
+		t : MoDAF!Stakeholder (
+			name <- s.name,
+			description <- thisModule.rationale(s)
+		)
+}
+
+rule StakeholderHasConcern {
+	from
+		s : IEEE1471!Stakeholder (s.concerns->notEmpty())
+	to
+		t : MoDAF!Stakeholder (
+			name <- s.name,
+			description <- thisModule.rationale(s),
+			concerns <- s.concerns
+		)
+}
+
+rule Viewpoint2View {
+	from
+		s : IEEE1471!Viewpoint
+	to
+		t_view : MoDAF!View (
+			name <- s.name,
+			description <- thisModule.rationale(s),
+			governedBy <- if s.library.oclIsUndefined() then OclUndefined else s.library endif,
+			addresses <- s.concerns,
+			frames <- s.views
+		)
+}
+
+rule View2ArchitecturalProduct {
+	from
+		s : IEEE1471!View
+	to
+		t : MoDAF!ArchitecturalProduct (
+			name <- s.name,
+			description <- thisModule.rationale(s),
+			framedBy <- s.conformsTo,
+			models <- s.models
+		)
+}
+
+rule Model2Element {
+	from
+		s : IEEE1471!Model
+	to
+		t : MoDAF!Element (
+			name <- s.name,
+			content <- s.content
+		)
+}
+
+rule Concern2Concern {
+	from
+		s : IEEE1471!Concern
+	to
+		t : MoDAF!Concern (
+			name <- s.name,
+			description <- thisModule.rationale(s),
+			stakeholders <- s.stakeholders,
+			addressedIn <- s.viewpoints
+		)
+}
+
+rule LibraryViewpoint2ArchitecturalFramework {
+	from
+		s : IEEE1471!LibraryViewpoint
+	to
+		t : MoDAF!ArchitecturalFramework (
+			name <- s.name,
+			description <- thisModule.rationale(s),
+			governs <- s.viewpoints
+		)
+}
+
+endpoint rule CreateDefaultFramework {
+	do {
+		let orphanVPs : Sequence(IEEE1471!Viewpoint) =
+			IEEE1471!Viewpoint.allInstances()->select(vp | vp.library.oclIsUndefined());
+		if orphanVPs->notEmpty() then {
+			let orphanViews : Sequence(MoDAF!View) =
+				orphanVPs->collect(vp | thisModule.resolveTemp(vp, 't_view'));
+			new framework : MoDAF!ArchitecturalFramework;
+			framework.name <- 'Undefined Architectural Framework';
+			framework.governs <- orphanViews;
+		}
+		endif;
+	}
+}
+```

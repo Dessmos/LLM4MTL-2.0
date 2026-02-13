@@ -125,9 +125,7 @@ public class Make2AntAllExecutionTest {
         // Register the Make metamodel in the global package registry.
         // The ATL injector will use this to resolve the namespace when loading the input XMI.
         EPackage.Registry.INSTANCE.put(makePkg.getNsURI(), makePkg);
-        // Also register the output metamodel for loading the output XMI
-        EPackage.Registry.INSTANCE.put(antPkg.getNsURI(), antPkg);
-
+        
         // Execute the transformation
         Resource outRes = executeAtl(asm, "Make.ecore", "Ant.ecore", "Make", "Ant", input);
         

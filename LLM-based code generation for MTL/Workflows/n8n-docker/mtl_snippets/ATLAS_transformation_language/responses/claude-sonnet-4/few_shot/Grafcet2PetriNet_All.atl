@@ -1,50 +1,68 @@
+```atl
 module Grafcet2PetriNet;
 create OUT : PetriNet from IN : Grafcet;
 
 rule PetriNet {
-  from g : Grafcet!Grafcet
-  to   p : PetriNet!PetriNet (
-    name <- g.name,
-    location <- g.location,
-    elements <- g.elements->collect(e | if e.oclIsTypeOf(Grafcet!Step) then thisModule.resolveTemp(e, 'place') else thisModule.resolveTemp(e, 'transition') endif),
-    arcs <- g.connections->collect(c | if c.oclIsTypeOf(Grafcet!StepToTransition) then thisModule.resolveTemp(c, 'arc') else thisModule.resolveTemp(c, 'arc') endif)
-  )
+  from
+    g : Grafcet!Grafcet
+  to
+    p : PetriNet!PetriNet (
+      location <- g.location,
+      name <- g.name,
+      elements <- g.elements,
+      arcs <- g.connections
+    )
 }
 
 rule Place {
-  from s : Grafcet!Step
-  to   p : PetriNet!Place (
-    name <- s.name,
-    location <- s.location
-  )
+  from
+    s : Grafcet!Step
+  to
+    p : PetriNet!Place (
+      location <- s.location,
+      name <- s.name,
+      net <- s.grafcet,
+      incomingArc <- s.incomingConnections,
+      outgoingArc <- s.outgoingConnections
+    )
 }
 
 rule Transition {
-  from t : Grafcet!Transition
-  to   tr : PetriNet!Transition (
-    name <- t.name,
-    location <- t.location
-  )
+  from
+    t : Grafcet!Transition
+  to
+    pt : PetriNet!Transition (
+      location <- t.location,
+      name <- t.name,
+      net <- t.grafcet,
+      incomingArc <- t.incomingConnections,
+      outgoingArc <- t.outgoingConnections
+    )
 }
 
 rule PlaceToTransition {
-  from c : Grafcet!StepToTransition
-  to   a : PetriNet!PlaceToTransition (
-    name <- c.name,
-    location <- c.location,
-    weight <- 1,
-    from <- thisModule.resolveTemp(c.from, 'place'),
-    to <- thisModule.resolveTemp(c.to, 'transition')
-  )
+  from
+    st : Grafcet!StepToTransition
+  to
+    pt : PetriNet!PlaceToTransition (
+      location <- st.location,
+      name <- st.name,
+      net <- st.grafcet,
+      from <- st.from,
+      to <- st.to
+    )
 }
 
 rule TransitionToPlace {
-  from c : Grafcet!TransitionToStep
-  to   a : PetriNet!TransitionToPlace (
-    name <- c.name,
-    location <- c.location,
-    weight <- 1,
-    from <- thisModule.resolveTemp(c.from, 'transition'),
-    to <- thisModule.resolveTemp(c.to, 'place')
-  )
+  from
+    ts : Grafcet!TransitionToStep
+  to
+    tp : PetriNet!TransitionToPlace (
+      location <- ts.location,
+      name <- ts.name,
+      net <- ts.grafcet,
+      from <- ts.from,
+      to <- ts.to
+    )
 }
+```

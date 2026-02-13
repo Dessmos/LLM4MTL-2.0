@@ -1,52 +1,70 @@
+```atl
 module PetriNet2Grafcet;
 create OUT : Grafcet from IN : PetriNet;
 
 rule Grafcet {
-  from pn : PetriNet!PetriNet
-  to   g : Grafcet!Grafcet (
-    name <- pn.name,
-    location <- pn.location,
-    elements <- pn.elements,
-    connections <- pn.arcs
-  )
+  from
+    src : PetriNet!PetriNet
+  to
+    tgt : Grafcet!Grafcet (
+      location <- src.location,
+      name <- src.name,
+      elements <- src.elements,
+      connections <- src.arcs
+    )
 }
 
 rule Step {
-  from p : PetriNet!Place
-  to   s : Grafcet!Step (
-    name <- p.name,
-    location <- p.location,
-    isInitial <- false,
-    isActive <- false,
-    action <- ''
-  )
+  from
+    src : PetriNet!Place
+  to
+    tgt : Grafcet!Step (
+      location <- src.location,
+      name <- src.name,
+      grafcet <- src.net,
+      incomingConnections <- src.incomingArc,
+      outgoingConnections <- src.outgoingArc,
+      isInitial <- false,
+      isActive <- false
+    )
 }
 
 rule Transition {
-  from t : PetriNet!Transition
-  to   tr : Grafcet!Transition (
-    name <- t.name,
-    location <- t.location,
-    condition <- ''
-  )
+  from
+    src : PetriNet!Transition
+  to
+    tgt : Grafcet!Transition (
+      location <- src.location,
+      name <- src.name,
+      grafcet <- src.net,
+      incomingConnections <- src.incomingArc,
+      outgoingConnections <- src.outgoingArc
+    )
 }
 
 rule StepToTransition {
-  from a : PetriNet!PlaceToTransition
-  to   c : Grafcet!StepToTransition (
-    name <- a.name,
-    location <- a.location,
-    from <- a.from,
-    to <- a.to
-  )
+  from
+    src : PetriNet!PlaceToTransition
+  to
+    tgt : Grafcet!StepToTransition (
+      location <- src.location,
+      name <- src.name,
+      grafcet <- src.net,
+      from <- src.from,
+      to <- src.to
+    )
 }
 
 rule TransitionToStep {
-  from a : PetriNet!TransitionToPlace
-  to   c : Grafcet!TransitionToStep (
-    name <- a.name,
-    location <- a.location,
-    from <- a.from,
-    to <- a.to
-  )
+  from
+    src : PetriNet!TransitionToPlace
+  to
+    tgt : Grafcet!TransitionToStep (
+      location <- src.location,
+      name <- src.name,
+      grafcet <- src.net,
+      from <- src.from,
+      to <- src.to
+    )
 }
+```

@@ -1,0 +1,3 @@
+Create a QVT-O transformation named **transf** that takes one input model of type *ECORE* and produces two output models, also of type *ECORE*.  
+In the **main** operation, instantiate two new *EPackage* objects—one in the first output model named “a” and another in the second output model named “b”.  
+Also define a mapping **EClass::toClass** that creates a corresponding *EClass* in the second output model, copying the source class’s name into the target.

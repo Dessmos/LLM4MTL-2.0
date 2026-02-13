@@ -1,0 +1,39 @@
+module FamiliesToPersons_All;
+
+create OUT : Persons from IN : Families;
+
+helper context Families!Member def: familyLastName() : String =
+  if not self.family.oclIsUndefined() then
+    self.family.lastName
+  else
+    ''
+  endif;
+
+helper context Families!Member def: isFemale() : Boolean =
+  self.oclIsTypeOf(Families!Mother) or self.oclIsTypeOf(Families!Daughter);
+
+helper context Families!Member def: isMale() : Boolean =
+  self.oclIsTypeOf(Families!Father) or self.oclIsTypeOf(Families!Son);
+
+rule FamiliesModel2PersonsModel {
+  from src : Families!FamiliesModel
+  to   dst : Persons!PersonsModel (
+    persons <- Families!Member.allInstances()
+                 ->collect(m | if m.isMale() then thisModule.Member2Male(m)
+                               else thisModule.Member2Female(m) endif)
+  )
+}
+
+unique lazy rule Member2Male {
+  from m : Families!Member (m.isMale())
+  to   p : Persons!Male (
+    fullName <- m.firstName.concat(' ').concat(m.familyLastName())
+  )
+}
+
+unique lazy rule Member2Female {
+  from m : Families!Member (m.isFemale())
+  to   p : Persons!Female (
+    fullName <- m.firstName.concat(' ').concat(m.familyLastName())
+  )
+}

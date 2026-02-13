@@ -1,0 +1,7 @@
+Create an ATL transformation module named `Document2Report_All` that maps the `document` metamodel to the `report` metamodel.
+
+In this module, define the model mapping as `create OUT : Report from IN : Document`.
+
+Add a transformation rule `Document2Report` that converts each `Document` into a `Report`, copying the `title` and `author` attributes and assigning its `sections` reference directly.
+
+Add another rule `Section2Section` that converts each `Section` in the source into a `Section` in the target, copying `title`, `content`, and `order`.

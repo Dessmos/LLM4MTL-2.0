@@ -1,0 +1,103 @@
+module BibTeX2DocBook;
+create OUT : DocBook from IN : BibTeX;
+
+helper def: authorSet : Set(BibTeX!Author) =
+	BibTeX!Author.allInstances();
+
+helper def: titledEntrySet : Set(BibTeX!TitledEntry) =
+	BibTeX!TitledEntry.allInstances()->select(e | not e.oclIsTypeOf(BibTeX!Article));
+
+helper def: articleSet : Set(BibTeX!Article) =
+	BibTeX!Article.allInstances();
+
+helper context BibTeX!Entry def: buildEntryPara() : String =
+	self.author + ' (' + self.year + ').';
+
+rule Main {
+	from s : BibTeX!BibTeXFile
+	to
+		b : DocBook!Book (
+			title <- 'Bibliography',
+			sections <- Sequence{authors, untitled, titled, articles}
+		),
+		authors : DocBook!Section (
+			title <- 'By Author',
+			paras <- thisModule.authorSet
+		),
+		untitled : DocBook!Section (
+			title <- 'Untitled Entries',
+			paras <- BibTeX!Entry.allInstances()->select(e | e.oclIsTypeOf(BibTeX!Entry))
+		),
+		titled : DocBook!Section (
+			title <- 'Titled Entries',
+			paras <- thisModule.titledEntrySet
+		),
+		articles : DocBook!Section (
+			title <- 'Articles',
+			paras <- thisModule.articleSet
+		)
+}
+
+rule Author {
+	from e : BibTeX!Author
+	to
+		p : DocBook!Para (
+			content <- e.name
+		)
+}
+
+rule UntitledEntry {
+	from e : BibTeX!Entry (e.oclIsTypeOf(BibTeX!Entry))
+	to
+		p : DocBook!Para (
+			content <- e.buildEntryPara()
+		)
+}
+
+rule TitledEntry_Title_NoArticle {
+	from e : BibTeX!TitledEntry (not e.oclIsTypeOf(BibTeX!Article) and not e.title.oclIsUndefined())
+	to
+		p : DocBook!Para (
+			content <- '"' + e.title + '". ' + e.buildEntryPara()
+		)
+}
+
+rule TitledEntry_NoTitle_NoArticle {
+	from e : BibTeX!TitledEntry (not e.oclIsTypeOf(BibTeX!Article) and e.title.oclIsUndefined())
+	to
+		p : DocBook!Para (
+			content <- e.buildEntryPara()
+		)
+}
+
+rule Article_Title_Journal {
+	from a : BibTeX!Article (not a.title.oclIsUndefined() and not a.journal.oclIsUndefined())
+	to
+		p : DocBook!Para (
+			content <- '"' + a.title + '". In: ' + a.journal + '. ' + a.buildEntryPara()
+		)
+}
+
+rule Article_NoTitle_Journal {
+	from a : BibTeX!Article (a.title.oclIsUndefined() and not a.journal.oclIsUndefined())
+	to
+		p : DocBook!Para (
+			content <- 'In: ' + a.journal + '. ' + a.buildEntryPara()
+		)
+}
+
+rule Article_Title_NoJournal {
+	from a : BibTeX!Article (not a.title.oclIsUndefined() and a.journal.oclIsUndefined())
+	to
+		p : DocBook!Para (
+			content <- '"' + a.title + '". ' + a.buildEntryPara()
+		)
+}
+
+rule Article_NoTitle_NoJournal {
+	from a : BibTeX!Article (a.title.oclIsUndefined() and a.journal.oclIsUndefined())
+	to
+		p : DocBook!Para (
+			content <- a.buildEntryPara()
+		)
+}
