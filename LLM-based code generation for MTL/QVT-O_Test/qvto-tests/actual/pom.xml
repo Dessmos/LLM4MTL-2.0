@@ -74,6 +74,20 @@
             <artifactId>junit-jupiter</artifactId>
             <scope>test</scope>
         </dependency>
+
+        <!-- p2 Wrappers to detect QVT-O and OCL dependencies -->
+        <dependency>
+            <groupId>org.eclipse.qvto.tests</groupId>
+            <artifactId>org.eclipse.qvto.tests.p2wrappers.qvto</artifactId>
+            <version>1.0.0</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.eclipse.qvto.tests</groupId>
+            <artifactId>org.eclipse.qvto.tests.p2wrappers.ocl</artifactId>
+            <version>1.0.0</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>

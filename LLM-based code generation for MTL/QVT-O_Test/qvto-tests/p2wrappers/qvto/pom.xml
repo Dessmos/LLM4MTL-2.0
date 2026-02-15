@@ -7,7 +7,7 @@
 
   <parent>
     <groupId>org.eclipse.qvto.tests</groupId>
-    <artifactId>p2wrappers</artifactId>
+    <artifactId>org.eclipse.qvto.tests.p2wrappers</artifactId>
     <version>1.0.0</version>
   </parent>
 
@@ -53,6 +53,7 @@
         <groupId>org.eclipse.m2m.qvt</groupId>
         <artifactId>org.eclipse.m2m.qvt.oml</artifactId>
         <version>3.10.8.v20231126-0839</version>
+        <scope>test</scope>
     </dependency>
     <dependency>
         <groupId>org.eclipse.m2m.qvt</groupId>
