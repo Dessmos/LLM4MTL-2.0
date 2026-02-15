@@ -98,50 +98,6 @@
             <version>${junit.version}</version>
             <scope>test</scope>
         </dependency>
-
-        <!-- ============================================== -->
-        <!-- Local install via install-deps.cmd             -->
-        <!-- Downloaded from Eclipse p2 update sites        -->
-        <!-- ============================================== -->
-
-        <!-- QVT-O (from Eclipse MMT QVT-O 3.10.8 release) -->
-        <dependency>
-            <groupId>org.eclipse.m2m</groupId>
-            <artifactId>org.eclipse.m2m.qvt.oml</artifactId>
-            <version>3.10.8</version>
-        </dependency>
-        <dependency>
-            <groupId>org.eclipse.m2m</groupId>
-            <artifactId>org.eclipse.m2m.qvt.oml.common</artifactId>
-            <version>3.10.2</version>
-        </dependency>
-        <dependency>
-            <groupId>org.eclipse.m2m</groupId>
-            <artifactId>org.eclipse.m2m.qvt.oml.cst.parser</artifactId>
-            <version>3.9.0</version>
-        </dependency>
-        <dependency>
-            <groupId>org.eclipse.m2m</groupId>
-            <artifactId>org.eclipse.m2m.qvt.oml.emf.util</artifactId>
-            <version>3.10.6</version>
-        </dependency>
-        <dependency>
-            <groupId>org.eclipse.m2m</groupId>
-            <artifactId>org.eclipse.m2m.qvt.oml.ecore.imperativeocl</artifactId>
-            <version>3.10.2</version>
-        </dependency>
-        <dependency>
-            <groupId>org.eclipse.m2m</groupId>
-            <artifactId>org.eclipse.m2m.qvt.oml.runtime</artifactId>
-            <version>3.10.7</version>
-        </dependency>
-        <dependency>
-            <groupId>org.eclipse.m2m</groupId>
-            <artifactId>org.eclipse.m2m.qvt.oml.ocl</artifactId>
-            <version>3.10.2</version>
-        </dependency>
-
-        <!-- Eclipse OCL  -->
     </dependencies>
   </dependencyManagement>
 </project>
