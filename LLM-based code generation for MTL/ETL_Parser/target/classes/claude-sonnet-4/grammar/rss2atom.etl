@@ -1,4 +1,3 @@
-```etl
 pre {
   var RSS!Rss rssRoot := RSS!Rss.all.first();
   var Atom!Feed atomRoot := new Atom!Feed;
@@ -94,4 +93,3 @@ operation Atom!Element appendEquivalentsOfChildrenOf(source : RSS!Element) {
   }
   self.appendChildren(equivalents);
 }
-```

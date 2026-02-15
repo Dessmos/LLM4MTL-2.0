@@ -1,22 +1,4 @@
 -------------------------------------------------------------------------------
 Test set: org.eclipse.epsilon.examples.etl.flowchart.GreedyTest
 -------------------------------------------------------------------------------
-Tests run: 1, Failures: 0, Errors: 1, Skipped: 0, Time elapsed: 1.584 s <<< FAILURE! -- in org.eclipse.epsilon.examples.etl.flowchart.GreedyTest
-org.eclipse.epsilon.examples.etl.flowchart.GreedyTest.testGreedy -- Time elapsed: 1.064 s <<< ERROR!
-Type 'flowchart!NamedElement' not found
-
-	at org.eclipse.epsilon.eol.dom.TypeExpression.execute(TypeExpression.java:97)
-	at org.eclipse.epsilon.eol.dom.TypeExpression.execute(TypeExpression.java:1)
-	at org.eclipse.epsilon.eol.execute.ExecutorFactory.executeImpl(ExecutorFactory.java:204)
-	at org.eclipse.epsilon.eol.execute.ExecutorFactory.execute(ExecutorFactory.java:233)
-	at org.eclipse.epsilon.eol.dom.Parameter.getType(Parameter.java:81)
-	at org.eclipse.epsilon.etl.dom.TransformationRule.isLazy(TransformationRule.java:100)
-	at org.eclipse.epsilon.etl.EtlModule.hasLazyRules(EtlModule.java:164)
-	at org.eclipse.epsilon.etl.EtlModule.prepareContext(EtlModule.java:121)
-	at org.eclipse.epsilon.eol.EolModule.execute(EolModule.java:474)
-	at org.eclipse.epsilon.examples.etl.EtlTestBase.runEtl(EtlTestBase.java:89)
-	at org.eclipse.epsilon.examples.etl.flowchart.GreedyTest.testGreedy(GreedyTest.java:17)
-	at java.base/java.lang.reflect.Method.invoke(Method.java:568)
-	at java.base/java.util.ArrayList.forEach(ArrayList.java:1511)
-	at java.base/java.util.ArrayList.forEach(ArrayList.java:1511)
-
+Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.017 s -- in org.eclipse.epsilon.examples.etl.flowchart.GreedyTest

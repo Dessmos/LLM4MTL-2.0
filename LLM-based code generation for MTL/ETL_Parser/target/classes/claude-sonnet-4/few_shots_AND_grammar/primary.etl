@@ -1,4 +1,3 @@
-```etl
 rule Flowchart2Heading
 	transform f : Flowchart!Flowchart
 	to div : HTML!DIV {
@@ -28,4 +27,3 @@ rule Transition2Heading
 	
 	h1.value = t.name;
 }
-```

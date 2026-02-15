@@ -1,4 +1,3 @@
-```etl
 rule Flowchart2H1
 transform f : flowchart!Flowchart
 to h : HTML!H1 {
@@ -11,4 +10,3 @@ to h : HTML!H1
 extends Flowchart2H1 {
 h.value = "Subflow " + h.value;
 }
-```

@@ -1,8 +1,6 @@
-```etl
 rule NamedElement2Heading
   transform s : flowchart!NamedElement
   to t : HTML!H1 {
   
   t.value = s.name;
 }
-```

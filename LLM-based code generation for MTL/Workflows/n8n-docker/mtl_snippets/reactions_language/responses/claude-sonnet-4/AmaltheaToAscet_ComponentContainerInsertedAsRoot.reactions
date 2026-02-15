@@ -1,7 +1,7 @@
-imports {
+imports
   metamodel amalthea "http://vitruv.tools/methodologisttemplate/amalthea"
   metamodel ascet "http://vitruv.tools/methodologisttemplate/ascet"
-}
+
 transformation amaltheaToAscet {
   reaction ComponentContainerInsertedAsRoot {
     after elementInserted as root cc: amalthea::ComponentContainer

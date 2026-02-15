@@ -1,4 +1,3 @@
-```etl
 rule Tree2Node
     transform t : Source!Tree
     to n : Target!Node {
@@ -13,4 +12,3 @@ rule Tree2Node
         parentNode.outgoing.add(edge);
     }
 }
-```

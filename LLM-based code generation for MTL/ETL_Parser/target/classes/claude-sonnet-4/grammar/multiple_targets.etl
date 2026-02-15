@@ -1,4 +1,3 @@
-```etl
 rule Action2Elements
   transform a : flowchart::Action
   to div : HTML::DIV {
@@ -31,4 +30,3 @@ operation createLink(text : String, href : String) : HTML::A {
   a.ahref = href;
   return a;
 }
-```
