@@ -1,12 +1,12 @@
-C:\Users\10239\OneDrive\Desktop\ETL Test\src\test\java\org\eclipse\epsilon\examples\etl\flowchart\EquivalentTest.java
-C:\Users\10239\OneDrive\Desktop\ETL Test\src\test\java\org\eclipse\epsilon\examples\etl\flowchart\FlowchartTestBase.java
-C:\Users\10239\OneDrive\Desktop\ETL Test\src\test\java\org\eclipse\epsilon\examples\etl\flowchart\InheritanceTest.java
-C:\Users\10239\OneDrive\Desktop\ETL Test\src\test\java\org\eclipse\epsilon\examples\etl\Rss2AtomTest.java
-C:\Users\10239\OneDrive\Desktop\ETL Test\src\test\java\org\eclipse\epsilon\examples\etl\flowchart\GreedyTest.java
-C:\Users\10239\OneDrive\Desktop\ETL Test\src\test\java\org\eclipse\epsilon\examples\etl\Tree2GraphTest.java
-C:\Users\10239\OneDrive\Desktop\ETL Test\src\test\java\org\eclipse\epsilon\examples\etl\flowchart\BaseTest.java
-C:\Users\10239\OneDrive\Desktop\ETL Test\src\test\java\org\eclipse\epsilon\examples\etl\flowchart\LazyTest.java
-C:\Users\10239\OneDrive\Desktop\ETL Test\src\test\java\org\eclipse\epsilon\examples\etl\flowchart\PrimaryTest.java
-C:\Users\10239\OneDrive\Desktop\ETL Test\src\test\java\org\eclipse\epsilon\examples\etl\EtlTestBase.java
-C:\Users\10239\OneDrive\Desktop\ETL Test\src\test\java\org\eclipse\epsilon\examples\etl\OO2DBTest.java
-C:\Users\10239\OneDrive\Desktop\ETL Test\src\test\java\org\eclipse\epsilon\examples\etl\flowchart\MultipleTargetsTest.java
+/home/benediktjutz/Documents/git/papers/natural-language-artifacts/LLM-based code generation for MTL/ETL_Test/src/test/java/org/eclipse/epsilon/examples/etl/flowchart/InheritanceTest.java
+/home/benediktjutz/Documents/git/papers/natural-language-artifacts/LLM-based code generation for MTL/ETL_Test/src/test/java/org/eclipse/epsilon/examples/etl/Rss2AtomTest.java
+/home/benediktjutz/Documents/git/papers/natural-language-artifacts/LLM-based code generation for MTL/ETL_Test/src/test/java/org/eclipse/epsilon/examples/etl/flowchart/LazyTest.java
+/home/benediktjutz/Documents/git/papers/natural-language-artifacts/LLM-based code generation for MTL/ETL_Test/src/test/java/org/eclipse/epsilon/examples/etl/flowchart/FlowchartTestBase.java
+/home/benediktjutz/Documents/git/papers/natural-language-artifacts/LLM-based code generation for MTL/ETL_Test/src/test/java/org/eclipse/epsilon/examples/etl/flowchart/PrimaryTest.java
+/home/benediktjutz/Documents/git/papers/natural-language-artifacts/LLM-based code generation for MTL/ETL_Test/src/test/java/org/eclipse/epsilon/examples/etl/flowchart/BaseTest.java
+/home/benediktjutz/Documents/git/papers/natural-language-artifacts/LLM-based code generation for MTL/ETL_Test/src/test/java/org/eclipse/epsilon/examples/etl/OO2DBTest.java
+/home/benediktjutz/Documents/git/papers/natural-language-artifacts/LLM-based code generation for MTL/ETL_Test/src/test/java/org/eclipse/epsilon/examples/etl/flowchart/EquivalentTest.java
+/home/benediktjutz/Documents/git/papers/natural-language-artifacts/LLM-based code generation for MTL/ETL_Test/src/test/java/org/eclipse/epsilon/examples/etl/flowchart/MultipleTargetsTest.java
+/home/benediktjutz/Documents/git/papers/natural-language-artifacts/LLM-based code generation for MTL/ETL_Test/src/test/java/org/eclipse/epsilon/examples/etl/flowchart/GreedyTest.java
+/home/benediktjutz/Documents/git/papers/natural-language-artifacts/LLM-based code generation for MTL/ETL_Test/src/test/java/org/eclipse/epsilon/examples/etl/Tree2GraphTest.java
+/home/benediktjutz/Documents/git/papers/natural-language-artifacts/LLM-based code generation for MTL/ETL_Test/src/test/java/org/eclipse/epsilon/examples/etl/EtlTestBase.java

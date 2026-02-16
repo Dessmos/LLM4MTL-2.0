@@ -1,4 +1,3 @@
-```etl
 pre {
 	var db : new DB!Database;
 	var trace : new SimpleTrace!Trace;
@@ -121,4 +120,3 @@ operation OO!Classifier toDbType() : String {
 		return "INT";
 	}
 }
-```

@@ -1,4 +1,3 @@
-```etl
 rule Tree2Node
 transform t : Tree!Tree
 to n : Graph!Node {
@@ -10,4 +9,3 @@ edge.source = parentNode;
 edge.target = n;
 }
 }
-```

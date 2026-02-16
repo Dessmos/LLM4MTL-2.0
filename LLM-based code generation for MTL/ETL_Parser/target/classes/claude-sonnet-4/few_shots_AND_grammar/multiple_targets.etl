@@ -1,4 +1,3 @@
-```etl
 rule Action2Elements
 	transform a : Flowchart!Action
 	to container : HTML!DIV, title : HTML!H1, link : HTML!A {
@@ -27,4 +26,3 @@ rule Decision2Elements
 		container.children.add(link);
 	}
 }
-```

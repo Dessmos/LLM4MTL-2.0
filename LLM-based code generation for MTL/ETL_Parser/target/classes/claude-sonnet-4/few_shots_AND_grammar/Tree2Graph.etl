@@ -1,4 +1,3 @@
-```etl
 rule Tree2Node
 	transform t : Tree!Tree
 	to n : Graph!Node {
@@ -11,4 +10,3 @@ rule Tree2Node
 		e.target = n;
 	}
 }
-```

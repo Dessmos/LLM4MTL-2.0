@@ -1,4 +1,3 @@
-```etl
 rule Action2Elements
   transform a : flowchart::Action
   to d : HTML::DIV {
@@ -26,4 +25,3 @@ rule Decision2Elements
     link.ahref = "#" + t.target.name;
   }
 }
-```
