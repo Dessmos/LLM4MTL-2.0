@@ -1,0 +1,26 @@
+import ecore : 'http://www.eclipse.org/emf/2002/Ecore';
+
+transformation t(in inModel : ecore, out outModel : ecore);
+
+main() {
+	inModel.rootObjects()
+		->select(oclIsKindOf(ecore::EPackage))
+		->map p2p();
+}
+
+mapping p2p(in src : ecore::EPackage) : ecore::EPackage {
+	name := src.name;
+	eClassifiers += src.eClassifiers
+		->select(oclIsKindOf(ecore::EClass))
+		->map makeClass();
+}
+
+abstract mapping makeClassifier(in src : ecore::EClassifier) : ecore::EClassifier {
+	name := src.name.concat('1');
+}
+
+mapping makeClass(in src : ecore::EClass) : ecore::EClass
+	merges makeClassifier {
+	var temp : String = '2';
+	name := src.name.concat('1').concat(temp);
+}

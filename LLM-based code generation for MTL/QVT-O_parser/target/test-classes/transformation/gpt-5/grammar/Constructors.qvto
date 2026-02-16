@@ -1,0 +1,24 @@
+modeltype ECORE uses "http://www.eclipse.org/emf/2002/Ecore";
+
+transformation t(in inModel : ECORE, out outModel : ECORE);
+
+main() {
+	var roots : ECORE::EPackage := inModel.rootObjects()[ECORE::EPackage];
+	roots->forEach(p) {
+		p->map p2p();
+	};
+}
+
+mapping ECORE::EPackage::p2p() : ECORE::EPackage {
+	init {
+		result.name := self.name;
+		var op : ECORE::EOperation := new ECORE::EOperation();
+		var c : ECORE::EClass := ECORE::EClass::createWithOp("AClass", op);
+		result.eClassifiers += c;
+	}
+}
+
+constructor ECORE::EClass::createWithOp(n : ECORE::EString, op : ECORE::EOperation) {
+	self.name := n;
+	self.eOperations += op;
+}
