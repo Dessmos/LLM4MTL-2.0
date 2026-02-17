@@ -15,10 +15,9 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 JAR_PATH = os.path.join(
     SCRIPT_DIR,
     "../../../../../"
-    "Reactions_Langauge_Parser",
-    "parser",
+    "ReactionParser",
     "target",
-    "tools.vitruv.reactionsparser.parser-0.1.0-SNAPSHOT-all.jar"
+    "reactionsparser.jar"
 )
 
 REACTIONS_RESPONSE_DIRECTORY = os.path.join(
@@ -46,10 +45,10 @@ def get_all_reactions_response():
     reactions_response_paths = [os.path.abspath(f) for f in glob.glob(os.path.join(search_path, '**/*.reactions'), recursive=True)]
     return reactions_response_paths
 
-def check_parsed_rate(input_reactions, output_xmi):
+def check_parsed_rate(input_reactions):
     if not os.path.isfile(JAR_PATH):
         raise FileNotFoundError(f"JAR not found: {JAR_PATH}")
-    result = subprocess.call(['java', '-jar', JAR_PATH, input_reactions, output_xmi, 'Workflows/n8n-docker/models'])
+    result = subprocess.call(['java', '-jar', JAR_PATH, input_reactions])
     return result == 0  # Return True if successful (exit code 0), False otherwise
 
 def extract_metadata_from_path(file_path):
@@ -71,7 +70,7 @@ def create_csv_report(output_csv='parsed_rate_report.csv'):
     csv_data = []
     for reaction_file in reactions_response_paths:
         llm, strategy = extract_metadata_from_path(reaction_file)
-        parsed = check_parsed_rate(reaction_file, 'output.xmi')
+        parsed = check_parsed_rate(reaction_file)
         print(f"Processed {reaction_file}: LLM={llm}, Strategy={strategy}, Parsed={parsed}")
         if llm and strategy:
             # For now, we'll mark as 'unknown' - update with actual parsing results
@@ -85,7 +84,7 @@ def create_csv_report(output_csv='parsed_rate_report.csv'):
     # Write to CSV
     if csv_data:
         with open(output_csv, 'w', newline='') as csvfile:
-            fieldnames = ['LLM', 'Strategy', 'Parsed']
+            fieldnames = ['ReactionFile', 'LLM', 'Strategy', 'Parsed']
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
             writer.writeheader()
             writer.writerows(csv_data)
