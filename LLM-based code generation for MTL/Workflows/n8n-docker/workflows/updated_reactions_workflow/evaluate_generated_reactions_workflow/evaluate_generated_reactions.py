@@ -210,7 +210,7 @@ def process_response_file_parallel(response_file):
             print(f"Warning: No corresponding reference found for {response_filename}")
         return None
 
-def create_similarity_report(output_csv='chrf_similarity_report.csv'):
+def create_similarity_report(output_csv='./results/similarity_chrf/chrf_similarity_report.csv'):
     """Generate CHRF similarity scores between responses and references.
     
     Creates a CSV with columns: LLM, Strategy, File, Score
