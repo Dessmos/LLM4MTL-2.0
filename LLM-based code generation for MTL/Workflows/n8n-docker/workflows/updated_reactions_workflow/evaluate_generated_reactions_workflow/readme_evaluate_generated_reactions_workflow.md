@@ -68,3 +68,15 @@ For a summary and significance tests, call:
 ```
 
 Inspect the results in `./results/similarity_chrf`. 
+
+### Evaluate pass1rate
+In this setting, the event **parsed** and **tests passed** corresponds to pass@1.
+
+In `./evaluate_pass1rate` its own readme can be found on how the results can be reproduced.
+
+For statistical evaluation call:
+
+````
+ python pass1rate_statistical_evaluation.py ./results/parsed_rate/parsed_rate_report.csv ./evaluate_pass1rate/test_matrix_report.csv --summary-out ./results/pass1rate/success_rate_pivot.csv --mcnemar-vs-baseline-out ./results/pass1rate/mcnemar_success_vs_baseline.csv --mcnemar-llm-pairwise-out ./results/pass1rate/mcnemar_success_llm_pairwise.csv
+```
+Inspect the results in `./results/pass1rate`
