@@ -1,0 +1,16 @@
+Strategy,LLM,N,MeanCHRF,MedianCHRF
+few_shot,claude-sonnet-4,12,88.4574495951,92.3064460754
+few_shot,gemini-2-5-pro,12,85.1962750753,88.3276519775
+few_shot,gpt-5,12,86.9384384155,90.1261024475
+few_shots_AND_grammar,claude-sonnet-4,12,86.6077295939,89.7514762878
+few_shots_AND_grammar,gemini-2-5-pro,12,87.8554808299,90.5011138916
+few_shots_AND_grammar,gpt-5,12,85.650285085,89.7236328125
+few_shots_AND_grammar_AND_helper,claude-sonnet-4,12,86.9422982534,89.8601951599
+few_shots_AND_grammar_AND_helper,gemini-2-5-pro,12,87.0245056152,89.4648742676
+few_shots_AND_grammar_AND_helper,gpt-5,12,86.4000867208,89.5918426514
+grammar,claude-sonnet-4,12,84.9876772563,89.0964775085
+grammar,gemini-2-5-pro,12,78.4624532064,77.7354125977
+grammar,gpt-5,12,80.1687679291,84.2266693115
+only_prompt,claude-sonnet-4,12,78.1184527079,79.6527786255
+only_prompt,gemini-2-5-pro,12,60.1238085429,61.1849269867
+only_prompt,gpt-5,12,62.1595389048,61.4782867432
