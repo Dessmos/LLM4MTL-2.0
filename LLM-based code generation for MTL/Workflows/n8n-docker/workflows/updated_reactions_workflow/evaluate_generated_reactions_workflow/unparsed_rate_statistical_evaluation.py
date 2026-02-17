@@ -314,7 +314,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     ap.add_argument("input_csv", type=Path, help="Input CSV file path")
     ap.add_argument("--pivot-out", type=Path, default=Path("parsed_rate_pivot.csv"),
                     help="Output CSV path for parsed-rate pivot (rows=strategy, cols=llm)")
-    ap.add_argument("--mcnemar-out", type=Path, default=Path("mcnemar_exact.csv"),
+    ap.add_argument("--mcnemar-strategy-pairwise-out", type=Path, default=Path("mcnemar_exact.csv"),
                     help="Output CSV path for exact McNemar results")
     ap.add_argument("--baseline", type=str, default=BASELINE_STRATEGY,
                     help='Baseline strategy name (default: "only_prompt")')
@@ -329,11 +329,11 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     rows = read_rows(args.input_csv)
     write_pivot_csv(rows, args.pivot_out)
-    write_mcnemar_csv(rows, args.mcnemar_out, baseline_strategy=args.baseline)
+    write_mcnemar_csv(rows, args.mcnemar_strategy_pairwise_out, baseline_strategy=args.baseline)
     write_llm_pairwise_within_strategy_csv(rows, args.mcnemar_llm_pairwise_out)
     print(f"Wrote LLM pairwise McNemar: {args.mcnemar_llm_pairwise_out}")
     print(f"Wrote pivot:   {args.pivot_out}")
-    print(f"Wrote McNemar: {args.mcnemar_out}")
+    print(f"Wrote McNemar: {args.mcnemar_strategy_pairwise_out}")
     return 0
 
 

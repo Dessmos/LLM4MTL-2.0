@@ -82,7 +82,7 @@ def process_reaction_file(reaction_file):
         }
     return None
 
-def create_csv_report(output_csv='parsed_rate_report.csv'):
+def create_csv_report(output_csv='./results/parsed_rate/parsed_rate_report.csv'):
     """Create CSV with LLM, Strategy, and parsed status for each reaction file."""
     get_all_reactions_response()
     
