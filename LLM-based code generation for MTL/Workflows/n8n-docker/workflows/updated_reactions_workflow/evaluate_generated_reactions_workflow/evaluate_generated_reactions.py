@@ -7,6 +7,7 @@ from pathlib import Path
 from fastchrf import aggregate_chrf, pairwise_chrf
 import numpy as np
 from concurrent.futures import ProcessPoolExecutor, as_completed
+import re
 
 
 
@@ -19,6 +20,7 @@ JAR_PATH = os.path.join(
     "target",
     "reactionsparser.jar"
 )
+RESULT_RE = re.compile(r"^RESULT\s+(.*?)\s+(\d+)\s*$")
 
 REACTIONS_RESPONSE_DIRECTORY = os.path.join(
     SCRIPT_DIR,
@@ -51,10 +53,52 @@ def get_all_reactions_response():
     return reactions_response_paths
 
 def check_parsed_rate(input_reactions):
+    """
+    Runs the reactions ANTLR parser JAR on one file.
+
+    Returns:
+        (parsed_ok, error_count)
+
+    parsed_ok = True if exit code == 0
+    error_count = number of syntax errors reported
+    """
     if not os.path.isfile(JAR_PATH):
         raise FileNotFoundError(f"JAR not found: {JAR_PATH}")
-    result = subprocess.call(['java', '-jar', JAR_PATH, input_reactions])
-    return result == 0  # Return True if successful (exit code 0), False otherwise
+    proc = subprocess.run(
+        ["java", "-jar", JAR_PATH, input_reactions],
+        capture_output=True,
+        text=True,
+    )
+    parsed_ok = (proc.returncode == 0)
+    output_lines = (proc.stdout + "\n" + proc.stderr).splitlines()
+    error_count = None
+    for line in output_lines:
+        m = RESULT_RE.match(line.strip())
+        if m:
+            error_count = int(m.group(2))
+            break
+    if error_count is None:
+        error_count = 0 if parsed_ok else -1
+
+    return parsed_ok, error_count
+
+
+def count_lines_of_code(file_path):
+    """
+    Count non-empty lines in the .reactions file.
+    """
+    try:
+        with open(file_path, "r", encoding="utf-8") as f:
+            lines = f.readlines()
+
+        # Count only non-empty lines
+        loc = sum(1 for line in lines if line.strip() != "")
+        return loc
+
+    except Exception as e:
+        print(f"Error counting LOC for {file_path}: {e}")
+        return 0
+
 
 def extract_metadata_from_path(file_path):
     """Extract LLM and Strategy from the file path."""
@@ -71,14 +115,15 @@ def extract_metadata_from_path(file_path):
 def process_reaction_file(reaction_file):
     """Module-level function for parallel processing of reaction files."""
     llm, strategy = extract_metadata_from_path(reaction_file)
-    parsed = check_parsed_rate(reaction_file, f'{llm}_{strategy}_output.xmi')
+    parsed, error_count = check_parsed_rate(reaction_file, f'{llm}_{strategy}_output.xmi')
     print(f"Processed {reaction_file}: LLM={llm}, Strategy={strategy}, Parsed={parsed}")
     if llm and strategy:
         return {
             'ReactionFile': reaction_file,
             'LLM': llm,
             'Strategy': strategy,
-            'Parsed': parsed
+            'Parsed': parsed,
+            'Error_Count': error_count
         }
     return None
 
@@ -89,21 +134,26 @@ def create_csv_report(output_csv='./results/parsed_rate/parsed_rate_report.csv')
     csv_data = []
     for reaction_file in reactions_response_paths:
         llm, strategy = extract_metadata_from_path(reaction_file)
-        parsed = check_parsed_rate(reaction_file)
-        print(f"Processed {reaction_file}: LLM={llm}, Strategy={strategy}, Parsed={parsed}")
+        parsed, error_count = check_parsed_rate(reaction_file)
+        loc = count_lines_of_code(reaction_file)
+        errors_per_loc = error_count / loc if loc > 0 else ""
+        print(f"Processed {reaction_file}: LLM={llm}, Strategy={strategy}, Parsed={parsed}, Error_Count={error_count}, LinesOfCode={loc}, ErrorsPerLic={errors_per_loc}")
         if llm and strategy:
             # For now, we'll mark as 'unknown' - update with actual parsing results
             csv_data.append({
                 'ReactionFile': reaction_file,
                 'LLM': llm,
                 'Strategy': strategy,
-                'Parsed': parsed
+                'Parsed': parsed,
+                'Error_Count': error_count,
+                'NumberOfLinesOfCode': loc,
+                'ErrorsPerLineOfCode': errors_per_loc
             })
     
     # Write to CSV
     if csv_data:
         with open(output_csv, 'w', newline='') as csvfile:
-            fieldnames = ['ReactionFile', 'LLM', 'Strategy', 'Parsed']
+            fieldnames = ['ReactionFile', 'LLM', 'Strategy', 'Parsed', 'Error_Count', 'NumberOfLinesOfCode', 'ErrorsPerLineOfCode']
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
             writer.writeheader()
             writer.writerows(csv_data)
