@@ -1,6 +1,7 @@
 package tools.vitruv.reactionsparser;
 
 import java.io.IOException;
+
 import tools.vitruv.reactionsparser.parser.PureAntlrParser;
 
 /** Main class for running the Reactions parser from command line. */
@@ -32,6 +33,7 @@ public class Main {
             System.err.println("  " + error);
           }
           totalErrors += result.getErrorCount();
+          System.out.println("RESULT\t" + filePath + "\t" + result.getErrorCount());
           filesWithErrors++;
         } else {
           System.out.println("✓ No syntax errors found");
