@@ -1,0 +1,13 @@
+LLM,Strategy,BaselineStrategy,PairedN,a_both_false,b_baseline_true_strategy_false,c_baseline_false_strategy_true,d_both_true,ExactMcNemarP
+claude-sonnet-4,few_shot,only_prompt,12,4,0,8,0,0.0078125
+claude-sonnet-4,few_shots_AND_grammar,only_prompt,12,2,0,10,0,0.001953125
+claude-sonnet-4,few_shots_AND_grammar_AND_helper,only_prompt,12,2,0,10,0,0.001953125
+claude-sonnet-4,grammar,only_prompt,12,4,0,8,0,0.0078125
+gemini-2-5-pro,few_shot,only_prompt,12,9,0,3,0,0.25
+gemini-2-5-pro,few_shots_AND_grammar,only_prompt,12,5,0,7,0,0.015625
+gemini-2-5-pro,few_shots_AND_grammar_AND_helper,only_prompt,12,6,0,6,0,0.03125
+gemini-2-5-pro,grammar,only_prompt,12,2,0,10,0,0.001953125
+gpt-5,few_shot,only_prompt,12,7,0,5,0,0.0625
+gpt-5,few_shots_AND_grammar,only_prompt,12,3,0,9,0,0.00390625
+gpt-5,few_shots_AND_grammar_AND_helper,only_prompt,12,1,0,11,0,0.0009765625
+gpt-5,grammar,only_prompt,12,11,0,1,0,1

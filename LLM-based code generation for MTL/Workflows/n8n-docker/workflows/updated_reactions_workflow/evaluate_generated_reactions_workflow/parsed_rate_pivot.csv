@@ -1,0 +1,6 @@
+Strategy (UnparsedRate),claude-sonnet-4,gemini-2-5-pro,gpt-5
+few_shot,0.3333333333,0.75,0.5833333333
+few_shots_AND_grammar,0.1666666667,0.4166666667,0.25
+few_shots_AND_grammar_AND_helper,0.1666666667,0.5,0.0833333333
+grammar,0.3333333333,0.1666666667,0.9166666667
+only_prompt,1.0,1.0,1.0
