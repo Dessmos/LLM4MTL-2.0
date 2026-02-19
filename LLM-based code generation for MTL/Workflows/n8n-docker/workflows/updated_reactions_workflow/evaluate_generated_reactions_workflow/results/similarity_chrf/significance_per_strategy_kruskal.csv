@@ -1,0 +1,6 @@
+Strategy,NumLLMs,TotalN,LLMsIncluded,KruskalPValue
+few_shot,3,36,"claude-sonnet-4,gemini-2-5-pro,gpt-5",0.33907052351
+few_shots_AND_grammar,3,36,"claude-sonnet-4,gemini-2-5-pro,gpt-5",0.727691570052
+few_shots_AND_grammar_AND_helper,3,36,"claude-sonnet-4,gemini-2-5-pro,gpt-5",0.95520319961
+grammar,3,36,"claude-sonnet-4,gemini-2-5-pro,gpt-5",0.211230609817
+only_prompt,3,36,"claude-sonnet-4,gemini-2-5-pro,gpt-5",0.000102984616946

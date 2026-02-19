@@ -1,0 +1,6 @@
+Strategy,NumLLMs,PairedN,CochranQ_PValue
+few_shot,3,12,0.0223707718562
+few_shots_AND_grammar,3,12,0.0969719678644
+few_shots_AND_grammar_AND_helper,3,12,0.0149955768205
+grammar,3,12,0.00376001123583
+only_prompt,3,12,1

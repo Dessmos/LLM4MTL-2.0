@@ -6,7 +6,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Iterable, List, Tuple, Optional
-from statsmodels.stats.contingency_tables import mcnemar
+from statsmodels.stats.contingency_tables import mcnemar, cochrans_q
 
 
 BASELINE_STRATEGY = "only_prompt"
@@ -309,6 +309,82 @@ def write_llm_pairwise_within_strategy_csv(
                     )
 
 
+def write_cochran_q_within_strategy_csv(
+    rows: Iterable[Row],
+    out_csv: Path,
+) -> None:
+    """
+    For each strategy, compare ALL LLMs jointly using Cochran's Q test
+    on the UNPARSED event (not parsed).
+
+      - binary outcome (unparsed)
+      - repeated measures (paired tasks)
+      - requires >= 3 LLMs
+
+    Output:
+      Strategy, NumLLMs, PairedN, CochranQ_PValue
+    """
+    # Map: strategy -> llm -> task_id -> unparsed_bool
+    data: Dict[str, Dict[str, Dict[str, bool]]] = defaultdict(lambda: defaultdict(dict))
+    strategies = set()
+    llms = set()
+
+    for row in rows:
+        strategies.add(row.strategy)
+        llms.add(row.llm)
+        data[row.strategy][row.llm][row.task_id] = (not row.parsed)
+
+    strategy_list = sorted(strategies)
+    llm_list = sorted(llms)
+
+    out_csv.parent.mkdir(parents=True, exist_ok=True)
+    with out_csv.open("w", newline="", encoding="utf-8") as f:
+        w = csv.writer(f)
+        w.writerow(["Strategy", "NumLLMs", "PairedN", "CochranQ_PValue"])
+
+        for strat in strategy_list:
+            llms_here = sorted([llm for llm in llm_list if data[strat].get(llm)])
+            if len(llms_here) < 3:
+                print("Number of LLMs (groups) was below 3. Crochan test requires at least 3 groups.")
+                continue
+
+            common_tasks = None
+            for llm in llms_here:
+                task_ids = set(data[strat][llm].keys())
+                common_tasks = task_ids if common_tasks is None else common_tasks & task_ids
+
+            common_tasks = sorted(common_tasks or [])
+
+            if not common_tasks:
+                print("No common tasks found.")
+                continue
+
+            # Build matrix: rows = tasks, cols = llms
+            # Each entry is 0/1 success
+            matrix = []
+            for tid in common_tasks:
+                row_vals = [int(data[strat][llm][tid]) for llm in llms_here]
+                matrix.append(row_vals)
+
+            # Degeneracy checks
+            any_discordant_task = any(len(set(row_vals)) > 1 for row_vals in matrix)
+            all_values = [v for row_vals in matrix for v in row_vals]
+            all_constant = (min(all_values) == max(all_values))
+
+            if (not any_discordant_task) or all_constant:
+                # No evidence of differences (and Q statistic degenerates)
+                p_str = "1"
+            else:
+                try:
+                    res = cochrans_q(matrix)
+                    p_str = f"{float(res.pvalue):.12g}"
+                except Exception:
+                    p_str = ""
+
+            w.writerow([strat, len(llms_here), len(common_tasks), p_str])
+
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     ap = argparse.ArgumentParser(description="Parsed-rate pivot + exact McNemar tests vs baseline strategy.")
     ap.add_argument("input_csv", type=Path, help="Input CSV file path")
@@ -324,6 +400,12 @@ def main(argv: Optional[List[str]] = None) -> int:
         default=Path("mcnemar_exact_llm_pairwise_within_strategy.csv"),
         help="Output CSV path for exact McNemar results comparing LLMs pairwise within each strategy",
     )
+    ap.add_argument(
+        "--cochranq-out",
+        type=Path,
+        default=Path("cochran_q_unparsed_within_strategy.csv"),
+        help="Output CSV: Cochran's Q across all LLMs within each strategy (UNPARSED event)",
+    )
 
     args = ap.parse_args(argv)
 
@@ -331,9 +413,11 @@ def main(argv: Optional[List[str]] = None) -> int:
     write_pivot_csv(rows, args.pivot_out)
     write_mcnemar_csv(rows, args.mcnemar_strategy_pairwise_out, baseline_strategy=args.baseline)
     write_llm_pairwise_within_strategy_csv(rows, args.mcnemar_llm_pairwise_out)
+    write_cochran_q_within_strategy_csv(rows, args.cochranq_out)
     print(f"Wrote LLM pairwise McNemar: {args.mcnemar_llm_pairwise_out}")
     print(f"Wrote pivot:   {args.pivot_out}")
     print(f"Wrote McNemar: {args.mcnemar_strategy_pairwise_out}")
+    print(f"Wrote CochranQ: {args.cochranq_out}")
     return 0
 
 

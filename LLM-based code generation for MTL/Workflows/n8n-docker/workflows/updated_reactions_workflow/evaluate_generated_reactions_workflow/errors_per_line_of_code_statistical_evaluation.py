@@ -9,7 +9,7 @@ from statistics import median
 from typing import Dict, Iterable, List, Tuple, Optional
 
 import numpy as np
-from scipy.stats import wilcoxon
+from scipy.stats import wilcoxon, kruskal
 
 
 BASELINE_STRATEGY = "only_prompt"
@@ -281,6 +281,57 @@ def write_llm_pairwise_within_strategy_wilcoxon_csv(
                     )
 
 
+def write_kruskal_within_strategy_csv(
+    rows: Iterable[Row],
+    out_csv: Path,
+) -> None:
+    """
+    For each strategy, compare ErrorsPerLineOfCode distributions across LLMs using Kruskal–Wallis.
+
+    H0: all LLMs have the same distribution.
+    Requires >=2 LLM groups with at least 1 observation each.
+    """
+    # Map: strategy -> llm -> list[errors_per_loc]
+    data: Dict[str, Dict[str, List[float]]] = defaultdict(lambda: defaultdict(list))
+
+    strategies = set()
+    for row in rows:
+        strategies.add(row.strategy)
+        data[row.strategy][row.llm].append(row.errors_per_loc)
+
+    strategy_list = sorted(strategies)
+
+    out_csv.parent.mkdir(parents=True, exist_ok=True)
+    with out_csv.open("w", newline="", encoding="utf-8") as f:
+        w = csv.writer(f)
+        w.writerow(["Strategy", "NumLLMs", "TotalN", "LLMsIncluded", "KruskalPValue"])
+
+        for strategy in strategy_list:
+            groups: List[Tuple[str, List[float]]] = []
+            for llm, xs in data[strategy].items():
+                if xs:
+                    groups.append((llm, xs))
+
+            llms_included = ",".join(sorted([g[0] for g in groups]))
+            total_n = sum(len(g[1]) for g in groups)
+
+            if len(groups) < 2:
+                # Not enough groups to run Kruskal–Wallis
+                w.writerow([strategy, len(groups), total_n, llms_included, ""])
+                continue
+
+            arrays = [np.array(xs, dtype=float) for _, xs in groups]
+
+            try:
+                res = kruskal(*arrays)
+                p_str = f"{float(res.pvalue):.12g}"
+            except Exception:
+                p_str = ""
+
+            w.writerow([strategy, len(groups), total_n, llms_included, p_str])
+
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     ap = argparse.ArgumentParser(
         description="Errors-per-LOC summaries + paired Wilcoxon tests vs baseline and pairwise across LLMs."
@@ -315,6 +366,13 @@ def main(argv: Optional[List[str]] = None) -> int:
         help='Baseline strategy name (default: "only_prompt")',
     )
 
+    ap.add_argument(
+        "--kruskal-within-strategy-out",
+        type=Path,
+        default=Path("errors_per_loc_kruskal_within_strategy.csv"),
+        help="Output CSV: Kruskal–Wallis p-values across LLMs within each strategy (ErrorsPerLineOfCode)",
+    )
+
     args = ap.parse_args(argv)
 
     rows = read_rows(args.input_csv)
@@ -322,10 +380,12 @@ def main(argv: Optional[List[str]] = None) -> int:
     write_eloc_summary_csv(rows, args.eloc_summary_out)
     write_wilcoxon_vs_baseline_csv(rows, args.wilcoxon_vs_baseline_out, baseline_strategy=args.baseline)
     write_llm_pairwise_within_strategy_wilcoxon_csv(rows, args.wilcoxon_llm_pairwise_out)
+    write_kruskal_within_strategy_csv(rows, args.kruskal_within_strategy_out)
 
     print(f"Wrote summary:  {args.eloc_summary_out}")
     print(f"Wrote baseline: {args.wilcoxon_vs_baseline_out}")
     print(f"Wrote pairwise: {args.wilcoxon_llm_pairwise_out}")
+    print(f"Wrote kruskal:  {args.kruskal_within_strategy_out}")
     return 0
 
 

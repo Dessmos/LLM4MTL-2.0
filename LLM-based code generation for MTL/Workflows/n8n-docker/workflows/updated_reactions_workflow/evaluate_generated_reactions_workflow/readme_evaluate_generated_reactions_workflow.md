@@ -37,7 +37,7 @@ The ANTLR parser is used for that.
 To retreive unparsed rates for each strategy and significance tests, call:
 
 ```
-python unparsed_rate_statistical_evaluation.py ./results/parsed_rate/parsed_rate_report.csv --pivot-out ./results/parsed_rate/parsed_rate_pivot.csv --mcnemar-strategy-pairwise-out ./results/parsed_rate/mcnemar_exact_strategies_compared_against_baseline.csv --mcnemar-llm-pairwise-out ./results/parsed_rate/mcnemar_exact_llms_pairwise_compared.csv
+python unparsed_rate_statistical_evaluation.py ./results/parsed_rate/parsed_rate_report.csv --pivot-out ./results/parsed_rate/parsed_rate_pivot.csv --mcnemar-strategy-pairwise-out ./results/parsed_rate/mcnemar_exact_strategies_compared_against_baseline.csv --mcnemar-llm-pairwise-out ./results/parsed_rate/mcnemar_exact_llms_pairwise_compared.csv --cochranq-out ./results/parsed_rate/cochranq_unparsed_across_llms.csv
 ```
 
 Inspect the results in `./results/parsed_rate`. 
@@ -53,7 +53,8 @@ python errors_per_line_of_code_statistical_evaluation.py \
   ./results/parsed_rate/parsed_rate_report.csv \
   --eloc-summary-out ./results/errors_per_line_of_code/errors_per_line_of_code_summary.csv \
   --wilcoxon-vs-baseline-out ./results/errors_per_line_of_code/errors_per_line_of_code_significance_compare_against_baseline_strategy.csv \
-  --wilcoxon-llm-pairwise-out ./results/errors_per_line_of_code/errors_per_line_of_code_significance_compare_each_llm_pairwise.csv
+  --wilcoxon-llm-pairwise-out ./results/errors_per_line_of_code/errors_per_line_of_code_significance_compare_each_llm_pairwise.csv \
+  --kruskal-within-strategy-out ./results/errors_per_line_of_code/significance_per_strategy_kruskal.csv
 ```
 
 Inspect the results in `./results/errors_per_line_of_code`. 
@@ -64,7 +65,7 @@ Call `evalute_generated_reactions.py similarity` to retreive a report `./results
 For a summary and significance tests, call:
 
 ```
- python chrf_similarity_statistical_evaluation.py ./results/similarity_chrf/chrf_similarity_report.csv --chrf-summary-out ./results/similarity_chrf/chrf_summary.csv --wilcoxon-vs-baseline-out ./results/similarity_chrf/chrf_significance_compare_against_baseline_strategy.csv --wilcoxon-llm-pairwise-out ./results/similarity_chrf/chrf_significance_compare_each_llm_pairwise.csv
+ python chrf_similarity_statistical_evaluation.py ./results/similarity_chrf/chrf_similarity_report.csv --chrf-summary-out ./results/similarity_chrf/chrf_summary.csv --wilcoxon-vs-baseline-out ./results/similarity_chrf/chrf_significance_compare_against_baseline_strategy.csv --wilcoxon-llm-pairwise-out ./results/similarity_chrf/chrf_significance_compare_each_llm_pairwise.csv --kruskal-within-strategy-out ./results/similarity_chrf/significance_per_strategy_kruskal.csv
 ```
 
 Inspect the results in `./results/similarity_chrf`. 
@@ -77,6 +78,6 @@ In `./evaluate_pass1rate` its own readme can be found on how the results can be 
 For statistical evaluation call:
 
 ````
- python pass1rate_statistical_evaluation.py ./results/parsed_rate/parsed_rate_report.csv ./evaluate_pass1rate/test_matrix_report.csv --summary-out ./results/pass1rate/success_rate_pivot.csv --mcnemar-vs-baseline-out ./results/pass1rate/mcnemar_success_vs_baseline.csv --mcnemar-llm-pairwise-out ./results/pass1rate/mcnemar_success_llm_pairwise.csv
+ python pass1rate_statistical_evaluation.py ./results/parsed_rate/parsed_rate_report.csv ./evaluate_pass1rate/test_matrix_report.csv --summary-out ./results/pass1rate/success_rate_pivot.csv --mcnemar-vs-baseline-out ./results/pass1rate/mcnemar_success_vs_baseline.csv --mcnemar-llm-pairwise-out ./results/pass1rate/mcnemar_success_llm_pairwise.csv --cochranq-out ./results/pass1rate/crochanq_across_all_llms.csv
 ```
 Inspect the results in `./results/pass1rate`
