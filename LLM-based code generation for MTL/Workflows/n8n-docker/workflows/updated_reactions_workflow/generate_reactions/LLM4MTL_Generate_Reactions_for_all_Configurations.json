@@ -1,0 +1,1138 @@
+{
+  "name": "CartesianProduct",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -2512,
+        832
+      ],
+      "id": "de70b996-48af-41ff-ae0d-dac4782a807c",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "fileSelector": "=/home/node/.n8n-files/examples/reactions/Examples.txt",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        -2192,
+        480
+      ],
+      "id": "f888a863-c266-43cf-aa22-6683aa74aa66",
+      "name": "Read few shot examples",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "operation": "write",
+        "fileName": "=/home/node/.n8n-files/snippets/reactions_language/responses/{{ $json.llmName }}/{{ $json.strategyName }}/{{ $json.baseName }}.reactions",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        1008,
+        672
+      ],
+      "id": "b290e890-8092-4dd7-a9a7-0c171070cb2c",
+      "name": "Write response to disk"
+    },
+    {
+      "parameters": {
+        "operation": "toText",
+        "sourceProperty": "text",
+        "binaryPropertyName": "=data",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        448,
+        784
+      ],
+      "id": "8668d43e-b1fd-4dcf-82cf-cbad4ff1c45e",
+      "name": "Convert response to File",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "operation": "text",
+        "destinationKey": "examples",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        -2000,
+        480
+      ],
+      "id": "27a88738-0c93-47a8-87f8-4b9e443ac2ab",
+      "name": "Extract text from examples file"
+    },
+    {
+      "parameters": {
+        "fileSelector": "/home/node/.n8n-files/grammar/reactions/EBNF.txt",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        -2192,
+        688
+      ],
+      "id": "b1f63c84-1eeb-4beb-b707-abfa774b09fa",
+      "name": "Read Grammar"
+    },
+    {
+      "parameters": {
+        "operation": "text",
+        "destinationKey": "grammar",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        -2000,
+        688
+      ],
+      "id": "4debadb9-60da-4ec5-9891-18c05698dcac",
+      "name": "Extract text from grammar"
+    },
+    {
+      "parameters": {
+        "fileSelector": "=/home/node/.n8n-files/snippets/reactions_language/prompts/*",
+        "options": {
+          "dataPropertyName": "data"
+        }
+      },
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        -2192,
+        1088
+      ],
+      "id": "d273ac0d-50d9-4f37-a62e-7b44bd5adae1",
+      "name": "Read prompt files",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "operation": "text",
+        "destinationKey": "prompt",
+        "options": {
+          "keepSource": "json"
+        }
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        -432,
+        784
+      ],
+      "id": "459a6772-3083-450b-a4de-a263fde810b3",
+      "name": "Extract text from prompt file",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "9773c101-2aba-4290-bd38-0f4618b76ca5",
+              "name": "baseName",
+              "value": "={{$binary.data.fileName.split('.').slice(0,-1).join('.')}}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -656,
+        784
+      ],
+      "id": "f422b242-6423-422e-8b74-93d593cb2c1f",
+      "name": "Save reaction name"
+    },
+    {
+      "parameters": {
+        "fileSelector": "=/home/node/.n8n-files/models/*.ecore",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        -2192,
+        272
+      ],
+      "id": "a510baf8-5e5c-4be6-b0ad-56d2d659c0c9",
+      "name": "Read model files",
+      "alwaysOutputData": true,
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "operation": "text",
+        "destinationKey": "model",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        -2000,
+        272
+      ],
+      "id": "c236bbae-a9e1-4136-86ae-0eeaa80124df",
+      "name": "Extract text from model files"
+    },
+    {
+      "parameters": {
+        "fileSelector": "/home/node/.n8n-files/helper_methods/reactions/*",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        -2192,
+        896
+      ],
+      "id": "7695670b-4991-4d6e-ad9f-da78fcedb840",
+      "name": "Read helper methods"
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-2.5-pro",
+        "options": {
+          "temperature": 0.2
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        144,
+        928
+      ],
+      "id": "e45fe53f-0b62-4b91-93f7-a6276f1fb7d6",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "kVN2o2JuGgaIQobc",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "claude-sonnet-4-20250514",
+          "mode": "list",
+          "cachedResultName": "Claude Sonnet 4"
+        },
+        "options": {
+          "temperature": 0.2
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.3,
+      "position": [
+        144,
+        1248
+      ],
+      "id": "689ce4d2-836d-4ee6-9b32-17269a400168",
+      "name": "Anthropic Chat Model",
+      "credentials": {
+        "anthropicApi": {
+          "id": "6NIjcn9tUu98BMC2",
+          "name": "Anthropic account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fieldsToSummarize": {
+          "values": [
+            {
+              "aggregation": "concatenate",
+              "field": "model",
+              "separateBy": "\n"
+            },
+            {
+              "aggregation": "concatenate",
+              "field": "model",
+              "includeEmpty": "=",
+              "separateBy": "\n"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.summarize",
+      "typeVersion": 1.1,
+      "position": [
+        -1840,
+        272
+      ],
+      "id": "f3794f1d-93f8-4fa4-9534-a29973741859",
+      "name": "Summarize"
+    },
+    {
+      "parameters": {
+        "operation": "text",
+        "destinationKey": "helper_methods",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        -2000,
+        896
+      ],
+      "id": "b5c9240d-94ba-4f03-8d61-4506a2f54d8f",
+      "name": "Extract text from helper methods"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-5",
+          "mode": "list",
+          "cachedResultName": "gpt-5"
+        },
+        "options": {
+          "timeout": 600000
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        144,
+        640
+      ],
+      "id": "2578f4e7-58ab-4e09-b059-0ca1f92eaa67",
+      "name": "OpenAI Chat Model",
+      "credentials": {
+        "openAiApi": {
+          "id": "tO8ZWLpFlc8MsamN",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "{\n  \"strategies\": [\n    {\n      \"name\": \"only_prompt\",\n      \"Few_shot\": false,\n      \"Grammar\": false,\n      \"Helper_methods\": false\n    },\n    {\n      \"name\": \"grammar\",\n      \"Few_shot\": false,\n      \"Grammar\": true,\n      \"Helper_methods\": false\n    },\n    {\n      \"name\": \"few_shot\",\n      \"Few_shot\": true,\n      \"Grammar\": false,\n      \"Helper_methods\": false\n    },\n    {\n      \"name\": \"few_shot_AND_grammar\",\n      \"Few_shot\": true,\n      \"Grammar\": true,\n      \"Helper_methods\": false\n    },\n    {\n      \"name\": \"few_shot_AND_grammar_AND_helper\",\n      \"Few_shot\": true,\n      \"Grammar\": true,\n      \"Helper_methods\": true\n    }\n  ]\n}\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -2192,
+        1280
+      ],
+      "id": "a747b38f-da6f-4a41-830a-ec0cc898fa02",
+      "name": "Define Strategies"
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "{\n  \"llms\": [\n    {\n      \"name\": \"claude-sonnet-4\",\n      \"node\": \"Anthropic Chat Model\"\n    },\n    {\n      \"name\": \"gemini-2.5-pro\",\n      \"node\": \"Google Gemini Chat Model\"\n    }\n  ]\n}\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -2192,
+        1440
+      ],
+      "id": "a4771572-12c3-45ac-ad3c-70bbb831a1f0",
+      "name": "Define LLM models to use"
+    },
+    {
+      "parameters": {
+        "jsCode": "const strategies = $json.strategies;\nconst llms = $json.llms;\n\nconst combinations = [];\n\nfor (const strategy of strategies) {\n  for (const llm of llms) {\n    combinations.push({\n      strategyName: strategy.name,\n      Few_shot: strategy.Few_shot,\n      Grammar: strategy.Grammar,\n      Helper_methods: strategy.Helper_methods,\n      llmName: llm.name,\n      llmNode: llm.node\n    });\n  }\n}\n\nreturn combinations.map(c => ({ json: c }));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1840,
+        1360
+      ],
+      "id": "556ddcfa-7032-4e98-bfed-b9da5ca04f51",
+      "name": "Build Matrix"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -2000,
+        1360
+      ],
+      "id": "ab3d158e-7d49-4d6b-96f3-3bb3d174e9fb",
+      "name": "Merge-Strategies-and-LLMs"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "5f91944b-1581-4c2c-86a5-1efe06962206",
+              "leftValue": "={{ $json.llmName }}",
+              "rightValue": "gemini-2.5-pro",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -224,
+        784
+      ],
+      "id": "84f0a646-2b84-4341-a426-d14388d58471",
+      "name": "If gemini-2.5-pro"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "77c37ae3-6c12-4998-93b3-f779cbc6bd6a",
+              "leftValue": "={{$json.llmName}}",
+              "rightValue": "claude-sonnet-4",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -160,
+        1104
+      ],
+      "id": "42c35abb-e12f-4f98-b010-9f197c89d388",
+      "name": "If claude-sonnet-4"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "70116f15-bfe8-48b5-8d50-0dbb6df2c6e6",
+              "leftValue": "={{$json.llmName}}",
+              "rightValue": "gpt-5",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -176,
+        496
+      ],
+      "id": "fef8b418-4eac-411e-ac1f-27ef211f79bc",
+      "name": "If gpt-5"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.prompt }}\n\n-- End of request.\nHere are the models:\n{{ $json.concatenated_model }}\n\nThe models are located here:\n\"http://vitruv.tools/methodologisttemplate/[modelname]\"\n\n{{ $json.Few_shot ? \"Here are some examples as guideline:\\n\" + $('Extract text from examples file').item.json.examples : \"\" }}\n\n\n{{ $json.Grammar ? \"Here is the grammar of the Language:\\n\" + $('Extract text from grammar').item.json.grammar : \"\"}}\n\n{{ $json.Helper_methods ? \"Here are helper methods you can use:\\n\" + $('Extract text from helper methods').item.json.helper_methods : \"\"}}",
+        "messages": {
+          "messageValues": [
+            {
+              "message": "You are an expert developer for the **Reactions Language**\n(model-transformation DSL).  \nYour job is to translate the user’s natural-language specification into\na complete, syntactically valid .reactions file.\n\nRules  \n1. Follow the DSL grammar exactly (imports, transformation block,\n   reactions, routines, guards, create/update sections, persistence\n   paths, correspondence links, etc.).  \n2. Use the transformation / reaction / routine names provided by the\n   user whenever they are specified.  \n3. If a name is missing, invent a concise, CamelCase name that matches\n   the intent.  \n4. Use as much Reactions Language as possible and use xtend only when necessary  \n5. Do **not** wrap it in Markdown fences, and do **not** add commentary,\n   explanations, or blank lines beyond what the language requires."
+            }
+          ]
+        },
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.7,
+      "position": [
+        144,
+        480
+      ],
+      "id": "c1d2a7c6-c1a1-439b-a38d-d71f1af8aa45",
+      "name": "(Re-)Generate code1",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.prompt }}\n\n-- End of request.\nHere are the models:\n{{ $json.concatenated_model }}\n\nThe models are located here:\n\"http://vitruv.tools/methodologisttemplate/[modelname]\"\n\n{{ $json.Few_shot ? \"Here are some examples as guideline:\\n\" + $('Extract text from examples file').item.json.examples : \"\" }}\n\n\n{{ $json.Grammar ? \"Here is the grammar of the Language:\\n\" + $('Extract text from grammar').item.json.grammar : \"\"}}\n\n{{ $json.Helper_methods ? \"Here are helper methods you can use:\\n\" + $('Extract text from helper methods').item.json.helper_methods : \"\"}}",
+        "messages": {
+          "messageValues": [
+            {
+              "message": "You are an expert developer for the **Reactions Language**\n(model-transformation DSL).  \nYour job is to translate the user’s natural-language specification into\na complete, syntactically valid .reactions file.\n\nRules  \n1. Follow the DSL grammar exactly (imports, transformation block,\n   reactions, routines, guards, create/update sections, persistence\n   paths, correspondence links, etc.).  \n2. Use the transformation / reaction / routine names provided by the\n   user whenever they are specified.  \n3. If a name is missing, invent a concise, CamelCase name that matches\n   the intent.  \n4. Use as much Reactions Language as possible and use xtend only when necessary  \n5. Do **not** wrap it in Markdown fences, and do **not** add commentary,\n   explanations, or blank lines beyond what the language requires."
+            }
+          ]
+        },
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.7,
+      "position": [
+        144,
+        1088
+      ],
+      "id": "754b837a-f4eb-49fa-bf53-dc7935d8f309",
+      "name": "(Re-)Generate code3"
+    },
+    {
+      "parameters": {
+        "jsCode": "const promptItems = $items(\"Read prompt files\", 0);   // keep binary + json\nconst configs = $items(\"Build Matrix\", 0).map(i => i.json);\n\nconst out = [];\n\nfor (const pItem of promptItems) {\n  for (const c of configs) {\n    out.push({\n      json: {\n        ...pItem.json,   // mimeType, fileName, etc.\n        ...c             // llmName, strategyName, flags...\n      },\n      binary: pItem.binary // <-- IMPORTANT: carry the file content forward\n    });\n  }\n}\n\nreturn out;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1088,
+        784
+      ],
+      "id": "8cdb4625-e4f3-4f8d-af15-4403f8f74f47",
+      "name": "BuildJobs"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "numberInputs": 4,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -1504,
+        544
+      ],
+      "id": "349ea2eb-cd34-4763-821b-31f4e9812516",
+      "name": "Static-Files-Ready"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "99078571-0532-46d4-bea9-336dc4b49a8c",
+              "name": "concatenated_model",
+              "value": "={{$items(\"Summarize\")[0].json.concatenated_model}}",
+              "type": "string"
+            },
+            {
+              "id": "24da7547-87f6-4a18-b474-893af7a11dc0",
+              "name": "examples_all",
+              "value": "={{$items(\"Extract text from examples file\")[0].json.examples}}",
+              "type": "string"
+            },
+            {
+              "id": "d117b2e1-df38-47dd-ad4e-3b314cec597e",
+              "name": "grammar_all",
+              "value": "={{$items(\"Extract text from grammar\")[0].json.grammar}}",
+              "type": "string"
+            },
+            {
+              "id": "32f642ad-30f8-4448-9815-a3e71b10c55b",
+              "name": "helper_methods_all",
+              "value": "={{$items(\"Extract text from helper methods\")[0].json.helper_methods}}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -880,
+        784
+      ],
+      "id": "0525bdcf-319c-4352-b78f-e1c6475b0401",
+      "name": "Update-Structure"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "numberInputs": 3,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -1296,
+        768
+      ],
+      "id": "0ce833a7-120f-4174-ad2d-cc23c43cfa0a",
+      "name": "Combine"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.prompt }}\n\n-- End of request.\nHere are the models:\n{{ $json.concatenated_model }}\n\nThe models are located here:\n\"http://vitruv.tools/methodologisttemplate/[modelname]\"\n\n{{ $json.Few_shot ? \"Here are some examples as guideline:\\n\" + $('Extract text from examples file').item.json.examples : \"\" }}\n\n\n{{ $json.Grammar ? \"Here is the grammar of the Language:\\n\" + $('Extract text from grammar').item.json.grammar : \"\"}}\n\n{{ $json.Helper_methods ? \"Here are helper methods you can use:\\n\" + $('Extract text from helper methods').item.json.helper_methods : \"\"}}",
+        "messages": {
+          "messageValues": [
+            {
+              "message": "You are an expert developer for the **Reactions Language**\n(model-transformation DSL).  \nYour job is to translate the user’s natural-language specification into\na complete, syntactically valid .reactions file.\n\nRules  \n1. Follow the DSL grammar exactly (imports, transformation block,\n   reactions, routines, guards, create/update sections, persistence\n   paths, correspondence links, etc.).  \n2. Use the transformation / reaction / routine names provided by the\n   user whenever they are specified.  \n3. If a name is missing, invent a concise, CamelCase name that matches\n   the intent.  \n4. Use as much Reactions Language as possible and use xtend only when necessary  \n5. Do **not** wrap it in Markdown fences, and do **not** add commentary,\n   explanations, or blank lines beyond what the language requires."
+            }
+          ]
+        },
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.7,
+      "position": [
+        96,
+        784
+      ],
+      "id": "df177471-8fac-4745-b29a-7b616d138f67",
+      "name": "(Re-)Generate Code2",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        704,
+        704
+      ],
+      "id": "f09f252f-57f4-42c1-be70-79163f76ba65",
+      "name": "MergeGemini"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        704,
+        352
+      ],
+      "id": "4c43787e-698d-43a8-9133-afa8276c1227",
+      "name": "MergeGPT-5"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        704,
+        992
+      ],
+      "id": "9be9f5ee-a90b-4de6-b87b-52586ed8d8b1",
+      "name": "MergeClaude"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Read prompt files",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Define Strategies",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Define LLM models to use",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Read model files",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Read few shot examples",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Read Grammar",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Read helper methods",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read few shot examples": {
+      "main": [
+        [
+          {
+            "node": "Extract text from examples file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Convert response to File": {
+      "main": [
+        [
+          {
+            "node": "MergeGemini",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Extract text from examples file": {
+      "main": [
+        [
+          {
+            "node": "Static-Files-Ready",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Write response to disk": {
+      "main": [
+        []
+      ]
+    },
+    "Read Grammar": {
+      "main": [
+        [
+          {
+            "node": "Extract text from grammar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract text from grammar": {
+      "main": [
+        [
+          {
+            "node": "Static-Files-Ready",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Read prompt files": {
+      "main": [
+        [
+          {
+            "node": "Combine",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Extract text from prompt file": {
+      "main": [
+        [
+          {
+            "node": "If gpt-5",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "If gemini-2.5-pro",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "If claude-sonnet-4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read model files": {
+      "main": [
+        [
+          {
+            "node": "Extract text from model files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract text from model files": {
+      "main": [
+        [
+          {
+            "node": "Summarize",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save reaction name": {
+      "main": [
+        [
+          {
+            "node": "Extract text from prompt file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read helper methods": {
+      "main": [
+        [
+          {
+            "node": "Extract text from helper methods",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Summarize": {
+      "main": [
+        [
+          {
+            "node": "Static-Files-Ready",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract text from helper methods": {
+      "main": [
+        [
+          {
+            "node": "Static-Files-Ready",
+            "type": "main",
+            "index": 3
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "(Re-)Generate code1",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Define Strategies": {
+      "main": [
+        [
+          {
+            "node": "Merge-Strategies-and-LLMs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Define LLM models to use": {
+      "main": [
+        [
+          {
+            "node": "Merge-Strategies-and-LLMs",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge-Strategies-and-LLMs": {
+      "main": [
+        [
+          {
+            "node": "Build Matrix",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Matrix": {
+      "main": [
+        [
+          {
+            "node": "Combine",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "If claude-sonnet-4": {
+      "main": [
+        [
+          {
+            "node": "(Re-)Generate code3",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "MergeClaude",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If gpt-5": {
+      "main": [
+        [
+          {
+            "node": "(Re-)Generate code1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "MergeGPT-5",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If gemini-2.5-pro": {
+      "main": [
+        [
+          {
+            "node": "(Re-)Generate Code2",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "MergeGemini",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "(Re-)Generate Code2",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Anthropic Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "(Re-)Generate code3",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "(Re-)Generate code1": {
+      "main": [
+        [
+          {
+            "node": "MergeGPT-5",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "(Re-)Generate code3": {
+      "main": [
+        [
+          {
+            "node": "MergeClaude",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "BuildJobs": {
+      "main": [
+        [
+          {
+            "node": "Update-Structure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Static-Files-Ready": {
+      "main": [
+        [
+          {
+            "node": "Combine",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update-Structure": {
+      "main": [
+        [
+          {
+            "node": "Save reaction name",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Combine": {
+      "main": [
+        [
+          {
+            "node": "BuildJobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "(Re-)Generate Code2": {
+      "main": [
+        [
+          {
+            "node": "Convert response to File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MergeGemini": {
+      "main": [
+        [
+          {
+            "node": "Write response to disk",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MergeGPT-5": {
+      "main": [
+        [
+          {
+            "node": "Write response to disk",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MergeClaude": {
+      "main": [
+        [
+          {
+            "node": "Write response to disk",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false
+  },
+  "versionId": "2a6502a6-447b-4048-9875-41339262b55f",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "fbfa5fa8d29d1ead6db1e5fe1f390eafb0d96c2754fa63140fd3f1f466b9ae34"
+  },
+  "id": "PH-wxFlu7HiorJp5glpQA",
+  "tags": []
+}

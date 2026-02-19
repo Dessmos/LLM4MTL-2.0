@@ -1,0 +1,16 @@
+strategy,llm1,unparsed_rate_llm1,llm2,unparsed_rate_llm2,significance_p_exact_mcnemar
+few_shot,claude-sonnet-4,0.3333333333,gemini-2-5-pro,0.75,0.0625
+few_shot,claude-sonnet-4,0.3333333333,gpt-5,0.5833333333,0.25
+few_shot,gemini-2-5-pro,0.75,gpt-5,0.5833333333,0.5
+few_shots_AND_grammar,claude-sonnet-4,0.1666666667,gemini-2-5-pro,0.4166666667,0.25
+few_shots_AND_grammar,claude-sonnet-4,0.1666666667,gpt-5,0.25,1
+few_shots_AND_grammar,gemini-2-5-pro,0.4166666667,gpt-5,0.25,0.5
+few_shots_AND_grammar_AND_helper,claude-sonnet-4,0.1666666667,gemini-2-5-pro,0.5,0.125
+few_shots_AND_grammar_AND_helper,claude-sonnet-4,0.1666666667,gpt-5,0.0833333333,1
+few_shots_AND_grammar_AND_helper,gemini-2-5-pro,0.5,gpt-5,0.0833333333,0.0625
+grammar,claude-sonnet-4,0.3333333333,gemini-2-5-pro,0.1666666667,0.6875
+grammar,claude-sonnet-4,0.3333333333,gpt-5,0.9166666667,0.015625
+grammar,gemini-2-5-pro,0.1666666667,gpt-5,0.9166666667,0.01171875
+only_prompt,claude-sonnet-4,1.0,gemini-2-5-pro,1.0,1
+only_prompt,claude-sonnet-4,1.0,gpt-5,1.0,1
+only_prompt,gemini-2-5-pro,1.0,gpt-5,1.0,1

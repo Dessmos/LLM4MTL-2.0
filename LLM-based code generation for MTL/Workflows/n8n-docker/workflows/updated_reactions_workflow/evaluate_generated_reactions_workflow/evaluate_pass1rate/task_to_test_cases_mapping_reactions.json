@@ -1,0 +1,137 @@
+[
+  {
+    "reaction_under_test": "FamiliesToPersons_CreatedFather",
+    "required_correct_reactions_from_references": [
+      "FamiliesToPersons_InsertedFamilyRegister"
+    ],
+    "testcases": [
+      "CreatedFatherCreatesPersonAndNamesAreCorrectTest",
+      "CreatedNewFatherRemovesOldFatherTest"
+    ],
+    "required_imports_path_alias": [{"http://vitruv.tools/methodologisttemplate/families":  "families"}, {"http://vitruv.tools/methodologisttemplate/persons": "persons"}],
+    "name_of_generated_reaction": "familiesToPersons"
+  },
+  {
+    "reaction_under_test": "FamiliesToPersons_DeletedFamily",
+    "required_correct_reactions_from_references": [
+      "FamiliesToPersons_InsertedFamilyRegister",
+      "FamiliesToPersons_CreatedFather",
+      "FamiliesToPersons_InsertedDaughter"
+    ],
+    "testcases": [
+      "DeleteFamilyDeletesCorrespondingPersonsTest"
+    ],
+    "required_imports_path_alias": [{"http://vitruv.tools/methodologisttemplate/families":  "families"}, {"http://vitruv.tools/methodologisttemplate/persons": "persons"}],
+    "name_of_generated_reaction": "familiesToPersons"
+  },
+  {
+    "reaction_under_test": "FamiliesToPersons_DeletedMember",
+    "required_correct_reactions_from_references": [
+      "FamiliesToPersons_InsertedFamilyRegister",
+      "FamiliesToPersons_CreatedFather",
+      "FamiliesToPersons_InsertedDaughter"
+    ],
+    "testcases": [
+      "DeleteFatherDeletesCorrespondingPersonTest"
+    ],
+    "required_imports_path_alias": [{"http://vitruv.tools/methodologisttemplate/families":  "families"}, {"http://vitruv.tools/methodologisttemplate/persons": "persons"}],
+    "name_of_generated_reaction": "familiesToPersons"
+  },
+  {
+    "reaction_under_test": "FamiliesToPersons_InsertedDaughter",
+    "required_correct_reactions_from_references": [
+      "FamiliesToPersons_InsertedFamilyRegister"
+    ],
+    "testcases": [
+      "InsertedDaughterCreatesPersonAndNamesAreCorrectTest"
+    ],
+    "required_imports_path_alias": [{"http://vitruv.tools/methodologisttemplate/families":  "families"}, {"http://vitruv.tools/methodologisttemplate/persons": "persons"}],
+    "name_of_generated_reaction": "familiesToPersons"
+  },
+  {
+    "reaction_under_test": "FamiliesToPersons_InsertedFamilyRegister",
+    "required_correct_reactions_from_references": [],
+    "testcases": [
+      "InsertFamilyRegisterCreatesPersonRegisterTest"
+    ],
+    "required_imports_path_alias": [{"http://vitruv.tools/methodologisttemplate/families":  "families"}, {"http://vitruv.tools/methodologisttemplate/persons": "persons"}],
+    "name_of_generated_reaction": "familiesToPersons"
+  },
+  {
+    "reaction_under_test": "AmaltheaToAscet_ComponentContainerInsertedAsRoot",
+    "required_correct_reactions_from_references": [],
+    "testcases": [
+      "ComponentContainerInsertedAsRootCreatesRootcomponentcontainerTest"
+    ],
+    "required_imports_path_alias": [{"http://vitruv.tools/methodologisttemplate/amalthea":  "amalthea"}, {"http://vitruv.tools/methodologisttemplate/ascet": "ascet"}],
+    "name_of_generated_reaction": "amaltheaToAscet"
+  },
+  {
+    "reaction_under_test": "AmaltheaToAscet_TaskCreated",
+    "required_correct_reactions_from_references": [
+      "AmaltheaToAscet_ComponentContainerInsertedAsRoot"
+    ],
+    "testcases": [
+      "InterruptTaskCreatedCreatesAscetModuleTest",
+      "PeriodicTaskCreatedCreatesAscetModuleTest",
+      "UncorrectTaskNumberCreatesNoAscetModuleTest"
+    ],
+    "required_imports_path_alias": [{"http://vitruv.tools/methodologisttemplate/amalthea":  "amalthea"}, {"http://vitruv.tools/methodologisttemplate/ascet": "ascet"}],
+    "name_of_generated_reaction": "amaltheaToAscet"
+  },
+  {
+    "reaction_under_test": "AmaltheaToAscet_TaskDeleted",
+    "required_correct_reactions_from_references": [
+      "AmaltheaToAscet_TaskCreated",
+      "AmaltheaToAscet_ComponentContainerInsertedAsRoot"
+    ],
+    "testcases": [
+      "TaskDeletedRemovesCorrespondingAscetTaskTest"
+    ],
+    "required_imports_path_alias": [{"http://vitruv.tools/methodologisttemplate/amalthea":  "amalthea"}, {"http://vitruv.tools/methodologisttemplate/ascet": "ascet"}],
+    "name_of_generated_reaction": "amaltheaToAscet"
+  },
+  {
+    "reaction_under_test": "NetworkToGraph_ComponentDeleted",
+    "required_correct_reactions_from_references": [
+      "NetworkToGraph_CreateAndRegisterRoot"
+    ],
+    "testcases": [
+      "DeleteComponentTest"
+    ],
+    "required_imports_path_alias": [{"http://vitruv.tools/methodologisttemplate/network":  "network"}, {"http://vitruv.tools/methodologisttemplate/graph": "graph"}],
+    "name_of_generated_reaction": "networkToGraph"
+  },
+  {
+    "reaction_under_test": "NetworkToGraph_ComponentInsertedIntoSystem",
+    "required_correct_reactions_from_references": [
+      "NetworkToGraph_CreateAndRegisterRoot"
+    ],
+    "testcases": [
+      "InsertComponentTest"
+    ],
+    "required_imports_path_alias": [{"http://vitruv.tools/methodologisttemplate/network":  "network"}, {"http://vitruv.tools/methodologisttemplate/graph": "graph"}],
+    "name_of_generated_reaction": "networkToGraph"
+  },
+  {
+    "reaction_under_test": "NetworkToGraph_ComponentRenamed",
+    "required_correct_reactions_from_references": [
+      "NetworkToGraph_CreateAndRegisterRoot",
+      "NetworkToGraph_ComponentInsertedIntoSystem"
+    ],
+    "testcases": [
+      "RenameComponentTest"
+    ],
+    "required_imports_path_alias": [{"http://vitruv.tools/methodologisttemplate/network":  "network"}, {"http://vitruv.tools/methodologisttemplate/graph": "graph"}],
+    "name_of_generated_reaction": "networkToGraph"
+  },
+  {
+    "reaction_under_test": "NetworkToGraph_CreateAndRegisterRoot",
+    "required_correct_reactions_from_references": [],
+    "testcases": [
+      "SystemInsertionAndPropagationTest"
+    ],
+    "required_imports_path_alias": [{"http://vitruv.tools/methodologisttemplate/network":  "network"}, {"http://vitruv.tools/methodologisttemplate/graph": "graph"}],
+    "name_of_generated_reaction": "networkToGraph"
+  }
+]

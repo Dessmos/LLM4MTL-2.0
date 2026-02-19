@@ -1,0 +1,11 @@
+import "http://vitruv.tools/methodologisttemplate/network" as network
+import "http://vitruv.tools/methodologisttemplate/graph" as graph
+
+reactions: combinedReactions
+in reaction to changes in network
+execute actions in graph
+
+// The first imported reaction is the llm-generated task
+import networkToGraph using qualified names
+
+// The reactions below are the correct reactions from the references to test the reaction_under_test

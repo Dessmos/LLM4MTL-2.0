@@ -1,0 +1,25 @@
+import "http://vitruv.tools/methodologisttemplate/ascet" as ascet
+import "http://vitruv.tools/methodologisttemplate/amalthea" as amalthea
+
+reactions: amaltheaToAscet_TaskDeleted
+in reaction to changes in amalthea
+execute actions in ascet
+
+reaction TaskDeleted {
+	after element amalthea::Task deleted
+	call deleteTask(affectedEObject)
+}
+
+routine deleteTask (amalthea::Task task){
+	match{
+		val ascettask = retrieve ascet::Task corresponding to task
+	}
+	update{
+        if (ascettask !== null) {
+			removeObject(ascettask)
+			removeCorrespondenceBetween(task, ascettask)
+		}     
+	}
+	
+}
+

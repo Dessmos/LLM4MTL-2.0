@@ -1,0 +1,25 @@
+import "http://vitruv.tools/methodologisttemplate/network" as network
+import "http://vitruv.tools/methodologisttemplate/graph" as graph
+
+reactions: networkToGraph_CreateAndRegisterRoot
+in reaction to changes in network
+execute actions in graph
+
+
+reaction SystemInsertedAsRoot {
+	after element network::System inserted as root
+	call createAndRegisterRoot(newValue)
+}
+
+routine createAndRegisterRoot(network::System system) {
+	match {
+		require absence of graph::Root corresponding to system
+	}
+  	create {
+    	val mRoot = new graph::Root
+  	}
+	update {
+    	persistProjectRelative(system, mRoot, "model/graph.graph")
+		addCorrespondenceBetween(system, mRoot)
+	}
+}

@@ -1,0 +1,26 @@
+import "http://vitruv.tools/methodologisttemplate/network" as network
+import "http://vitruv.tools/methodologisttemplate/graph" as graph
+
+reactions: networkToGraph_ComponentInsertedIntoSystem
+in reaction to changes in network
+execute actions in graph
+
+reaction ComponentInsertedIntoSystem {
+	after element network::Component inserted in network::System[components]
+	call createAndInsertEntity(affectedEObject, newValue)
+}
+
+routine createAndInsertEntity(network::System system, network::Component component) {
+	match {
+		require absence of graph::Entity corresponding to component
+    	val mRoot = retrieve graph::Root corresponding to system
+	}
+  	create {
+    	val entity = new graph::Entity
+  	}
+	update {
+    	entity.name = component.name
+    	mRoot.entities.add(entity)
+		addCorrespondenceBetween(component, entity)
+	}
+}

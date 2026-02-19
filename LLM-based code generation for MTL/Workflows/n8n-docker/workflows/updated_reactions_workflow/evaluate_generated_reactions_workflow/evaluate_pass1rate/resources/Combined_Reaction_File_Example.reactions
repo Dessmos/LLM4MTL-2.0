@@ -1,0 +1,15 @@
+import "http://vitruv.tools/methodologisttemplate/families" as families
+import "http://vitruv.tools/methodologisttemplate/persons" as persons
+
+reactions: combinedReactions
+in reaction to changes in families
+execute actions in persons
+
+// The first imported reaction is the llm-generated task
+import familiesToPersons using qualified names
+
+// The reactions below are the correct reactions from the references to test the reaction_under_test
+
+import familiesToPersons_InsertedFamilyRegister using qualified names
+import familiesToPersons_CreatedFather using qualified names
+import familiesToPersons_InsertedDaughter using qualified names
