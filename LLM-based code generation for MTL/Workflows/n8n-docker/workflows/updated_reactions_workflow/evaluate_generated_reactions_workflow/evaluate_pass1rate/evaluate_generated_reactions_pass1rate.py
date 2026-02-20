@@ -269,7 +269,7 @@ def build_combined_reactions_content(entry):
 
 def write_combined_reactions_file(entry):
     reaction_under_test = entry["reaction_under_test"]
-    combined_filename = f"Combined_{reaction_under_test}.reactions"
+    combined_filename = f"CombinedReactions.reactions"
     combined_path = os.path.join(TARGET_REACTIONS_DIR, combined_filename)
     write_text_file(combined_path, build_combined_reactions_content(entry))
     return combined_path

@@ -1,9 +1,11 @@
 package tools.vitruv.methodologisttemplate.vsum;
 
-import tools.vitruv.methodologisttemplate.model.families.FamilyRegister;
-import tools.vitruv.methodologisttemplate.model.families.FamiliesFactory;
-import tools.vitruv.methodologisttemplate.model.persons.PersonRegister;
-import mir.reactions.familiesToPersons.FamiliesToPersonsChangePropagationSpecification;
+import java.nio.file.Path;
+import java.util.Collection;
+import java.util.List;
+import java.util.function.Consumer;
+import java.util.function.Function;
+
 import org.eclipse.emf.common.util.URI;
 import org.eclipse.emf.ecore.resource.Resource;
 import org.eclipse.emf.ecore.xmi.impl.XMIResourceFactoryImpl;
@@ -11,6 +13,8 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+
+import mir.reactions.combinedReactions.CombinedReactionsChangePropagationSpecification;
 import tools.vitruv.change.propagation.ChangePropagationMode;
 import tools.vitruv.change.testutils.TestUserInteraction;
 import tools.vitruv.framework.views.CommittableView;
@@ -19,12 +23,9 @@ import tools.vitruv.framework.views.ViewTypeFactory;
 import tools.vitruv.framework.vsum.VirtualModel;
 import tools.vitruv.framework.vsum.VirtualModelBuilder;
 import tools.vitruv.framework.vsum.internal.InternalVirtualModel;
-
-import java.nio.file.Path;
-import java.util.Collection;
-import java.util.List;
-import java.util.function.Consumer;
-import java.util.function.Function;
+import tools.vitruv.methodologisttemplate.model.families.FamiliesFactory;
+import tools.vitruv.methodologisttemplate.model.families.FamilyRegister;
+import tools.vitruv.methodologisttemplate.model.persons.PersonRegister;
 
 /**
  * VSUM Tests for Families to Persons Transformation
@@ -78,7 +79,7 @@ public class InsertedDaughterCreatesPersonAndNamesAreCorrectTest {
     InternalVirtualModel model = new VirtualModelBuilder()
         .withStorageFolder(projectPath)
         .withUserInteractorForResultProvider(new TestUserInteraction.ResultProvider(new TestUserInteraction()))
-        .withChangePropagationSpecifications(new FamiliesToPersonsChangePropagationSpecification())
+        .withChangePropagationSpecifications(new CombinedReactionsChangePropagationSpecification())
         .buildAndInitialize();
     model.setChangePropagationMode(ChangePropagationMode.TRANSITIVE_CYCLIC);
     return model;

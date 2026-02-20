@@ -1,15 +1,11 @@
 package tools.vitruv.methodologisttemplate.vsum;
 
-import tools.vitruv.framework.vsum.VirtualModelBuilder;
-import tools.vitruv.framework.vsum.internal.InternalVirtualModel;
-import tools.vitruv.methodologisttemplate.model.network.NetworkFactory;
-import tools.vitruv.methodologisttemplate.model.graph.Root;
-
 import java.nio.file.Path;
 import java.util.Collection;
 import java.util.List;
 import java.util.function.Consumer;
 import java.util.function.Function;
+
 import org.eclipse.emf.common.util.URI;
 import org.eclipse.emf.ecore.resource.Resource;
 import org.eclipse.emf.ecore.xmi.impl.XMIResourceFactoryImpl;
@@ -18,13 +14,17 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-import mir.reactions.networkToGraph.NetworkToGraphChangePropagationSpecification;
+import mir.reactions.combinedReactions.CombinedReactionsChangePropagationSpecification;
 import tools.vitruv.change.propagation.ChangePropagationMode;
 import tools.vitruv.change.testutils.TestUserInteraction;
 import tools.vitruv.framework.views.CommittableView;
 import tools.vitruv.framework.views.View;
 import tools.vitruv.framework.views.ViewTypeFactory;
 import tools.vitruv.framework.vsum.VirtualModel;
+import tools.vitruv.framework.vsum.VirtualModelBuilder;
+import tools.vitruv.framework.vsum.internal.InternalVirtualModel;
+import tools.vitruv.methodologisttemplate.model.graph.Root;
+import tools.vitruv.methodologisttemplate.model.network.NetworkFactory;
 import tools.vitruv.methodologisttemplate.model.network.System;
 
 /**
@@ -70,7 +70,7 @@ public class SystemInsertionAndPropagationTest {
     InternalVirtualModel model = new VirtualModelBuilder()
         .withStorageFolder(projectPath)
         .withUserInteractorForResultProvider(new TestUserInteraction.ResultProvider(new TestUserInteraction()))
-        .withChangePropagationSpecifications(new NetworkToGraphChangePropagationSpecification())
+        .withChangePropagationSpecifications(new CombinedReactionsChangePropagationSpecification())
         .buildAndInitialize();
     model.setChangePropagationMode(ChangePropagationMode.TRANSITIVE_CYCLIC);
     return model;
