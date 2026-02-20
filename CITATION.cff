@@ -1,0 +1,52 @@
+# This CITATION.cff file was generated with cffinit.
+# Visit https://bit.ly/cffinit to generate yours today!
+
+cff-version: 1.2.0
+title: >-
+  Replication Package for "LLM4MTLs: Automated Generation
+  and Empirical Evaluation of Model Transformation
+  Languages"
+message: >-
+  If you use this dataset, please cite it using the metadata
+  from this file.
+type: dataset
+authors:
+  - given-names: Bowen
+    family-names: Jiang
+    email: bowen.jiang@kit.edu
+    affiliation: 'KASTEL, Karlsruhe Institute of Technology'
+    orcid: 'https://orcid.org/0009-0001-8168-0866'
+  - given-names: Lukas
+    family-names: Schroth
+    email: uupsz@student.kit.edu
+    affiliation: 'KASTEL, Karlsruhe Institute of Technology'
+  - given-names: Nathan
+    family-names: Hagel
+    email: nathan.hagel@kit.edu
+    affiliation: 'KASTEL, Karlsruhe Institute of Technology'
+    orcid: 'https://orcid.org/0009-0003-9919-4449'
+  - given-names: Haowei
+    family-names: Cheng
+    email: haowei.cheng@fuji.waseda.jp
+    affiliation: >-
+      Department of Computer Science and Communications
+      Engineering, Waseda University
+    orcid: 'https://orcid.org/0009-0008-2265-6437'
+  - given-names: Arne
+    family-names: Lange
+    email: arne.lange@kit.edu
+    affiliation: 'KASTEL, Karlsruhe Institute of Technology'
+    orcid: 'https://orcid.org/0000-0002-1776-0247'
+  - given-names: Benedikt
+    family-names: Jutz
+    email: benedikt.jutz@kit.edu
+    affiliation: 'KASTEL, Karlsruhe Institute of Technology'
+    orcid: 'https://orcid.org/0009-0006-2110-7159'
+repository-code: 'https://github.com/vitruv-tools/natural-language-artifacts'
+keywords:
+  - Model Transformation Languages
+  - Large Language Models
+  - Code Generation
+  - Prompt Engineering
+  - Grammar Prompting
+license: MIT
