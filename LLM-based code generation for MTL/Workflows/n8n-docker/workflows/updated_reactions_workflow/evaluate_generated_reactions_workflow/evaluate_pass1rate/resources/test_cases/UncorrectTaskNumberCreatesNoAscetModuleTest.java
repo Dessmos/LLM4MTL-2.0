@@ -15,6 +15,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import mir.reactions.amaltheaToAscet.AmaltheaToAscetChangePropagationSpecification;
+import mir.reactions.combinedReactions.CombinedReactionsChangePropagationSpecification;
 import tools.vitruv.change.propagation.ChangePropagationMode;
 import tools.vitruv.change.testutils.TestUserInteraction;
 import tools.vitruv.framework.views.CommittableView;
@@ -26,8 +27,6 @@ import tools.vitruv.framework.vsum.internal.InternalVirtualModel;
 import tools.vitruv.methodologisttemplate.model.amalthea.AmaltheaFactory;
 import tools.vitruv.methodologisttemplate.model.amalthea.ComponentContainer;
 import tools.vitruv.methodologisttemplate.model.ascet.AscetModule;
-import tools.vitruv.methodologisttemplate.model.ascet.InterruptTask;
-import tools.vitruv.methodologisttemplate.model.ascet.PeriodicTask;
 
 
 /**
@@ -72,7 +71,7 @@ public class UncorrectTaskNumberCreatesNoAscetModuleTest {
     InternalVirtualModel model = new VirtualModelBuilder()
         .withStorageFolder(projectPath)
         .withUserInteractorForResultProvider(new TestUserInteraction.ResultProvider(new TestUserInteraction()))
-        .withChangePropagationSpecifications(new AmaltheaToAscetChangePropagationSpecification())
+        .withChangePropagationSpecifications(new CombinedReactionsChangePropagationSpecification())
         .buildAndInitialize();
     model.setChangePropagationMode(ChangePropagationMode.TRANSITIVE_CYCLIC);
     return model;
