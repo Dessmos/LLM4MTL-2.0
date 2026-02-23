@@ -1,0 +1,69 @@
+transformation Rss2Atom
+
+model RSS metamodel "http://vitruv.tools/methodologisttemplate/RSS"
+model Atom metamodel "http://vitruv.tools/methodologisttemplate/Atom"
+
+rule Rss2Atom
+	transform rss : RSS!RSS
+	to feed : Atom!Feed {
+		feed.appendEquivalentsOfChildrenOf(rss);
+		feed.entries.addAll(rss.items.equivalent());
+	}
+
+rule Item2Entry
+	transform item : RSS!Item
+	to entry : Atom!Entry {
+		entry.appendEquivalentsOfChildrenOf(item);
+	}
+
+rule Title2Title
+	transform t : RSS!Title
+	to at : Atom!Title {
+		at.text = t.text;
+	}
+
+rule Link2Link
+	transform l : RSS!Link
+	to al : Atom!Link {
+		al.href = l.text;
+	}
+
+rule Generator2Generator
+	transform g : RSS!Generator
+	to ag : Atom!Generator {
+		ag.text = g.text;
+	}
+
+rule Creator2Author
+	transform c : RSS!Creator
+	to aa : Atom!Author {
+		aa.name = c.text;
+	}
+
+rule Description2Summary
+	transform d : RSS!Description
+	to as : Atom!Summary {
+		as.text = d.text;
+	}
+
+rule ContentEncoded2Content
+	transform ce : RSS!ContentEncoded
+	to ac : Atom!Content {
+		ac.text = ce.text;
+	}
+
+rule PubDate2Published
+	transform pd : RSS!PubDate
+	to ap : Atom!Published {
+		ap.text = pd.text;
+	}
+
+operation Any appendChildren(children) {
+	for (child in children) {
+		self.elements.add(child);
+	}
+}
+
+operation Any appendEquivalentsOfChildrenOf(element) {
+	self.appendChildren(element.children.equivalent());
+}

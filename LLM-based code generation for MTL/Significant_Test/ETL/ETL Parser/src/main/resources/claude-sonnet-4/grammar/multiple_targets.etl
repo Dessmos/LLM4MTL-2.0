@@ -1,0 +1,32 @@
+rule Action2Elements
+  transform a : flowchart::Action
+  to div : HTML::DIV {
+  
+  guard : a.outgoing.notEmpty()
+  
+  div.children.add(createH1(a.name));
+  div.children.add(createLink(a.outgoing.first().target.name, a.outgoing.first().target.name));
+}
+
+rule Decision2Elements
+  transform d : flowchart::Decision
+  to div : HTML::DIV {
+  
+  div.children.add(createH1(d.name));
+  for (t in d.outgoing) {
+    div.children.add(createLink(t.target.name, t.target.name));
+  }
+}
+
+operation createH1(text : String) : HTML::H1 {
+  var h : new HTML::H1;
+  h.value = text;
+  return h;
+}
+
+operation createLink(text : String, href : String) : HTML::A {
+  var a : new HTML::A;
+  a.value = text;
+  a.ahref = href;
+  return a;
+}

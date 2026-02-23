@@ -1,0 +1,12 @@
+rule Flowchart2H1
+  transform s : Flowchart!Flowchart
+  to t : HTML!H1 {
+  t.value = "Flowchart " + s.name;
+}
+
+rule Subflow2H1
+  extends Flowchart2H1
+  transform s : Flowchart!Subflow
+  to t : HTML!H1 {
+  t.value = "Subflow " + t.value;
+}

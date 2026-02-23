@@ -1,0 +1,49 @@
+Language,Metric,Strategy,LLM,Mean,Star,Underline
+QVT-O,ChrF,Baseline,GPT,0.6852,No,Yes
+QVT-O,ChrF,Baseline,Gemini,0.7305,No,Yes
+QVT-O,ChrF,Baseline,Claude,0.7882,No,Yes
+QVT-O,ChrF,Few-shot,GPT,0.7991,Yes,Yes
+QVT-O,ChrF,Few-shot,Gemini,0.7999,Yes,Yes
+QVT-O,ChrF,Few-shot,Claude,0.8128,No,Yes
+QVT-O,ChrF,Grammar,GPT,0.6447,No,Yes
+QVT-O,ChrF,Grammar,Gemini,0.7014,No,Yes
+QVT-O,ChrF,Grammar,Claude,0.7993,No,Yes
+QVT-O,ChrF,FS + GR,GPT,0.7976,Yes,Yes
+QVT-O,ChrF,FS + GR,Gemini,0.7982,Yes,Yes
+QVT-O,ChrF,FS + GR,Claude,0.8313,Yes,Yes
+QVT-O,Errors/LoC,Baseline,GPT,0.3057,No,No
+QVT-O,Errors/LoC,Baseline,Gemini,0.1674,No,No
+QVT-O,Errors/LoC,Baseline,Claude,0.1119,No,No
+QVT-O,Errors/LoC,Few-shot,GPT,0.0159,Yes,No
+QVT-O,Errors/LoC,Few-shot,Gemini,0.01,Yes,No
+QVT-O,Errors/LoC,Few-shot,Claude,0.0,Yes,No
+QVT-O,Errors/LoC,Grammar,GPT,0.1242,No,No
+QVT-O,Errors/LoC,Grammar,Gemini,0.0784,Yes,No
+QVT-O,Errors/LoC,Grammar,Claude,0.0598,Yes,No
+QVT-O,Errors/LoC,FS + GR,GPT,0.0,Yes,No
+QVT-O,Errors/LoC,FS + GR,Gemini,0.0,Yes,No
+QVT-O,Errors/LoC,FS + GR,Claude,0.0099,Yes,No
+QVT-O,Parsability,Baseline,GPT,0.0,No,No
+QVT-O,Parsability,Baseline,Gemini,0.1,No,No
+QVT-O,Parsability,Baseline,Claude,0.0,No,No
+QVT-O,Parsability,Few-shot,GPT,0.8,Yes,No
+QVT-O,Parsability,Few-shot,Gemini,0.9,Yes,No
+QVT-O,Parsability,Few-shot,Claude,1.0,Yes,No
+QVT-O,Parsability,Grammar,GPT,0.6,Yes,Yes
+QVT-O,Parsability,Grammar,Gemini,0.4,No,Yes
+QVT-O,Parsability,Grammar,Claude,0.1,No,Yes
+QVT-O,Parsability,FS + GR,GPT,1.0,Yes,No
+QVT-O,Parsability,FS + GR,Gemini,1.0,Yes,No
+QVT-O,Parsability,FS + GR,Claude,0.8,Yes,No
+QVT-O,Pass@1,Baseline,GPT,0.0,No,No
+QVT-O,Pass@1,Baseline,Gemini,0.1,No,No
+QVT-O,Pass@1,Baseline,Claude,0.0,No,No
+QVT-O,Pass@1,Few-shot,GPT,0.6,Yes,No
+QVT-O,Pass@1,Few-shot,Gemini,0.6,Yes,No
+QVT-O,Pass@1,Few-shot,Claude,0.7,Yes,No
+QVT-O,Pass@1,Grammar,GPT,0.0,No,No
+QVT-O,Pass@1,Grammar,Gemini,0.2,No,No
+QVT-O,Pass@1,Grammar,Claude,0.1,No,No
+QVT-O,Pass@1,FS + GR,GPT,0.5,Yes,No
+QVT-O,Pass@1,FS + GR,Gemini,0.7,Yes,No
+QVT-O,Pass@1,FS + GR,Claude,0.6,Yes,No

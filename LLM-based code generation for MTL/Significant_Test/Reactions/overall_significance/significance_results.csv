@@ -1,0 +1,21 @@
+Metric,Test,Language,Strategy,GPT_mean,Gemini_mean,Claude_mean,p_value,Significant
+PPL_s (ErrorsPerLoC),Friedman,Reactions,Baseline,0.0396,0.0562,0.0427,0.1118,No
+PPL_s (ErrorsPerLoC),Friedman,Reactions,Few-Shot (FS),0.0652,0.0335,0.0289,0.1022,No
+PPL_s (ErrorsPerLoC),Friedman,Reactions,Grammar (GR),0.0769,0.0083,0.036,0.0012,Yes
+PPL_s (ErrorsPerLoC),Friedman,Reactions,FS + GR,0.0342,0.0437,0.0159,0.0556,No
+PPL_s (ErrorsPerLoC),Friedman,Reactions,FS + GR + HM,0.0145,0.0546,0.016,0.0045,Yes
+ChrF,Friedman,Reactions,Baseline,62.1595,60.1238,78.1185,0.0004,Yes
+ChrF,Friedman,Reactions,Few-Shot (FS),86.9384,85.1963,88.4574,0.2617,No
+ChrF,Friedman,Reactions,Grammar (GR),80.1688,78.4625,84.9877,0.2636,No
+ChrF,Friedman,Reactions,FS + GR,85.6503,87.8555,86.6077,0.6397,No
+ChrF,Friedman,Reactions,FS + GR + HM,86.4001,87.0245,86.9423,0.4361,No
+Parsability,Cochran's Q,Reactions,Baseline,0.0,0.0,0.0,NaN,No
+Parsability,Cochran's Q,Reactions,Few-Shot (FS),0.4167,0.25,0.6667,0.0224,Yes
+Parsability,Cochran's Q,Reactions,Grammar (GR),0.0833,0.8333,0.6667,0.0038,Yes
+Parsability,Cochran's Q,Reactions,FS + GR,0.75,0.5833,0.8333,0.097,No
+Parsability,Cochran's Q,Reactions,FS + GR + HM,0.9167,0.5,0.8333,0.015,Yes
+Parsed & Tests Passed,Cochran's Q,Reactions,Baseline,0.0,0.0,0.0,NaN,No
+Parsed & Tests Passed,Cochran's Q,Reactions,Few-Shot (FS),0.4167,0.25,0.5,0.097,No
+Parsed & Tests Passed,Cochran's Q,Reactions,Grammar (GR),0.0,0.0,0.0,NaN,No
+Parsed & Tests Passed,Cochran's Q,Reactions,FS + GR,0.5,0.4167,0.5,0.3679,No
+Parsed & Tests Passed,Cochran's Q,Reactions,FS + GR + HM,0.5833,0.4167,0.4167,0.2636,No

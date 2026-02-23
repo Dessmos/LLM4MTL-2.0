@@ -1,0 +1,14 @@
+LLM,Strategy,Parsed,Total,ParsedRate(%),TotalProblems,Avg_CHRF,Min_CHRF,Max_CHRF
+claude-sonnet-4,few_shot,9,10,90.000,10,74.66,58.84,100.0
+claude-sonnet-4,few_shots_AND_grammar,8,10,80.000,5,74.19,55.39,100.0
+claude-sonnet-4,grammar,8,10,80.000,10,62.01,48.68,78.05
+claude-sonnet-4,only_prompt,9,10,90.000,10,61.1,44.36,78.05
+gemini-2-5-pro,few_shot,4,10,40.000,13,71.4,55.83,91.57
+gemini-2-5-pro,few_shots_AND_grammar,2,10,20.000,8,70.68,57.36,86.81
+gemini-2-5-pro,grammar,1,10,10.000,9,62.86,50.12,79.33
+gemini-2-5-pro,only_prompt,0,10,0.000,11,60.54,50.46,74.46
+gpt-5,few_shot,9,10,90.000,1,73.95,60.43,91.57
+gpt-5,few_shots_AND_grammar,8,10,80.000,18,75.19,59.25,91.57
+gpt-5,grammar,7,10,70.000,17,62.82,47.61,76.79
+gpt-5,only_prompt,7,10,70.000,27,64.1,51.67,79.02
+OVERALL,,72,120,60.000,139,67.79,44.36,100.0

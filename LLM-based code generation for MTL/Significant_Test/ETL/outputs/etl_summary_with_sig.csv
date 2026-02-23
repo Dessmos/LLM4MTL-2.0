@@ -1,0 +1,49 @@
+Language,Metric,Strategy,LLM,Mean,Star,Underline
+ETL,ChrF,Baseline,GPT,64.1019,No,No
+ETL,ChrF,Baseline,Gemini,60.5426,No,No
+ETL,ChrF,Baseline,Claude,61.1035,No,No
+ETL,ChrF,Few-shot,GPT,73.95,Yes,No
+ETL,ChrF,Few-shot,Gemini,71.404,Yes,No
+ETL,ChrF,Few-shot,Claude,74.6568,Yes,No
+ETL,ChrF,Grammar,GPT,62.8214,No,No
+ETL,ChrF,Grammar,Gemini,62.8627,No,No
+ETL,ChrF,Grammar,Claude,62.0055,No,No
+ETL,ChrF,FS + GR,GPT,75.193,Yes,No
+ETL,ChrF,FS + GR,Gemini,70.683,Yes,No
+ETL,ChrF,FS + GR,Claude,74.1945,Yes,No
+ETL,Errors/LoC,Baseline,GPT,0.078,No,Yes
+ETL,Errors/LoC,Baseline,Gemini,0.076,No,Yes
+ETL,Errors/LoC,Baseline,Claude,0.0103,No,Yes
+ETL,Errors/LoC,Few-shot,GPT,0.001,No,Yes
+ETL,Errors/LoC,Few-shot,Gemini,0.0452,No,Yes
+ETL,Errors/LoC,Few-shot,Claude,0.0103,No,Yes
+ETL,Errors/LoC,Grammar,GPT,0.0525,No,No
+ETL,Errors/LoC,Grammar,Gemini,0.0493,No,No
+ETL,Errors/LoC,Grammar,Claude,0.0129,No,No
+ETL,Errors/LoC,FS + GR,GPT,0.0225,No,No
+ETL,Errors/LoC,FS + GR,Gemini,0.0393,No,No
+ETL,Errors/LoC,FS + GR,Claude,0.0132,No,No
+ETL,Parsability,Baseline,GPT,0.7,No,Yes
+ETL,Parsability,Baseline,Gemini,0.0,No,Yes
+ETL,Parsability,Baseline,Claude,0.9,No,Yes
+ETL,Parsability,Few-shot,GPT,0.9,No,Yes
+ETL,Parsability,Few-shot,Gemini,0.4,No,Yes
+ETL,Parsability,Few-shot,Claude,0.9,No,Yes
+ETL,Parsability,Grammar,GPT,0.7,No,Yes
+ETL,Parsability,Grammar,Gemini,0.1,No,Yes
+ETL,Parsability,Grammar,Claude,0.8,No,Yes
+ETL,Parsability,FS + GR,GPT,0.8,No,Yes
+ETL,Parsability,FS + GR,Gemini,0.2,No,Yes
+ETL,Parsability,FS + GR,Claude,0.8,No,Yes
+ETL,Pass@1,Baseline,GPT,0.2,No,No
+ETL,Pass@1,Baseline,Gemini,0.0,No,No
+ETL,Pass@1,Baseline,Claude,0.1,No,No
+ETL,Pass@1,Few-shot,GPT,0.6,No,No
+ETL,Pass@1,Few-shot,Gemini,0.3,No,No
+ETL,Pass@1,Few-shot,Claude,0.6,Yes,No
+ETL,Pass@1,Grammar,GPT,0.1,No,No
+ETL,Pass@1,Grammar,Gemini,0.0,No,No
+ETL,Pass@1,Grammar,Claude,0.0,No,No
+ETL,Pass@1,FS + GR,GPT,0.5,No,No
+ETL,Pass@1,FS + GR,Gemini,0.1,No,No
+ETL,Pass@1,FS + GR,Claude,0.5,No,No

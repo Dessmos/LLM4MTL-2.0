@@ -1,0 +1,37 @@
+transformation Flowchart2Html
+
+model Flowchart metamodel "http://vitruv.tools/methodologisttemplate/flowchart"
+model HTML metamodel "http://vitruv.tools/methodologisttemplate/HTML"
+
+rule Action2Elements
+	transform s : Flowchart!Action
+	to d : HTML!DIV {
+		
+	guard : s.outgoing.isDefined() and s.outgoing.size() > 0
+	
+	var h = new HTML!H1;
+	h.value = s.name;
+	
+	var a = new HTML!A;
+	a.value = s.outgoing.first().target.name;
+	a.ahref = "#" + s.outgoing.first().target.name;
+	
+	d.children.add(h);
+	d.children.add(a);
+}
+
+rule Decision2Elements
+	transform s : Flowchart!Decision
+	to d : HTML!DIV {
+	
+	var h = new HTML!H1;
+	h.value = s.name;
+	d.children.add(h);
+
+	for (t in s.outgoing) {
+		var a = new HTML!A;
+		a.value = t.target.name;
+		a.ahref = "#" + t.target.name;
+		d.children.add(a);
+	}
+}

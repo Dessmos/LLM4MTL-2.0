@@ -1,0 +1,116 @@
+pre {
+	var atomRoot : new Atom!Feed;
+}
+
+rule Rss2Atom
+	transform rss : RSS!Rss
+	to feed : Atom!Feed {
+	
+	feed = atomRoot;
+	feed.appendEquivalentsOfChildrenOf(rss);
+	feed.entries.addAll(rss.channel.items.equivalent());
+}
+
+rule Item2Entry
+	transform item : RSS!Item
+	to entry : Atom!Entry {
+	
+	entry.appendEquivalentsOfChildrenOf(item);
+}
+
+rule Title2Title
+	transform rssTitle : RSS!Title
+	to atomTitle : Atom!Title {
+	
+	atomTitle.value = rssTitle.value;
+}
+
+rule Link2Link
+	transform rssLink : RSS!Link
+	to atomLink : Atom!Link {
+	
+	atomLink.href = rssLink.value;
+}
+
+rule Generator2Generator
+	transform rssGenerator : RSS!Generator
+	to atomGenerator : Atom!Generator {
+	
+	atomGenerator.value = rssGenerator.value;
+}
+
+rule Creator2Author
+	transform creator : RSS!Creator
+	to author : Atom!Author {
+	
+	author.name = creator.value;
+}
+
+rule Description2Summary
+	transform description : RSS!Description
+	to summary : Atom!Summary {
+	
+	summary.value = description.value;
+}
+
+rule ContentEncoded2Content
+	transform contentEncoded : RSS!ContentEncoded
+	to content : Atom!Content {
+	
+	content.value = contentEncoded.value;
+}
+
+rule PubDate2Published
+	transform pubDate : RSS!PubDate
+	to published : Atom!Published {
+	
+	published.value = pubDate.value;
+}
+
+operation Atom!Feed appendChildren(children : Sequence) {
+	for (child in children) {
+		if (child.isTypeOf(Atom!Title)) {
+			self.title = child;
+		}
+		else if (child.isTypeOf(Atom!Link)) {
+			self.links.add(child);
+		}
+		else if (child.isTypeOf(Atom!Generator)) {
+			self.generator = child;
+		}
+		else if (child.isTypeOf(Atom!Author)) {
+			self.authors.add(child);
+		}
+	}
+}
+
+operation Atom!Entry appendChildren(children : Sequence) {
+	for (child in children) {
+		if (child.isTypeOf(Atom!Title)) {
+			self.title = child;
+		}
+		else if (child.isTypeOf(Atom!Link)) {
+			self.links.add(child);
+		}
+		else if (child.isTypeOf(Atom!Author)) {
+			self.authors.add(child);
+		}
+		else if (child.isTypeOf(Atom!Summary)) {
+			self.summary = child;
+		}
+		else if (child.isTypeOf(Atom!Content)) {
+			self.content = child;
+		}
+		else if (child.isTypeOf(Atom!Published)) {
+			self.published = child;
+		}
+	}
+}
+
+operation Any appendEquivalentsOfChildrenOf(source : Any) {
+	var equivalents : Sequence;
+	if (source.isDefined() and source.eContents.isDefined()) {
+		equivalents = source.eContents.equivalent();
+		self.appendChildren(equivalents);
+	}
+}

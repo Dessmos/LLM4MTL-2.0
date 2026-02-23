@@ -1,0 +1,6 @@
+rule NamedElement2Heading
+	transform s : Flowchart!NamedElement
+	to t : HTML!H1 {
+		
+	t.value = s.name;
+}

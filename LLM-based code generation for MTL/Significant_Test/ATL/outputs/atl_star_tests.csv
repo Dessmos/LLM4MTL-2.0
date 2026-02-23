@@ -1,0 +1,37 @@
+Language,TestType,StatTest,Metric,Strategy,LLM,p_value,Significant
+ATL,Star,Wilcoxon (one-sided),ChrF,Few-shot,GPT,0.01767,Yes
+ATL,Star,Wilcoxon (one-sided),ChrF,Few-shot,Gemini,0.276247,No
+ATL,Star,Wilcoxon (one-sided),ChrF,Few-shot,Claude,0.48748,No
+ATL,Star,Wilcoxon (one-sided),ChrF,Grammar,GPT,0.376576,No
+ATL,Star,Wilcoxon (one-sided),ChrF,Grammar,Gemini,0.48748,No
+ATL,Star,Wilcoxon (one-sided),ChrF,Grammar,Claude,0.764831,No
+ATL,Star,Wilcoxon (one-sided),ChrF,FS + GR,GPT,0.007827,Yes
+ATL,Star,Wilcoxon (one-sided),ChrF,FS + GR,Gemini,0.406973,No
+ATL,Star,Wilcoxon (one-sided),ChrF,FS + GR,Claude,0.724538,No
+ATL,Star,Wilcoxon (one-sided),Errors/LoC,Few-shot,GPT,0.231536,No
+ATL,Star,Wilcoxon (one-sided),Errors/LoC,Few-shot,Gemini,0.124432,No
+ATL,Star,Wilcoxon (one-sided),Errors/LoC,Few-shot,Claude,0.32736,No
+ATL,Star,Wilcoxon (one-sided),Errors/LoC,Grammar,GPT,0.987581,No
+ATL,Star,Wilcoxon (one-sided),Errors/LoC,Grammar,Gemini,0.376576,No
+ATL,Star,Wilcoxon (one-sided),Errors/LoC,Grammar,Claude,0.158655,No
+ATL,Star,Wilcoxon (one-sided),Errors/LoC,FS + GR,GPT,0.112458,No
+ATL,Star,Wilcoxon (one-sided),Errors/LoC,FS + GR,Gemini,0.069005,No
+ATL,Star,Wilcoxon (one-sided),Errors/LoC,FS + GR,Claude,0.32736,No
+ATL,Star,McNemar (one-sided),Parsability,Few-shot,GPT,0.5,No
+ATL,Star,McNemar (one-sided),Parsability,Few-shot,Gemini,0.6875,No
+ATL,Star,McNemar (one-sided),Parsability,Few-shot,Claude,0.75,No
+ATL,Star,McNemar (one-sided),Parsability,Grammar,GPT,0.992188,No
+ATL,Star,McNemar (one-sided),Parsability,Grammar,Gemini,0.6875,No
+ATL,Star,McNemar (one-sided),Parsability,Grammar,Claude,0.5,No
+ATL,Star,McNemar (one-sided),Parsability,FS + GR,GPT,0.3125,No
+ATL,Star,McNemar (one-sided),Parsability,FS + GR,Gemini,0.3125,No
+ATL,Star,McNemar (one-sided),Parsability,FS + GR,Claude,0.5,No
+ATL,Star,McNemar (one-sided),Pass@1,Few-shot,GPT,0.6875,No
+ATL,Star,McNemar (one-sided),Pass@1,Few-shot,Gemini,0.5,No
+ATL,Star,McNemar (one-sided),Pass@1,Few-shot,Claude,0.125,No
+ATL,Star,McNemar (one-sided),Pass@1,Grammar,GPT,0.875,No
+ATL,Star,McNemar (one-sided),Pass@1,Grammar,Gemini,0.6875,No
+ATL,Star,McNemar (one-sided),Pass@1,Grammar,Claude,1.0,No
+ATL,Star,McNemar (one-sided),Pass@1,FS + GR,GPT,0.6875,No
+ATL,Star,McNemar (one-sided),Pass@1,FS + GR,Gemini,0.3125,No
+ATL,Star,McNemar (one-sided),Pass@1,FS + GR,Claude,0.25,No

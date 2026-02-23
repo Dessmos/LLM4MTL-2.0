@@ -1,0 +1,37 @@
+LLM,metric,baseline,strategy,test,p_value,significant
+GPT,CHRF_Score,Baseline (only_prompt),Few-shot,Wilcoxon,0.000977,True
+Gemini,CHRF_Score,Baseline (only_prompt),Few-shot,Wilcoxon,0.004883,True
+Claude,CHRF_Score,Baseline (only_prompt),Few-shot,Wilcoxon,0.000977,True
+GPT,CHRF_Score,Baseline (only_prompt),Grammar,Wilcoxon,0.787109,False
+Gemini,CHRF_Score,Baseline (only_prompt),Grammar,Wilcoxon,0.384766,False
+Claude,CHRF_Score,Baseline (only_prompt),Grammar,Wilcoxon,0.230469,False
+GPT,CHRF_Score,Baseline (only_prompt),FS + GR,Wilcoxon,0.000977,True
+Gemini,CHRF_Score,Baseline (only_prompt),FS + GR,Wilcoxon,0.001953,True
+Claude,CHRF_Score,Baseline (only_prompt),FS + GR,Wilcoxon,0.001953,True
+GPT,errors_per_LOC,Baseline (only_prompt),Few-shot,Wilcoxon,0.125,False
+Gemini,errors_per_LOC,Baseline (only_prompt),Few-shot,Wilcoxon,0.28125,False
+Claude,errors_per_LOC,Baseline (only_prompt),Few-shot,Wilcoxon,NaN,False
+GPT,errors_per_LOC,Baseline (only_prompt),Grammar,Wilcoxon,0.375,False
+Gemini,errors_per_LOC,Baseline (only_prompt),Grammar,Wilcoxon,0.25,False
+Claude,errors_per_LOC,Baseline (only_prompt),Grammar,Wilcoxon,0.75,False
+GPT,errors_per_LOC,Baseline (only_prompt),FS + GR,Wilcoxon,0.1875,False
+Gemini,errors_per_LOC,Baseline (only_prompt),FS + GR,Wilcoxon,0.25,False
+Claude,errors_per_LOC,Baseline (only_prompt),FS + GR,Wilcoxon,0.75,False
+GPT,Parsed,Baseline (only_prompt),Few-shot,McNemar,0.25,False
+Gemini,Parsed,Baseline (only_prompt),Few-shot,McNemar,0.0625,False
+Claude,Parsed,Baseline (only_prompt),Few-shot,McNemar,NaN,False
+GPT,Parsed,Baseline (only_prompt),Grammar,McNemar,0.75,False
+Gemini,Parsed,Baseline (only_prompt),Grammar,McNemar,0.5,False
+Claude,Parsed,Baseline (only_prompt),Grammar,McNemar,1.0,False
+GPT,Parsed,Baseline (only_prompt),FS + GR,McNemar,0.5,False
+Gemini,Parsed,Baseline (only_prompt),FS + GR,McNemar,0.25,False
+Claude,Parsed,Baseline (only_prompt),FS + GR,McNemar,1.0,False
+GPT,pass1,Baseline (only_prompt),Few-shot,McNemar,0.0625,False
+Gemini,pass1,Baseline (only_prompt),Few-shot,McNemar,0.125,False
+Claude,pass1,Baseline (only_prompt),Few-shot,McNemar,0.03125,True
+GPT,pass1,Baseline (only_prompt),Grammar,McNemar,0.875,False
+Gemini,pass1,Baseline (only_prompt),Grammar,McNemar,NaN,False
+Claude,pass1,Baseline (only_prompt),Grammar,McNemar,1.0,False
+GPT,pass1,Baseline (only_prompt),FS + GR,McNemar,0.125,False
+Gemini,pass1,Baseline (only_prompt),FS + GR,McNemar,0.5,False
+Claude,pass1,Baseline (only_prompt),FS + GR,McNemar,0.0625,False

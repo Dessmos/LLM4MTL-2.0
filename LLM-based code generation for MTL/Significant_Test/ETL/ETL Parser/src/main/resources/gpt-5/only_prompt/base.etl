@@ -1,0 +1,23 @@
+rule Flowchart2Heading
+  transform s : Flowchart!Flowchart
+  to t : HTML!H1 {
+  t.value := s.name;
+}
+
+rule Action2Heading
+  transform s : Flowchart!Action
+  to t : HTML!H1 {
+  t.value := s.name;
+}
+
+rule Decision2Heading
+  transform s : Flowchart!Decision
+  to t : HTML!H1 {
+  t.value := s.name;
+}
+
+rule Transition2Heading
+  transform s : Flowchart!Transition
+  to t : HTML!H1 {
+  t.value := s.name;
+}

@@ -1,0 +1,138 @@
+pre {
+	var db : new DB!Database;
+	var trace : new SimpleTrace!Trace;
+}
+
+post {
+	for (sourceElement in OO!PackageableElement.all) {
+		var link : new SimpleTrace!TraceLink;
+		link.description = "Transformation of " + sourceElement.eClass().name;
+		link.sources.add(sourceElement);
+		var targetElements = sourceElement.equivalents();
+		if (targetElements.isDefined()) {
+			link.targets.addAll(targetElements);
+		}
+		trace.links.add(link);
+	}
+}
+
+rule Class2Table
+	transform c : OO!Class
+	to t : DB!Table, pk : DB!Column {
+	
+	guard : not c.isAbstract
+	
+	t.name = c.name;
+	t.database = db;
+	db.contents.add(t);
+	
+	pk.name = t.primaryKeyName();
+	pk.type = "INT";
+	t.columns.add(pk);
+	t.primaryKeys.add(pk);
+	
+	if (c.extends.isDefined()) {
+		var parentTable = c.extends.equivalent();
+		if (parentTable.isDefined()) {
+			var fk : new DB!ForeignKey;
+			fk.name = t.name + "_extends_" + parentTable.name;
+			fk.child = pk;
+			fk.parent = parentTable.primaryKeys.first();
+			fk.database = db;
+			db.contents.add(fk);
+		}
+	}
+}
+
+rule SingleValuedAttribute2Column
+	transform a : OO!Attribute
+	to c : DB!Column {
+	
+	guard : not a.isMany
+	
+	c.name = a.name;
+	c.type = a.type.toDbType();
+	var ownerTable = a.owner.equivalent();
+	if (ownerTable.isDefined()) {
+		c.table = ownerTable;
+	}
+}
+
+rule MultiValuedAttribute2Table
+	transform a : OO!Attribute
+	to t : DB!Table, ownerCol : DB!Column, valueCol : DB!Column {
+	
+	guard : a.isMany
+	
+	t.name = a.valuesTableName();
+	t.database = db;
+	db.contents.add(t);
+	
+	ownerCol.name = a.owner.name.firstToLowerCase() + "Id";
+	ownerCol.type = "INT";
+	t.columns.add(ownerCol);
+	t.primaryKeys.add(ownerCol);
+	
+	valueCol.name = a.name;
+	valueCol.type = a.type.toDbType();
+	t.columns.add(valueCol);
+	
+	var ownerTable = a.owner.equivalent();
+	if (ownerTable.isDefined()) {
+		var fk : new DB!ForeignKey;
+		fk.name = t.name + "_" + ownerCol.name + "_fk";
+		fk.child = ownerCol;
+		fk.parent = ownerTable.primaryKeys.first();
+		fk.database = db;
+		db.contents.add(fk);
+	}
+}
+
+rule Reference2ForeignKey
+	transform r : OO!Reference
+	to fk : DB!ForeignKey, col : DB!Column {
+	
+	guard : not r.isMany and r.type.isTypeOf(OO!Class)
+	
+	col.name = r.name + "Id";
+	col.type = "INT";
+	var ownerTable = r.owner.equivalent();
+	if (ownerTable.isDefined()) {
+		col.table = ownerTable;
+	}
+	
+	fk.name = r.owner.name + "_" + r.name + "_fk";
+	fk.child = col;
+	var refTable = r.type.equivalent();
+	if (refTable.isDefined() and refTable.primaryKeys.notEmpty()) {
+		fk.parent = refTable.primaryKeys.first();
+	}
+	fk.database = db;
+	db.contents.add(fk);
+}
+
+operation DB!Table primaryKeyName() : String {
+	return self.name.firstToLowerCase() + "Id";
+}
+
+operation OO!Attribute valuesTableName() : String {
+	return self.owner.name + "_" + self.name;
+}
+
+operation OO!Classifier toDbType() : String {
+	if (self.isTypeOf(OO!Datatype)) {
+		var typeName = self.name;
+		if (typeName = "String") {
+			return "VARCHAR";
+		} else if (typeName = "Integer" or typeName = "Int") {
+			return "INT";
+		} else if (typeName = "Boolean") {
+			return "BOOLEAN";
+		} else if (typeName = "Real" or typeName = "Double") {
+			return "DOUBLE";
+		} else {
+			return "VARCHAR";
+		}
+	}
+	return "VARCHAR";
+}

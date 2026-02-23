@@ -1,0 +1,32 @@
+transformation Flowchart2Html
+model Flowchart metamodel "flowchart"
+model HTML metamodel "HTML"
+
+rule Action2Elements
+  transform s : flowchart!Action
+  to t : HTML!DIV {
+
+  guard : s.outgoing.size() > 0
+
+  t.children.add(new HTML!H1(value : s.name));
+
+  var firstTransition = s.outgoing.first();
+  t.children.add(new HTML!A(
+    value : firstTransition.target.name,
+    ahref : "#" + firstTransition.target.name
+  ));
+}
+
+rule Decision2Elements
+  transform s : flowchart!Decision
+  to t : HTML!DIV {
+
+  t.children.add(new HTML!H1(value : s.name));
+
+  for (transition in s.outgoing) {
+    t.children.add(new HTML!A(
+      value : transition.target.name,
+      ahref : "#" + transition.target.name
+    ));
+  }
+}

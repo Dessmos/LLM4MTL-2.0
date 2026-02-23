@@ -1,0 +1,143 @@
+transformation OO2DB;
+
+model OO metaModelUri "OO";
+model DB metaModelUri "DB";
+model SimpleTrace metaModelUri "SimpleTrace";
+
+pre {
+	var db = new DB!Database;
+}
+
+rule Class2Table
+	transform s : OO!Class
+	to t : DB!Table {
+	
+	guard : not s.isAbstract
+	
+	t.name = s.name;
+	db.contents.add(t);
+	
+	var pk = new DB!Column;
+	pk.name = s.primaryKeyName();
+	pk.type = "INTEGER";
+	t.columns.add(pk);
+	t.primaryKeys.add(pk);
+	
+	if (s.extends.isDefined()) {
+		var fk = new DB!ForeignKey;
+		fk.name = "fk_" + s.name + "_" + s.extends.name;
+		fk.child = pk;
+		var parentTable = s.extends.equivalent();
+		if (parentTable.isDefined()) {
+			fk.parent = parentTable.primaryKeys.first();
+			db.contents.add(fk);
+		}
+	}
+	
+	for (f in s.features) {
+		f.equivalent();
+	}
+}
+
+rule SingleValuedAttribute2Column
+	transform s : OO!Attribute
+	to t : DB!Column {
+	
+	guard : not s.isMany
+	
+	t.name = s.name;
+	t.type = s.type.toDbType();
+	
+	s.owner.equivalent().columns.add(t);
+}
+
+rule MultiValuedAttribute2Table
+	transform s : OO!Attribute
+	to t : DB!Table {
+	
+	guard : s.isMany
+	
+	t.name = s.valuesTableName();
+	db.contents.add(t);
+	
+	var ownerTable = s.owner.equivalent();
+	var ownerPk = ownerTable.primaryKeys.first();
+	
+	var fkCol = new DB!Column;
+	fkCol.name = ownerTable.name.firstToLowerCase() + "Id";
+	fkCol.type = ownerPk.type;
+	t.columns.add(fkCol);
+	
+	var fk = new DB!ForeignKey;
+	fk.name = "fk_" + t.name + "_" + ownerTable.name;
+	fk.parent = ownerPk;
+	fk.child = fkCol;
+	db.contents.add(fk);
+	
+	var valCol = new DB!Column;
+	valCol.name = "value";
+	valCol.type = s.type.toDbType();
+	t.columns.add(valCol);
+	
+	t.primaryKeys.add(fkCol);
+	t.primaryKeys.add(valCol);
+}
+
+rule Reference2ForeignKey
+	transform s : OO!Reference
+	to t : DB!ForeignKey {
+	
+	guard : not s.isMany
+	
+	var ownerTable = s.owner.equivalent();
+	var referencedTable = s.type.equivalent();
+	
+	if (referencedTable.isUndefined()) return;
+	
+	var referencedPk = referencedTable.primaryKeys.first();
+	
+	var fkCol = new DB!Column;
+	fkCol.name = s.name + "Id";
+	fkCol.type = referencedPk.type;
+	ownerTable.columns.add(fkCol);
+	
+	t.name = "fk_" + ownerTable.name + "_" + referencedTable.name;
+	t.child = fkCol;
+	t.parent = referencedPk;
+	
+	db.contents.add(t);
+}
+
+operation OO!Class primaryKeyName() : String {
+	return self.name.firstToLowerCase() + "Id";
+}
+
+operation OO!Attribute valuesTableName() : String {
+	return self.owner.name + "_" + self.name;
+}
+
+operation OO!Classifier toDbType() : String {
+	if (self.name = "String") {
+		return "VARCHAR(255)";
+	}
+	else if (self.name = "Integer") {
+		return "INTEGER";
+	}
+	else if (self.name = "Boolean") {
+		return "BOOLEAN";
+	}
+	else {
+		return "VARCHAR(255)";
+	}
+}
+
+post {
+	var trace = new SimpleTrace!Trace;
+	for (tr in _trc.traces) {
+		var link = new SimpleTrace!TraceLink;
+		link.description = tr.rule.name;
+		link.sources.add(tr.source);
+		link.targets.addAll(tr.targets);
+		trace.links.add(link);
+	}
+}

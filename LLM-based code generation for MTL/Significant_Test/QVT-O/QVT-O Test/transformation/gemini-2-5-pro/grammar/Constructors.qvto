@@ -1,0 +1,17 @@
+modeltype ECORE "http://www.eclipse.org/emf/2002/Ecore";
+
+transformation t(in inputModel : ECORE, out outputModel : ECORE);
+
+main() {
+	inputModel.rootObjects()[Ecore::EPackage]->map p2p();
+}
+
+mapping Ecore::EPackage::p2p(in p : Ecore::EPackage) : Ecore::EPackage {
+	name := p.name;
+	eClassifiers += new Ecore::EClass("AClass", object Ecore::EOperation {});
+}
+
+constructor Ecore::EClass(n : String, op : Ecore::EOperation) {
+	self.name := n;
+	self.eOperations += op;
+}

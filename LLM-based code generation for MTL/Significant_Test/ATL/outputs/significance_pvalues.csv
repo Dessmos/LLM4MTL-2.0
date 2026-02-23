@@ -1,37 +1,37 @@
-LLM,metric,baseline,strategy,n_pairs,test,p_value,significant,reason
-claude-sonnet-4,CHRF_Score,only_prompt,few_shot,15,Wilcoxon,0.9749599188317098,False,
-claude-sonnet-4,errors_per_LOC,only_prompt,few_shot,15,Wilcoxon,0.6547208460185769,False,
-claude-sonnet-4,Parsed,only_prompt,few_shot,15,McNemar,1.0,False,
-claude-sonnet-4,test_pass,only_prompt,few_shot,15,McNemar,0.25,False,
-claude-sonnet-4,CHRF_Score,only_prompt,grammar,15,Wilcoxon,0.4703377962613965,False,
-claude-sonnet-4,errors_per_LOC,only_prompt,grammar,15,Wilcoxon,,False,有效样本不足（非零差值仅1个）
-claude-sonnet-4,Parsed,only_prompt,grammar,15,McNemar,1.0,False,
-claude-sonnet-4,test_pass,only_prompt,grammar,15,McNemar,1.0,False,
-claude-sonnet-4,CHRF_Score,only_prompt,few_shots_AND_grammar,15,Wilcoxon,0.550923682773407,False,
-claude-sonnet-4,errors_per_LOC,only_prompt,few_shots_AND_grammar,15,Wilcoxon,0.6547208460185769,False,
-claude-sonnet-4,Parsed,only_prompt,few_shots_AND_grammar,15,McNemar,1.0,False,
-claude-sonnet-4,test_pass,only_prompt,few_shots_AND_grammar,15,McNemar,0.5,False,
-gemini-2-5-pro,CHRF_Score,only_prompt,few_shot,15,Wilcoxon,0.5524933360016062,False,
-gemini-2-5-pro,errors_per_LOC,only_prompt,few_shot,15,Wilcoxon,0.24886387493792206,False,
-gemini-2-5-pro,Parsed,only_prompt,few_shot,15,McNemar,1.0,False,
-gemini-2-5-pro,test_pass,only_prompt,few_shot,15,McNemar,1.0,False,
-gemini-2-5-pro,CHRF_Score,only_prompt,grammar,15,Wilcoxon,0.9749599188317098,False,
-gemini-2-5-pro,errors_per_LOC,only_prompt,grammar,15,Wilcoxon,0.7531523647659145,False,
-gemini-2-5-pro,Parsed,only_prompt,grammar,15,McNemar,1.0,False,
-gemini-2-5-pro,test_pass,only_prompt,grammar,15,McNemar,1.0,False,
-gemini-2-5-pro,CHRF_Score,only_prompt,few_shots_AND_grammar,15,Wilcoxon,0.8139453463016609,False,
-gemini-2-5-pro,errors_per_LOC,only_prompt,few_shots_AND_grammar,15,Wilcoxon,0.13801073756865956,False,
-gemini-2-5-pro,Parsed,only_prompt,few_shots_AND_grammar,15,McNemar,0.625,False,
-gemini-2-5-pro,test_pass,only_prompt,few_shots_AND_grammar,15,McNemar,0.625,False,
-gpt-5,CHRF_Score,only_prompt,few_shot,15,Wilcoxon,0.03533935546875,True,
-gpt-5,errors_per_LOC,only_prompt,few_shot,15,Wilcoxon,0.463071015014588,False,
-gpt-5,Parsed,only_prompt,few_shot,15,McNemar,1.0,False,
-gpt-5,test_pass,only_prompt,few_shot,15,McNemar,1.0,False,
-gpt-5,CHRF_Score,only_prompt,grammar,15,Wilcoxon,0.7531523647659145,False,
-gpt-5,errors_per_LOC,only_prompt,grammar,15,Wilcoxon,0.024838501704883265,True,
-gpt-5,Parsed,only_prompt,grammar,15,McNemar,0.125,False,
-gpt-5,test_pass,only_prompt,grammar,15,McNemar,1.0,False,
-gpt-5,CHRF_Score,only_prompt,few_shots_AND_grammar,15,Wilcoxon,0.015653550837455003,True,
-gpt-5,errors_per_LOC,only_prompt,few_shots_AND_grammar,15,Wilcoxon,0.22491588401596185,False,
-gpt-5,Parsed,only_prompt,few_shots_AND_grammar,15,McNemar,0.625,False,
-gpt-5,test_pass,only_prompt,few_shots_AND_grammar,15,McNemar,1.0,False,
+LLM,metric,baseline,strategy,test,p_value,significant
+GPT,ChrF,Baseline,Few-shot,Wilcoxon (one-sided),0.01767,True
+Gemini,ChrF,Baseline,Few-shot,Wilcoxon (one-sided),0.276247,False
+Claude,ChrF,Baseline,Few-shot,Wilcoxon (one-sided),0.48748,False
+GPT,ChrF,Baseline,Grammar,Wilcoxon (one-sided),0.376576,False
+Gemini,ChrF,Baseline,Grammar,Wilcoxon (one-sided),0.48748,False
+Claude,ChrF,Baseline,Grammar,Wilcoxon (one-sided),0.764831,False
+GPT,ChrF,Baseline,FS + GR,Wilcoxon (one-sided),0.007827,True
+Gemini,ChrF,Baseline,FS + GR,Wilcoxon (one-sided),0.406973,False
+Claude,ChrF,Baseline,FS + GR,Wilcoxon (one-sided),0.724538,False
+GPT,Errors/LoC,Baseline,Few-shot,Wilcoxon (one-sided),0.231536,False
+Gemini,Errors/LoC,Baseline,Few-shot,Wilcoxon (one-sided),0.124432,False
+Claude,Errors/LoC,Baseline,Few-shot,Wilcoxon (one-sided),0.32736,False
+GPT,Errors/LoC,Baseline,Grammar,Wilcoxon (one-sided),0.987581,False
+Gemini,Errors/LoC,Baseline,Grammar,Wilcoxon (one-sided),0.376576,False
+Claude,Errors/LoC,Baseline,Grammar,Wilcoxon (one-sided),0.158655,False
+GPT,Errors/LoC,Baseline,FS + GR,Wilcoxon (one-sided),0.112458,False
+Gemini,Errors/LoC,Baseline,FS + GR,Wilcoxon (one-sided),0.069005,False
+Claude,Errors/LoC,Baseline,FS + GR,Wilcoxon (one-sided),0.32736,False
+GPT,Parsability,Baseline,Few-shot,McNemar (one-sided),0.5,False
+Gemini,Parsability,Baseline,Few-shot,McNemar (one-sided),0.6875,False
+Claude,Parsability,Baseline,Few-shot,McNemar (one-sided),0.75,False
+GPT,Parsability,Baseline,Grammar,McNemar (one-sided),0.992188,False
+Gemini,Parsability,Baseline,Grammar,McNemar (one-sided),0.6875,False
+Claude,Parsability,Baseline,Grammar,McNemar (one-sided),0.5,False
+GPT,Parsability,Baseline,FS + GR,McNemar (one-sided),0.3125,False
+Gemini,Parsability,Baseline,FS + GR,McNemar (one-sided),0.3125,False
+Claude,Parsability,Baseline,FS + GR,McNemar (one-sided),0.5,False
+GPT,Pass@1,Baseline,Few-shot,McNemar (one-sided),0.6875,False
+Gemini,Pass@1,Baseline,Few-shot,McNemar (one-sided),0.5,False
+Claude,Pass@1,Baseline,Few-shot,McNemar (one-sided),0.125,False
+GPT,Pass@1,Baseline,Grammar,McNemar (one-sided),0.875,False
+Gemini,Pass@1,Baseline,Grammar,McNemar (one-sided),0.6875,False
+Claude,Pass@1,Baseline,Grammar,McNemar (one-sided),1.0,False
+GPT,Pass@1,Baseline,FS + GR,McNemar (one-sided),0.6875,False
+Gemini,Pass@1,Baseline,FS + GR,McNemar (one-sided),0.3125,False
+Claude,Pass@1,Baseline,FS + GR,McNemar (one-sided),0.25,False
