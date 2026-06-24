@@ -68,7 +68,7 @@
     {
       "parameters": {
         "operation": "write",
-        "fileName": "=/data/snippets/ETL_test_generation/prompts/{{ $node[\"Save reaction name\"].json.baseName }}.txt",
+        "fileName": "=/data/snippets/ETL_test_generation/prompts/{{ $node[\"Merge models, reference and grammar\"].json.baseName }}.txt",
         "dataPropertyName": "={{ $('Generate Prompt from Input').item.json.text }}",
         "options": {
           "append": false
@@ -252,7 +252,7 @@
       "parameters": {
         "mode": "combine",
         "combineBy": "combineByPosition",
-        "numberInputs": 3,
+        "numberInputs": 4,
         "options": {}
       },
       "type": "n8n-nodes-base.merge",
@@ -319,17 +319,6 @@
             "node": "Merge models, reference and grammar",
             "type": "main",
             "index": 1
-          }
-        ]
-      ]
-    },
-    "Save reaction name": {
-      "main": [
-        [
-          {
-            "node": "Extract text from reference file",
-            "type": "main",
-            "index": 0
           }
         ]
       ]
@@ -445,6 +434,17 @@
             "node": "Generate Prompt from Input",
             "type": "main",
             "index": 0
+          }
+        ]
+      ]
+    },
+    "Save reaction name": {
+      "main": [
+        [
+          {
+            "node": "Merge models, reference and grammar",
+            "type": "main",
+            "index": 3
           }
         ]
       ]

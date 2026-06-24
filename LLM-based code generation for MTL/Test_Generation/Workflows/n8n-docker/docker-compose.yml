@@ -8,6 +8,7 @@ services:
       - GENERIC_TIMEZONE=Europe/Berlin
       - TZ=Europe/Berlin
       - N8N_SECURE_COOKIE=false
+      - N8N_RESTRICT_FILE_ACCESS_TO=/data
     volumes:
       # Keep this test-generation n8n instance separate from the baseline n8n.
       - n8n_test_generation_data:/home/node/.n8n
@@ -25,4 +26,3 @@ services:
 
 volumes:
   n8n_test_generation_data:
-

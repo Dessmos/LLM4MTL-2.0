@@ -1,0 +1,31 @@
+To validate the ETL transformation behavior, generate a Java/JUnit semantic test suite that includes the following:
+
+1. **Input Model Cases**:
+   - A simple flowchart with nodes and edges.
+   - A complex decision tree with multiple branches.
+
+2. **Expected Target Model Assertions**:
+   - The transformed `Flowchart` should have an `H1` element for each node, displaying the node's name.
+   - The transformed `Decision` should have an `H1` element for each branch, displaying the branch's name.
+
+3. **Generated Tests are the Primary Semantic Oracle After Validation Against the Reference Transformation**:
+   - The generated tests should be executed to ensure that the transformation behaves as expected against the provided input models.
+   - The test suite should cover all possible scenarios and edge cases to validate the transformation's correctness.
+
+4. **The Generated Tests Should Be Executed in a Separate Test Class**:
+   - Create a separate Java class for the semantic tests, ensuring it is distinct from the main ETL transformation code.
+   - Use JUnit annotations to define test methods that correspond to each rule in the ETL grammar.
+
+5. **Include Assertions to Verify Transformation Results**:
+   - In each test method, use assertions to verify that the transformed model matches the expected target model.
+   - For example, use `assertEquals` or `assertTrue` to compare the actual output with the expected result.
+
+6. **Ensure Test Coverage for All Rules in the ETL Grammar**:
+   - Write tests for all rules defined in the ETL grammar, ensuring that each rule is executed and its transformation behavior is verified.
+   - Use test data that covers various scenarios, including edge cases and complex transformations.
+
+7. **Run the Tests to Validate Transformation Behavior**:
+   - Execute the generated test suite to validate the ETL transformation against the provided input models.
+   - Ensure that all tests pass without any failures or errors.
+
+By following these steps, you can generate a comprehensive Java/JUnit semantic test suite for the given ETL transformation, ensuring its correctness and reliability.

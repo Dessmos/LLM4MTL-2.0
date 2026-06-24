@@ -30,9 +30,22 @@ Mounted paths inside the container:
 /data/baseline/ETL_Parser/resources
 ```
 
+File access is explicitly restricted to the mounted workflow workspace:
+
+```text
+N8N_RESTRICT_FILE_ACCESS_TO=/data
+```
+
+If n8n shows `Access to the file is not allowed`, recreate the container after
+changing the Docker Compose environment:
+
+```sh
+docker compose down
+docker compose up -d
+```
+
 Stop it with:
 
 ```sh
 docker compose down
 ```
-

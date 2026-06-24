@@ -1,0 +1,21 @@
+To validate the ETL transformation behavior, generate a Java/JUnit semantic test suite that includes the following:
+
+1. **Input Model Cases**:
+   - A simple flowchart with nodes and edges.
+   - A complex decision tree with multiple branches.
+
+2. **Expected Target Model Assertions**:
+   - The transformed HTML should accurately represent the original flowchart or decision tree structure.
+   - Each node in the HTML should have a corresponding name attribute.
+   - Each edge in the HTML should connect the correct nodes based on the transformation rules.
+
+3. **Validation Against the Reference Transformation**:
+   - Ensure that the generated tests are the primary semantic oracle after validation against the reference transformation.
+
+4. **Test Execution**:
+   - Execute the test suite to verify that the transformed HTML accurately represents the original flowchart or decision tree structure.
+   - Use assertions to check if the HTML nodes and edges match the expected output.
+
+5. **Refinement and Maintenance**:
+   - Refine the test cases as needed based on new requirements or changes in the ETL transformation rules.
+   - Maintain the test suite to ensure that it remains up-to-date with any changes in the ETL codebase.

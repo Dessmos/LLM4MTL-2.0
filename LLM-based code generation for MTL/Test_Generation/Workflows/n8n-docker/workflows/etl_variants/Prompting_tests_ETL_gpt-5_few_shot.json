@@ -52,7 +52,7 @@
     {
       "parameters": {
         "operation": "write",
-        "fileName": "=/data/snippets/ETL_test_generation/responses/gpt-5/few_shot/{{ $node[\"Save file name\"].json.baseName }}.md",
+        "fileName": "=/data/snippets/ETL_test_generation/responses/gpt-5/few_shot/{{ $node[\"Merge\"].json.baseName }}.md",
         "dataPropertyName": "={{$node[\"(Re-)Generate test suite\"].json.text}}",
         "options": {}
       },
@@ -86,7 +86,7 @@
       "parameters": {
         "mode": "combine",
         "combineBy": "combineByPosition",
-        "numberInputs": 5,
+        "numberInputs": 6,
         "options": {
           "includeUnpaired": true
         }
@@ -814,9 +814,9 @@
       "main": [
         [
           {
-            "node": "Extract text from prompt file",
+            "node": "Merge",
             "type": "main",
-            "index": 0
+            "index": 5
           }
         ]
       ]
