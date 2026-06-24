@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="ASCII"?>
+<Tree:Tree xmi:version="2.0" xmlns:xmi="http://www.omg.org/XMI" xmlns:Tree="Tree" xmi:id="_tree_branching_root" label="root">
+  <children xmi:id="_tree_branching_left" label="left"/>
+  <children xmi:id="_tree_branching_right" label="right"/>
+</Tree:Tree>
+

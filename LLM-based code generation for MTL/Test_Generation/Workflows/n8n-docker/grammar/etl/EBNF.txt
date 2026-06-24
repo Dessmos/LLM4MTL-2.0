@@ -1,0 +1,21 @@
+erlModuleContent ::= pre
+                   | annotationBlock
+                   | operationDeclaration
+                   | post
+                   ;
+
+pre  ::= "pre"  [ NAME ]  statementBlock ;
+post ::= "post" [ NAME ]  statementBlock ;
+
+guard ::= "guard"  expressionOrStatementBlock ;
+
+extendz ::= "extends"  NAME  { "," NAME } ;
+
+(* Terminals / tokens *)
+NAME ::= Identifier ;   (* defined in the lexer / elsewhere *)
+
+(* Referenced non-terminals from base EOL grammar (not defined in this .g file): *)
+(* annotationBlock          *)
+(* operationDeclaration     *)
+(* statementBlock           *)
+(* expressionOrStatementBlock *)
