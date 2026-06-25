@@ -1,31 +1,25 @@
-To validate the ETL transformation behavior, generate a Java/JUnit semantic test suite that includes the following:
-
-1. **Input Model Cases**:
-   - A simple flowchart with nodes and edges.
-   - A complex decision tree with multiple branches.
-
-2. **Expected Target Model Assertions**:
-   - The transformed `Flowchart` should have an `H1` element for each node, displaying the node's name.
-   - The transformed `Decision` should have an `H1` element for each branch, displaying the branch's name.
-
-3. **Generated Tests are the Primary Semantic Oracle After Validation Against the Reference Transformation**:
-   - The generated tests should be executed to ensure that the transformation behaves as expected against the provided input models.
-   - The test suite should cover all possible scenarios and edge cases to validate the transformation's correctness.
-
-4. **The Generated Tests Should Be Executed in a Separate Test Class**:
-   - Create a separate Java class for the semantic tests, ensuring it is distinct from the main ETL transformation code.
-   - Use JUnit annotations to define test methods that correspond to each rule in the ETL grammar.
-
-5. **Include Assertions to Verify Transformation Results**:
-   - In each test method, use assertions to verify that the transformed model matches the expected target model.
-   - For example, use `assertEquals` or `assertTrue` to compare the actual output with the expected result.
-
-6. **Ensure Test Coverage for All Rules in the ETL Grammar**:
-   - Write tests for all rules defined in the ETL grammar, ensuring that each rule is executed and its transformation behavior is verified.
-   - Use test data that covers various scenarios, including edge cases and complex transformations.
-
-7. **Run the Tests to Validate Transformation Behavior**:
-   - Execute the generated test suite to validate the ETL transformation against the provided input models.
-   - Ensure that all tests pass without any failures or errors.
-
-By following these steps, you can generate a comprehensive Java/JUnit semantic test suite for the given ETL transformation, ensuring its correctness and reliability.
+```java
+/**
+ * Developer Prompt: Create an executable Java/JUnit semantic test suite for Tree2Graph.
+ *
+ * Requirements:
+ * 1. The test suite must be contained in the file GeneratedTree2GraphSemanticTest.java.
+ * 2. Three model files are required: tree_simple.model, tree_branching.model, and tree_deep.model.
+ * 3. The tests should not depend on manual Tree2GraphTest.
+ * 4. Generated tests become the semantic oracle only after technical and reference validation.
+ *
+ * Model Files:
+ * - tree_simple.model
+ * - tree_branching.model
+ * - tree_deep.model
+ *
+ * Test Suite Requirements:
+ * 1. Assertions for graph node creation.
+ * 2. Assertions to ensure node names are preserved from the source model.
+ * 3. Assertions for graph edge creation representing parent-child relations.
+ * 4. Assertions to verify correct edge endpoints (source and target nodes).
+ * 5. Assertions to check for no superfluous nodes or edges in the generated graph.
+ *
+ * Note: The test suite should be designed to validate the semantic correctness of the Tree2Graph transformation.
+ */
+```

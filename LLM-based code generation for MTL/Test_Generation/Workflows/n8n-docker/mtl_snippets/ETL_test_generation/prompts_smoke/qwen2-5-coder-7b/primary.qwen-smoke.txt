@@ -1,1 +1,74 @@
-Generate a Java/JUnit semantic test suite for the given ETL transformation, validating its behavior with specified input model cases and expected target model assertions. The generated tests should serve as the primary semantic oracle after validation against the reference transformation.
+```java
+/**
+ * Developer Prompt: Create an executable Java/JUnit semantic test suite for Tree2Graph.
+ *
+ * Requirements:
+ * 1. The test suite must be contained in the file `GeneratedTree2GraphSemanticTest.java`.
+ * 2. Three model files are required: `tree_simple.model`, `tree_branching.model`, and `tree_deep.model`.
+ * 3. The tests should not depend on manual Tree2GraphTest.
+ * 4. Generated tests become the semantic oracle only after technical and reference validation.
+ *
+ * Test Suite Requirements:
+ * - Assertions for graph node creation
+ * - Assertions for node name preservation
+ * - Assertions for graph edge creation for parent-child relations
+ * - Assertions for correct edge endpoints
+ * - Assertions to ensure no superfluous nodes or edges are created
+ */
+
+// GeneratedTree2GraphSemanticTest.java
+
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
+
+public class GeneratedTree2GraphSemanticTest {
+
+    @Test
+    public void testSimpleTreeConversion() {
+        // Load and transform the simple tree model
+        // Assertions for node creation, name preservation, edge creation, correct endpoints, no superfluous nodes/edges
+    }
+
+    @Test
+    public void testBranchingTreeConversion() {
+        // Load and transform the branching tree model
+        // Assertions for node creation, name preservation, edge creation, correct endpoints, no superfluous nodes/edges
+    }
+
+    @Test
+    public void testDeepTreeConversion() {
+        // Load and transform the deep tree model
+        // Assertions for node creation, name preservation, edge creation, correct endpoints, no superfluous nodes/edges
+    }
+}
+```
+
+// tree_simple.model
+```plaintext
+Tree(label="Root")
+  Node(name="Child1")
+  Node(name="Child2")
+```
+
+// tree_branching.model
+```plaintext
+Tree(label="Root")
+  Node(name="Child1")
+    Node(name="Grandchild1")
+    Node(name="Grandchild2")
+  Node(name="Child2")
+```
+
+// tree_deep.model
+```plaintext
+Tree(label="Root")
+  Node(name="Child1")
+    Node(name="Grandchild1")
+      Node(name="GreatGrandchild1")
+      Node(name="GreatGrandchild2")
+    Node(name="Grandchild2")
+  Node(name="Child2")
+    Node(name="Grandchild3")
+```
+
+Please ensure that the test suite is comprehensive and covers all aspects of the Tree2Graph transformation, adhering to the specified requirements.

@@ -1,26 +1,3 @@
-Develop an executable Java/JUnit semantic test suite for `Tree2Graph` that ensures the transformation from a tree model to a graph model is accurate. The test suite should include three model files: `tree_simple.model`, `tree_branching.model`, and `tree_deep.model`. The tests must be self-contained and not depend on any manual `Tree2GraphTest`. Generated tests will serve as the semantic oracle only after technical and reference validation.
-
-### Requirements:
-1. **File Blocks**:
-   - `GeneratedTree2GraphSemanticTest.java`
-   - `tree_simple.model`
-   - `tree_branching.model`
-   - `tree_deep.model`
-
-2. **Assertions**:
-   - Ensure that each node in the graph corresponds to a node in the tree.
-   - Verify that the name of each node in the graph matches its corresponding node in the tree.
-   - Check that edges are created for parent-child relationships between nodes.
-   - Confirm that the source and target of each edge correctly point to the parent and child nodes, respectively.
-   - Ensure there are no superfluous nodes or edges in the resulting graph.
-
-3. **Prohibited Dependencies**:
-   - Do not use any manual `Tree2GraphTest` for validation.
-
-4. **Validation Process**:
-   - The generated tests will be considered the semantic oracle only after they have been validated both technically and against a reference implementation.
-
-### Example Test Structure:
 ```java
 public class GeneratedTree2GraphSemanticTest {
 
@@ -75,17 +52,54 @@ public class GeneratedTree2GraphSemanticTest {
 
     private TreeModel loadModel(String modelName) {
         // Implementation to load model from file
+        try (InputStream inputStream = getClass().getResourceAsStream("/" + modelName)) {
+            return ModelLoader.load(inputStream);
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to load model: " + modelName, e);
+        }
     }
 
     private GraphModel transformToGraph(TreeModel treeModel) {
         // Implementation of the transformation logic
+        Tree2Graph transformer = new Tree2Graph();
+        return transformer.transform(treeModel);
     }
 }
 ```
 
-### Model Files:
-- `tree_simple.model`: A simple tree with one root and one child.
-- `tree_branching.model`: A branching tree with one root and two children.
-- `tree_deep.model`: A deep tree with multiple levels of nodes.
+```xml
+<!-- tree_simple.model -->
+<Tree:Tree label="Root">
+  <children>
+    <Tree:Tree label="Child"/>
+  </children>
+</Tree:Tree>
+```
 
-Ensure that each model file is correctly formatted and represents the intended tree structure.
+```xml
+<!-- tree_branching.model -->
+<Tree:Tree label="Root">
+  <children>
+    <Tree:Tree label="Child1"/>
+    <Tree:Tree label="Child2"/>
+  </children>
+</Tree:Tree>
+```
+
+```xml
+<!-- tree_deep.model -->
+<Tree:Tree label="Root">
+  <children>
+    <Tree:Tree label="Child1">
+      <children>
+        <Tree:Tree label="Grandchild1"/>
+      </children>
+    </Tree:Tree>
+  </children>
+</Tree:Tree>
+```
+
+### Notes:
+- The `loadModel` method reads the model files from the classpath.
+- The `transformToGraph` method uses a hypothetical `Tree2Graph` transformer to perform the transformation.
+- Ensure that the `ModelLoader` and `Tree2Graph` classes are correctly implemented and available in your project.

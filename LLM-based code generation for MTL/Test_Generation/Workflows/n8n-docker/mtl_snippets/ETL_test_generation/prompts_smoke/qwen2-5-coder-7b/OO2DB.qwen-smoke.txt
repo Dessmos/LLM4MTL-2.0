@@ -1,1 +1,20 @@
-Please provide the reference ETL transformation code and the models for context.
+```java
+/**
+ * Developer Prompt: Generate a Semantic Test Suite for Tree2Graph Transformation
+ *
+ * Requirements:
+ * 1. Create an executable Java/JUnit test suite named GeneratedTree2GraphSemanticTest.java.
+ * 2. Include three model files: tree_simple.model, tree_branching.model, and tree_deep.model.
+ * 3. Ensure the tests do not depend on manual Tree2GraphTest.
+ * 4. The generated tests will become the semantic oracle only after technical and reference validation.
+ *
+ * Test Suite Requirements:
+ * - Assert that graph nodes are created for each tree node.
+ * - Verify that node names are preserved during transformation.
+ * - Confirm that graph edges are created for parent-child relations in the tree.
+ * - Ensure correct edge endpoints (source and target).
+ * - Check for no superfluous nodes or edges in the resulting graph.
+ *
+ * Note: The test suite should validate the semantic correctness of the Tree2Graph transformation.
+ */
+```

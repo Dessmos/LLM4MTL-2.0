@@ -1,21 +1,19 @@
-To validate the ETL transformation behavior, generate a Java/JUnit semantic test suite that includes the following:
+Develop an executable Java/JUnit semantic test suite for the `Tree2Graph` transformation, ensuring it adheres to the provided metamodels and ETL rules. The test suite should include:
 
-1. **Input Model Cases**:
-   - A simple flowchart with nodes and edges.
-   - A complex decision tree with multiple branches.
+1. **GeneratedTree2GraphSemanticTest.java**: This file should contain JUnit tests that validate the correctness of the `Tree2Graph` transformation based on the given models (`tree_simple.model`, `tree_branching.model`, `tree_deep.model`). The tests must assert:
+   - Correct creation of graph nodes.
+   - Preservation of node names from the source model to the target graph.
+   - Creation of graph edges representing parent-child relationships in the source tree.
+   - Accuracy of edge endpoints (source and target nodes).
+   - Absence of superfluous nodes or edges in the generated graph.
 
-2. **Expected Target Model Assertions**:
-   - The transformed HTML should accurately represent the original flowchart or decision tree structure.
-   - Each node in the HTML should have a corresponding name attribute.
-   - Each edge in the HTML should connect the correct nodes based on the transformation rules.
+2. **Model Files**:
+   - `tree_simple.model`: A simple tree model with a single root node and one child node.
+   - `tree_branching.model`: A branching tree model with multiple levels of children.
+   - `tree_deep.model`: A deep tree model with many levels of nested nodes.
 
-3. **Validation Against the Reference Transformation**:
-   - Ensure that the generated tests are the primary semantic oracle after validation against the reference transformation.
+3. **Requirements**:
+   - The test suite must not depend on manual `Tree2GraphTest`.
+   - Generated tests should serve as the semantic oracle only after technical and reference validation.
 
-4. **Test Execution**:
-   - Execute the test suite to verify that the transformed HTML accurately represents the original flowchart or decision tree structure.
-   - Use assertions to check if the HTML nodes and edges match the expected output.
-
-5. **Refinement and Maintenance**:
-   - Refine the test cases as needed based on new requirements or changes in the ETL transformation rules.
-   - Maintain the test suite to ensure that it remains up-to-date with any changes in the ETL codebase.
+Ensure that all tests are comprehensive and cover various scenarios to validate the correctness of the transformation logic.

@@ -1,0 +1,401 @@
+{
+  "name": "Tests_ETL_qwen2.5-coder-7b_only_prompt_smoke",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -1120,
+        -240
+      ],
+      "id": "c3d4e5f6-2003-4f03-c003-000000000001",
+      "name": "When clicking 'Execute workflow'"
+    },
+    {
+      "parameters": {
+        "fileSelector": "=/data/snippets/ETL_test_generation/prompts_smoke/qwen2-5-coder-7b/*.qwen-smoke.txt",
+        "options": {
+          "dataPropertyName": "data"
+        }
+      },
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        -928,
+        -240
+      ],
+      "id": "c3d4e5f6-2003-4f03-c003-000000000002",
+      "name": "Read Qwen prompt files",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -736,
+        -240
+      ],
+      "id": "c3d4e5f6-2003-4f03-c003-000000000003",
+      "name": "Loop Over Items"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c3d4e5f6-2003-4f03-c003-100000000001",
+              "name": "baseName",
+              "value": "={{$binary.data.fileName.replace(/\\.qwen-smoke\\.txt$/, '').replace(/\\.txt$/, '')}}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -512,
+        -96
+      ],
+      "id": "c3d4e5f6-2003-4f03-c003-000000000004",
+      "name": "Save task name"
+    },
+    {
+      "parameters": {
+        "operation": "text",
+        "destinationKey": "prompt",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        -512,
+        -240
+      ],
+      "id": "c3d4e5f6-2003-4f03-c003-000000000005",
+      "name": "Extract text from prompt file"
+    },
+    {
+      "parameters": {
+        "fileSelector": "=/data/models/etl/*.ecore",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        -512,
+        48
+      ],
+      "id": "c3d4e5f6-2003-4f03-c003-000000000006",
+      "name": "Read model files",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "operation": "text",
+        "destinationKey": "model",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        -320,
+        48
+      ],
+      "id": "c3d4e5f6-2003-4f03-c003-000000000007",
+      "name": "Extract text from model files"
+    },
+    {
+      "parameters": {
+        "fieldsToSummarize": {
+          "values": [
+            {
+              "aggregation": "concatenate",
+              "field": "model",
+              "separateBy": "\n"
+            },
+            {
+              "aggregation": "concatenate",
+              "field": "model",
+              "includeEmpty": "=",
+              "separateBy": "\n"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.summarize",
+      "typeVersion": 1.1,
+      "position": [
+        -128,
+        48
+      ],
+      "id": "c3d4e5f6-2003-4f03-c003-000000000008",
+      "name": "Summarize models"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "numberInputs": 3,
+        "options": {
+          "includeUnpaired": true
+        }
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        96,
+        -128
+      ],
+      "id": "c3d4e5f6-2003-4f03-c003-000000000009",
+      "name": "Merge prompt, task and models",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:11434/api/chat",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'qwen2.5-coder:7b', stream: false, messages: [ { role: 'system', content: 'You are an expert Java/JUnit test engineer for Epsilon Transformation Language (ETL) model transformations. Generate the actual semantic test suite artifacts, not another prompt. The generated suite is a primary semantic oracle candidate only after technical validation and reference validation. Do not call, extend, or depend on manually written semantic tests. Return only file-oriented Markdown blocks with filenames and complete file contents. Include Java/JUnit test code and all input model files required by the test suite. Do not generate ETL transformation code.' }, { role: 'user', content: 'Task: ' + ($json.baseName || 'ETL') + '\\n\\nGenerated-test request prompt:\\n\\n' + ($json.prompt || '') + '\\n\\nSource and target metamodels for context:\\n\\n' + ($json.concatenated_model || '') + '\\n\\nNow generate the complete Java/JUnit semantic test suite and generated input model files.' } ], options: { temperature: 0.1, top_p: 1 } }) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        320,
+        -128
+      ],
+      "id": "c3d4e5f6-2003-4f03-c003-00000000000a",
+      "name": "Generate Test Suite with local Qwen"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c3d4e5f6-2003-4f03-c003-100000000002",
+              "name": "text",
+              "value": "={{ $json.message.content }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        544,
+        -128
+      ],
+      "id": "c3d4e5f6-2003-4f03-c003-00000000000b",
+      "name": "Extract Qwen test text"
+    },
+    {
+      "parameters": {
+        "operation": "toText",
+        "sourceProperty": "text",
+        "binaryPropertyName": "={{ $json.text }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        768,
+        -128
+      ],
+      "id": "c3d4e5f6-2003-4f03-c003-00000000000c",
+      "name": "Convert response to file"
+    },
+    {
+      "parameters": {
+        "operation": "write",
+        "fileName": "=/data/snippets/ETL_test_generation/responses/qwen2-5-coder-7b/only_prompt/{{ $node[\"Merge prompt, task and models\"].json.baseName }}.md",
+        "dataPropertyName": "={{ $('Extract Qwen test text').item.json.text }}",
+        "options": {
+          "append": false
+        }
+      },
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        992,
+        -128
+      ],
+      "id": "c3d4e5f6-2003-4f03-c003-00000000000d",
+      "name": "Write response to disk"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking 'Execute workflow'": {
+      "main": [
+        [
+          {
+            "node": "Read Qwen prompt files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Qwen prompt files": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Extract text from prompt file",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Save task name",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Read model files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save task name": {
+      "main": [
+        [
+          {
+            "node": "Merge prompt, task and models",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Extract text from prompt file": {
+      "main": [
+        [
+          {
+            "node": "Merge prompt, task and models",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read model files": {
+      "main": [
+        [
+          {
+            "node": "Extract text from model files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract text from model files": {
+      "main": [
+        [
+          {
+            "node": "Summarize models",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Summarize models": {
+      "main": [
+        [
+          {
+            "node": "Merge prompt, task and models",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Merge prompt, task and models": {
+      "main": [
+        [
+          {
+            "node": "Generate Test Suite with local Qwen",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Test Suite with local Qwen": {
+      "main": [
+        [
+          {
+            "node": "Extract Qwen test text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Qwen test text": {
+      "main": [
+        [
+          {
+            "node": "Convert response to file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Convert response to file": {
+      "main": [
+        [
+          {
+            "node": "Write response to disk",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write response to disk": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "meta": {
+    "instanceId": "baac600b301729508052ad55e0d8a15d3b34368b7a1ed3c61d229191ca3faa41"
+  },
+  "tags": []
+}

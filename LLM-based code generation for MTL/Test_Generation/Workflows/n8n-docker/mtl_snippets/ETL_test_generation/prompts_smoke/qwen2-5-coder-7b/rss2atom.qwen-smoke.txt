@@ -1,1 +1,50 @@
-Please provide the reference ETL transformation code and the models for context.
+Develop an executable Java/JUnit semantic test suite for the `Tree2Graph` transformation, ensuring it adheres to the following requirements:
+
+1. **File Blocks**:
+   - `GeneratedTree2GraphSemanticTest.java`
+   - `tree_simple.model`
+   - `tree_branching.model`
+   - `tree_deep.model`
+
+2. **Model Files**:
+   - `tree_simple.model`: A simple tree structure with a single root node and one child.
+   - `tree_branching.model`: A branching tree structure with multiple levels of nodes.
+   - `tree_deep.model`: A deep tree structure with many layers of nodes.
+
+3. **Constraints**:
+   - The test suite must not depend on manual `Tree2GraphTest`.
+   - Generated tests will become the semantic oracle only after technical and reference validation.
+
+4. **Assertions**:
+   - Ensure that graph nodes are created for each node in the tree.
+   - Verify that node names are preserved during the transformation.
+   - Confirm that graph edges are created to represent parent-child relationships.
+   - Check that edge endpoints correctly reflect the source and target nodes.
+   - Ensure there are no superfluous nodes or edges in the resulting graph.
+
+5. **Test Suite Structure**:
+   - The test suite should include methods for each model file, testing the transformation of different tree structures.
+   - Each method should use assertions to validate the correctness of the transformed graph.
+
+6. **Example Method**:
+   ```java
+   @Test
+   public void testTreeSimpleModel() {
+       // Load the tree_simple.model and perform the transformation
+       Tree2Graph transformer = new Tree2Graph();
+       Graph.Graph result = transformer.transform(loadModel("tree_simple.model"));
+
+       // Assertions to validate the transformed graph
+       assertEquals(2, result.nodes.size()); // Root node and one child node
+       assertTrue(result.nodes.stream().anyMatch(node -> "Root".equals(node.name))); // Node name preservation
+       assertTrue(result.nodes.stream().anyMatch(node -> "Child".equals(node.name)));
+       assertEquals(1, result.nodes.get(0).outgoing.size()); // One outgoing edge from root
+       assertEquals(result.nodes.get(1), result.nodes.get(0).outgoing.get(0).target); // Correct edge endpoint
+   }
+   ```
+
+7. **Validation**:
+   - After implementing the test suite, ensure that it passes all assertions.
+   - If any assertion fails, debug and fix the transformation logic accordingly.
+
+By following these guidelines, you will create a robust semantic test suite for the `Tree2Graph` transformation, ensuring its correctness across various tree structures.

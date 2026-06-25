@@ -76,7 +76,8 @@ It reads ETL reference transformations from:
 Workflows/n8n-docker/mtl_snippets/ETL_test_generation/references/*.etl
 ```
 
-and writes generated developer prompt candidates by prompt-generating LLM:
+Each `.etl` reference produces one generated test prompt with the same base
+name, and prompt candidates are written by prompt-generating LLM:
 
 ```text
 Workflows/n8n-docker/mtl_snippets/ETL_test_generation/prompts/gpt-5/*.txt
@@ -98,8 +99,30 @@ Workflows/n8n-docker/workflows/etl_variants/prompt_generation/Prompt_generation_
 Workflows/n8n-docker/mtl_snippets/ETL_test_generation/prompts_smoke/qwen2-5-coder-7b/
 ```
 
-All `Prompting_tests_ETL_<llm>_<strategy>.json` workflows read production prompts
-from:
+To smoke-test the next step with local Qwen, import and run:
+
+```text
+Workflows/n8n-docker/workflows/etl_variants/test_generation/Prompting_tests_ETL_qwen2-5-coder-7b_only_prompt.json
+```
+
+It reads Qwen-generated prompt files from:
+
+```text
+Workflows/n8n-docker/mtl_snippets/ETL_test_generation/prompts_smoke/qwen2-5-coder-7b/*.qwen-smoke.txt
+```
+
+and writes raw Markdown test-suite responses to:
+
+```text
+Workflows/n8n-docker/mtl_snippets/ETL_test_generation/responses/qwen2-5-coder-7b/only_prompt/*.md
+```
+
+These Qwen outputs are for cheap local workflow checks. They can still be passed
+through extraction and technical validation, but they are not the main thesis
+LLM result set unless explicitly promoted.
+
+Production `Prompting_tests_ETL_<llm>_<strategy>.json` workflows read selected
+production prompts from:
 
 ```text
 /data/snippets/ETL_test_generation/prompts/*.txt

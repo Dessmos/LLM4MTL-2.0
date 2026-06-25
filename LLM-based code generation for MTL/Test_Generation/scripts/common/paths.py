@@ -38,6 +38,10 @@ def default_prompts_root() -> Path:
     return n8n_snippets_root() / "prompts"
 
 
+def default_references_root() -> Path:
+    return n8n_snippets_root() / "references"
+
+
 def default_etl_test_dir() -> Path:
     return repo_root() / "ETL_Test"
 
