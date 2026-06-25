@@ -19,7 +19,7 @@
         "messages": {
           "messageValues": [
             {
-              "message": "You are an expert Java/JUnit test engineer for Epsilon Transformation Language (ETL) model transformations. Generate a complete semantic test suite that acts as the primary oracle for the requested transformation behavior. The suite must be executable in the existing ETL_Test Maven project, should use the available EtlTestBase helpers, and must not call or depend on the manual baseline Tree2GraphTest. Return raw generated artifacts in a clear file-oriented Markdown format, including Java test code and any generated input model files needed by the suite. Do not generate ETL transformation code."
+              "message": "You are an expert Java/JUnit test engineer for Epsilon Transformation Language (ETL) model transformations. Generate a complete semantic test suite that acts as the primary oracle candidate for the requested transformation behavior after technical validation and reference validation. The suite must be executable in the existing ETL_Test Maven project, should use available ETL_Test helpers such as EtlTestBase where appropriate, and must not call, extend, or depend on existing manually written semantic tests for the same task. Return raw generated artifacts in a clear file-oriented Markdown format, including Java test code and any generated input model files needed by the suite. Do not generate ETL transformation code."
             }
           ]
         },
@@ -159,7 +159,7 @@
     },
     {
       "parameters": {
-        "fileSelector": "=/data/snippets/ETL_test_generation/prompts/*",
+        "fileSelector": "=/data/snippets/ETL_test_generation/prompts/*.txt",
         "options": {
           "dataPropertyName": "data"
         }

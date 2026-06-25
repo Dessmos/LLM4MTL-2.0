@@ -36,3 +36,52 @@ templates. Generated prompt texts, references, and responses can be stored under
 
 The models under `Test_Generation/Workflows/n8n-docker/models` are prompt-context
 copies. The source of truth remains the original `ETL_Test` resources.
+
+## Tree2Graph Prompt Generation
+
+The first implemented test-generation prompt is:
+
+```text
+Workflows/n8n-docker/mtl_snippets/ETL_test_generation/prompts/Tree2Graph.txt
+```
+
+It asks an LLM to generate an executable Java/JUnit semantic suite and requires
+exact file blocks for:
+
+```text
+GeneratedTree2GraphSemanticTest.java
+models/tree_simple.model
+models/tree_branching.model
+models/tree_deep.model
+```
+
+The production prompt-generation workflow is:
+
+```text
+Workflows/n8n-docker/workflows/etl_variants/Prompt_generation_tests_etl.json
+```
+
+It reads ETL reference transformations from:
+
+```text
+Workflows/n8n-docker/mtl_snippets/ETL_test_generation/references/*.etl
+```
+
+and writes generated developer prompts to:
+
+```text
+Workflows/n8n-docker/mtl_snippets/ETL_test_generation/prompts/*.txt
+```
+
+The local Qwen workflow is only for infrastructure smoke testing and writes to:
+
+```text
+Workflows/n8n-docker/mtl_snippets/ETL_test_generation/prompts_smoke/
+```
+
+All `Prompting_tests_ETL_<llm>_<strategy>.json` workflows read production prompts
+from:
+
+```text
+/data/snippets/ETL_test_generation/prompts/*.txt
+```

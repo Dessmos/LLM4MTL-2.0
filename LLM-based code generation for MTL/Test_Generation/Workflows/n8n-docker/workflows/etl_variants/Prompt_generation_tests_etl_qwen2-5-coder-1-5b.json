@@ -14,7 +14,7 @@
     },
     {
       "parameters": {
-        "fileSelector": "=/data/snippets/ETL_test_generation/references/*",
+        "fileSelector": "=/data/snippets/ETL_test_generation/references/Tree2Graph.etl",
         "options": {}
       },
       "type": "n8n-nodes-base.readWriteFile",
@@ -188,7 +188,7 @@
         "url": "http://host.docker.internal:11434/api/chat",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ model: 'qwen2.5-coder:1.5b', stream: false, messages: [ { role: 'system', content: 'You are acting as a senior model-transformation test engineer. Reconstruct a concise natural-language request that would ask an AI assistant to generate an executable Java/JUnit semantic test suite for the given ETL transformation. The request must describe the intended transformation behavior, required input model cases, expected target model assertions, and must state that the generated tests are the primary semantic oracle after validation against the reference transformation. Keep the request under 180 words.' }, { role: 'user', content: 'Here is the reference ETL transformation code:\\n\\n' + ($json.data || '') + '\\n\\nGenerate the original developer request for a Java/JUnit semantic test suite that validates this transformation behavior.\\n\\nHere are the models:\\n' + ($json.concatenated_model || '') + '\\n\\nHere is the ETL grammar for context:\\n' + ($json.grammar || '') } ], options: { temperature: 0.1, top_p: 1 } }) }}",
+        "jsonBody": "={{ JSON.stringify({ model: 'qwen2.5-coder:1.5b', stream: false, messages: [ { role: 'system', content: 'Produce only the developer prompt text, not the Java test itself. The prompt must ask for an executable Java/JUnit semantic test suite for Tree2Graph. It must require exact file blocks for GeneratedTree2GraphSemanticTest.java and three model files: tree_simple.model, tree_branching.model, tree_deep.model. It must forbid depending on manual Tree2GraphTest and must state that generated tests become the semantic oracle only after technical and reference validation.' }, { role: 'user', content: 'Reference ETL transformation file: ' + ($json.baseName || 'Tree2Graph') + '.etl\\n\\nReference ETL transformation code:\\n\\n' + ($json.data || '') + '\\n\\nSource and target metamodels:\\n' + ($json.concatenated_model || '') + '\\n\\nETL grammar for context:\\n' + ($json.grammar || '') + '\\n\\nGenerate the final developer prompt for creating a Tree2Graph semantic JUnit test suite. It must require assertions for graph node creation, node name preservation, graph edge creation for parent-child relations, correct edge endpoints, and no superfluous nodes or edges.' } ], options: { temperature: 0.1, top_p: 1 } }) }}",
         "options": {}
       },
       "type": "n8n-nodes-base.httpRequest",

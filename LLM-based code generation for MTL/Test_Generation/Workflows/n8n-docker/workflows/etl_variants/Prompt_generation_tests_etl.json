@@ -15,11 +15,11 @@
     {
       "parameters": {
         "promptType": "define",
-        "text": "=Here is the reference ETL transformation code:\n\n{{ $json.data }}\n\nGenerate the original developer request for a Java/JUnit semantic test suite that validates this transformation behavior.\n\nHere are the models:\n{{ $json.concatenated_model }}\n\nHere is the ETL grammar for context:\n{{ $json.grammar }}\n",
+        "text": "=Reference ETL transformation file: {{ $json.baseName }}.etl\n\nReference ETL transformation code:\n\n{{ $json.data }}\n\nSource and target metamodels:\n{{ $json.concatenated_model }}\n\nETL grammar for context:\n{{ $json.grammar }}\n\nGenerate the final developer prompt that will be given to another LLM to create an executable Java/JUnit semantic test suite for this specific ETL transformation. The prompt must describe the intended semantics inferred from the reference transformation and must require the generated suite to return exact fenced file blocks for Java and any generated model files.\n",
         "messages": {
           "messageValues": [
             {
-              "message": "You are acting as a senior model-transformation test engineer. Your task is to reconstruct a concise natural-language request that would ask an AI assistant to generate an executable Java/JUnit semantic test suite for the given ETL transformation. The request must describe the intended transformation behavior, required input model cases, expected target model assertions, and must state that the generated tests are the primary semantic oracle after validation against the reference transformation. Keep the request under 180 words."
+              "message": "You are acting as a senior model-transformation test engineer. Produce only the developer prompt text, not the Java test itself. The prompt must ask for an executable Java/JUnit semantic test suite for the specific ETL transformation provided in the input. It must state that generated tests are the primary semantic oracle candidate only after technical validation and reference validation. It must forbid depending on existing manually written semantic tests for the same task. It must require generated input model files when needed. It must require precise assertions for the transformation semantics inferred from the reference ETL code, including absence of superfluous target elements where applicable. It must require the LLM output to use exact fenced file blocks with file attributes, for example ```java file=<GeneratedSemanticTest.java>``` and ```xml file=models/<input>.model```. Keep the prompt direct and implementation-ready."
             }
           ]
         },
@@ -36,7 +36,7 @@
     },
     {
       "parameters": {
-        "fileSelector": "=/data/snippets/ETL_test_generation/references/*",
+        "fileSelector": "=/data/snippets/ETL_test_generation/references/*.etl",
         "options": {}
       },
       "type": "n8n-nodes-base.readWriteFile",
