@@ -1,5 +1,5 @@
 {
-  "name": "Prompt_generation_tests_ETL",
+  "name": "Prompt_generation_tests_ETL_gpt-5",
   "nodes": [
     {
       "parameters": {},
@@ -68,7 +68,7 @@
     {
       "parameters": {
         "operation": "write",
-        "fileName": "=/data/snippets/ETL_test_generation/prompts/{{ $node[\"Merge models, reference and grammar\"].json.baseName }}.txt",
+        "fileName": "=/data/snippets/ETL_test_generation/prompts/gpt-5/{{ $node[\"Merge models, reference and grammar\"].json.baseName }}.txt",
         "dataPropertyName": "={{ $('Generate Prompt from Input').item.json.text }}",
         "options": {
           "append": false
@@ -197,11 +197,12 @@
       "parameters": {
         "model": {
           "__rl": true,
-          "value": "gpt-5-chat-latest",
+          "value": "gpt-5",
           "mode": "list",
-          "cachedResultName": "gpt-5-chat-latest"
+          "cachedResultName": "gpt-5"
         },
         "options": {
+          "timeout": 600000,
           "topP": 1
         }
       },
@@ -212,7 +213,7 @@
         496
       ],
       "id": "a1b2c3d4-1001-4e01-b001-00000000000d",
-      "name": "OpenAI GPT-5-Chat-latest",
+      "name": "OpenAI Chat Model",
       "credentials": {
         "openAiApi": {
           "id": "8mtpdiKzgoTWwPSM",
@@ -405,17 +406,6 @@
         ]
       ]
     },
-    "OpenAI GPT-5-Chat-latest": {
-      "ai_languageModel": [
-        [
-          {
-            "node": "Generate Prompt from Input",
-            "type": "ai_languageModel",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "Summarize": {
       "main": [
         [
@@ -445,6 +435,17 @@
             "node": "Merge models, reference and grammar",
             "type": "main",
             "index": 3
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Generate Prompt from Input",
+            "type": "ai_languageModel",
+            "index": 0
           }
         ]
       ]

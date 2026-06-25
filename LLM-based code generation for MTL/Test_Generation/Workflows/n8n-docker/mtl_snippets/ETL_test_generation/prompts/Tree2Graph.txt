@@ -1,0 +1,36 @@
+Generate an executable Java/JUnit semantic test suite for the ETL Tree2Graph transformation. The generated suite is the primary semantic oracle candidate after technical validation and validation against the reference Tree2Graph.etl. Do not call, extend, or depend on the existing manual Tree2GraphTest; it may only be treated as background style if needed.
+
+The suite must test the full intended Tree2Graph behavior from scratch:
+- every Tree node produces exactly one Graph node;
+- Graph node names preserve Tree node names;
+- every parent-child Tree relation produces exactly one Graph edge;
+- each Graph edge has the correct source and target endpoints;
+- no superfluous Graph nodes or Graph edges are created.
+
+Create and return these input model files:
+- models/tree_simple.model: one root with one child;
+- models/tree_branching.model: one root with at least two children and one grandchild;
+- models/tree_deep.model: a chain with depth at least four.
+
+The Java test must be executable inside the existing ETL_Test Maven project as:
+org.eclipse.epsilon.examples.etl.generated.GeneratedTree2GraphSemanticTest
+
+Use existing ETL_Test helpers such as EtlTestBase if appropriate. The tests should load the generated input models, run Tree2Graph.etl, load the produced Graph model, and assert the semantic properties above.
+
+Return exactly these fenced file blocks and no extra generated files:
+
+```java file=GeneratedTree2GraphSemanticTest.java
+...
+```
+
+```xml file=models/tree_simple.model
+...
+```
+
+```xml file=models/tree_branching.model
+...
+```
+
+```xml file=models/tree_deep.model
+...
+```

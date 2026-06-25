@@ -1,0 +1,454 @@
+{
+  "name": "Prompt_generation_tests_ETL_gemini-2-5-pro",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -2112,
+        -64
+      ],
+      "id": "a1b2c3d4-1001-4e01-b001-000000000001",
+      "name": "When clicking 'Execute workflow'"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Reference ETL transformation file: {{ $json.baseName }}.etl\n\nReference ETL transformation code:\n\n{{ $json.data }}\n\nSource and target metamodels:\n{{ $json.concatenated_model }}\n\nETL grammar for context:\n{{ $json.grammar }}\n\nGenerate the final developer prompt that will be given to another LLM to create an executable Java/JUnit semantic test suite for this specific ETL transformation. The prompt must describe the intended semantics inferred from the reference transformation and must require the generated suite to return exact fenced file blocks for Java and any generated model files.\n",
+        "messages": {
+          "messageValues": [
+            {
+              "message": "You are acting as a senior model-transformation test engineer. Produce only the developer prompt text, not the Java test itself. The prompt must ask for an executable Java/JUnit semantic test suite for the specific ETL transformation provided in the input. It must state that generated tests are the primary semantic oracle candidate only after technical validation and reference validation. It must forbid depending on existing manually written semantic tests for the same task. It must require generated input model files when needed. It must require precise assertions for the transformation semantics inferred from the reference ETL code, including absence of superfluous target elements where applicable. It must require the LLM output to use exact fenced file blocks with file attributes, for example ```java file=<GeneratedSemanticTest.java>``` and ```xml file=models/<input>.model```. Keep the prompt direct and implementation-ready."
+            }
+          ]
+        },
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.7,
+      "position": [
+        -1168,
+        320
+      ],
+      "id": "a1b2c3d4-1001-4e01-b001-000000000002",
+      "name": "Generate Prompt from Input"
+    },
+    {
+      "parameters": {
+        "fileSelector": "=/data/snippets/ETL_test_generation/references/*.etl",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        -1920,
+        -64
+      ],
+      "id": "a1b2c3d4-1001-4e01-b001-000000000003",
+      "name": "Read reference file",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "operation": "toText",
+        "sourceProperty": "text",
+        "binaryPropertyName": "={{ $json.text }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        -864,
+        320
+      ],
+      "id": "a1b2c3d4-1001-4e01-b001-000000000004",
+      "name": "Convert prompt to file"
+    },
+    {
+      "parameters": {
+        "operation": "write",
+        "fileName": "=/data/snippets/ETL_test_generation/prompts/gemini-2-5-pro/{{ $node[\"Merge models, reference and grammar\"].json.baseName }}.txt",
+        "dataPropertyName": "={{ $('Generate Prompt from Input').item.json.text }}",
+        "options": {
+          "append": false
+        }
+      },
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        -848,
+        528
+      ],
+      "id": "a1b2c3d4-1001-4e01-b001-000000000005",
+      "name": "Write prompt to disk"
+    },
+    {
+      "parameters": {
+        "operation": "text",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        -1664,
+        368
+      ],
+      "id": "a1b2c3d4-1001-4e01-b001-000000000006",
+      "name": "Extract text from reference file",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a1b2c3d4-1001-4e01-b001-100000000001",
+              "name": "baseName",
+              "value": "={{$binary.data.fileName.split('.').slice(0,-1).join('.')}}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -1824,
+        272
+      ],
+      "id": "a1b2c3d4-1001-4e01-b001-000000000007",
+      "name": "Save reaction name"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -2112,
+        224
+      ],
+      "id": "a1b2c3d4-1001-4e01-b001-000000000008",
+      "name": "Loop Over Items"
+    },
+    {
+      "parameters": {
+        "fileSelector": "/data/grammar/etl/EBNF.txt",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        -1824,
+        496
+      ],
+      "id": "a1b2c3d4-1001-4e01-b001-000000000009",
+      "name": "Read Grammar"
+    },
+    {
+      "parameters": {
+        "operation": "text",
+        "destinationKey": "grammar",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        -1504,
+        496
+      ],
+      "id": "a1b2c3d4-1001-4e01-b001-00000000000a",
+      "name": "Extract text from grammar"
+    },
+    {
+      "parameters": {
+        "fileSelector": "=/data/models/etl/*.ecore",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        -1824,
+        128
+      ],
+      "id": "a1b2c3d4-1001-4e01-b001-00000000000b",
+      "name": "Read model files",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "operation": "text",
+        "destinationKey": "model",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        -1648,
+        128
+      ],
+      "id": "a1b2c3d4-1001-4e01-b001-00000000000c",
+      "name": "Extract text from model files"
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-2.5-pro",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        -1168,
+        496
+      ],
+      "id": "a1b2c3d4-1001-4e01-b001-00000000000d",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "nUZ88X2Akoz1dXpt",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fieldsToSummarize": {
+          "values": [
+            {
+              "aggregation": "concatenate",
+              "field": "model",
+              "separateBy": "\n"
+            },
+            {
+              "aggregation": "concatenate",
+              "field": "model",
+              "includeEmpty": "=",
+              "separateBy": "\n"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.summarize",
+      "typeVersion": 1.1,
+      "position": [
+        -1472,
+        128
+      ],
+      "id": "a1b2c3d4-1001-4e01-b001-00000000000e",
+      "name": "Summarize"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "numberInputs": 4,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -1344,
+        304
+      ],
+      "id": "a1b2c3d4-1001-4e01-b001-00000000000f",
+      "name": "Merge models, reference and grammar",
+      "alwaysOutputData": true
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking 'Execute workflow'": {
+      "main": [
+        [
+          {
+            "node": "Read reference file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Prompt from Input": {
+      "main": [
+        [
+          {
+            "node": "Convert prompt to file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read reference file": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Convert prompt to file": {
+      "main": [
+        [
+          {
+            "node": "Write prompt to disk",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract text from reference file": {
+      "main": [
+        [
+          {
+            "node": "Merge models, reference and grammar",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Save reaction name",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Extract text from reference file",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Read model files",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Read Grammar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Grammar": {
+      "main": [
+        [
+          {
+            "node": "Extract text from grammar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract text from grammar": {
+      "main": [
+        [
+          {
+            "node": "Merge models, reference and grammar",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Write prompt to disk": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read model files": {
+      "main": [
+        [
+          {
+            "node": "Extract text from model files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract text from model files": {
+      "main": [
+        [
+          {
+            "node": "Summarize",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Summarize": {
+      "main": [
+        [
+          {
+            "node": "Merge models, reference and grammar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge models, reference and grammar": {
+      "main": [
+        [
+          {
+            "node": "Generate Prompt from Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save reaction name": {
+      "main": [
+        [
+          {
+            "node": "Merge models, reference and grammar",
+            "type": "main",
+            "index": 3
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Generate Prompt from Input",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "meta": {
+    "instanceId": "baac600b301729508052ad55e0d8a15d3b34368b7a1ed3c61d229191ca3faa41"
+  },
+  "tags": []
+}

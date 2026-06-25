@@ -1,0 +1,1 @@
+Please generate a Java/JUnit semantic test suite for the given ETL transformation, validating its behavior with the provided input models and expected target model assertions. The generated tests should serve as the primary semantic oracle after validation against the reference transformation.
