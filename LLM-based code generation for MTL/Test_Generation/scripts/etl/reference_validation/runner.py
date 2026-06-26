@@ -2,17 +2,15 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 from common.injection import Injection
 from common.maven import run_maven, summarize_error
 from etl.reference_validation.maven_status import compiles, executes
 from etl.reference_validation.models import ReferenceValidationContext, ReferenceValidationResult
 from etl.reference_validation.promotion import promote_validated_suite
 from etl.reference_validation.reference import inject_reference_transformation
-from etl.technical_validation.java import infer_fqcn
-from etl.technical_validation.models import CandidateSuite
-from etl.technical_validation.suite import inject_suite
+from etl.suites.injection import inject_suite, suite_model_paths
+from etl.suites.java import infer_fqcn
+from etl.suites.models import CandidateSuite
 
 
 def validate_suite(
@@ -63,13 +61,6 @@ def validate_suite(
         return result
     finally:
         injection.restore()
-
-
-def suite_model_paths(suite_path: Path) -> list[Path]:
-    models_dir = suite_path / "models"
-    if not models_dir.exists():
-        return []
-    return sorted(path for path in models_dir.rglob("*") if path.is_file())
 
 
 def failed_before_maven(suite: CandidateSuite, error: str) -> ReferenceValidationResult:

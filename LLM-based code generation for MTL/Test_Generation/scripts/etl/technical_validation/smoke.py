@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from common.injection import Injection
-from etl.technical_validation.java import java_destination
+from etl.suites.java import java_destination
 from etl.technical_validation.models import SMOKE_TEST_CLASS, SMOKE_TEST_FQCN, SMOKE_TEST_PACKAGE
 
 

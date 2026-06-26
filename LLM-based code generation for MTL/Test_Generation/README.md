@@ -158,9 +158,16 @@ editable implementation is split by responsibility:
 
 ```text
 scripts/common/                    # shared paths, CSV, injection, Maven helpers
+scripts/etl/suites/                # shared suite metadata, Java path, and injection helpers
 scripts/etl/extraction/            # Markdown response discovery/parsing/writing
 scripts/etl/technical_validation/  # suite discovery, Java/model checks, smoke tests
+scripts/etl/reference_validation/  # reference ETL injection, Maven execution, promotion
 ```
 
 This keeps command compatibility while making the workflow internals easier to
 edit in smaller files.
+
+Language-specific filesystem conventions are centralized in
+`scripts/common/paths.py` via `LanguageConfig`. The current default is ETL, but
+new language workflows should add their own config instead of hardcoding roots
+inside validation or extraction modules.

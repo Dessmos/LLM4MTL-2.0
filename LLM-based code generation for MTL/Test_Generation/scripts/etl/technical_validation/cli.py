@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 
 from common.paths import default_etl_test_dir, default_generated_tests_root, default_results_root
-from etl.technical_validation.discovery import discover_suites
+from etl.suites.discovery import discover_suites
 from etl.technical_validation.results import write_results
 from etl.technical_validation.suite import check_suite
 

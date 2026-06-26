@@ -5,10 +5,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from common.paths import LANGUAGE_ETL
+from common.paths import ETL_CONFIG
 
 
-LANGUAGE = LANGUAGE_ETL
+LANGUAGE = ETL_CONFIG.language
 ALLOWED_EXTENSIONS = {".java", ".model", ".xmi", ".xml"}
 
 

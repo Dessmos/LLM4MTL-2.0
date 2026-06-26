@@ -7,7 +7,7 @@ import shutil
 from pathlib import Path
 
 from common.paths import relative_or_absolute
-from etl.technical_validation.models import CandidateSuite
+from etl.suites.models import CandidateSuite
 
 
 def promote_validated_suite(suite: CandidateSuite, row: dict[str, str]) -> Path:

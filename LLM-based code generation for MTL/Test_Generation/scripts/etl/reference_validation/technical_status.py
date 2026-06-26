@@ -6,7 +6,7 @@ import argparse
 import csv
 from pathlib import Path
 
-from etl.technical_validation.models import CandidateSuite
+from etl.suites.models import CandidateSuite
 
 
 SuiteKey = tuple[str, str, str, str]

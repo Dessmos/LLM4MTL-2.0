@@ -16,7 +16,7 @@ from etl.reference_validation.models import ReferenceValidationContext
 from etl.reference_validation.results import write_results
 from etl.reference_validation.runner import validate_suite
 from etl.reference_validation.technical_status import filter_technically_valid_suites
-from etl.technical_validation.discovery import discover_suites
+from etl.suites.discovery import discover_suites
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:

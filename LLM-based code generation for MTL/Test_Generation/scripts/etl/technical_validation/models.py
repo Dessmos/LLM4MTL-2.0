@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from pathlib import Path
-
-from common.paths import LANGUAGE_ETL
+from common.paths import ETL_CONFIG
+from etl.suites.models import CandidateSuite
 
 
-LANGUAGE = LANGUAGE_ETL
+LANGUAGE = ETL_CONFIG.language
 SMOKE_TEST_PACKAGE = "org.eclipse.epsilon.examples.etl.generated"
 SMOKE_TEST_CLASS = "GeneratedSuiteTechnicalSmokeTest"
 SMOKE_TEST_FQCN = f"{SMOKE_TEST_PACKAGE}.{SMOKE_TEST_CLASS}"
@@ -27,12 +25,3 @@ RESULT_COLUMNS = [
     "maven_exit_code",
     "error_summary",
 ]
-
-
-@dataclass(frozen=True)
-class CandidateSuite:
-    path: Path
-    task: str
-    llm: str
-    strategy: str
-    suite_id: str

@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import argparse
-from pathlib import Path
 
 from common.injection import Injection
 from common.maven import run_maven, summarize_error
-from etl.technical_validation.java import infer_fqcn, java_destination, slug
-from etl.technical_validation.models import LANGUAGE, SMOKE_TEST_FQCN, CandidateSuite
+from etl.suites.injection import inject_suite
+from etl.suites.java import infer_fqcn
+from etl.suites.models import CandidateSuite
+from etl.technical_validation.models import LANGUAGE, SMOKE_TEST_FQCN
 from etl.technical_validation.resources import check_models_load
 from etl.technical_validation.smoke import inject_smoke_test
 
@@ -80,20 +81,3 @@ def check_suite(suite: CandidateSuite, args: argparse.Namespace) -> dict[str, st
         return result
     finally:
         injection.restore()
-
-
-def inject_suite(
-    suite: CandidateSuite,
-    java_paths: list[Path],
-    model_paths: list[Path],
-    etl_test_dir: Path,
-    injection: Injection,
-) -> None:
-    for java_path in java_paths:
-        fqcn = infer_fqcn(java_path)
-        injection.copy_file(java_path, java_destination(etl_test_dir, fqcn))
-
-    task_resource_dir = etl_test_dir / "src" / "test" / "resources" / "generated-models" / slug(suite.task)
-    for model_path in model_paths:
-        relative = model_path.relative_to(suite.path / "models")
-        injection.copy_file(model_path, task_resource_dir / relative)

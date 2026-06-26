@@ -5,11 +5,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from common.paths import LANGUAGE_ETL
-from etl.technical_validation.models import CandidateSuite
+from common.paths import ETL_CONFIG
+from etl.suites.models import CandidateSuite
 
 
-LANGUAGE = LANGUAGE_ETL
+LANGUAGE = ETL_CONFIG.language
 RESULT_COLUMNS = [
     "language",
     "task",

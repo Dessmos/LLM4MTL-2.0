@@ -9,7 +9,7 @@ import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 
-from common.paths import default_prompts_root, relative_or_absolute, repo_root
+from common.paths import ETL_CONFIG, default_prompts_root, n8n_workflows_root, relative_or_absolute
 from etl.extraction.models import LANGUAGE, ResponseTarget
 from etl.extraction.parser import java_files, model_files
 
@@ -72,14 +72,9 @@ def build_metadata(
 ) -> dict[str, object]:
     prompt_path = default_prompts_root() / f"{target.task}.txt"
     workflow_path = (
-        repo_root()
-        / "Test_Generation"
-        / "Workflows"
-        / "n8n-docker"
-        / "workflows"
-        / "etl_variants"
+        n8n_workflows_root(ETL_CONFIG)
         / "test_generation"
-        / f"Prompting_tests_ETL_{target.llm}_{target.strategy}.json"
+        / f"Prompting_tests_{ETL_CONFIG.language}_{target.llm}_{target.strategy}.json"
     )
     return {
         "language": LANGUAGE,
