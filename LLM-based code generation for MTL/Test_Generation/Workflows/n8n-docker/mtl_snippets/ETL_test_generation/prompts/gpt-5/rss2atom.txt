@@ -1,14 +1,52 @@
-Create an executable Java/JUnit semantic test suite for the ETL transformation defined in the provided `rss2atom.etl` file. The transformation must adhere to the semantics inferred from the reference ETL code, specifically converting RSS elements into their corresponding Atom elements while ensuring that no superfluous target elements are present in the output.
+Create an **executable Java/JUnit semantic test suite** for the ETL transformation **`rss2atom.etl`** (code provided below as the reference semantic source).  
 
-The generated tests should serve as the primary semantic oracle candidate, pending technical validation and reference validation. Do not depend on any existing manually written semantic tests for the same task. If input model files are needed for testing, ensure they are generated as required.
+Your generated tests are a **primary semantic oracle candidate only after**:
+1) technical validation (tests compile/run), and  
+2) reference validation against the provided ETL semantics.  
 
-The assertions within the tests must precisely reflect the transformation semantics as specified in the reference code. For example, check the content of Atom titles, links, authors, summaries, etc., against the expected results derived from their corresponding RSS elements.
+Do **not** depend on, import, copy, or assume any existing manually written semantic tests for this transformation task.
 
-Ensure that all output is formatted using exact fenced file blocks with appropriate file attributes, such as:
-```java file=<GeneratedSemanticTest.java>
-```
-and if applicable:
-```xml file=models/<input>.model
-```
+### Scope and intent
+Infer expected behavior strictly from the provided ETL rules and operations, and produce tests that validate the transformation semantics precisely, including checks for **absence of superfluous target elements** where relevant.
 
-Focus on coverage of all transformation rules outlined in the reference ETL code, and ensure that the semantics captured in your assertions are comprehensive and precise.
+### Semantics to cover from the reference ETL
+- `Rss2Atom`: transforms `RSS!t_rss` to `Atom!t_feed`; sets `Atom.root = f`; appends equivalents of all `r.e_channel.c_item`.
+- `Item2Entry` (lazy): each `RSS!t_item` -> `Atom!t_entry`; appends equivalents of children of item.
+- Child mappings (all lazy):
+  - `t_title` -> `t_title` with `text` copied.
+  - `t_link` -> `t_link` with `a_href = source.text`.
+  - `t_generator` -> `t_generator` with `a_href = source.text`.
+  - ``t_dc:creator`` -> `t_author` containing one `t_name` child with `text = creator.text`.
+  - `t_description` -> `t_summary` with `text` copied.
+  - ``t_content:encoded`` -> `t_content` with `text` copied.
+  - `t_pubDate` -> `t_published` with `text` copied.
+- `appendEquivalentsOfChildrenOf(source)` appends only defined equivalents of direct children.
+- Therefore, unmapped child element types under item must **not** create Atom output nodes.
+
+### Test requirements
+- Use JUnit (prefer JUnit 5).
+- Tests must be executable end-to-end, including loading models, running ETL, and asserting outputs.
+- If input models are needed, **generate them** and include them in output as files.
+- Include at least:
+  1) Happy-path mapping with one RSS root/channel and multiple items.
+  2) Per-field assertions for all mapped child types listed above.
+  3) Multi-item cardinality assertions: number/order of produced entries from channel items.
+  4) Negative/strictness assertions: ensure no output for unmapped item children; ensure no extra unexpected children in each produced entry.
+  5) Structural assertion that Atom root/feed is set and used as container for mapped entries.
+- Assertions must be specific (exact counts, exact text/href values, exact child type presence/absence), not vague existence-only checks.
+
+### Important consistency note
+The supplied “Source and target metamodels” in this task text appear unrelated (Graph/Tree). Use the **ETL reference code semantics (`RSS` to `Atom`)** as the authoritative basis for test intent. If runtime stubs or model fixtures are required, provide them so the suite remains executable and semantically aligned to `rss2atom.etl`.
+
+### Output format (strict)
+Return **only** fenced file blocks with explicit file attributes.  
+Use exact style like:
+- ```java file=src/test/java/.../GeneratedSemanticTest.java
+  // content
+  ```
+- ```xml file=models/<input>.model
+  <!-- content -->
+  ```
+- (and additional files as needed, e.g., helper Java classes, build files)
+
+No prose outside file blocks.

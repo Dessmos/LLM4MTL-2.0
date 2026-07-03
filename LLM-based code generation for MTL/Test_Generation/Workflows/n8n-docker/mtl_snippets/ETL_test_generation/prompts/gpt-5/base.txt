@@ -1,23 +1,34 @@
-Create an executable Java/JUnit semantic test suite for the following ETL transformation defined in the `base.etl` file. The transformation consists of rules that convert different elements of a flowchart model into corresponding heading elements in an HTML model. The specific semantics to be tested are as follows:
+Create an executable **Java/JUnit semantic test suite** for the ETL transformation in `base.etl` (rules: `Flowchart2Heading`, `Action2Heading`, `Decision2Heading`, `Transition2Heading`) using the provided source and target metamodels.
 
-1. The `Flowchart2Heading` rule should transform a `Flowchart` instance into an `H1` element where the `H1` value equals the name of the `Flowchart`.
-2. The `Action2Heading` rule should transform `Action` instances into `H1` elements where the `H1` value equals the name of the `Action`.
-3. The `Decision2Heading` rule should transform `Decision` instances similarly, ensuring that the value of the `H1` is the name of the `Decision`.
-4. Finally, the `Transition2Heading` rule should transform `Transition` instances into `H1` elements with their names properly set as the `H1` value.
+### Scope and oracle policy
+- Treat the generated tests as the **primary semantic oracle candidate only after**:
+  1) technical validation (tests compile/run), and  
+  2) reference validation against the provided ETL code.
+- **Do not depend on, import, copy, or reference any existing manually written semantic tests** for this same task.
+- Infer assertions directly from the reference ETL transformation code.
 
-Your test suite must include precise assertions to validate the target elements' values against the expected semantics defined by the reference ETL code. Additionally, it should check for the absence of any superfluous target elements that do not conform to these transformations.
+### Required semantic expectations to test
+From the ETL rules, the suite must validate that:
+- A source `Flowchart!Flowchart` instance maps to one target `HTML!H1` with `value = source.name`.
+- A source `Flowchart!Action` instance maps to one target `HTML!H1` with `value = source.name`.
+- A source `Flowchart!Decision` instance maps to one target `HTML!H1` with `value = source.name`.
+- A source `Flowchart!Transition` instance maps to one target `HTML!H1` with `value = source.name`.
+- Assertions must be **precise**, including:
+  - exact target element counts for covered inputs,
+  - exact value propagation checks,
+  - and checks for **absence of superfluous/unexpected target elements** where applicable.
 
-Please note the following requirements:
-- Do not depend on any existing manually written semantic tests for the same ETL task.
-- Ensure that input model files are generated and provided where necessary for your tests.
-- The generated test suite serves as the primary semantic oracle candidate only after technical validation and reference validation.
+### Test implementation requirements
+- Use JUnit (prefer JUnit 5).
+- Make tests executable end-to-end (arrange input model, run ETL, inspect output model).
+- If input model instances are needed, **generate and provide them as files** (do not assume they already exist).
+- Keep test data minimal but sufficient to cover all mapped source types and cardinality expectations.
+- Ensure deterministic assertions.
 
-Ensure that the output uses exact fenced file blocks with appropriate file attributes. For example, use:
-```java file=<GeneratedSemanticTest.java>
-```
-for the Java test suite and 
-```xml file=models/<input>.model
-``` 
-for the generated input model files as needed.
+### Output format (strict)
+Return only fenced file blocks with explicit file attributes.  
+Use exact patterns like:
+- ```java file=<GeneratedSemanticTest.java>```
+- ```xml file=models/<input>.model>```
 
-Proceed with the implementation of the test suite based on these specifications.
+Include all necessary files (test class(es) and model file(s)) in this format so they can be saved and executed directly. Do not output explanatory text outside fenced file blocks.

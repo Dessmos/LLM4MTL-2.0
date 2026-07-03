@@ -1,16 +1,46 @@
-Create an executable Java/JUnit semantic test suite for the provided ETL transformation defined in `greedy.etl`. The transformation includes a rule that converts a `NamedElement` from the `Flowchart` metamodel into an `H1` element in the `HTML` metamodel, where the value of the `H1` element should match the `name` attribute of the `NamedElement`. 
+Create an executable **Java/JUnit semantic test suite** for the ETL transformation `greedy.etl` shown below, targeting this specific task only.
 
-The generated test suite must satisfy the following requirements:
+### Reference ETL (semantic ground truth)
+```etl
+@greedy
+rule NamedElement2Heading
+	transform e : Flowchart!NamedElement
+	to h1 : HTML!H1 {
+	
+	h1.value = e.name;
+}
+```
 
-1. The generated tests will be the primary semantic oracle candidate only after technical validation and reference validation. 
-2. Do not depend on any existing manually written semantic tests for this transformation.
-3. Include generated input model files as needed to validate the transformation.
-4. Implement precise assertions to confirm the transformation semantics inferred from the reference ETL code, specifically verifying the value of `h1.value` equals `e.name`, and ensuring there are no superfluous target elements in the generated output.
-5. Use exact fenced file blocks with file attributes for the outputs, for example:
-   ```java file=<GeneratedSemanticTest.java>
-   ```
-   and 
-   ```xml file=models/<input>.model
-   ```
+### What to infer and test
+From the ETL rule, infer and validate these semantics precisely:
 
-Ensure that the testing logic is thorough, validating various scenarios that the transformation may encounter, including edge cases in the input data.
+1. The rule is `@greedy`, so it applies to **all** source instances of `Flowchart!NamedElement`.
+2. For each matched source element, exactly one target `HTML!H1` is created.
+3. The created `H1.value` equals the source `NamedElement.name` (including `null` handling if applicable).
+4. No extra/superfluous `HTML!H1` elements are produced beyond those required by matched `NamedElement` instances.
+5. Assertions must be exact and quantitative (counts + value correspondence), not vague.
+
+### Important constraints
+- Treat generated tests as the **primary semantic oracle candidate only after**:
+  1) technical validation (tests compile/run), and  
+  2) reference validation against the provided ETL code.
+- **Do not depend on or reuse any existing manually written semantic tests** for this same transformation/task.
+- Generate any required **input model files** explicitly as part of your output.
+- Use only semantics derivable from the provided ETL rule; do not invent unrelated behavior.
+
+### Metamodel context provided to you
+Source/target metamodel snippets are provided in the task input. Use them as context, but still derive test intent from the ETL rule above.
+
+### Output format requirements (strict)
+Return only exact fenced file blocks with file attributes, e.g.:
+
+```java file=src/test/java/.../GeneratedSemanticTest.java
+// content
+```
+
+```xml file=models/<input>.model
+<!-- content -->
+```
+
+Include all necessary files for execution (test class and any model instances you create).  
+No prose outside fenced file blocks.

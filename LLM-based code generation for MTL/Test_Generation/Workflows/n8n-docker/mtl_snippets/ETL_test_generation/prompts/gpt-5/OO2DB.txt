@@ -1,17 +1,95 @@
-Create an executable Java/JUnit semantic test suite for the provided ETL transformation defined in `OO2DB.etl`. The test suite should validate the transformation semantics including, but not limited to:
+Create an executable **Java/JUnit 5 semantic test suite** for the ETL transformation **`OO2DB.etl`**.
 
-1. Correct transformation from classes to database tables and primary key columns, ensuring that table names align with the class names, and primary keys are accurately defined.
-2. Validation of foreign key creation between tables when classes extend other classes.
-3. Accurate transformation of single-valued attributes to columns, ensuring the column names and types match the attributes.
-4. Proper handling of multi-valued attributes, ensuring a new table is created for the values and foreign keys are correctly established.
-5. Correct transformation of references into foreign keys, confirming that the relationships are accurately defined in the target model.
+You must treat this suite as the **primary semantic oracle candidate only after**:
+1. technical validation (tests compile/run, transformation executes), and  
+2. reference validation against the provided ETL code semantics.
 
-The generated tests will be primary candidates for semantic oracle validation only after thorough technical validation and reference validation. Do not depend on any existing manually written semantic tests for this transformation.
+Do **not** depend on, import, call, or mirror any existing manually written semantic tests for this same transformation task.
 
-The suite must include generated input model files whenever required for testing. Precise assertions are required for all transformation semantics, and ensure there are no superfluous target elements in the results.
+## Scope and semantic expectations to cover
 
-Use exact fenced file blocks for Java test files and model files, for example:
-```java file=<GeneratedSemanticTest.java>```
-```xml file=models/<input>.model```
+Infer assertions directly from the provided ETL code and validate at least these behaviors precisely:
 
-Be direct and implementation-ready in your response.
+1. **Pre/Post behavior**
+   - `pre` creates exactly one `DB!Database` instance used as container for produced DB elements.
+   - `post` creates one `Trace!Trace` and one `Trace!TraceLink` per transformation trace entry, with:
+     - `sources` containing the transformation source,
+     - `targets` equal to rule targets,
+     - `description = "Transformed by " + ruleName`.
+
+2. **Class2Table**
+   - Each `OO!Class` transforms to one `DB!Table` and one PK `DB!Column`.
+   - `t.name = c.name`.
+   - PK name is `t.primaryKeyName()` where `primaryKeyName()` = `firstToLowerCase(className) + "Id"`.
+   - PK type is `"INT"`.
+   - PK is included in `t.columns` and `t.primaryKeys`.
+   - If class has parent (`extends`), create FK with:
+     - `parent = parentTable.primaryKeys.first()`,
+     - child column name equal to parent PK name,
+     - child column type `"INT"`,
+     - FK name `c.name + "Extends" + c.extends.name`,
+     - FK and child column correctly attached (`fk.database = db`, child column belongs to child table).
+
+3. **SingleValuedAttribute2Column**
+   - Applies only when `not a.isMany`.
+   - Produces one `DB!Column`:
+     - `name = a.name`,
+     - `table` equivalent of `a.owner`,
+     - `type = a.type.name.toDbType()` result.
+
+4. **MultiValuedAttribute2Table**
+   - Applies only when `a.isMany`.
+   - Produces:
+     - values table named `owner.name + "_" + firstToUpperCase(a.name) + "Values"`,
+     - `pkCol` named `"id"`, type `"INT"`, in values table,
+     - `valueCol` named `"value"`, type mapped from attribute type, in values table,
+     - owner-side foreign key column named `a.name + "Id"`, type `"INT"`, in owner table,
+     - FK with `parent = pkCol`, `child = fkCol`, `database = db`.
+
+5. **Reference2ForeignKey**
+   - For each `OO!Reference`:
+     - produce FK column in referenced type table (`fkCol.table ::= r.type`),
+     - `fkCol.name = r.name + "Id"`, `fkCol.type = "INT"`,
+     - FK database is `db`,
+     - `fk.parent = r.owner.equivalent().primaryKeys.first()`,
+     - `fk.child = fkCol`,
+     - `fk.name = r.name`.
+
+6. **Type mapping (`toDbType`)**
+   - If mapping exists in `OO2DB!TypeMapping` by `source == self`, use `mapping.target`.
+   - If absent, fallback to `OO2DB!TypeMap.allInstances().first().default.target`.
+   - Include at least one test for mapped and one for fallback behavior.
+
+7. **Negative/absence checks (required)**
+   - Assert absence of superfluous target elements where applicable (e.g., no extra tables/columns/FKs beyond rule intent for given input).
+   - Example: single-valued attribute must not create a values table; multi-valued attribute must not be transformed by single-valued rule.
+   - Ensure counts are exact, not lower-bound only.
+
+## Input models and fixtures
+
+- Generate all necessary input model files if not provided.
+- If auxiliary models are needed (e.g., type map / type mapping / trace model instances), generate them too.
+- Keep fixtures minimal but sufficient to isolate each rule and at least one integrated scenario combining class, inheritance, attributes (single+many), and reference.
+
+## Technical requirements
+
+- Use Java + JUnit 5.
+- Tests must be executable end-to-end (arrange input models, run ETL, load outputs, assert semantics).
+- Avoid brittle assertions tied to incidental ordering unless the transformation implies ordering.
+- Prefer helper methods for model lookup by name and typed element counting.
+
+## Output format (strict)
+
+Return **only** fenced file blocks with explicit file attributes.  
+Use exact style like:
+
+```java file=src/test/java/.../GeneratedSemanticTest.java
+// content
+```
+
+```xml file=models/<input>.model
+<!-- content -->
+```
+
+Include every required Java/XML (and other text) file in this format so the suite is runnable.  
+No prose outside fenced file blocks.

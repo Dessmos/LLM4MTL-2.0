@@ -1,18 +1,55 @@
-Please generate an executable Java/JUnit semantic test suite for the ETL transformation defined in the provided reference file `lazy.etl`. 
+Create an executable **Java/JUnit semantic test suite** for the ETL transformation `lazy.etl` described below.
 
-The intended semantics inferred from the transformation rules are as follows:
-1. The `Flowchart2Heading` rule should transform a `Flowchart` into a `HTML!DIV`, with the `DIV` containing all nodes from the flowchart.
-2. The `Action2Heading` rule should transform each `Action` in the flowchart into a `HTML!H1`, where the `H1` element's value is set to the name of the action.
-3. The `Decision2Heading` rule should similarly transform each `Decision` into a `HTML!H1`, using the decision's name as the value.
-4. The `Transition2Heading` rule is never invoked; therefore, no `HTML!H1`s should be generated for transitions, which implies that any resulting elements must reflect this absence where applicable.
+### Scope and oracle policy
+- Treat the generated tests as the **primary semantic oracle candidate only after**:
+  1) technical validation (tests compile/run), and  
+  2) reference validation against the provided ETL transformation.
+- **Do not depend on, import, or reuse any existing manually written semantic tests** for this same transformation task.
+- If test inputs are needed, **generate explicit input model files** in the output.
 
-The generated tests will be the primary candidate for the semantic oracle only after thorough technical validation and reference validation. Please refrain from depending on any existing manually written semantic tests for this same task.
+### Transformation-under-test (semantic intent to assert)
+From the provided ETL code:
 
-You must include generated input model files when needed, and ensure that the test suite includes precise assertions for the transformation semantics as defined. Verify the absence of any superfluous target elements according to the transformation rules.
+- `Flowchart2Heading` (non-lazy):
+  - source: `Flowchart!Flowchart`
+  - target: `HTML!DIV`
+  - effect: `div.children.addAll(f.nodes.equivalent());`
+- `Action2Heading` (`@lazy`):
+  - source: `Flowchart!Action`
+  - target: `HTML!H1`
+  - effect: `h1.value = a.name;`
+- `Decision2Heading` (`@lazy`):
+  - source: `Flowchart!Decision`
+  - target: `HTML!H1`
+  - effect: `h1.value = d.name;`
+- `Transition2Heading` (`@lazy`) is never invoked directly by any executed rule.
 
-Please format the output using exact fenced file blocks for the generated Java test file and any model files. For example:
-```java file=<GeneratedSemanticTest.java>```
-and 
-```xml file=models/<input>.model```. 
+### Required semantic assertions
+Design tests that precisely verify (based on ETL semantics and the given code):
 
-Thank you.
+1. A source root `Flowchart` produces exactly one target `DIV`.
+2. `DIV.children` contains equivalents of `f.nodes` only.
+3. For each source node that is an `Action`, one `H1` child is created with `value == Action.name`.
+4. For each source node that is a `Decision`, one `H1` child is created with `value == Decision.name`.
+5. Nodes without an applicable lazy rule (e.g., base `Node` if present) do **not** produce superfluous target elements.
+6. `Transition2Heading` is not implicitly triggered: transitions must not create `H1` unless explicitly invoked (which this transformation does not do).
+7. Assert absence of superfluous target elements globally where applicable (e.g., no extra `H1`, no unexpected target object types, correct counts).
+
+### Metamodel-name mismatch handling
+The ETL code references `Flowchart` and `HTML` types, while the provided metamodel snippets are named `Graph` and `Tree`.  
+Your tests must still be executable: configure/load the actual metamodels used by the runtime fixture for `lazy.etl` and craft input instances using the correct effective types expected by that fixture. Document assumptions in code comments and keep assertions tied to the ETL rule intent above.
+
+### Output requirements (strict)
+Return **only** fenced file blocks with explicit file attributes.  
+Use exact formats like:
+
+```java file=<GeneratedSemanticTest.java>
+...code...
+```
+
+```xml file=models/<input>.model
+...model...
+```
+
+Include all necessary files for execution (test class(es) and any generated model files).  
+No prose outside fenced file blocks.

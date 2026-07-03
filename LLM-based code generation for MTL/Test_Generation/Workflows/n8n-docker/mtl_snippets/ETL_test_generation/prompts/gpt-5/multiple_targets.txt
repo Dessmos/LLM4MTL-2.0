@@ -1,19 +1,67 @@
-Generate an executable Java/JUnit semantic test suite for the provided ETL transformation defined in `multiple_targets.etl`. The tests must validate the transformation semantics as follows:
+Create an **executable Java/JUnit semantic test suite** for the ETL transformation `multiple_targets.etl`, using the provided reference ETL code as the **sole semantic specification source**.
 
-1. **Action Transformation**: Verify that `Action` elements from the source model are correctly transformed into HTML `DIV` containers, with the `H1` title correctly set to the `Action` name and the `A` link pointing to the name of the first outgoing transition's target. Ensure that no superfluous target elements are present.
+The generated tests are a **primary semantic oracle candidate only after**:
+1. technical validation (the tests compile/run and are deterministic), and  
+2. reference validation (assertions match the reference ETL behavior).
 
-2. **Decision Transformation**: Ensure that `Decision` elements are transformed into HTML `DIV` containers, where the `H1` title is set to the `Decision` name. Each outgoing transition should be represented as an `A` link, and ensure all links are correctly populated without any duplication or missing targets.
+Do **not** depend on, invoke, copy, or assume any existing manually written semantic tests for this same task.
 
-The generated tests will be the primary semantic oracle candidate only after comprehensive technical validation and reference validation. You must not depend on any existing manually written semantic tests for this task.
+### Transformation semantics to encode in assertions
 
-Please remember to include the required generated input model files when necessary and ensure that your assertions are precise, capturing the expected semantics inferred from the reference ETL code. 
+Infer and test these semantics from the reference ETL rules:
 
-All outputs must utilize exact fenced file blocks with appropriate file attributes as shown in the examples below:
+1. **Action2Elements rule**
+   - Source: `Flowchart!Action`
+   - Targets created: exactly one `HTML!DIV` (`container`), one `HTML!H1` (`title`), one `HTML!A` (`link`)
+   - Guard: apply only when `a.outgoing.notEmpty()`
+   - Effects:
+     - `title.value = a.name`
+     - `link.value = "Next steps"`
+     - `link.ahref = a.outgoing.first.target.name`
+     - `container.children` contains `title` and `link` (in that order per rule body)
 
-```java file=<GeneratedSemanticTest.java>
+2. **Decision2Elements rule**
+   - Source: `Flowchart!Decision`
+   - Targets created: exactly one `HTML!DIV` (`container`), one `HTML!H1` (`title`), and a sequence of `HTML!A` links (one per outgoing transition)
+   - Effects:
+     - `title.value = d.name`
+     - For each `t in d.outgoing`:
+       - create link with `link.value = t.target.name`
+       - `link.ahref = t.target.name`
+       - add to `links`
+     - `container.children` contains `title` followed by all generated links
+
+3. **Negative / non-creation semantics**
+   - `Action` with no outgoing transitions must produce **no target elements** from `Action2Elements`.
+   - Assert absence of superfluous target elements where applicable (no extra DIV/H1/A beyond what rules imply for the given input).
+
+### Test suite requirements
+
+- Use Java + JUnit (JUnit 5 preferred).
+- Tests must be executable end-to-end (arrange input model, run ETL, load target model, assert).
+- Include all needed helper code/classes/files so the suite can run in a standard Maven/Gradle Java setup.
+- If input models are needed, **generate and provide concrete model files** (do not assume pre-existing ones).
+- Cover at least:
+  - Action with outgoing edge (positive case)
+  - Action without outgoing edge (guard false case)
+  - Decision with multiple outgoing edges
+  - Precise target counts and structural/content assertions
+- Assertions must be exact and semantic (not just non-null checks).
+
+### Output format (strict)
+
+Return only fenced file blocks with explicit `file=` attributes, e.g.:
+
+```java file=src/test/java/.../GeneratedSemanticTest.java
+// content
 ```
 
 ```xml file=models/<input>.model
+<!-- content -->
 ```
 
-The test suite should include thorough cases for both transformations, accounting for tests where no transformations occur (i.e., when there are no outgoing transitions from the `Action`). Please proceed with the generation of this semantic test suite.
+```xml file=pom.xml
+<!-- if needed -->
+```
+
+No prose outside fenced blocks.

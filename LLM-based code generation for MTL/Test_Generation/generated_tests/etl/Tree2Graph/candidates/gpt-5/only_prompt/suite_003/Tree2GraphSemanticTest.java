@@ -1,4 +1,3 @@
-```java file=src/test/java/org/example/etl/Tree2GraphSemanticTest.java
 package org.example.etl;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -177,61 +176,3 @@ public class Tree2GraphSemanticTest extends EtlTestBase {
         }
     }
 }
-```
-
-```xml file=src/test/resources/models/tree_single_root.xmi
-<?xml version="1.0" encoding="UTF-8"?>
-<Tree:Tree xmi:version="2.0"
-    xmlns:xmi="http://www.omg.org/XMI"
-    xmlns:Tree="Tree"
-    label="root"/>
-```
-
-```xml file=src/test/resources/models/tree_root_one_child.xmi
-<?xml version="1.0" encoding="UTF-8"?>
-<Tree:Tree xmi:version="2.0"
-    xmlns:xmi="http://www.omg.org/XMI"
-    xmlns:Tree="Tree"
-    label="root">
-  <children label="child"/>
-</Tree:Tree>
-```
-
-```xml file=src/test/resources/models/tree_deep_chain.xmi
-<?xml version="1.0" encoding="UTF-8"?>
-<Tree:Tree xmi:version="2.0"
-    xmlns:xmi="http://www.omg.org/XMI"
-    xmlns:Tree="Tree"
-    label="root">
-  <children label="child">
-    <children label="grandchild"/>
-  </children>
-</Tree:Tree>
-```
-
-```xml file=src/test/resources/models/tree_branching.xmi
-<?xml version="1.0" encoding="UTF-8"?>
-<Tree:Tree xmi:version="2.0"
-    xmlns:xmi="http://www.omg.org/XMI"
-    xmlns:Tree="Tree"
-    label="root">
-  <children label="a"/>
-  <children label="b">
-    <children label="b1"/>
-  </children>
-  <children label="c"/>
-</Tree:Tree>
-```
-
-```xml file=src/test/resources/models/tree_distinct_labels.xmi
-<?xml version="1.0" encoding="UTF-8"?>
-<Tree:Tree xmi:version="2.0"
-    xmlns:xmi="http://www.omg.org/XMI"
-    xmlns:Tree="Tree"
-    label="ROOT_X">
-  <children label="left-1"/>
-  <children label="right_2">
-    <children label="leaf.Z"/>
-  </children>
-</Tree:Tree>
-```
