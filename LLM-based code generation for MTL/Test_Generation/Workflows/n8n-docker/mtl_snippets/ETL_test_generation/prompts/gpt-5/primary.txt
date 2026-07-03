@@ -1,59 +1,79 @@
-Create an **executable Java/JUnit semantic test suite** for the ETL transformation in `primary.etl` (provided below), using it as the **reference semantics source**.
+You are generating **semantic test assets** for a specific ETL transformation.  
+Your output will be consumed by a deterministic pipeline that already generates the Java/JUnit harness.
 
-### Scope and oracle policy
-- Treat the generated tests as the **primary semantic oracle candidate only after**:
-  1. **Technical validation** (tests compile/run, transformation executes correctly in the harness), and
-  2. **Reference validation** (assertions aligned with the provided reference ETL code).
-- **Do not depend on or reuse any existing manually written semantic tests** for this same task.
-- Infer semantics strictly from the provided ETL rules and assert them precisely.
+## Scope
+Use the provided ETL (`primary.etl`) as the **single source of truth** to derive expected semantics.  
+Do **not** depend on or reuse existing manually written semantic tests for this task.
 
-### Transformation semantics to test (from reference ETL)
-Rules in `primary.etl`:
-- `Flowchart2Heading` transforms one `Flowchart!Flowchart` to one `HTML!DIV`.
-  - For each `t` in `f.transitions`, it adds `t.equivalents().first` to `contents.children`.
-  - Intent: DIV contains only headings of transitions, not links.
-- `Transition2SourceLink` transforms each `Flowchart!Transition` to an `HTML!A`:
+## Critical constraints
+- **Do not output Java or JUnit code.**
+- Produce only:
+  1. `semantic_cases.json`
+  2. One or more source input model files in XML/XMI form under `models/`
+- Cases are accepted only after:
+  - **technical validation** (format/schema/parsing), and
+  - **reference validation** (executing against the reference ETL and matching observed results).
+
+## What to infer from the ETL
+Derive precise, externally observable target-model facts from ETL rules and assignments, including:
+- exact target element counts,
+- exact attribute values,
+- exact references/links,
+- **relationship direction** exactly as implied by assignments (e.g., `e.source` vs `e.target`),
+- and explicit absence of superfluous target elements.
+
+Use rule interactions and `equivalents()` behavior implied by ETL execution to define expectations.
+
+## Required output format (strict)
+Return **only** fenced file blocks with exact filenames:
+
+```json file=semantic_cases.json
+{
+  "testClass": "..."
+  ,"tests": [
+    {
+      "name": "...",
+      "inputModel": "models/<file>.model",
+      "expectedNodes": [
+        { "type": "...", "id": "...", "attributes": { "...": "..." } }
+      ],
+      "expectedEdges": [
+        { "type": "...", "source": "...", "target": "...", "label": "..." }
+      ]
+    }
+  ]
+}
+```
+
+And one or more:
+
+```xml file=models/<input>.model
+<!-- valid source model instance -->
+```
+
+## semantic_cases.json schema expectations
+- Top-level keys: `testClass`, `tests[]`
+- Per test:
+  - `name`
+  - `inputModel`
+  - `expectedNodes` (all required target objects with observable attributes)
+  - `expectedEdges` (all required target references)
+- `expectedEdges` must encode direction as `source -> target` **exactly according to ETL assignments**.
+- Include enough cases to cover core and corner semantics of this transformation.
+
+## Transformation under test (summary to use)
+ETL rules:
+- `Flowchart2Heading`: `Flowchart!Flowchart -> HTML!DIV`, adds `t.equivalents().first` for each transition to `contents.children`.
+- `Transition2SourceLink`: `Flowchart!Transition -> HTML!A`, sets:
   - `a.value = t.source.name`
   - `a.ahref = "#" + t.source.name`
-- `Transition2TargetLink` transforms each `Flowchart!Transition` to an `HTML!A`:
+- `Transition2TargetLink`: `Flowchart!Transition -> HTML!A`, sets:
   - `a.value = t.name`
   - `a.ahref = "#" + t.target.name`
-- `@primary Transition2Heading` transforms each `Flowchart!Transition` to an `HTML!H1`:
+- `@primary Transition2Heading`: `Flowchart!Transition -> HTML!H1`, sets:
   - `h1.value = t.name`
 
-### Required semantic assertions
-Your suite must include tests that verify at least:
-1. **Primary-rule resolution in equivalents**: `Flowchart2Heading` adds `H1` equivalents (from `Transition2Heading`) into `DIV.children`, not `A` links.
-2. **Cardinality**:
-   - Exactly one `DIV` per source `Flowchart`.
-   - Exactly one `H1` per source `Transition`.
-   - Exactly two `A` per source `Transition` (one source-link, one target-link), unless impossible due to malformed input.
-3. **Attribute correctness**:
-   - `H1.value == transition.name`
-   - Source link: `value == source.name`, `ahref == "#" + source.name`
-   - Target link: `value == transition.name`, `ahref == "#" + target.name`
-4. **No superfluous target elements where applicable**:
-   - `DIV.children` contains only headings for transitions in that flowchart and no extra/non-heading elements.
-   - No unexpected extra `DIV`/`H1`/`A` instances beyond rule-implied counts.
-5. **Ordering behavior** where deterministic from `for (t in f.transitions)` (children order follows transition iteration order).
+Focus expectations on what must exist in target model due to these rules, their multiplicities, and references created by containment/children assignments.
 
-### Inputs/metamodel handling
-- If model instances are needed, **generate concrete input model files** as part of the output.
-- Use minimal, clear fixtures that cover:
-  - multiple transitions,
-  - distinct source/target nodes,
-  - edge cases such as empty transitions collection.
-- Ensure model/metamodel names and types are consistent with executable ETL test harness setup.
-
-### Output format requirements (strict)
-Return only exact fenced file blocks with file attributes, e.g.:
-- ```java file=<GeneratedSemanticTest.java>```
-- ```xml file=models/<input>.model>```
-- (and any additional required files similarly)
-Do not output prose outside file blocks.
-
-### Implementation expectations
-- Use JUnit (prefer JUnit 5) and make tests executable end-to-end.
-- Include all necessary setup/teardown and transformation execution code.
-- Keep assertions specific and strong (no vague/non-deterministic checks).
-- Do not reference or import pre-existing manual semantic test classes for this transformation.
+## Final instruction
+Output only the required fenced files, with no extra prose.

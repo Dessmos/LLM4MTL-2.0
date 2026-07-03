@@ -1,2 +1,2 @@
 language,task,suite_id,llm,strategy,compiles,executes,reference_pass,valid,maven_exit_code,error_summary
-ETL,Tree2Graph,suite_002,gpt-5,only_prompt,True,True,False,False,1,"[ERROR] Tests run: 3, Failures: 2, Errors: 0, Skipped: 0, Time elapsed: 0.334 s <<< FAILURE! -- in org.eclipse.epsilon.examples.etl.generated.Tree2GraphSemanticTest | [ERROR] Failures: | [ERROR] Tests run: 3, Failures: 2, Errors: 0, Skipped: 0"
+ETL,Tree2Graph,suite_004,gpt-5,only_prompt,True,True,True,True,0,

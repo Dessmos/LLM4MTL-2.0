@@ -70,7 +70,7 @@ def file_path_from_nearby_text(text: str) -> str | None:
     if match and looks_like_extractable_file(match.group(1)):
         return match.group(1)
 
-    match = re.search(r"([A-Za-z0-9_./-]+\.(?:java|model|xmi|xml))", text)
+    match = re.search(r"([A-Za-z0-9_./-]+\.(?:java|json|model|xmi|xml))", text)
     if match:
         return match.group(1)
 
@@ -93,6 +93,8 @@ def normalize_generated_path(path_value: str) -> str | None:
 
     if suffix == ".java":
         return path.name
+    if suffix == ".json":
+        return path.name
 
     if path.parts and path.parts[0] == "models":
         return str(path)
@@ -106,3 +108,7 @@ def java_files(extracted: dict[str, str]) -> list[str]:
 
 def model_files(extracted: dict[str, str]) -> list[str]:
     return sorted(path for path in extracted if path.endswith((".model", ".xmi", ".xml")))
+
+
+def semantic_case_files(extracted: dict[str, str]) -> list[str]:
+    return sorted(path for path in extracted if path.endswith(".json"))

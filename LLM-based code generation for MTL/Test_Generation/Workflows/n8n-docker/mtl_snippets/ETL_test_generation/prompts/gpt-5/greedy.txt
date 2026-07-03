@@ -1,6 +1,10 @@
-Create an executable **Java/JUnit semantic test suite** for the ETL transformation `greedy.etl` shown below, targeting this specific task only.
+You are generating **semantic test specifications and source input models** for a specific ETL transformation task.
 
-### Reference ETL (semantic ground truth)
+## Task context (fixed)
+
+- Transformation file: `greedy.etl`
+- ETL code:
+
 ```etl
 @greedy
 rule NamedElement2Heading
@@ -11,36 +15,67 @@ rule NamedElement2Heading
 }
 ```
 
-### What to infer and test
-From the ETL rule, infer and validate these semantics precisely:
+- Source metamodel provided to you: `Graph` with classes `Graph`, `Node`, `Edge`  
+  - `Graph.nodes : Node[*]` containment
+  - `Node.name : EString`
+  - `Node.outgoing : Edge[*]` containment, opposite `Edge.source`
+  - `Node.incoming : Edge[*]`, opposite `Edge.target`
+  - `Edge.source : Node`
+  - `Edge.target : Node`
+- Target metamodel provided to you: `Tree` with class `Tree`
+  - `Tree.children : Tree[*]` containment, opposite `Tree.parent`
+  - `Tree.parent : Tree`
+  - `Tree.label : EString`
 
-1. The rule is `@greedy`, so it applies to **all** source instances of `Flowchart!NamedElement`.
-2. For each matched source element, exactly one target `HTML!H1` is created.
-3. The created `H1.value` equals the source `NamedElement.name` (including `null` handling if applicable).
-4. No extra/superfluous `HTML!H1` elements are produced beyond those required by matched `NamedElement` instances.
-5. Assertions must be exact and quantitative (counts + value correspondence), not vague.
+## What you must produce
 
-### Important constraints
-- Treat generated tests as the **primary semantic oracle candidate only after**:
-  1) technical validation (tests compile/run), and  
-  2) reference validation against the provided ETL code.
-- **Do not depend on or reuse any existing manually written semantic tests** for this same transformation/task.
-- Generate any required **input model files** explicitly as part of your output.
-- Use only semantics derivable from the provided ETL rule; do not invent unrelated behavior.
+Produce **only** these fenced file blocks, with no extra text:
 
-### Metamodel context provided to you
-Source/target metamodel snippets are provided in the task input. Use them as context, but still derive test intent from the ETL rule above.
+1. ```json file=semantic_cases.json```
+2. One or more ```xml file=models/<input>.model``` blocks for every referenced `inputModel`
 
-### Output format requirements (strict)
-Return only exact fenced file blocks with file attributes, e.g.:
+Do not output anything else.
 
-```java file=src/test/java/.../GeneratedSemanticTest.java
-// content
-```
+## Hard constraints
 
-```xml file=models/<input>.model
-<!-- content -->
-```
+- **Do NOT generate Java or JUnit.** The Java test harness is generated deterministically by the pipeline.
+- Do not rely on or reference any existing manually written semantic tests for this task.
+- Derive expectations strictly from the ETL code and metamodel facts given above.
+- Cases are accepted only after:
+  1. **technical validation** (well-formed JSON/XML and metamodel-conformant models), and
+  2. **reference validation** against the ETL behavior.
+- Include precise, externally observable target-model expectations:
+  - exact target element counts,
+  - exact attribute values,
+  - exact references/relationships,
+  - relationship direction must match ETL assignment direction semantics (e.g., `source->target` when applicable),
+  - explicit expectation of **absence of superfluous target elements**.
 
-Include all necessary files for execution (test class and any model instances you create).  
-No prose outside fenced file blocks.
+## semantic_cases.json required schema
+
+Top-level object with:
+- `testClass` (string)
+- `tests` (array)
+
+Each test object must contain:
+- `name` (string)
+- `inputModel` (string; path under `models/`)
+- `expectedNodes` (array)
+- `expectedEdges` (array)
+
+Use `expectedEdges` direction as `source->target` exactly by assignment semantics (even if empty for this transformation).
+
+## Test design requirements for this specific transformation
+
+- Account for `@greedy`: rule applies to all source elements of matched type.
+- Analyze type compatibility between ETL rule types and provided metamodels; encode semantic expectations accordingly.
+- Include multiple tests covering meaningful source variations (e.g., empty graph, several nodes, edges, null/empty names where representable), while keeping expectations strictly ETL-driven.
+- If no target elements can be produced under given metamodel/type conditions, expected results must state zero outputs and no edges, with no superfluous elements.
+
+## Output format reminder (strict)
+
+You must output exactly:
+- one `semantic_cases.json` fenced block
+- all required `models/*.model` XML fenced blocks
+
+No prose, no markdown outside those fenced file blocks.

@@ -1,34 +1,60 @@
-Create an executable **Java/JUnit semantic test suite** for the ETL transformation in `base.etl` (rules: `Flowchart2Heading`, `Action2Heading`, `Decision2Heading`, `Transition2Heading`) using the provided source and target metamodels.
+You are generating **semantic test assets** for a specific ETL transformation.  
+Do **not** generate Java or JUnit. The Java/JUnit harness is produced deterministically by the pipeline.
 
-### Scope and oracle policy
-- Treat the generated tests as the **primary semantic oracle candidate only after**:
-  1) technical validation (tests compile/run), and  
-  2) reference validation against the provided ETL code.
-- **Do not depend on, import, copy, or reference any existing manually written semantic tests** for this same task.
-- Infer assertions directly from the reference ETL transformation code.
+Use this ETL as the sole reference for expected behavior:
 
-### Required semantic expectations to test
-From the ETL rules, the suite must validate that:
-- A source `Flowchart!Flowchart` instance maps to one target `HTML!H1` with `value = source.name`.
-- A source `Flowchart!Action` instance maps to one target `HTML!H1` with `value = source.name`.
-- A source `Flowchart!Decision` instance maps to one target `HTML!H1` with `value = source.name`.
-- A source `Flowchart!Transition` instance maps to one target `HTML!H1` with `value = source.name`.
-- Assertions must be **precise**, including:
-  - exact target element counts for covered inputs,
-  - exact value propagation checks,
-  - and checks for **absence of superfluous/unexpected target elements** where applicable.
+- `Flowchart2Heading`: `Flowchart!Flowchart -> HTML!H1`, `h1.value = f.name`
+- `Action2Heading`: `Flowchart!Action -> HTML!H1`, `h1.value = a.name`
+- `Decision2Heading`: `Flowchart!Decision -> HTML!H1`, `h1.value = d.name`
+- `Transition2Heading`: `Flowchart!Transition -> HTML!H1`, `h1.value = t.name`
 
-### Test implementation requirements
-- Use JUnit (prefer JUnit 5).
-- Make tests executable end-to-end (arrange input model, run ETL, inspect output model).
-- If input model instances are needed, **generate and provide them as files** (do not assume they already exist).
-- Keep test data minimal but sufficient to cover all mapped source types and cardinality expectations.
-- Ensure deterministic assertions.
+### Task
+Produce semantic test cases and corresponding **input model files** for this ETL transformation.
+
+### Critical constraints
+1. **No Java, no JUnit, no test harness code.**
+2. Do **not** depend on or reuse existing manually written semantic tests for this task.
+3. Tests are accepted only after:
+   - **technical validation** (format/schema/parsing), and
+   - **reference validation** against the ETL behavior above.
+4. Expected results must contain **precise externally observable target-model facts** inferred from the ETL:
+   - exact target element counts,
+   - exact attribute values,
+   - exact references / relationship direction where applicable,
+   - and explicit absence of superfluous target elements.
+5. For edge direction semantics, use `source->target` direction exactly as ETL assignments would define (e.g., `e.source`, `e.target`).  
+   (If no edges are created by the ETL, keep `expectedEdges` correctly empty.)
 
 ### Output format (strict)
-Return only fenced file blocks with explicit file attributes.  
-Use exact patterns like:
-- ```java file=<GeneratedSemanticTest.java>```
-- ```xml file=models/<input>.model>```
+Return **only** fenced file blocks in this exact pattern:
+- One JSON block:
+  ```json file=semantic_cases.json
+  ```
+- One or more XML input model blocks:
+  ```xml file=models/<input>.model
+  ```
 
-Include all necessary files (test class(es) and model file(s)) in this format so they can be saved and executed directly. Do not output explanatory text outside fenced file blocks.
+No prose outside fenced blocks.
+
+### `semantic_cases.json` required schema
+Top-level object:
+- `testClass`: string
+- `tests`: array of objects
+
+Each test object must include:
+- `name`: string
+- `inputModel`: string (path matching one generated XML file)
+- `expectedNodes`: array
+- `expectedEdges`: array
+
+Design `expectedNodes`/`expectedEdges` so assertions can verify exact transformed target content, including no extra elements.
+
+### Coverage expectations
+Create a compact but meaningful suite covering:
+- each mapped source type that has a rule,
+- mixed-type inputs in one model,
+- empty/minimal input behavior,
+- name propagation correctness (`name` → `H1.value`),
+- multiplicity/count correctness (1 source element of mapped type => 1 `H1`).
+
+Use the ETL code above as authoritative even if metamodel names shown elsewhere appear inconsistent.

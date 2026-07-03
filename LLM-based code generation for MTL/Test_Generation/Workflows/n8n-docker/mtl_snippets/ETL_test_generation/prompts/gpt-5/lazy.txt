@@ -1,55 +1,84 @@
-Create an executable **Java/JUnit semantic test suite** for the ETL transformation `lazy.etl` described below.
+You are given a specific ETL transformation (`lazy.etl`) and must produce **only semantic test specifications and source input models** for that transformation.
 
-### Scope and oracle policy
-- Treat the generated tests as the **primary semantic oracle candidate only after**:
-  1) technical validation (tests compile/run), and  
-  2) reference validation against the provided ETL transformation.
-- **Do not depend on, import, or reuse any existing manually written semantic tests** for this same transformation task.
-- If test inputs are needed, **generate explicit input model files** in the output.
+## Scope and objective
+Generate high-quality semantic test cases derived strictly from the provided ETL code and metamodels.  
+Do **not** generate Java, JUnit, or any test harness code (the pipeline generates that deterministically).
 
-### Transformation-under-test (semantic intent to assert)
-From the provided ETL code:
+Your output will be accepted only after:
+1. **Technical validation** (format/schema/parsing), and
+2. **Reference validation** against the ETL transformation behavior.
 
-- `Flowchart2Heading` (non-lazy):
-  - source: `Flowchart!Flowchart`
-  - target: `HTML!DIV`
-  - effect: `div.children.addAll(f.nodes.equivalent());`
-- `Action2Heading` (`@lazy`):
-  - source: `Flowchart!Action`
-  - target: `HTML!H1`
-  - effect: `h1.value = a.name;`
-- `Decision2Heading` (`@lazy`):
-  - source: `Flowchart!Decision`
-  - target: `HTML!H1`
-  - effect: `h1.value = d.name;`
-- `Transition2Heading` (`@lazy`) is never invoked directly by any executed rule.
+## Critical constraints
+- Do **not** depend on, reuse, or reference any existing manually written semantic tests for this task.
+- Infer expectations directly from the ETL rules and assignments.
+- Assert only **externally observable target-model facts**.
+- For every test, include:
+  - exact target element counts,
+  - exact attribute values,
+  - exact references/relationships,
+  - relationship direction exactly aligned with ETL assignments (e.g., `e.source -> e.target` when applicable),
+  - explicit absence of superfluous/unexpected target elements.
+- Keep tests deterministic and unambiguous.
 
-### Required semantic assertions
-Design tests that precisely verify (based on ETL semantics and the given code):
+## ETL-specific intent to cover
+From the provided `lazy.etl`:
+- Non-lazy entry rule transforms `Flowchart` to one `HTML!DIV` and sets `div.children.addAll(f.nodes.equivalent())`.
+- Lazy rules exist for `Action` and `Decision` mapping to `HTML!H1` with `h1.value = <node>.name`.
+- Lazy `Transition2Heading` is explicitly never invoked; tests should reflect that no target elements are produced from transitions unless invoked (which they are not here).
+- Therefore, node coverage and lazy invocation via `equivalent()` are central; transitions should not create headings.
 
-1. A source root `Flowchart` produces exactly one target `DIV`.
-2. `DIV.children` contains equivalents of `f.nodes` only.
-3. For each source node that is an `Action`, one `H1` child is created with `value == Action.name`.
-4. For each source node that is a `Decision`, one `H1` child is created with `value == Decision.name`.
-5. Nodes without an applicable lazy rule (e.g., base `Node` if present) do **not** produce superfluous target elements.
-6. `Transition2Heading` is not implicitly triggered: transitions must not create `H1` unless explicitly invoked (which this transformation does not do).
-7. Assert absence of superfluous target elements globally where applicable (e.g., no extra `H1`, no unexpected target object types, correct counts).
-
-### Metamodel-name mismatch handling
-The ETL code references `Flowchart` and `HTML` types, while the provided metamodel snippets are named `Graph` and `Tree`.  
-Your tests must still be executable: configure/load the actual metamodels used by the runtime fixture for `lazy.etl` and craft input instances using the correct effective types expected by that fixture. Document assumptions in code comments and keep assertions tied to the ETL rule intent above.
-
-### Output requirements (strict)
-Return **only** fenced file blocks with explicit file attributes.  
-Use exact formats like:
-
-```java file=<GeneratedSemanticTest.java>
-...code...
+## Required output format (exact fenced blocks only)
+Return exactly:
+1. One JSON block:
+```json file=semantic_cases.json
+{
+  "testClass": "LazyEtlSemanticTests",
+  "tests": [
+    {
+      "name": "string",
+      "inputModel": "models/<name>.model",
+      "expectedNodes": [
+        {
+          "id": "string",
+          "type": "string",
+          "attributes": {},
+          "count": 1
+        }
+      ],
+      "expectedEdges": [
+        {
+          "source": "nodeId",
+          "target": "nodeId",
+          "type": "string"
+        }
+      ]
+    }
+  ]
+}
 ```
 
+2. One or more XML blocks for input models:
 ```xml file=models/<input>.model
-...model...
+<!-- XMI/XML instance of the SOURCE metamodel -->
 ```
 
-Include all necessary files for execution (test class(es) and any generated model files).  
-No prose outside fenced file blocks.
+## Schema expectations
+- `testClass`: string.
+- `tests`: array of test objects.
+- Per test:
+  - `name`: unique, descriptive.
+  - `inputModel`: relative path under `models/`.
+  - `expectedNodes`: expected target elements with precise typing/count/attributes.
+  - `expectedEdges`: directed relationships using `source -> target` semantics exactly.
+- Use stable IDs in `expectedNodes` so `expectedEdges` can reference them.
+- Include zero-edge expectations where appropriate (empty array).
+
+## Quality bar
+Design a compact but comprehensive suite covering:
+- empty/minimal source model behavior,
+- mixed source node types that should map,
+- name propagation to target attributes,
+- containment/reference structure in target,
+- non-invoked lazy transition rule effect (no extra target elements).
+
+Output only the required fenced file blocks and nothing else.

@@ -1,95 +1,77 @@
-Create an executable **Java/JUnit 5 semantic test suite** for the ETL transformation **`OO2DB.etl`**.
+You are generating **semantic test specifications and input models** for the ETL transformation **`OO2DB.etl`**.
 
-You must treat this suite as the **primary semantic oracle candidate only after**:
-1. technical validation (tests compile/run, transformation executes), and  
-2. reference validation against the provided ETL code semantics.
+## Scope and goal
+Produce test cases that validate the transformation behavior from the provided ETL code, using only **externally observable target-model facts**.  
+Do **not** generate Java/JUnit code (the Java test harness is generated deterministically by the pipeline).
 
-Do **not** depend on, import, call, or mirror any existing manually written semantic tests for this same transformation task.
-
-## Scope and semantic expectations to cover
-
-Infer assertions directly from the provided ETL code and validate at least these behaviors precisely:
-
-1. **Pre/Post behavior**
-   - `pre` creates exactly one `DB!Database` instance used as container for produced DB elements.
-   - `post` creates one `Trace!Trace` and one `Trace!TraceLink` per transformation trace entry, with:
-     - `sources` containing the transformation source,
-     - `targets` equal to rule targets,
-     - `description = "Transformed by " + ruleName`.
-
-2. **Class2Table**
-   - Each `OO!Class` transforms to one `DB!Table` and one PK `DB!Column`.
-   - `t.name = c.name`.
-   - PK name is `t.primaryKeyName()` where `primaryKeyName()` = `firstToLowerCase(className) + "Id"`.
-   - PK type is `"INT"`.
-   - PK is included in `t.columns` and `t.primaryKeys`.
-   - If class has parent (`extends`), create FK with:
-     - `parent = parentTable.primaryKeys.first()`,
-     - child column name equal to parent PK name,
-     - child column type `"INT"`,
-     - FK name `c.name + "Extends" + c.extends.name`,
-     - FK and child column correctly attached (`fk.database = db`, child column belongs to child table).
-
-3. **SingleValuedAttribute2Column**
-   - Applies only when `not a.isMany`.
-   - Produces one `DB!Column`:
-     - `name = a.name`,
-     - `table` equivalent of `a.owner`,
-     - `type = a.type.name.toDbType()` result.
-
-4. **MultiValuedAttribute2Table**
-   - Applies only when `a.isMany`.
-   - Produces:
-     - values table named `owner.name + "_" + firstToUpperCase(a.name) + "Values"`,
-     - `pkCol` named `"id"`, type `"INT"`, in values table,
-     - `valueCol` named `"value"`, type mapped from attribute type, in values table,
-     - owner-side foreign key column named `a.name + "Id"`, type `"INT"`, in owner table,
-     - FK with `parent = pkCol`, `child = fkCol`, `database = db`.
-
-5. **Reference2ForeignKey**
-   - For each `OO!Reference`:
-     - produce FK column in referenced type table (`fkCol.table ::= r.type`),
-     - `fkCol.name = r.name + "Id"`, `fkCol.type = "INT"`,
-     - FK database is `db`,
-     - `fk.parent = r.owner.equivalent().primaryKeys.first()`,
-     - `fk.child = fkCol`,
-     - `fk.name = r.name`.
-
-6. **Type mapping (`toDbType`)**
-   - If mapping exists in `OO2DB!TypeMapping` by `source == self`, use `mapping.target`.
-   - If absent, fallback to `OO2DB!TypeMap.allInstances().first().default.target`.
-   - Include at least one test for mapped and one for fallback behavior.
-
-7. **Negative/absence checks (required)**
-   - Assert absence of superfluous target elements where applicable (e.g., no extra tables/columns/FKs beyond rule intent for given input).
-   - Example: single-valued attribute must not create a values table; multi-valued attribute must not be transformed by single-valued rule.
-   - Ensure counts are exact, not lower-bound only.
-
-## Input models and fixtures
-
-- Generate all necessary input model files if not provided.
-- If auxiliary models are needed (e.g., type map / type mapping / trace model instances), generate them too.
-- Keep fixtures minimal but sufficient to isolate each rule and at least one integrated scenario combining class, inheritance, attributes (single+many), and reference.
-
-## Technical requirements
-
-- Use Java + JUnit 5.
-- Tests must be executable end-to-end (arrange input models, run ETL, load outputs, assert semantics).
-- Avoid brittle assertions tied to incidental ordering unless the transformation implies ordering.
-- Prefer helper methods for model lookup by name and typed element counting.
+## Critical constraints
+1. **Do not output Java, JUnit, or pseudocode for a harness.**
+2. **Do not depend on or reuse existing manual semantic tests** for this task; derive tests directly from the ETL code and metamodel semantics provided.
+3. Test cases are accepted only after:
+   - **Technical validation** (parsable JSON/XML, schema compliance, model loadability), and
+   - **Reference validation** (expected results align with ETL semantics).
+4. Assertions must be precise and observable in the target model:
+   - exact element counts,
+   - exact attribute values,
+   - exact references,
+   - exact relationship direction derived from ETL assignments (e.g., `e.source`, `e.target`, `fk.parent`, `fk.child`),
+   - and explicit absence of superfluous/unexpected target elements.
 
 ## Output format (strict)
+Return **only** fenced file blocks in this exact pattern:
+- One block:  
+  ```json file=semantic_cases.json
+  ...
+  ```
+- One or more blocks:  
+  ```xml file=models/<input>.model
+  ...
+  ```
 
-Return **only** fenced file blocks with explicit file attributes.  
-Use exact style like:
+No other text before, between, or after file blocks.
 
-```java file=src/test/java/.../GeneratedSemanticTest.java
-// content
-```
+## semantic_cases.json required schema
+Top-level object with:
+- `testClass`: string
+- `tests`: array of objects, each with:
+  - `name`: string
+  - `inputModel`: string (must match one generated XML file path)
+  - `expectedNodes`: array
+  - `expectedEdges`: array
 
-```xml file=models/<input>.model
-<!-- content -->
-```
+Interpretation requirements:
+- `expectedNodes` must encode the exact expected target elements and key attributes (names/types/etc.) needed to validate semantics.
+- `expectedEdges` must encode directed relationships as **source->target** exactly reflecting ETL assignment direction (e.g., parent/child, source/target).
+- Include enough facts to detect missing and extra target elements.
 
-Include every required Java/XML (and other text) file in this format so the suite is runnable.  
-No prose outside fenced file blocks.
+## What to cover from OO2DB.etl
+Design tests to cover, at minimum, these semantics inferred from the ETL:
+- `pre` creates exactly one `DB!Database` root context object.
+- `Class2Table`:
+  - class -> table with same name,
+  - PK column name via `primaryKeyName()` (`firstToLowerCase + "Id"`),
+  - PK type = `INT`,
+  - PK present in both `columns` and `primaryKeys`,
+  - inheritance creates FK with:
+    - `parent` = parent table PK,
+    - `child` = child FK column in child table,
+    - name = `<Child>Extends<Parent>`.
+- `SingleValuedAttribute2Column` (guard `not a.isMany`):
+  - attribute -> column in owner’s table,
+  - column name = attribute name,
+  - type = `a.type.name.toDbType()`.
+- `MultiValuedAttribute2Table` (guard `a.isMany`):
+  - creates values table named `ownerName + "_" + AttributeNameFirstUpper + "Values"`,
+  - creates `id` PK-like column (`INT`) and `value` column with mapped DB type,
+  - creates FK column in owner table named `<attrName>Id` (`INT`),
+  - FK direction: `parent = valuesTable.id`, `child = owner.<attrName>Id`.
+- `Reference2ForeignKey`:
+  - creates FK column in referenced type’s table (`fkCol.table ::= r.type`),
+  - FK col name `<referenceName>Id`, type `INT`,
+  - FK direction: `parent = r.owner.equivalent().primaryKeys.first()`, `child = fkCol`,
+  - FK name = reference name.
+- Type mapping behavior through `toDbType()` including default fallback when no mapping exists.
+
+Also include negative/edge-focused cases where appropriate (e.g., no inheritance, mixed single/many attributes, missing type mapping fallback), always with exact expected target facts and no extras.
+
+Generate realistic, minimal input models required for these cases, consistent with the source metamodel used by `OO2DB.etl`.

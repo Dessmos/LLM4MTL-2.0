@@ -1,11 +1,8 @@
-Create an **executable Java/JUnit semantic test suite** for the ETL transformation `inheritance.etl` shown below.  
-Your output is a **primary semantic oracle candidate only after** (1) technical validation (compilation/execution) and (2) reference validation against the provided ETL and metamodels.
+You are generating **semantic test specifications and input model files** for the ETL transformation **`inheritance.etl`**.  
+Do **not** generate Java or JUnit. The Java test harness is generated deterministically by the pipeline.
 
-### Transformation under test (authoritative semantics source)
+### Transformation under test (authoritative)
 ```etl
-// If we make the following rule abstract, then only
-// subflows will be transformed.
-// @abstract
 rule Flowchart2H1
 	transform e : Flowchart!Flowchart
 	to h1 : HTML!H1 {
@@ -22,38 +19,42 @@ rule Subflow2H1
 }
 ```
 
-### Required semantic interpretation to test
-Infer assertions from ETL code structure and rule inheritance semantics:
+### Required output format (exactly)
+Return only fenced file blocks:
+1. ```json file=semantic_cases.json```  
+2. One or more ```xml file=models/<input>.model``` blocks for the input models referenced by `semantic_cases.json`.
 
-- `Flowchart2H1` is **not abstract** (annotation is commented), so it must run for `Flowchart!Flowchart` instances.
-- It creates one `HTML!H1` per matched source element and sets:
-  - `h1.value = "Flowchart " + e.name`
-- `Subflow2H1` applies to `Flowchart!Subflow`, extends `Flowchart2H1`, and then overrides value with:
-  - `h1.value = "Subflow " + h1.value`
-  - Therefore expected final prefix for subflow-derived H1 is: `"Subflow Flowchart " + e.name`
-- Ensure tests verify **both presence and exact values** of produced target elements.
-- Ensure tests verify **absence of superfluous target elements** (e.g., no extra `H1` beyond those justified by matches).
-- Include at least one test case with:
-  - plain `Flowchart`
-  - `Subflow`
-  - mixed instances to confirm inherited rule behavior is correct and non-duplicative.
+No extra prose.
 
-### Constraints
-- Do **not** depend on any existing manually written semantic tests for this task.
-- Generate any required **input model files** (and expected-output model files only if your test harness needs them).
-- Use only the provided transformation as semantic ground truth (plus metamodel compatibility needed to run).
-- The test suite must be runnable and self-contained in structure (test class, utility/setup as needed, model resources).
+### Hard constraints
+- **Do not output Java/JUnit** or any harness code.
+- Do not depend on, reference, or reuse existing manually written semantic tests for this task.
+- Derive expectations strictly from the ETL semantics and metamodel typing.
+- Cases are accepted only after:
+  1) technical validation (schema/format/model loadability), and  
+  2) reference validation against the ETL behavior.
+- Include **precise externally observable target-model facts**:
+  - exact target element counts,
+  - exact attribute values,
+  - exact references/relationships,
+  - relationship direction must follow ETL assignment direction semantics (e.g., `source->target` when applicable),
+  - explicit absence of superfluous target elements.
 
-### Output format (strict)
-Return **only** exact fenced file blocks with file attributes, no extra prose.  
-Use formats like:
+### semantic_cases.json schema
+Use this JSON structure:
+- `testClass`: string
+- `tests`: array of objects, each with:
+  - `name`: string
+  - `inputModel`: string (path like `models/<name>.model`)
+  - `expectedNodes`: array of expected target nodes with exact observable properties (type + attributes)
+  - `expectedEdges`: array of directed relationships in `source->target` form (use exact direction semantics)
 
-```java file=src/test/java/.../GeneratedSemanticTest.java
-// content
-```
-
-```xml file=models/<input>.model
-<!-- content -->
-```
-
-Include all files necessary to execute the tests (Java + generated model files + any minimal config/resources your suite requires).
+### Modeling notes for this specific task
+- Focus on inheritance behavior of ETL rules:
+  - `Subflow2H1` extends `Flowchart2H1`, so base assignment happens then subrule rewrites `h1.value`.
+- Ensure tests cover:
+  - plain `Flowchart` instance transformation,
+  - `Subflow` instance transformation with inherited + overridden value effect,
+  - mixed populations and exact output cardinality,
+  - no extra target elements beyond those implied by matching rules.
+- Build input models consistent with the provided source metamodel and transformation intent; expected outputs must reflect the ETL code exactly.

@@ -1,67 +1,82 @@
-Create an **executable Java/JUnit semantic test suite** for the ETL transformation `multiple_targets.etl`, using the provided reference ETL code as the **sole semantic specification source**.
+You are generating **semantic test assets** for the ETL transformation **`multiple_targets.etl`**.
 
-The generated tests are a **primary semantic oracle candidate only after**:
-1. technical validation (the tests compile/run and are deterministic), and  
-2. reference validation (assertions match the reference ETL behavior).
+### Scope
+Produce:
+1. A structured semantic test specification in `semantic_cases.json`
+2. One or more source input model files referenced by those tests
 
-Do **not** depend on, invoke, copy, or assume any existing manually written semantic tests for this same task.
+Do **not** generate Java, JUnit, or any harness code. The Java/JUnit harness is generated deterministically by the pipeline.
 
-### Transformation semantics to encode in assertions
+### Transformation to analyze (authoritative)
+Use only the provided ETL logic as ground truth:
 
-Infer and test these semantics from the reference ETL rules:
+- `Action2Elements`  
+  - Source: `Flowchart!Action`  
+  - Targets: `HTML!DIV` (`container`), `HTML!H1` (`title`), `HTML!A` (`link`)  
+  - Guard: `a.outgoing.notEmpty()`  
+  - Assignments:
+    - `title.value = a.name`
+    - `link.value = "Next steps"`
+    - `link.ahref = a.outgoing.first.target.name`
+    - `container.children.add(title)`
+    - `container.children.add(link)`
 
-1. **Action2Elements rule**
-   - Source: `Flowchart!Action`
-   - Targets created: exactly one `HTML!DIV` (`container`), one `HTML!H1` (`title`), one `HTML!A` (`link`)
-   - Guard: apply only when `a.outgoing.notEmpty()`
-   - Effects:
-     - `title.value = a.name`
-     - `link.value = "Next steps"`
-     - `link.ahref = a.outgoing.first.target.name`
-     - `container.children` contains `title` and `link` (in that order per rule body)
+- `Decision2Elements`  
+  - Source: `Flowchart!Decision`  
+  - Targets: `HTML!DIV` (`container`), `HTML!H1` (`title`), `Sequence(HTML!A)` (`links`)  
+  - Assignments:
+    - `title.value = d.name`
+    - For each outgoing transition `t`:
+      - create `HTML!A`
+      - `link.value = t.target.name`
+      - `link.ahref = t.target.name`
+      - add to `links`
+    - `container.children.add(title)`
+    - `container.children.addAll(links)`
 
-2. **Decision2Elements rule**
-   - Source: `Flowchart!Decision`
-   - Targets created: exactly one `HTML!DIV` (`container`), one `HTML!H1` (`title`), and a sequence of `HTML!A` links (one per outgoing transition)
-   - Effects:
-     - `title.value = d.name`
-     - For each `t in d.outgoing`:
-       - create link with `link.value = t.target.name`
-       - `link.ahref = t.target.name`
-       - add to `links`
-     - `container.children` contains `title` followed by all generated links
+### Critical requirements
+- Do not depend on or reuse existing manually written semantic tests for this task.
+- Infer expected results directly from the ETL code and metamodel semantics.
+- Each test must contain **precise externally observable target-model facts**, including:
+  - exact target element counts by type
+  - exact attribute values
+  - exact references/containment links
+  - relationship direction consistent with ETL assignments (e.g., parent/container -> child as added by `children.add(...)`)
+  - explicit absence of superfluous target elements
+- `expectedEdges` must use `source->target` direction exactly according to ETL-side assignments (e.g., container to title/link via children).
 
-3. **Negative / non-creation semantics**
-   - `Action` with no outgoing transitions must produce **no target elements** from `Action2Elements`.
-   - Assert absence of superfluous target elements where applicable (no extra DIV/H1/A beyond what rules imply for the given input).
-
-### Test suite requirements
-
-- Use Java + JUnit (JUnit 5 preferred).
-- Tests must be executable end-to-end (arrange input model, run ETL, load target model, assert).
-- Include all needed helper code/classes/files so the suite can run in a standard Maven/Gradle Java setup.
-- If input models are needed, **generate and provide concrete model files** (do not assume pre-existing ones).
-- Cover at least:
-  - Action with outgoing edge (positive case)
-  - Action without outgoing edge (guard false case)
-  - Decision with multiple outgoing edges
-  - Precise target counts and structural/content assertions
-- Assertions must be exact and semantic (not just non-null checks).
+### Validation policy
+Generated test cases are accepted only after:
+1. **Technical validation** (schema/format/path consistency, parseable models)
+2. **Reference validation** against `multiple_targets.etl`
 
 ### Output format (strict)
+Return **only** fenced file blocks in this exact pattern:
+- One block:
+  ```json file=semantic_cases.json
+  ...
+  ```
+- One or more blocks:
+  ```xml file=models/<input>.model
+  ...
+  ```
 
-Return only fenced file blocks with explicit `file=` attributes, e.g.:
+No extra prose outside fenced blocks.
 
-```java file=src/test/java/.../GeneratedSemanticTest.java
-// content
-```
+### `semantic_cases.json` required schema
+Top-level object with:
+- `testClass`: string
+- `tests`: array of objects, each with:
+  - `name`: string
+  - `inputModel`: string (path under `models/`)
+  - `expectedNodes`: array (typed target-node expectations with identifiers and attributes)
+  - `expectedEdges`: array (directed links in `source->target` form, aligned to ETL assignments)
 
-```xml file=models/<input>.model
-<!-- content -->
-```
+Design high-value semantic tests covering at least:
+- Action with no outgoing edge (guard prevents transformation)
+- Action with one or more outgoing edges (first outgoing target used for `ahref`)
+- Decision with multiple outgoing edges (one link per outgoing edge)
+- Mixed-source scenarios and exact total target counts
+- No unexpected target nodes/edges beyond what rules create
 
-```xml file=pom.xml
-<!-- if needed -->
-```
-
-No prose outside fenced blocks.
+Ensure all referenced input model files are included as XML blocks.

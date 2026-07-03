@@ -1,52 +1,80 @@
-Create an **executable Java/JUnit semantic test suite** for the ETL transformation **`Tree2Graph.etl`** shown below, using the provided Tree and Graph metamodels.
+You are generating **semantic test artifacts only** for this specific ETL transformation task.
 
-Your output is the test suite implementation (and any needed input models), not a plan.
+## Transformation under test
+**File:** `Tree2Graph.etl`
 
-### Scope and oracle policy
-- Treat the generated tests as the **primary semantic oracle candidate only after**:
-  1) **technical validation** (tests compile/run), and  
-  2) **reference validation** against the provided ETL code.
-- **Do not depend on or reuse any manually written semantic tests** for this same transformation task.
-- Infer assertions only from the reference ETL semantics below.
+```etl
+rule Tree2Node 
+	transform t : Tree!Tree
+	to n : Graph!Node {
+	
+	n.name = t.label;
+	
+	// If t is not the top tree
+	// create an edge connecting n
+	// with the Node created from t's parent
+	if (t.parent.isDefined()) {
+		var e : new Graph!Edge;
+		e.source ::= t.parent;
+		e.target = n;
+	}	
+}
+```
 
-### Reference ETL semantics to test
-ETL rule:
-- `Tree2Node` transforms each `Tree!Tree` element `t` into one `Graph!Node` `n`.
-- `n.name = t.label`.
-- If `t.parent.isDefined()` then create one `Graph!Edge e` with:
-  - `e.source ::= t.parent` (resolved to the Node produced from the parent Tree)
-  - `e.target = n`.
+## Source/target metamodel essentials
+- Source: `Tree::Tree` with `label : EString`, `children : Tree[*]` (containment), `parent : Tree` (opposite).
+- Target: `Graph::Graph` contains `nodes : Node[*]`.
+- `Node` has `name : EString`, `outgoing : Edge[*]` (containment, opposite `Edge.source`), `incoming : Edge[*]` (opposite `Edge.target`).
+- `Edge` has `source : Node`, `target : Node`.
 
-Implications that must be asserted:
-- Exactly one `Graph::Node` per source `Tree::Tree`.
-- Node names exactly match tree labels.
-- Exactly one edge per non-root tree node.
-- No edge for root node(s).
-- Each edge direction is **parent-node -> child-node**.
-- Edge endpoints must reference transformed Nodes, not raw Tree objects.
-- Absence of superfluous target elements:
-  - no extra Nodes beyond transformed Trees,
-  - no extra Edges beyond required parent-child links.
+## Required output scope
+Produce:
+1. `semantic_cases.json` (structured semantic assertions)
+2. One or more source input model files under `models/` (XML/XMI instances of `Tree` metamodel), referenced by `inputModel` in JSON.
 
-### Required test scenarios (minimum)
-Include independent JUnit tests that execute the ETL and assert precisely:
-1. **Single root tree only**: 1 node, 0 edges, name copied.
-2. **Root with one child**: 2 nodes, 1 edge root->child, correct names.
-3. **Deeper hierarchy** (e.g., root->child->grandchild): edge count equals non-root count; each edge connects correct parent/child transformed nodes.
-4. **Branching tree** (root with multiple children, optionally deeper branch): all expected edges exist, no unexpected edges.
-5. **Label handling** (distinct labels): exact name mapping for all nodes.
+## Strict prohibitions
+- **Do NOT generate Java, JUnit, or any test harness code.**
+- Do NOT output prose outside required fenced file blocks.
+- Do NOT depend on or copy existing manually written semantic tests for this task.
+- Do NOT assume acceptance by generation alone: tests are accepted only after **technical validation** and **reference validation**.
 
-### Implementation requirements
-- Use Java + JUnit (JUnit 5 preferred).
-- Tests must be executable end-to-end: load metamodels, load/create input model, run ETL, inspect output model, assert semantics.
-- If input model files are needed, **generate and include them**.
-- Keep assertions deterministic and exact (counts, element identities/links, mapped names).
-- Validate both presence of required elements and absence of superfluous ones.
+## Semantic precision requirements
+Infer expectations strictly from the ETL code and metamodels. For each test, specify externally observable target-model facts, including:
+- Exact number of created `Graph::Node` elements.
+- Exact `Node.name` values (from `t.label`).
+- Exact number of `Graph::Edge` elements.
+- Exact edge endpoints and **direction**:
+  - `e.source ::= t.parent`
+  - `e.target = n`
+  - Therefore edges must be parent-node -> child-node.
+- Absence of superfluous target elements/relationships beyond those implied by source trees.
 
-### Output format (strict)
-Return only fenced file blocks with explicit file attributes, e.g.:
-- ```java file=<GeneratedSemanticTest.java>```
-- ```xml file=models/<input>.model>```
-- (and additional files similarly, such as pom/gradle config if needed to run)
+Include diverse cases (e.g., single root, chain, branching, repeated labels) while remaining valid against metamodel constraints.
 
-Do not output prose outside fenced file blocks.
+## JSON schema required
+`semantic_cases.json` must have:
+- `testClass` (string)
+- `tests` (array), each test object containing:
+  - `name` (string)
+  - `inputModel` (string path like `models/<name>.model`)
+  - `expectedNodes` (array of node expectations with exact observable attributes)
+  - `expectedEdges` (array of directed edges using source->target consistent with ETL assignments)
+
+Use directed edge facts explicitly in source->target direction exactly as ETL defines.
+
+## Output format (mandatory)
+Return **only** these fenced blocks, no extra text:
+
+```json file=semantic_cases.json
+...
+```
+
+```xml file=models/<input1>.model
+...
+```
+
+```xml file=models/<input2>.model
+...
+```
+
+(One XML block per referenced input model; include all referenced models.)

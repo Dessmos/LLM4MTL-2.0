@@ -11,7 +11,8 @@ from pathlib import Path
 
 from common.paths import ETL_CONFIG, default_prompts_root, n8n_workflows_root, relative_or_absolute
 from etl.extraction.models import LANGUAGE, ResponseTarget
-from etl.extraction.parser import java_files, model_files
+from etl.extraction.parser import java_files, model_files, semantic_case_files
+from etl.extraction.semantic_cases import augment_with_generated_java
 
 
 def next_suite_id(strategy_dir: Path) -> str:
@@ -30,6 +31,7 @@ def write_suite(
     extracted: dict[str, str],
     args: argparse.Namespace,
 ) -> Path:
+    extracted = augment_with_generated_java(target.task, extracted)
     strategy_dir = (
         args.generated_tests_root.resolve()
         / target.task
@@ -92,6 +94,7 @@ def build_metadata(
             "missing_files": [] if java_files(extracted) else ["*.java"],
             "extracted_files": sorted(extracted),
             "java_files": java_files(extracted),
+            "semantic_case_files": semantic_case_files(extracted),
             "model_files": model_files(extracted),
         },
     }

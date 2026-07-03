@@ -1,39 +1,64 @@
-Create an executable Java/JUnit **semantic** test suite for the ETL transformation `equivalent.etl` (rules `Flowchart2Div` and `Transition2Heading`) using the reference ETL code as the semantics source.
+You are generating **semantic test specifications and input models only** for the ETL transformation in `equivalent.etl`.
 
-Key requirements:
+## Scope
+Use the provided ETL rules and metamodels to derive **externally observable, exact expected target-model facts**.  
+Do **not** generate Java, JUnit, or any harness code (this is generated deterministically by the pipeline).
 
-1. **Oracle status and validation flow**
-   - Treat the generated tests as the **primary semantic oracle candidate only after**:
-     1) technical validation (tests compile/run), and  
-     2) reference validation (assertions aligned with the provided ETL rules).
-   - Do **not** rely on or import any existing manually written semantic tests for this same transformation task.
+## Transformation under test (authoritative)
+- `Flowchart2Div`: `Flowchart!Flowchart -> HTML!DIV`, with `div.children ::= f.transitions;`
+- `Transition2Heading`: `Flowchart!Transition -> HTML!H1`, with `h1.value = t.name;`
 
-2. **Semantics to encode from ETL**
-   - `Flowchart2Div`: each `Flowchart!Flowchart` produces one `HTML!DIV`; `div.children ::= f.transitions` means children are the equivalents of all transitions.
-   - `Transition2Heading`: each `Flowchart!Transition` produces one `HTML!H1` with `h1.value = t.name`.
-   - Assertions must verify:
-     - correct element creation counts (including empty/non-empty cases),
-     - correct mapping of transition names to `H1.value`,
-     - correct containment/linking of produced `H1` elements in `DIV.children`,
-     - **absence of superfluous target elements** where applicable.
+Interpretation required:
+- Each source `Flowchart` produces one target `DIV`.
+- Each source `Transition` produces one target `H1`.
+- `DIV.children` contains equivalents of `f.transitions` (thus references from DIV to produced H1s).
+- `H1.value` equals source `Transition.name`.
 
-3. **Metamodel/conformance handling**
-   - The provided source/target metamodel text is part of the task context; infer and use the ETL semantics from the ETL code itself.
-   - If input models are needed, generate them explicitly as files in the output.
+## Critical requirements
+1. Produce **semantic** tests from the ETL logic itself, not from assumptions, and **do not depend on existing manually written semantic tests** for this task.
+2. Each test must include:
+   - exact target element counts,
+   - exact attribute values,
+   - exact references and their direction,
+   - explicit absence of superfluous/unexpected target elements.
+3. Relationship direction in `expectedEdges` must follow ETL assignment direction exactly (source -> target), analogous to assignments like `e.source` / `e.target`.
+4. Cases are accepted only after:
+   - **technical validation** (format/schema/metamodel consistency),
+   - **reference validation** (matches behavior implied by the provided ETL rules).
 
-4. **Test implementation expectations**
-   - Use JUnit (Jupiter preferred) and provide runnable test code.
-   - Include helper/loading/execution logic necessary to run the ETL transformation and inspect output models.
-   - Make assertions precise and deterministic.
+## Output format (strict)
+Return **only** fenced file blocks in this exact pattern:
+1. ```json file=semantic_cases.json
+   ...
+   ```
+2. One or more input model files:
+   ```xml file=models/<input>.model
+   ...
+   ```
 
-5. **Output format (strict)**
-   - Return **only** fenced file blocks with explicit file attributes.
-   - Use exact style like:
-     - ```java file=<GeneratedSemanticTest.java>
-       // code
-       ```
-     - ```xml file=models/<input>.model
-       <!-- model -->
-       ```
-   - Include all required Java files and all generated model files (inputs and expected/reference artifacts if used) as separate fenced blocks.
-   - No prose outside fenced file blocks.
+No prose outside fenced blocks.
+
+## `semantic_cases.json` schema (required)
+Top-level object:
+- `testClass`: string
+- `tests`: array of objects, each with:
+  - `name`: string
+  - `inputModel`: string (must match one generated file path under `models/`)
+  - `expectedNodes`: array of node assertions
+  - `expectedEdges`: array of edge assertions
+
+Use a consistent node/edge assertion structure that is explicit enough to verify:
+- target type (e.g., `DIV`, `H1`),
+- identifiers used for cross-references inside expectations,
+- attribute expectations (`value` for H1),
+- containment/reference links (`DIV.children -> H1`).
+
+## Test design guidance
+Include a compact but meaningful suite covering at least:
+- minimal non-empty case (one flowchart, one transition),
+- multiple transitions with distinct names (cardinality + value mapping),
+- empty transitions (DIV exists, no children),
+- multiple flowcharts if representable in separate input files (independence, no cross-link leakage),
+- any case needed to prove no extra H1/DIV instances are produced.
+
+Ensure every expected fact is directly inferable from the ETL code above.

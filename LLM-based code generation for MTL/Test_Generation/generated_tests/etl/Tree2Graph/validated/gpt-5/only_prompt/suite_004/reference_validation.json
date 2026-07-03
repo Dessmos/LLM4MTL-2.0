@@ -1,0 +1,20 @@
+{
+  "task": "Tree2Graph",
+  "llm": "gpt-5",
+  "strategy": "only_prompt",
+  "suite_id": "suite_004",
+  "source_suite": "Test_Generation/generated_tests/etl/Tree2Graph/candidates/gpt-5/only_prompt/suite_004",
+  "validation": {
+    "language": "ETL",
+    "task": "Tree2Graph",
+    "suite_id": "suite_004",
+    "llm": "gpt-5",
+    "strategy": "only_prompt",
+    "compiles": "True",
+    "executes": "True",
+    "reference_pass": "True",
+    "valid": "True",
+    "maven_exit_code": "0",
+    "error_summary": ""
+  }
+}

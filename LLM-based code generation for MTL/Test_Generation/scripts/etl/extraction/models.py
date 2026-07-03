@@ -9,7 +9,7 @@ from common.paths import ETL_CONFIG
 
 
 LANGUAGE = ETL_CONFIG.language
-ALLOWED_EXTENSIONS = {".java", ".model", ".xmi", ".xml"}
+ALLOWED_EXTENSIONS = {".java", ".json", ".model", ".xmi", ".xml"}
 
 
 @dataclass(frozen=True)

@@ -9,13 +9,14 @@ from pathlib import Path
 from common.paths import default_generated_tests_root, default_responses_root
 from etl.extraction.discovery import discover_responses
 from etl.extraction.models import ResponseTarget
-from etl.extraction.parser import extract_files, java_files
+from etl.extraction.parser import extract_files, java_files, semantic_case_files
+from etl.extraction.semantic_cases import can_generate_java_from_semantic_cases
 from etl.extraction.writer import write_suite
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Extract generated Java/JUnit semantic test suites from Markdown responses."
+        description="Extract generated ETL semantic test suites from Markdown responses."
     )
     parser.add_argument(
         "--response",
@@ -65,7 +66,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--allow-incomplete",
         action="store_true",
-        help="Write extracted files even if no Java file is found.",
+        help="Write extracted files even if no Java file or semantic_cases.json is found.",
     )
     parser.add_argument(
         "--dry-run",
@@ -81,8 +82,13 @@ def extract_one(target: ResponseTarget, args: argparse.Namespace) -> tuple[bool,
 
     markdown = target.response_path.read_text(encoding="utf-8")
     extracted = extract_files(markdown)
-    if not java_files(extracted) and not args.allow_incomplete:
-        return False, f"no Java file block found in {target.response_path}"
+    has_java = bool(java_files(extracted))
+    has_semantic_cases = bool(semantic_case_files(extracted))
+    has_supported_semantic_cases = has_semantic_cases and can_generate_java_from_semantic_cases(target.task)
+    if not has_java and not has_supported_semantic_cases and not args.allow_incomplete:
+        if has_semantic_cases:
+            return False, f"semantic_cases.json is not supported for {target.task} yet: {target.response_path}"
+        return False, f"no Java file block or supported semantic_cases.json block found in {target.response_path}"
 
     suite_dir = write_suite(target, extracted, args)
     action = "would write" if args.dry_run else "wrote"

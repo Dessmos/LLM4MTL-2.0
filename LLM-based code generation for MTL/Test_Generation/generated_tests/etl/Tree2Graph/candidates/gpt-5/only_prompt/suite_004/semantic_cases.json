@@ -1,4 +1,3 @@
-```json file=semantic_cases.json
 {
   "testClass": "Tree2GraphSemanticCases",
   "tests": [
@@ -53,53 +52,3 @@
     }
   ]
 }
-```
-
-```xml file=models/single_root_only.model
-<?xml version="1.0" encoding="UTF-8"?>
-<Tree:Tree xmi:version="2.0"
-    xmlns:xmi="http://www.omg.org/XMI"
-    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-    xmlns:Tree="Tree"
-    label="root"/>
-```
-
-```xml file=models/three_level_chain.model
-<?xml version="1.0" encoding="UTF-8"?>
-<Tree:Tree xmi:version="2.0"
-    xmlns:xmi="http://www.omg.org/XMI"
-    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-    xmlns:Tree="Tree"
-    label="A">
-  <children label="B">
-    <children label="C"/>
-  </children>
-</Tree:Tree>
-```
-
-```xml file=models/branching_tree.model
-<?xml version="1.0" encoding="UTF-8"?>
-<Tree:Tree xmi:version="2.0"
-    xmlns:xmi="http://www.omg.org/XMI"
-    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-    xmlns:Tree="Tree"
-    label="root">
-  <children label="left">
-    <children label="left.left"/>
-  </children>
-  <children label="right"/>
-</Tree:Tree>
-```
-
-```xml file=models/repeated_labels.model
-<?xml version="1.0" encoding="UTF-8"?>
-<Tree:Tree xmi:version="2.0"
-    xmlns:xmi="http://www.omg.org/XMI"
-    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-    xmlns:Tree="Tree"
-    label="dup">
-  <children label="dup">
-    <children label="dup"/>
-  </children>
-</Tree:Tree>
-```
