@@ -1,0 +1,16 @@
+Create an executable Java/JUnit semantic test suite for the provided ETL transformation defined in `greedy.etl`. The transformation includes a rule that converts a `NamedElement` from the `Flowchart` metamodel into an `H1` element in the `HTML` metamodel, where the value of the `H1` element should match the `name` attribute of the `NamedElement`. 
+
+The generated test suite must satisfy the following requirements:
+
+1. The generated tests will be the primary semantic oracle candidate only after technical validation and reference validation. 
+2. Do not depend on any existing manually written semantic tests for this transformation.
+3. Include generated input model files as needed to validate the transformation.
+4. Implement precise assertions to confirm the transformation semantics inferred from the reference ETL code, specifically verifying the value of `h1.value` equals `e.name`, and ensuring there are no superfluous target elements in the generated output.
+5. Use exact fenced file blocks with file attributes for the outputs, for example:
+   ```java file=<GeneratedSemanticTest.java>
+   ```
+   and 
+   ```xml file=models/<input>.model
+   ```
+
+Ensure that the testing logic is thorough, validating various scenarios that the transformation may encounter, including edge cases in the input data.

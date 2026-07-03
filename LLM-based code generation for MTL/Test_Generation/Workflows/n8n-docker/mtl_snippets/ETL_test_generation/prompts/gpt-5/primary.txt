@@ -1,0 +1,23 @@
+Create an executable Java/JUnit semantic test suite for the provided ETL transformation code defined in the file `primary.etl`. The generated tests must validate the intended semantics of the transformation, which includes:
+
+1. **Flowchart2Heading**: Ensure that the output `DIV` contains only the headings of the transitions without any additional links or superfluous elements.
+  
+2. **Transition2SourceLink**: Verify that `A` elements are generated for each transition with the correct `value` corresponding to the source node's name and the appropriate `ahref` attribute pointing to the source node.
+
+3. **Transition2TargetLink**: Confirm that `A` elements are generated for each transition with the correct `value` corresponding to the transition name and the appropriate `ahref` attribute pointing to the target node.
+
+4. **Transition2Heading**: Ensure that each transition produces an `H1` heading with the correct transition name.
+
+The generated tests must include precise assertions based on the transformation semantics inferred from the ETL code, including the absence of superfluous target elements where applicable. 
+
+Please note that the generated tests will be the primary semantic oracle candidate only after comprehensive technical validation and reference validation. You must not depend on any existing manually written semantic tests for this task. 
+
+When applicable, include the necessary generated input model files to execute the tests correctly. Ensure that the output uses exact fenced file blocks with file attributes, such as:
+
+```java file=<GeneratedSemanticTest.java>
+```
+
+```xml file=models/<input>.model
+```
+
+Complete this task with a focus on generating an accurate and fully functional test suite tailored to the specified ETL transformation.

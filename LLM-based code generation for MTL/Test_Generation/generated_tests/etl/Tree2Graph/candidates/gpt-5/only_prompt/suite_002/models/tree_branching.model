@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Tree:Tree xmi:version="2.0"
+    xmlns:xmi="http://www.omg.org/XMI"
+    xmlns:Tree="Tree"
+    label="r">
+  <children label="a">
+    <children label="a1"/>
+    <children label="a2"/>
+  </children>
+  <children label="b"/>
+  <children label="c">
+    <children label="c1"/>
+  </children>
+</Tree:Tree>

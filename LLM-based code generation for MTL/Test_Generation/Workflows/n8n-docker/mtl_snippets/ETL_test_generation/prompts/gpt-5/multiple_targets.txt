@@ -1,0 +1,19 @@
+Generate an executable Java/JUnit semantic test suite for the provided ETL transformation defined in `multiple_targets.etl`. The tests must validate the transformation semantics as follows:
+
+1. **Action Transformation**: Verify that `Action` elements from the source model are correctly transformed into HTML `DIV` containers, with the `H1` title correctly set to the `Action` name and the `A` link pointing to the name of the first outgoing transition's target. Ensure that no superfluous target elements are present.
+
+2. **Decision Transformation**: Ensure that `Decision` elements are transformed into HTML `DIV` containers, where the `H1` title is set to the `Decision` name. Each outgoing transition should be represented as an `A` link, and ensure all links are correctly populated without any duplication or missing targets.
+
+The generated tests will be the primary semantic oracle candidate only after comprehensive technical validation and reference validation. You must not depend on any existing manually written semantic tests for this task.
+
+Please remember to include the required generated input model files when necessary and ensure that your assertions are precise, capturing the expected semantics inferred from the reference ETL code. 
+
+All outputs must utilize exact fenced file blocks with appropriate file attributes as shown in the examples below:
+
+```java file=<GeneratedSemanticTest.java>
+```
+
+```xml file=models/<input>.model
+```
+
+The test suite should include thorough cases for both transformations, accounting for tests where no transformations occur (i.e., when there are no outgoing transitions from the `Action`). Please proceed with the generation of this semantic test suite.

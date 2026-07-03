@@ -1,0 +1,17 @@
+Create an executable Java/JUnit semantic test suite for the provided ETL transformation defined in `inheritance.etl`. The tests must validate the following semantics:
+
+1. For the `Flowchart2H1` rule, ensure that an instance of `Flowchart` transforms into an `H1` element with the value formatted as "Flowchart <name>", where `<name>` is the `name` property of the `Flowchart`.
+2. For the `Subflow2H1` rule, verify that an instance of `Subflow` (which is a subclass of `Flowchart`) transforms into an `H1` element with the value formatted as "Subflow Flowchart <name>". 
+3. Ensure that the transformed target does not contain superfluous elements and matches the exact transformation outcome as defined by the rules.
+
+The generated tests will be considered the primary semantic oracle candidate only after technical validation and reference validation. You must not depend on existing manually written semantic tests for this task. 
+
+If input model files are needed, please specify them accordingly. Include all generated model files using precise assertions to verify the transformation semantics.
+
+Make sure to use exact fenced file blocks for each output, such as:
+```java file=<GeneratedSemanticTest.java>
+```
+```xml file=models/<input>.model
+```
+
+Complete the task promptly and ensure clarity in the structure and assertions of the tests.

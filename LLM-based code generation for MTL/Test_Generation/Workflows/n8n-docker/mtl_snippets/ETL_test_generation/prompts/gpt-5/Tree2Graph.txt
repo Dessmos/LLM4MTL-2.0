@@ -1,0 +1,11 @@
+Please create an executable Java/JUnit semantic test suite for the ETL transformation specified in the provided reference file `Tree2Graph.etl`. The transformation, as defined by the rule `Tree2Node`, is responsible for converting a tree structure into a graph structure. The rule maps the `label` of a `Tree` element to the `name` of a `Graph!Node`. Moreover, if the `Tree` element is not the root (i.e., it has a defined parent), it creates an edge connecting the new `Node` to its parent's corresponding `Node`.
+
+The generated test suite must serve as a primary semantic oracle candidate but will only be considered valid after undergoing technical validation and reference validation. It is essential that the suite does not rely on any existing manually written semantic tests for this transformation.
+
+You are required to generate model files that accurately represent test scenarios for both the `Tree` source elements and the `Graph` target elements. Precise assertions must be used to validate the transformation semantics, ensuring that the resulting graph contains no superfluous nodes or edges and adheres strictly to the required mappings outlined in the transformation code. 
+
+The output must utilize exact fenced file blocks with the appropriate attributes, such as:
+```java file=<GeneratedSemanticTest.java>```
+```xml file=models/<input>.model```
+
+Please ensure that the tests are thorough and reflect all necessary scenarios to validate the transformation's correctness as defined.

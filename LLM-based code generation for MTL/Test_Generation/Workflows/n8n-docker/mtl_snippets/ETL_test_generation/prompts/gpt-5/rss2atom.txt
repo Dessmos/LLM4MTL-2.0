@@ -1,0 +1,14 @@
+Create an executable Java/JUnit semantic test suite for the ETL transformation defined in the provided `rss2atom.etl` file. The transformation must adhere to the semantics inferred from the reference ETL code, specifically converting RSS elements into their corresponding Atom elements while ensuring that no superfluous target elements are present in the output.
+
+The generated tests should serve as the primary semantic oracle candidate, pending technical validation and reference validation. Do not depend on any existing manually written semantic tests for the same task. If input model files are needed for testing, ensure they are generated as required.
+
+The assertions within the tests must precisely reflect the transformation semantics as specified in the reference code. For example, check the content of Atom titles, links, authors, summaries, etc., against the expected results derived from their corresponding RSS elements.
+
+Ensure that all output is formatted using exact fenced file blocks with appropriate file attributes, such as:
+```java file=<GeneratedSemanticTest.java>
+```
+and if applicable:
+```xml file=models/<input>.model
+```
+
+Focus on coverage of all transformation rules outlined in the reference ETL code, and ensure that the semantics captured in your assertions are comprehensive and precise.

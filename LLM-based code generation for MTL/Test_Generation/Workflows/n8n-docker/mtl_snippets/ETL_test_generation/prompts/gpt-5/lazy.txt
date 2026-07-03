@@ -1,0 +1,18 @@
+Please generate an executable Java/JUnit semantic test suite for the ETL transformation defined in the provided reference file `lazy.etl`. 
+
+The intended semantics inferred from the transformation rules are as follows:
+1. The `Flowchart2Heading` rule should transform a `Flowchart` into a `HTML!DIV`, with the `DIV` containing all nodes from the flowchart.
+2. The `Action2Heading` rule should transform each `Action` in the flowchart into a `HTML!H1`, where the `H1` element's value is set to the name of the action.
+3. The `Decision2Heading` rule should similarly transform each `Decision` into a `HTML!H1`, using the decision's name as the value.
+4. The `Transition2Heading` rule is never invoked; therefore, no `HTML!H1`s should be generated for transitions, which implies that any resulting elements must reflect this absence where applicable.
+
+The generated tests will be the primary candidate for the semantic oracle only after thorough technical validation and reference validation. Please refrain from depending on any existing manually written semantic tests for this same task.
+
+You must include generated input model files when needed, and ensure that the test suite includes precise assertions for the transformation semantics as defined. Verify the absence of any superfluous target elements according to the transformation rules.
+
+Please format the output using exact fenced file blocks for the generated Java test file and any model files. For example:
+```java file=<GeneratedSemanticTest.java>```
+and 
+```xml file=models/<input>.model```. 
+
+Thank you.

@@ -1,0 +1,17 @@
+Create an executable Java/JUnit semantic test suite for the provided ETL transformation defined in `OO2DB.etl`. The test suite should validate the transformation semantics including, but not limited to:
+
+1. Correct transformation from classes to database tables and primary key columns, ensuring that table names align with the class names, and primary keys are accurately defined.
+2. Validation of foreign key creation between tables when classes extend other classes.
+3. Accurate transformation of single-valued attributes to columns, ensuring the column names and types match the attributes.
+4. Proper handling of multi-valued attributes, ensuring a new table is created for the values and foreign keys are correctly established.
+5. Correct transformation of references into foreign keys, confirming that the relationships are accurately defined in the target model.
+
+The generated tests will be primary candidates for semantic oracle validation only after thorough technical validation and reference validation. Do not depend on any existing manually written semantic tests for this transformation.
+
+The suite must include generated input model files whenever required for testing. Precise assertions are required for all transformation semantics, and ensure there are no superfluous target elements in the results.
+
+Use exact fenced file blocks for Java test files and model files, for example:
+```java file=<GeneratedSemanticTest.java>```
+```xml file=models/<input>.model```
+
+Be direct and implementation-ready in your response.

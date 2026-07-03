@@ -1,0 +1,21 @@
+Create an executable Java/JUnit semantic test suite for the provided ETL transformation defined in the file `equivalent.etl`. The transformation involves converting a `Flowchart` into a `DIV` HTML element that contains a list of transitions as its children, and converting each `Transition` into an `H1` HTML element that displays the transition's name.
+
+The generated tests should assert the following semantic conditions:
+
+1. The `DIV` element must contain the exact number of children as the transitions in the `Flowchart`.
+2. Each child of the `DIV` must be an `H1` element created from each `Transition` in the `Flowchart`.
+3. The value of each `H1` must correspond exactly to the name of its respective `Transition`.
+4. There must be no superfluous elements in the `DIV`, such as additional `H1` tags that do not correspond to any `Transition`.
+
+Note: The generated tests will serve as the primary semantic oracle candidate only after technical validation and reference validation; do not rely on any existing manually written semantic tests for this transformation.
+
+If the transformation requires specific input models to validate against, please include the exact input model files in the output.
+
+Ensure to use exact fenced file blocks with file attributes in your output, for example:
+```java file=<GeneratedSemanticTest.java>
+```
+and
+```xml file=models/<input>.model
+```
+
+Provide precise assertions for the transformation semantics as inferred from the reference ETL code. Thank you!

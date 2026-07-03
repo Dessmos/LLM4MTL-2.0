@@ -1,0 +1,23 @@
+Create an executable Java/JUnit semantic test suite for the following ETL transformation defined in the `base.etl` file. The transformation consists of rules that convert different elements of a flowchart model into corresponding heading elements in an HTML model. The specific semantics to be tested are as follows:
+
+1. The `Flowchart2Heading` rule should transform a `Flowchart` instance into an `H1` element where the `H1` value equals the name of the `Flowchart`.
+2. The `Action2Heading` rule should transform `Action` instances into `H1` elements where the `H1` value equals the name of the `Action`.
+3. The `Decision2Heading` rule should transform `Decision` instances similarly, ensuring that the value of the `H1` is the name of the `Decision`.
+4. Finally, the `Transition2Heading` rule should transform `Transition` instances into `H1` elements with their names properly set as the `H1` value.
+
+Your test suite must include precise assertions to validate the target elements' values against the expected semantics defined by the reference ETL code. Additionally, it should check for the absence of any superfluous target elements that do not conform to these transformations.
+
+Please note the following requirements:
+- Do not depend on any existing manually written semantic tests for the same ETL task.
+- Ensure that input model files are generated and provided where necessary for your tests.
+- The generated test suite serves as the primary semantic oracle candidate only after technical validation and reference validation.
+
+Ensure that the output uses exact fenced file blocks with appropriate file attributes. For example, use:
+```java file=<GeneratedSemanticTest.java>
+```
+for the Java test suite and 
+```xml file=models/<input>.model
+``` 
+for the generated input model files as needed.
+
+Proceed with the implementation of the test suite based on these specifications.

@@ -7,9 +7,6 @@ from etl.suites.models import CandidateSuite
 
 
 LANGUAGE = ETL_CONFIG.language
-SMOKE_TEST_PACKAGE = "org.eclipse.epsilon.examples.etl.generated"
-SMOKE_TEST_CLASS = "GeneratedSuiteTechnicalSmokeTest"
-SMOKE_TEST_FQCN = f"{SMOKE_TEST_PACKAGE}.{SMOKE_TEST_CLASS}"
 RESULT_COLUMNS = [
     "language",
     "task",

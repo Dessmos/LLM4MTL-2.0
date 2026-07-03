@@ -9,9 +9,9 @@ from common.maven import run_maven, summarize_error
 from etl.suites.injection import inject_suite
 from etl.suites.java import infer_fqcn
 from etl.suites.models import CandidateSuite
-from etl.technical_validation.models import LANGUAGE, SMOKE_TEST_FQCN
+from etl.technical_validation.models import LANGUAGE
 from etl.technical_validation.resources import check_models_load
-from etl.technical_validation.smoke import inject_smoke_test
+from etl.technical_validation.smoke import junit_test_method_counts, surefire_test_selector
 
 
 def check_suite(suite: CandidateSuite, args: argparse.Namespace) -> dict[str, str]:
@@ -45,6 +45,10 @@ def check_suite(suite: CandidateSuite, args: argparse.Namespace) -> dict[str, st
     if not models_present:
         result["error_summary"] = "No generated model/resource files found under models/"
         return result
+    test_counts = junit_test_method_counts(java_paths)
+    if not any(count > 0 for count in test_counts.values()):
+        result["error_summary"] = "No JUnit @Test methods found in generated Java files"
+        return result
     if not models_load:
         result["error_summary"] = model_error
         return result
@@ -53,7 +57,7 @@ def check_suite(suite: CandidateSuite, args: argparse.Namespace) -> dict[str, st
     try:
         inject_suite(suite, java_paths, model_paths, args.etl_test_dir.resolve(), injection)
         class_names = [infer_fqcn(path) for path in java_paths]
-        inject_smoke_test(args.etl_test_dir.resolve(), class_names, injection)
+        test_selector = surefire_test_selector(class_names)
 
         compile_result = run_maven(
             ["mvn", "clean", "test-compile", "-DskipTests"],
@@ -67,7 +71,7 @@ def check_suite(suite: CandidateSuite, args: argparse.Namespace) -> dict[str, st
         result["compiles"] = "True"
 
         smoke_result = run_maven(
-            ["mvn", "test", f"-Dtest={SMOKE_TEST_FQCN}"],
+            ["mvn", "test", f"-Dtest={test_selector}"],
             cwd=args.etl_test_dir.resolve(),
             timeout=args.timeout,
         )
