@@ -10,6 +10,7 @@ from etl.reference_validation.promotion import promote_validated_suite
 from etl.reference_validation.reference import inject_reference_transformation
 from etl.suites.injection import inject_suite, suite_model_paths
 from etl.suites.java import infer_fqcn
+from etl.suites.metadata import contract_invalid_reason
 from etl.suites.models import CandidateSuite
 
 
@@ -17,6 +18,10 @@ def validate_suite(
     suite: CandidateSuite,
     context: ReferenceValidationContext,
 ) -> ReferenceValidationResult:
+    contract_reason = contract_invalid_reason(suite.path)
+    if contract_reason:
+        return failed_before_maven(suite, contract_reason)
+
     java_paths = sorted(suite.path.glob("*.java"))
     model_paths = suite_model_paths(suite.path)
 

@@ -1,0 +1,99 @@
+{
+  "task": "OO2DB",
+  "transformation": "OO2DB.etl",
+  "reference": "Test_Generation/Workflows/n8n-docker/mtl_snippets/ETL_test_generation/references/OO2DB.etl",
+  "models": [
+    {
+      "runtimeName": "DB",
+      "roles": [
+        "target"
+      ],
+      "typesUsedInEtL": [
+        "Column",
+        "Database",
+        "ForeignKey",
+        "Table"
+      ],
+      "kind": "emf",
+      "metamodelUri": "DB",
+      "metamodelNsPrefix": "DB",
+      "metamodelFile": "ETL_Test/src/test/resources/metamodels/DB.ecore",
+      "availableTypes": [
+        "DatabaseElement",
+        "Database",
+        "Table",
+        "Column",
+        "ForeignKey"
+      ]
+    },
+    {
+      "runtimeName": "OO",
+      "roles": [
+        "source",
+        "target"
+      ],
+      "typesUsedInEtL": [
+        "Attribute",
+        "Class",
+        "Reference"
+      ],
+      "kind": "emf",
+      "metamodelUri": "OO",
+      "metamodelNsPrefix": "OO",
+      "metamodelFile": "ETL_Test/src/test/resources/metamodels/OO.ecore",
+      "availableTypes": [
+        "Package",
+        "PackageableElement",
+        "Classifier",
+        "Class",
+        "Datatype",
+        "Feature",
+        "Attribute",
+        "Reference"
+      ]
+    },
+    {
+      "runtimeName": "OO2DB",
+      "roles": [
+        "source"
+      ],
+      "typesUsedInEtL": [
+        "TypeMap",
+        "TypeMapping"
+      ],
+      "kind": "emf",
+      "metamodelUri": "TM",
+      "metamodelNsPrefix": "TM",
+      "metamodelFile": "ETL_Test/src/test/resources/metamodels/TM.ecore",
+      "availableTypes": [
+        "TypeMap",
+        "TypeMapping"
+      ]
+    },
+    {
+      "runtimeName": "Trace",
+      "roles": [
+        "target"
+      ],
+      "typesUsedInEtL": [
+        "Trace",
+        "TraceLink"
+      ],
+      "kind": "emf",
+      "metamodelUri": "SimpleTrace",
+      "metamodelNsPrefix": "SimpleTrace",
+      "metamodelFile": "ETL_Test/src/test/resources/metamodels/SimpleTrace.ecore",
+      "availableTypes": [
+        "Trace",
+        "TraceLink"
+      ]
+    }
+  ],
+  "rules": [
+    "models[].name in semantic_cases.json must equal runtimeName exactly.",
+    "For EMF models, models[].metamodelUri must equal metamodelUri exactly.",
+    "For generated EMF XMI, XML namespace URI/prefix must use metamodelUri/metamodelNsPrefix exactly.",
+    "For plainXml models, do not set metamodelUri and use kind='plainXml'.",
+    "Do not invent model names, metamodel URIs, metamodel files, or type names outside this contract."
+  ]
+}

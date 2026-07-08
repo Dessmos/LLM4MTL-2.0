@@ -1,82 +1,139 @@
-You are generating **semantic test assets** for the ETL transformation **`multiple_targets.etl`**.
+<!-- BEGIN deterministic-model-contract -->
+## Deterministic model contract (preflight)
 
-### Scope
-Produce:
-1. A structured semantic test specification in `semantic_cases.json`
-2. One or more source input model files referenced by those tests
+Use this contract as ground truth. Do not infer or invent model names, metamodel URIs, XML namespaces, or type names.
 
-Do **not** generate Java, JUnit, or any harness code. The Java/JUnit harness is generated deterministically by the pipeline.
+| Runtime model name | Role(s) | Kind | metamodelUri | XML nsPrefix | Types used by ETL |
+|---|---|---|---|---|---|
+| Flowchart | source | emf | flowchart | flowchart | Action, Decision |
+| HTML | target | emf | HTML | HTML | A, DIV, H1 |
 
-### Transformation to analyze (authoritative)
-Use only the provided ETL logic as ground truth:
+Mandatory rules:
+- In semantic_cases.json, each models[].name must equal one runtime model name above exactly.
+- For EMF models, each models[].metamodelUri must equal the listed metamodelUri exactly; do not use the Ecore file stem when it differs.
+- For generated EMF/XMI model files, use the listed XML nsPrefix and metamodelUri exactly in xmlns declarations.
+- For plainXml models, use kind="plainXml" and omit metamodelUri.
+- Do not mention or use any model/metamodel/type that is not listed in this contract.
+<!-- END deterministic-model-contract -->
 
-- `Action2Elements`  
-  - Source: `Flowchart!Action`  
-  - Targets: `HTML!DIV` (`container`), `HTML!H1` (`title`), `HTML!A` (`link`)  
-  - Guard: `a.outgoing.notEmpty()`  
-  - Assignments:
-    - `title.value = a.name`
-    - `link.value = "Next steps"`
-    - `link.ahref = a.outgoing.first.target.name`
-    - `container.children.add(title)`
-    - `container.children.add(link)`
+You are generating **semantic test specifications and source input model files** for one ETL transformation task. Base every expectation strictly on the ETL rules and metamodels given below.
 
-- `Decision2Elements`  
-  - Source: `Flowchart!Decision`  
-  - Targets: `HTML!DIV` (`container`), `HTML!H1` (`title`), `Sequence(HTML!A)` (`links`)  
-  - Assignments:
-    - `title.value = d.name`
-    - For each outgoing transition `t`:
-      - create `HTML!A`
-      - `link.value = t.target.name`
-      - `link.ahref = t.target.name`
-      - add to `links`
-    - `container.children.add(title)`
-    - `container.children.addAll(links)`
+<!-- BEGIN deterministic-task-context -->
+## Task context (must be used as ground truth)
 
-### Critical requirements
-- Do not depend on or reuse existing manually written semantic tests for this task.
-- Infer expected results directly from the ETL code and metamodel semantics.
-- Each test must contain **precise externally observable target-model facts**, including:
-  - exact target element counts by type
-  - exact attribute values
-  - exact references/containment links
-  - relationship direction consistent with ETL assignments (e.g., parent/container -> child as added by `children.add(...)`)
-  - explicit absence of superfluous target elements
-- `expectedEdges` must use `source->target` direction exactly according to ETL-side assignments (e.g., container to title/link via children).
+- Transformation file: `multiple_targets.etl`
+- ETL rules (authoritative — derive every expected fact only from these):
 
-### Validation policy
-Generated test cases are accepted only after:
-1. **Technical validation** (schema/format/path consistency, parseable models)
-2. **Reference validation** against `multiple_targets.etl`
+```etl
+rule Action2Elements
+	transform a : Flowchart!Action
+	to container : HTML!DIV, title : HTML!H1, link : HTML!A {
+	
+	// Note that "Get up" is not transformed as it has no outgoing transitions
+	guard: a.outgoing.notEmpty() 
+	
+	title.value = a.name;
+	link.value = "Next steps";
+	link.ahref = a.outgoing.first.target.name;
+	
+	container.children.add(title);
+	container.children.add(link);
+}
 
-### Output format (strict)
-Return **only** fenced file blocks in this exact pattern:
-- One block:
-  ```json file=semantic_cases.json
-  ...
-  ```
-- One or more blocks:
-  ```xml file=models/<input>.model
-  ...
-  ```
 
-No extra prose outside fenced blocks.
+rule Decision2Elements
+	transform d : Flowchart!Decision
+	to container : HTML!DIV, title : HTML!H1, links : Sequence(HTML!A) {
+	
+	title.value = d.name;
+	
+	for (t in d.outgoing) {
+		var link = new HTML!A;
+		link.value = t.target.name;
+		link.ahref = t.target.name;
+		links.add(link);
+	}
+	
+	container.children.add(title);
+	container.children.addAll(links);
+}
+```
 
-### `semantic_cases.json` required schema
-Top-level object with:
-- `testClass`: string
-- `tests`: array of objects, each with:
-  - `name`: string
-  - `inputModel`: string (path under `models/`)
-  - `expectedNodes`: array (typed target-node expectations with identifiers and attributes)
-  - `expectedEdges`: array (directed links in `source->target` form, aligned to ETL assignments)
+- Metamodels for this task (from the deterministic contract; do not use any others):
+  - `Flowchart` (source, emf, metamodelUri `flowchart`): types Action, Decision
+  - `HTML` (target, emf, metamodelUri `HTML`): types A, DIV, H1
+<!-- END deterministic-task-context -->
 
-Design high-value semantic tests covering at least:
-- Action with no outgoing edge (guard prevents transformation)
-- Action with one or more outgoing edges (first outgoing target used for `ahref`)
-- Decision with multiple outgoing edges (one link per outgoing edge)
-- Mixed-source scenarios and exact total target counts
-- No unexpected target nodes/edges beyond what rules create
+## Critical constraints
+1. **Do NOT generate Java or JUnit code.** The Java test harness is produced
+   deterministically by the pipeline from your JSON.
+2. **Do NOT depend on or reuse existing manually written semantic tests.** Derive
+   cases only from the ETL rules and metamodels above.
+3. **Use only the runtime model names, metamodel URIs, and types from the
+   deterministic contract.** Do not invent, rename, or substitute metamodels,
+   URIs, namespaces, or type names.
+4. Generated suites are accepted only after **technical validation** (schema and
+   contract consistency) and **reference validation** (behaviour matches the
+   reference ETL).
+5. Assertions must state **externally observable target-model facts** inferred
+   from the ETL semantics:
+   - exact target element counts,
+   - exact attribute/feature values,
+   - exact references/links and their direction,
+   - explicit absence of superfluous target elements.
 
-Ensure all referenced input model files are included as XML blocks.
+## Output format (strict)
+Return **only** fenced file blocks, with no prose outside them:
+
+```json file=semantic_cases.json
+...content...
+```
+
+```xml file=models/<name>.model
+...content...
+```
+
+## Required JSON schema (task-generic)
+`semantic_cases.json` top-level fields: `schemaVersion`, `testClass`,
+`transformation`, `metamodels`, `tests`.
+
+- `metamodels[]`: `name`, `uri` (the metamodelUri from the contract; omit `uri`
+  for plainXml models).
+- `tests[]`: `name`, `models`, `assertions`.
+- `models[]`: `name` (equal to a runtime model name from the contract), `kind`
+  (`"emf"` or `"plainXml"`), `role` (`"source"` or `"target"`), `path` (for
+  source models you emit), `generated` (boolean), `metamodelUri` (EMF models
+  only, exactly as in the contract).
+- `assertions[]` may use only these generic kinds: `count`, `featureValues`,
+  `objects`, `pathValues`, `referencePairs`.
+
+Canonical assertion payloads:
+
+```json
+{"kind": "count", "model": "<target runtime model>", "type": "<type>", "expected": 0}
+{"kind": "featureValues", "model": "<target runtime model>", "type": "<type>", "feature": "<feature>", "expected": ["value"]}
+{"kind": "pathValues", "model": "<target runtime model>", "type": "<type>", "path": "<feature.or.reference.path>", "expected": ["value"]}
+{"kind": "objects", "model": "<target runtime model>", "type": "<type>", "features": ["feature"], "expected": [{"feature": "value"}]}
+{"kind": "referencePairs", "model": "<target runtime model>", "type": "<type>", "source": "<source.path>", "target": "<target.path>", "expected": [{"source": "a", "target": "b"}]}
+```
+
+Do **not** use alternate primary keys such as `value`, `values`, `equals`,
+`ids`, `pairs`, `sourceType`, `targetType`, `where`, or `match`. Use the
+canonical `expected` field and the canonical path fields above.
+
+Do **not** introduce transformation-specific schema fields such as
+`expectedNodes` / `expectedEdges`.
+
+## Test design requirements
+- Cover positive and edge scenarios implied by the ETL: empty/minimal source,
+  one instance per mapped source type, mixed instances across mapped types, and
+  duplicate/empty values where the metamodel allows.
+- For each scenario, assert the exact number of produced target elements and
+  their exact feature values.
+- Include assertions that rule out unexpected target elements beyond those
+  justified by matched source elements.
+- Keep every assertion precise and machine-checkable using the generic kinds.
+- Emit each source input model as a fenced model file and reference it from
+  `models[].path`.
+
+Now produce the files.

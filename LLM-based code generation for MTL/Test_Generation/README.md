@@ -44,25 +44,134 @@ Generated prompt texts, references, and responses can be stored under
 The models under `Test_Generation/Workflows/n8n-docker/models` are prompt-context
 copies. The source of truth remains the original `ETL_Test` resources.
 
-## Tree2Graph Prompt Generation
+## Semantic Case Schema
 
-The first implemented test-generation prompt is:
-
-```text
-Workflows/n8n-docker/mtl_snippets/ETL_test_generation/prompts/Tree2Graph.txt
-```
-
-It asks an LLM to generate an executable Java/JUnit semantic suite and requires
-exact file blocks for:
+Generated-test responses should not contain Java/JUnit as the primary artifact.
+The expected Plan B output is:
 
 ```text
-GeneratedTree2GraphSemanticTest.java
-models/tree_simple.model
-models/tree_branching.model
-models/tree_deep.model
+semantic_cases.json
+models/<generated-input>.model
+models/<generated-input>.xml
 ```
 
-The production prompt-generation workflows are:
+`semantic_cases.json` is task-generic. It describes how the deterministic
+harness should run ETL and what observable target-model facts should be checked:
+
+```json
+{
+  "schemaVersion": 1,
+  "testClass": "GeneratedTransformationSemanticTest",
+  "transformation": "transformations/<Task>.etl",
+  "metamodels": [
+    "metamodels/Source.ecore",
+    "metamodels/Target.ecore"
+  ],
+  "tests": [
+    {
+      "name": "case name",
+      "models": [
+        {
+          "name": "Source",
+          "kind": "emf",
+          "role": "source",
+          "path": "models/input.model",
+          "generated": true,
+          "metamodelUri": "Source"
+        },
+        {
+          "name": "Target",
+          "kind": "emf",
+          "role": "target",
+          "metamodelUri": "Target"
+        }
+      ],
+      "assertions": [
+        {
+          "kind": "count",
+          "model": "Target",
+          "type": "Element",
+          "expected": 3
+        },
+        {
+          "kind": "featureValues",
+          "model": "Target",
+          "type": "Element",
+          "feature": "name",
+          "expected": ["a", "b", "b"]
+        },
+        {
+          "kind": "referencePairs",
+          "model": "Target",
+          "type": "Relationship",
+          "source": "source.name",
+          "target": "target.name",
+          "expected": [
+            {"source": "a", "target": "b"}
+          ]
+        }
+      ]
+    }
+  ]
+}
+```
+
+Supported model kinds:
+
+```text
+emf
+plainXml
+```
+
+Supported assertion kinds:
+
+```text
+count
+featureValues
+pathValues
+objects
+referencePairs
+```
+
+The deterministic generator compares repeated values as multisets. This means
+cases such as three target elements with the same `name` are valid and are not
+collapsed through Java `Set` semantics.
+
+The extraction layer still accepts the older Tree2Graph-only fields
+`inputModel`, `expectedNodes`, and `expectedEdges` as a compatibility adapter,
+but new prompts should use the task-generic schema above.
+
+## Prompt Generation
+
+Before running test generation, build the deterministic model contracts and
+production prompts locally:
+
+```bash
+PYTHONPATH=Test_Generation/scripts python3 Test_Generation/scripts/etl/build_task_model_contracts.py
+PYTHONPATH=Test_Generation/scripts python3 Test_Generation/scripts/etl/build_task_prompts.py --llm gpt-5
+```
+
+The first command writes task contracts under:
+
+```text
+Workflows/n8n-docker/mtl_snippets/ETL_test_generation/task_contracts/
+```
+
+The second command writes production prompts under:
+
+```text
+Workflows/n8n-docker/mtl_snippets/ETL_test_generation/prompts/gpt-5/*.txt
+```
+
+Each contract separates ETL runtime model names from EMF metamodel URIs. For
+example, `Flowchart!Flowchart` uses runtime model name `Flowchart` but
+metamodel URI `flowchart`; `OO2DB!TypeMapping` uses runtime model name `OO2DB`
+but metamodel URI `TM`; `RSS`/`Atom` are `plainXml` runtime models. Production
+prompts and test-generation workflows must treat these contracts as ground
+truth and must not invent model names, metamodel URIs, XML namespaces, or type
+names.
+
+The n8n prompt-generation workflows are draft-only experiments:
 
 ```text
 Workflows/n8n-docker/workflows/etl_variants/prompt_generation/Prompt_generation_tests_ETL_gpt-5.json
@@ -70,26 +179,28 @@ Workflows/n8n-docker/workflows/etl_variants/prompt_generation/Prompt_generation_
 Workflows/n8n-docker/workflows/etl_variants/prompt_generation/Prompt_generation_tests_ETL_gemini-2-5-pro.json
 ```
 
-It reads ETL reference transformations from:
+They read ETL reference transformations from:
 
 ```text
 Workflows/n8n-docker/mtl_snippets/ETL_test_generation/references/*.etl
 ```
 
-Each `.etl` reference produces one generated test prompt with the same base
-name, and prompt candidates are written by prompt-generating LLM:
+For `gpt-5`, draft prompt candidates are written by the prompt-generating LLM
+to:
+
+```text
+Workflows/n8n-docker/mtl_snippets/ETL_test_generation/prompt_drafts/gpt-5/*.txt
+```
+
+Draft prompts are not consumed by the production test-generation workflows. The
+`prompts/gpt-5/*.txt` production prompts are generated by
+`build_task_prompts.py` so deterministic contract and task-context sections
+cannot be overwritten by another LLM.
+
+The LLM-specific production prompt folder is consumed by the next stage:
 
 ```text
 Workflows/n8n-docker/mtl_snippets/ETL_test_generation/prompts/gpt-5/*.txt
-Workflows/n8n-docker/mtl_snippets/ETL_test_generation/prompts/claude-sonnet-4/*.txt
-Workflows/n8n-docker/mtl_snippets/ETL_test_generation/prompts/gemini-2-5-pro/*.txt
-```
-
-The root prompt folder is reserved for selected production prompts consumed by
-the next stage:
-
-```text
-Workflows/n8n-docker/mtl_snippets/ETL_test_generation/prompts/*.txt
 ```
 
 The local Qwen workflow is only for infrastructure smoke testing and writes to:
@@ -122,10 +233,11 @@ through extraction and technical validation, but they are not the main thesis
 LLM result set unless explicitly promoted.
 
 Production `Prompting_tests_ETL_<llm>_<strategy>.json` workflows read selected
-production prompts from:
+production prompts from the LLM-specific prompt folder. The current `gpt-5`
+workflows use:
 
 ```text
-/data/snippets/ETL_test_generation/prompts/*.txt
+/data/snippets/ETL_test_generation/prompts/gpt-5/*.txt
 ```
 
 The test-generation workflows are stored under:

@@ -83,8 +83,9 @@ def main(argv: list[str] | None = None) -> int:
         rows.append(row)
         print(
             "  technically_valid="
-            f"{row['technically_valid']} compiles={row['compiles']} "
-            f"models_load={row['models_load']} junit_executes={row['junit_executes']}"
+            f"{row['technically_valid']} contract_valid={row['contract_valid']} "
+            f"compiles={row['compiles']} models_load={row['models_load']} "
+            f"junit_executes={row['junit_executes']}"
         )
         if row["error_summary"]:
             print(f"  error: {row['error_summary']}")

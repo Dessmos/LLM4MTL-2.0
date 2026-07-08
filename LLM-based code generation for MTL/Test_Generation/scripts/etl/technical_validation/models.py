@@ -15,6 +15,7 @@ RESULT_COLUMNS = [
     "strategy",
     "java_present",
     "models_present",
+    "contract_valid",
     "compiles",
     "models_load",
     "junit_executes",

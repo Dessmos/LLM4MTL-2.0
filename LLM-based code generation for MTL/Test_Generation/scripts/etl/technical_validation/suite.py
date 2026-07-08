@@ -8,6 +8,7 @@ from common.injection import Injection
 from common.maven import run_maven, summarize_error
 from etl.suites.injection import inject_suite
 from etl.suites.java import infer_fqcn
+from etl.suites.metadata import contract_invalid_reason
 from etl.suites.models import CandidateSuite
 from etl.technical_validation.models import LANGUAGE
 from etl.technical_validation.resources import check_models_load
@@ -31,6 +32,7 @@ def check_suite(suite: CandidateSuite, args: argparse.Namespace) -> dict[str, st
         "strategy": suite.strategy,
         "java_present": str(java_present),
         "models_present": str(models_present),
+        "contract_valid": "True",
         "compiles": "False",
         "models_load": str(models_load),
         "junit_executes": "False",
@@ -38,6 +40,14 @@ def check_suite(suite: CandidateSuite, args: argparse.Namespace) -> dict[str, st
         "maven_exit_code": "",
         "error_summary": "",
     }
+
+    # Fail-fast: a suite that violated its task contract at extraction time must
+    # not proceed to Maven; surface the recorded reason here instead.
+    contract_reason = contract_invalid_reason(suite.path)
+    if contract_reason:
+        result["contract_valid"] = "False"
+        result["error_summary"] = contract_reason
+        return result
 
     if not java_present:
         result["error_summary"] = "No Java file found in suite root"

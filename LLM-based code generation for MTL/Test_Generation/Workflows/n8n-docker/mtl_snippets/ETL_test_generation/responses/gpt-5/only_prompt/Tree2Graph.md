@@ -1,105 +1,275 @@
 ```json file=semantic_cases.json
 {
-  "testClass": "Tree2GraphSemanticCases",
+  "schemaVersion": "1.0",
+  "testClass": "Tree2GraphSemanticTests",
+  "transformation": "Tree2Graph",
+  "metamodels": [
+    {
+      "name": "IN",
+      "kind": "emf",
+      "role": "source",
+      "metamodelUri": "Tree"
+    },
+    {
+      "name": "OUT",
+      "kind": "emf",
+      "role": "target",
+      "metamodelUri": "Graph"
+    }
+  ],
   "tests": [
     {
-      "name": "single_root_only",
-      "inputModel": "models/single_root_only.model",
-      "expectedNodes": [
-        { "name": "root" }
+      "name": "single_root_no_children",
+      "models": [
+        {
+          "name": "IN",
+          "kind": "emf",
+          "role": "source",
+          "path": "models/single_root.model",
+          "generated": true,
+          "metamodelUri": "Tree"
+        },
+        {
+          "name": "OUT",
+          "kind": "emf",
+          "role": "target",
+          "generated": false,
+          "metamodelUri": "Graph"
+        }
       ],
-      "expectedEdges": []
-    },
-    {
-      "name": "three_level_chain",
-      "inputModel": "models/three_level_chain.model",
-      "expectedNodes": [
-        { "name": "A" },
-        { "name": "B" },
-        { "name": "C" }
-      ],
-      "expectedEdges": [
-        { "source": "A", "target": "B" },
-        { "source": "B", "target": "C" }
+      "assertions": [
+        {
+          "kind": "count",
+          "model": "OUT",
+          "type": "Graph",
+          "equals": 1
+        },
+        {
+          "kind": "count",
+          "model": "OUT",
+          "type": "Node",
+          "equals": 1
+        },
+        {
+          "kind": "count",
+          "model": "OUT",
+          "type": "Edge",
+          "equals": 0
+        },
+        {
+          "kind": "featureValues",
+          "model": "OUT",
+          "type": "Node",
+          "idFeature": "name",
+          "expected": [
+            {
+              "id": "root",
+              "values": {
+                "name": "root"
+              }
+            }
+          ]
+        }
       ]
     },
     {
-      "name": "branching_tree",
-      "inputModel": "models/branching_tree.model",
-      "expectedNodes": [
-        { "name": "root" },
-        { "name": "left" },
-        { "name": "right" },
-        { "name": "left.left" }
+      "name": "two_level_with_siblings",
+      "models": [
+        {
+          "name": "IN",
+          "kind": "emf",
+          "role": "source",
+          "path": "models/two_level_siblings.model",
+          "generated": true,
+          "metamodelUri": "Tree"
+        },
+        {
+          "name": "OUT",
+          "kind": "emf",
+          "role": "target",
+          "generated": false,
+          "metamodelUri": "Graph"
+        }
       ],
-      "expectedEdges": [
-        { "source": "root", "target": "left" },
-        { "source": "root", "target": "right" },
-        { "source": "left", "target": "left.left" }
+      "assertions": [
+        {
+          "kind": "count",
+          "model": "OUT",
+          "type": "Graph",
+          "equals": 1
+        },
+        {
+          "kind": "count",
+          "model": "OUT",
+          "type": "Node",
+          "equals": 3
+        },
+        {
+          "kind": "count",
+          "model": "OUT",
+          "type": "Edge",
+          "equals": 2
+        },
+        {
+          "kind": "objects",
+          "model": "OUT",
+          "type": "Node",
+          "idFeature": "name",
+          "ids": ["root", "c1", "c2"]
+        },
+        {
+          "kind": "referencePairs",
+          "model": "OUT",
+          "type": "Edge",
+          "sourceFeature": "source.name",
+          "targetFeature": "target.name",
+          "pairs": [
+            ["root", "c1"],
+            ["root", "c2"]
+          ]
+        }
       ]
     },
     {
-      "name": "repeated_labels",
-      "inputModel": "models/repeated_labels.model",
-      "expectedNodes": [
-        { "name": "dup" },
-        { "name": "dup" },
-        { "name": "dup" }
+      "name": "three_level_branching_direction_and_propagation",
+      "models": [
+        {
+          "name": "IN",
+          "kind": "emf",
+          "role": "source",
+          "path": "models/three_level_branching.model",
+          "generated": true,
+          "metamodelUri": "Tree"
+        },
+        {
+          "name": "OUT",
+          "kind": "emf",
+          "role": "target",
+          "generated": false,
+          "metamodelUri": "Graph"
+        }
       ],
-      "expectedEdges": [
-        { "source": "dup", "target": "dup" },
-        { "source": "dup", "target": "dup" }
+      "assertions": [
+        {
+          "kind": "count",
+          "model": "OUT",
+          "type": "Graph",
+          "equals": 1
+        },
+        {
+          "kind": "count",
+          "model": "OUT",
+          "type": "Node",
+          "equals": 6
+        },
+        {
+          "kind": "count",
+          "model": "OUT",
+          "type": "Edge",
+          "equals": 5
+        },
+        {
+          "kind": "objects",
+          "model": "OUT",
+          "type": "Node",
+          "idFeature": "name",
+          "ids": ["A", "B", "C", "D", "E", "F"]
+        },
+        {
+          "kind": "referencePairs",
+          "model": "OUT",
+          "type": "Edge",
+          "sourceFeature": "source.name",
+          "targetFeature": "target.name",
+          "pairs": [
+            ["A", "B"],
+            ["A", "C"],
+            ["B", "D"],
+            ["B", "E"],
+            ["C", "F"]
+          ]
+        },
+        {
+          "kind": "featureValues",
+          "model": "OUT",
+          "type": "Node",
+          "idFeature": "name",
+          "expected": [
+            {
+              "id": "A",
+              "values": {
+                "name": "A"
+              }
+            },
+            {
+              "id": "B",
+              "values": {
+                "name": "B"
+              }
+            },
+            {
+              "id": "C",
+              "values": {
+                "name": "C"
+              }
+            },
+            {
+              "id": "D",
+              "values": {
+                "name": "D"
+              }
+            },
+            {
+              "id": "E",
+              "values": {
+                "name": "E"
+              }
+            },
+            {
+              "id": "F",
+              "values": {
+                "name": "F"
+              }
+            }
+          ]
+        }
       ]
     }
   ]
 }
 ```
 
-```xml file=models/single_root_only.model
+```xml file=models/single_root.model
 <?xml version="1.0" encoding="UTF-8"?>
 <Tree:Tree xmi:version="2.0"
     xmlns:xmi="http://www.omg.org/XMI"
-    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
     xmlns:Tree="Tree"
     label="root"/>
 ```
 
-```xml file=models/three_level_chain.model
+```xml file=models/two_level_siblings.model
 <?xml version="1.0" encoding="UTF-8"?>
 <Tree:Tree xmi:version="2.0"
     xmlns:xmi="http://www.omg.org/XMI"
-    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:Tree="Tree"
+    label="root">
+  <children label="c1"/>
+  <children label="c2"/>
+</Tree:Tree>
+```
+
+```xml file=models/three_level_branching.model
+<?xml version="1.0" encoding="UTF-8"?>
+<Tree:Tree xmi:version="2.0"
+    xmlns:xmi="http://www.omg.org/XMI"
     xmlns:Tree="Tree"
     label="A">
   <children label="B">
-    <children label="C"/>
+    <children label="D"/>
+    <children label="E"/>
   </children>
-</Tree:Tree>
-```
-
-```xml file=models/branching_tree.model
-<?xml version="1.0" encoding="UTF-8"?>
-<Tree:Tree xmi:version="2.0"
-    xmlns:xmi="http://www.omg.org/XMI"
-    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-    xmlns:Tree="Tree"
-    label="root">
-  <children label="left">
-    <children label="left.left"/>
-  </children>
-  <children label="right"/>
-</Tree:Tree>
-```
-
-```xml file=models/repeated_labels.model
-<?xml version="1.0" encoding="UTF-8"?>
-<Tree:Tree xmi:version="2.0"
-    xmlns:xmi="http://www.omg.org/XMI"
-    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-    xmlns:Tree="Tree"
-    label="dup">
-  <children label="dup">
-    <children label="dup"/>
+  <children label="C">
+    <children label="F"/>
   </children>
 </Tree:Tree>
 ```

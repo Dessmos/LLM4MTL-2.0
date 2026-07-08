@@ -71,6 +71,10 @@ def default_prompts_root(config: LanguageConfig = ETL_CONFIG) -> Path:
     return n8n_snippets_root(config) / "prompts"
 
 
+def default_task_contracts_root(config: LanguageConfig = ETL_CONFIG) -> Path:
+    return n8n_snippets_root(config) / "task_contracts"
+
+
 def default_references_root(config: LanguageConfig = ETL_CONFIG) -> Path:
     return n8n_snippets_root(config) / "references"
 

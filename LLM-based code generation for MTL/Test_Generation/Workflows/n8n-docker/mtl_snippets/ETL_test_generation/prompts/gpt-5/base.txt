@@ -1,60 +1,134 @@
-You are generating **semantic test assets** for a specific ETL transformation.  
-Do **not** generate Java or JUnit. The Java/JUnit harness is produced deterministically by the pipeline.
+<!-- BEGIN deterministic-model-contract -->
+## Deterministic model contract (preflight)
 
-Use this ETL as the sole reference for expected behavior:
+Use this contract as ground truth. Do not infer or invent model names, metamodel URIs, XML namespaces, or type names.
 
-- `Flowchart2Heading`: `Flowchart!Flowchart -> HTML!H1`, `h1.value = f.name`
-- `Action2Heading`: `Flowchart!Action -> HTML!H1`, `h1.value = a.name`
-- `Decision2Heading`: `Flowchart!Decision -> HTML!H1`, `h1.value = d.name`
-- `Transition2Heading`: `Flowchart!Transition -> HTML!H1`, `h1.value = t.name`
+| Runtime model name | Role(s) | Kind | metamodelUri | XML nsPrefix | Types used by ETL |
+|---|---|---|---|---|---|
+| Flowchart | source | emf | flowchart | flowchart | Action, Decision, Flowchart, Transition |
+| HTML | target | emf | HTML | HTML | H1 |
 
-### Task
-Produce semantic test cases and corresponding **input model files** for this ETL transformation.
+Mandatory rules:
+- In semantic_cases.json, each models[].name must equal one runtime model name above exactly.
+- For EMF models, each models[].metamodelUri must equal the listed metamodelUri exactly; do not use the Ecore file stem when it differs.
+- For generated EMF/XMI model files, use the listed XML nsPrefix and metamodelUri exactly in xmlns declarations.
+- For plainXml models, use kind="plainXml" and omit metamodelUri.
+- Do not mention or use any model/metamodel/type that is not listed in this contract.
+<!-- END deterministic-model-contract -->
 
-### Critical constraints
-1. **No Java, no JUnit, no test harness code.**
-2. Do **not** depend on or reuse existing manually written semantic tests for this task.
-3. Tests are accepted only after:
-   - **technical validation** (format/schema/parsing), and
-   - **reference validation** against the ETL behavior above.
-4. Expected results must contain **precise externally observable target-model facts** inferred from the ETL:
+You are generating **semantic test specifications and source input model files** for one ETL transformation task. Base every expectation strictly on the ETL rules and metamodels given below.
+
+<!-- BEGIN deterministic-task-context -->
+## Task context (must be used as ground truth)
+
+- Transformation file: `base.etl`
+- ETL rules (authoritative — derive every expected fact only from these):
+
+```etl
+rule Flowchart2Heading
+	transform f : Flowchart!Flowchart
+	to h1 : HTML!H1 {
+	
+	h1.value = f.name;
+}
+
+rule Action2Heading
+	transform a : Flowchart!Action
+	to h1 : HTML!H1 {
+	
+	h1.value = a.name;
+}
+
+rule Decision2Heading
+	transform d : Flowchart!Decision
+	to h1 : HTML!H1 {
+	
+	h1.value = d.name;
+}
+
+rule Transition2Heading
+	transform t : Flowchart!Transition
+	to h1 : HTML!H1 {
+	
+	h1.value = t.name;
+}
+```
+
+- Metamodels for this task (from the deterministic contract; do not use any others):
+  - `Flowchart` (source, emf, metamodelUri `flowchart`): types Action, Decision, Flowchart, Transition
+  - `HTML` (target, emf, metamodelUri `HTML`): types H1
+<!-- END deterministic-task-context -->
+
+## Critical constraints
+1. **Do NOT generate Java or JUnit code.** The Java test harness is produced
+   deterministically by the pipeline from your JSON.
+2. **Do NOT depend on or reuse existing manually written semantic tests.** Derive
+   cases only from the ETL rules and metamodels above.
+3. **Use only the runtime model names, metamodel URIs, and types from the
+   deterministic contract.** Do not invent, rename, or substitute metamodels,
+   URIs, namespaces, or type names.
+4. Generated suites are accepted only after **technical validation** (schema and
+   contract consistency) and **reference validation** (behaviour matches the
+   reference ETL).
+5. Assertions must state **externally observable target-model facts** inferred
+   from the ETL semantics:
    - exact target element counts,
-   - exact attribute values,
-   - exact references / relationship direction where applicable,
-   - and explicit absence of superfluous target elements.
-5. For edge direction semantics, use `source->target` direction exactly as ETL assignments would define (e.g., `e.source`, `e.target`).  
-   (If no edges are created by the ETL, keep `expectedEdges` correctly empty.)
+   - exact attribute/feature values,
+   - exact references/links and their direction,
+   - explicit absence of superfluous target elements.
 
-### Output format (strict)
-Return **only** fenced file blocks in this exact pattern:
-- One JSON block:
-  ```json file=semantic_cases.json
-  ```
-- One or more XML input model blocks:
-  ```xml file=models/<input>.model
-  ```
+## Output format (strict)
+Return **only** fenced file blocks, with no prose outside them:
 
-No prose outside fenced blocks.
+```json file=semantic_cases.json
+...content...
+```
 
-### `semantic_cases.json` required schema
-Top-level object:
-- `testClass`: string
-- `tests`: array of objects
+```xml file=models/<name>.model
+...content...
+```
 
-Each test object must include:
-- `name`: string
-- `inputModel`: string (path matching one generated XML file)
-- `expectedNodes`: array
-- `expectedEdges`: array
+## Required JSON schema (task-generic)
+`semantic_cases.json` top-level fields: `schemaVersion`, `testClass`,
+`transformation`, `metamodels`, `tests`.
 
-Design `expectedNodes`/`expectedEdges` so assertions can verify exact transformed target content, including no extra elements.
+- `metamodels[]`: `name`, `uri` (the metamodelUri from the contract; omit `uri`
+  for plainXml models).
+- `tests[]`: `name`, `models`, `assertions`.
+- `models[]`: `name` (equal to a runtime model name from the contract), `kind`
+  (`"emf"` or `"plainXml"`), `role` (`"source"` or `"target"`), `path` (for
+  source models you emit), `generated` (boolean), `metamodelUri` (EMF models
+  only, exactly as in the contract).
+- `assertions[]` may use only these generic kinds: `count`, `featureValues`,
+  `objects`, `pathValues`, `referencePairs`.
 
-### Coverage expectations
-Create a compact but meaningful suite covering:
-- each mapped source type that has a rule,
-- mixed-type inputs in one model,
-- empty/minimal input behavior,
-- name propagation correctness (`name` → `H1.value`),
-- multiplicity/count correctness (1 source element of mapped type => 1 `H1`).
+Canonical assertion payloads:
 
-Use the ETL code above as authoritative even if metamodel names shown elsewhere appear inconsistent.
+```json
+{"kind": "count", "model": "<target runtime model>", "type": "<type>", "expected": 0}
+{"kind": "featureValues", "model": "<target runtime model>", "type": "<type>", "feature": "<feature>", "expected": ["value"]}
+{"kind": "pathValues", "model": "<target runtime model>", "type": "<type>", "path": "<feature.or.reference.path>", "expected": ["value"]}
+{"kind": "objects", "model": "<target runtime model>", "type": "<type>", "features": ["feature"], "expected": [{"feature": "value"}]}
+{"kind": "referencePairs", "model": "<target runtime model>", "type": "<type>", "source": "<source.path>", "target": "<target.path>", "expected": [{"source": "a", "target": "b"}]}
+```
+
+Do **not** use alternate primary keys such as `value`, `values`, `equals`,
+`ids`, `pairs`, `sourceType`, `targetType`, `where`, or `match`. Use the
+canonical `expected` field and the canonical path fields above.
+
+Do **not** introduce transformation-specific schema fields such as
+`expectedNodes` / `expectedEdges`.
+
+## Test design requirements
+- Cover positive and edge scenarios implied by the ETL: empty/minimal source,
+  one instance per mapped source type, mixed instances across mapped types, and
+  duplicate/empty values where the metamodel allows.
+- For each scenario, assert the exact number of produced target elements and
+  their exact feature values.
+- Include assertions that rule out unexpected target elements beyond those
+  justified by matched source elements.
+- Keep every assertion precise and machine-checkable using the generic kinds.
+- Emit each source input model as a fenced model file and reference it from
+  `models[].path`.
+
+Now produce the files.

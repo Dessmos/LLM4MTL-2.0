@@ -1,0 +1,49 @@
+{
+  "task": "Tree2Graph",
+  "transformation": "Tree2Graph.etl",
+  "reference": "Test_Generation/Workflows/n8n-docker/mtl_snippets/ETL_test_generation/references/Tree2Graph.etl",
+  "models": [
+    {
+      "runtimeName": "Graph",
+      "roles": [
+        "target"
+      ],
+      "typesUsedInEtL": [
+        "Edge",
+        "Node"
+      ],
+      "kind": "emf",
+      "metamodelUri": "Graph",
+      "metamodelNsPrefix": "Graph",
+      "metamodelFile": "ETL_Test/src/test/resources/metamodels/Graph.ecore",
+      "availableTypes": [
+        "Graph",
+        "Node",
+        "Edge"
+      ]
+    },
+    {
+      "runtimeName": "Tree",
+      "roles": [
+        "source"
+      ],
+      "typesUsedInEtL": [
+        "Tree"
+      ],
+      "kind": "emf",
+      "metamodelUri": "Tree",
+      "metamodelNsPrefix": "Tree",
+      "metamodelFile": "ETL_Test/src/test/resources/metamodels/Tree.ecore",
+      "availableTypes": [
+        "Tree"
+      ]
+    }
+  ],
+  "rules": [
+    "models[].name in semantic_cases.json must equal runtimeName exactly.",
+    "For EMF models, models[].metamodelUri must equal metamodelUri exactly.",
+    "For generated EMF XMI, XML namespace URI/prefix must use metamodelUri/metamodelNsPrefix exactly.",
+    "For plainXml models, do not set metamodelUri and use kind='plainXml'.",
+    "Do not invent model names, metamodel URIs, metamodel files, or type names outside this contract."
+  ]
+}

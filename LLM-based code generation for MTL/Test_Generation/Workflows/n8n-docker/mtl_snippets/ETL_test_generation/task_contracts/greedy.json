@@ -1,0 +1,55 @@
+{
+  "task": "greedy",
+  "transformation": "greedy.etl",
+  "reference": "Test_Generation/Workflows/n8n-docker/mtl_snippets/ETL_test_generation/references/greedy.etl",
+  "models": [
+    {
+      "runtimeName": "Flowchart",
+      "roles": [
+        "source"
+      ],
+      "typesUsedInEtL": [
+        "NamedElement"
+      ],
+      "kind": "emf",
+      "metamodelUri": "flowchart",
+      "metamodelNsPrefix": "flowchart",
+      "metamodelFile": "ETL_Test/src/test/resources/metamodels/Flowchart.ecore",
+      "availableTypes": [
+        "NamedElement",
+        "Flowchart",
+        "Node",
+        "Action",
+        "Decision",
+        "Subflow",
+        "Transition"
+      ]
+    },
+    {
+      "runtimeName": "HTML",
+      "roles": [
+        "target"
+      ],
+      "typesUsedInEtL": [
+        "H1"
+      ],
+      "kind": "emf",
+      "metamodelUri": "HTML",
+      "metamodelNsPrefix": "HTML",
+      "metamodelFile": "ETL_Test/src/test/resources/metamodels/HTML.ecore",
+      "availableTypes": [
+        "HTMLElement",
+        "DIV",
+        "H1",
+        "A"
+      ]
+    }
+  ],
+  "rules": [
+    "models[].name in semantic_cases.json must equal runtimeName exactly.",
+    "For EMF models, models[].metamodelUri must equal metamodelUri exactly.",
+    "For generated EMF XMI, XML namespace URI/prefix must use metamodelUri/metamodelNsPrefix exactly.",
+    "For plainXml models, do not set metamodelUri and use kind='plainXml'.",
+    "Do not invent model names, metamodel URIs, metamodel files, or type names outside this contract."
+  ]
+}

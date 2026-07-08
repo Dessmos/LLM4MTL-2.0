@@ -1,0 +1,80 @@
+{
+  "task": "rss2atom",
+  "transformation": "rss2atom.etl",
+  "reference": "Test_Generation/Workflows/n8n-docker/mtl_snippets/ETL_test_generation/references/rss2atom.etl",
+  "models": [
+    {
+      "runtimeName": "Atom",
+      "roles": [
+        "target"
+      ],
+      "typesUsedInEtL": [
+        "t_author",
+        "t_content",
+        "t_entry",
+        "t_feed",
+        "t_generator",
+        "t_link",
+        "t_name",
+        "t_published",
+        "t_summary",
+        "t_title"
+      ],
+      "kind": "plainXml",
+      "metamodelUri": null,
+      "metamodelNsPrefix": null,
+      "metamodelFile": null,
+      "availableTypes": [
+        "t_author",
+        "t_content",
+        "t_entry",
+        "t_feed",
+        "t_generator",
+        "t_link",
+        "t_name",
+        "t_published",
+        "t_summary",
+        "t_title"
+      ]
+    },
+    {
+      "runtimeName": "RSS",
+      "roles": [
+        "source"
+      ],
+      "typesUsedInEtL": [
+        "t_content:encoded",
+        "t_dc:creator",
+        "t_description",
+        "t_generator",
+        "t_item",
+        "t_link",
+        "t_pubDate",
+        "t_rss",
+        "t_title"
+      ],
+      "kind": "plainXml",
+      "metamodelUri": null,
+      "metamodelNsPrefix": null,
+      "metamodelFile": null,
+      "availableTypes": [
+        "t_content:encoded",
+        "t_dc:creator",
+        "t_description",
+        "t_generator",
+        "t_item",
+        "t_link",
+        "t_pubDate",
+        "t_rss",
+        "t_title"
+      ]
+    }
+  ],
+  "rules": [
+    "models[].name in semantic_cases.json must equal runtimeName exactly.",
+    "For EMF models, models[].metamodelUri must equal metamodelUri exactly.",
+    "For generated EMF XMI, XML namespace URI/prefix must use metamodelUri/metamodelNsPrefix exactly.",
+    "For plainXml models, do not set metamodelUri and use kind='plainXml'.",
+    "Do not invent model names, metamodel URIs, metamodel files, or type names outside this contract."
+  ]
+}

@@ -8,6 +8,9 @@ from pathlib import Path
 from etl.extraction.models import ResponseTarget
 
 
+SMOKE_RESPONSE_SUFFIXES = (".qwen-smoke",)
+
+
 def discover_responses(args: argparse.Namespace) -> list[ResponseTarget]:
     if args.response:
         if args.suite_id and len(args.response) != 1:
@@ -47,8 +50,8 @@ def response_target_from_path(
     strategy_override: str | None,
     task_override: str | None,
 ) -> ResponseTarget:
-    task = task_override or response_path.stem
-    if task_override and response_path.stem != task_override:
+    task = task_override or task_name_from_response(response_path)
+    if task_override and task_name_from_response(response_path) != task_override:
         raise SystemExit(f"Expected response file named {task_override}.md: {response_path}")
 
     llm = llm_override
@@ -75,3 +78,11 @@ def response_target_from_path(
         strategy=strategy,
         task=task,
     )
+
+
+def task_name_from_response(response_path: Path) -> str:
+    stem = response_path.stem
+    for suffix in SMOKE_RESPONSE_SUFFIXES:
+        if stem.endswith(suffix):
+            return stem[: -len(suffix)]
+    return stem

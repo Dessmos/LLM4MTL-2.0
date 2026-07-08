@@ -90,8 +90,11 @@ def extract_one(target: ResponseTarget, args: argparse.Namespace) -> tuple[bool,
             return False, f"semantic_cases.json is not supported for {target.task} yet: {target.response_path}"
         return False, f"no Java file block or supported semantic_cases.json block found in {target.response_path}"
 
-    suite_dir = write_suite(target, extracted, args)
+    suite_dir, enforcement = write_suite(target, extracted, args)
     action = "would write" if args.dry_run else "wrote"
+    if not enforcement.valid:
+        reason = "; ".join(enforcement.violations)
+        return True, f"{action} {suite_dir} [INVALID: contract violation] {reason}"
     return True, f"{action} {suite_dir}"
 
 

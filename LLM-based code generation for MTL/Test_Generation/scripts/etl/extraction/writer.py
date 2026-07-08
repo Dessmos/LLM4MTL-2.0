@@ -12,7 +12,7 @@ from pathlib import Path
 from common.paths import ETL_CONFIG, default_prompts_root, n8n_workflows_root, relative_or_absolute
 from etl.extraction.models import LANGUAGE, ResponseTarget
 from etl.extraction.parser import java_files, model_files, semantic_case_files
-from etl.extraction.semantic_cases import augment_with_generated_java
+from etl.extraction.semantic_cases import EnforcementOutcome, augment_with_generated_java
 
 
 def next_suite_id(strategy_dir: Path) -> str:
@@ -30,8 +30,8 @@ def write_suite(
     target: ResponseTarget,
     extracted: dict[str, str],
     args: argparse.Namespace,
-) -> Path:
-    extracted = augment_with_generated_java(target.task, extracted)
+) -> tuple[Path, EnforcementOutcome]:
+    extracted, enforcement = augment_with_generated_java(target.task, extracted)
     strategy_dir = (
         args.generated_tests_root.resolve()
         / target.task
@@ -51,7 +51,7 @@ def write_suite(
             shutil.rmtree(suite_dir)
 
     if args.dry_run:
-        return suite_dir
+        return suite_dir, enforcement
 
     suite_dir.mkdir(parents=True, exist_ok=True)
     for relative_path, content in extracted.items():
@@ -59,20 +59,21 @@ def write_suite(
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text(content, encoding="utf-8")
 
-    metadata = build_metadata(target, suite_id, extracted)
+    metadata = build_metadata(target, suite_id, extracted, enforcement)
     (suite_dir / "metadata.json").write_text(
         json.dumps(metadata, indent=2) + "\n",
         encoding="utf-8",
     )
-    return suite_dir
+    return suite_dir, enforcement
 
 
 def build_metadata(
     target: ResponseTarget,
     suite_id: str,
     extracted: dict[str, str],
+    enforcement: EnforcementOutcome,
 ) -> dict[str, object]:
-    prompt_path = default_prompts_root() / f"{target.task}.txt"
+    prompt_path = default_prompts_root() / target.llm / f"{target.task}.txt"
     workflow_path = (
         n8n_workflows_root(ETL_CONFIG)
         / "test_generation"
@@ -88,7 +89,12 @@ def build_metadata(
         "prompt_file": relative_or_absolute(prompt_path) if prompt_path.exists() else None,
         "workflow_file": relative_or_absolute(workflow_path) if workflow_path.exists() else None,
         "raw_output_file": relative_or_absolute(target.response_path),
-        "status": "candidate",
+        "status": "candidate" if enforcement.valid else "invalid",
+        "contract_enforcement": {
+            "applied": enforcement.applied,
+            "valid": enforcement.valid,
+            "violations": enforcement.violations,
+        },
         "extraction": {
             "complete": bool(java_files(extracted)),
             "missing_files": [] if java_files(extracted) else ["*.java"],
