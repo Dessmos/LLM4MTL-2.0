@@ -1,2 +1,291 @@
-Placeholder for ETL semantic test generation few-shot examples.
+ETL semantic test generation few-shot examples.
 
+These examples are format guidance only. They intentionally use synthetic
+runtime model names, metamodel URIs, type names, features, paths, and
+transformation names so they cannot serve as answers for the benchmark tasks.
+For the current task, replace every synthetic identifier with an identifier from
+the deterministic model contract and the ETL task context. Never copy an
+identifier from these examples unless the current contract lists it exactly.
+
+The generated response must contain semantic test artifacts only:
+- one semantic_cases.json file block,
+- one or more generated source model file blocks,
+- no Java, no JUnit, no Maven files, and no prose outside file blocks.
+
+Always use canonical assertion payloads with the expected field. Do not use
+legacy task-specific assertion fields or alternate primary assertion keys.
+
+Example 1: canonical EMF source-to-EMF target response shape.
+Use concrete source types from the current contract. Do not instantiate abstract
+types. The target model has no path because the harness creates it.
+
+```json file=semantic_cases.json
+{
+  "schemaVersion": "1.0",
+  "testClass": "GeneratedSyntheticEmfShapeExample",
+  "transformation": "transformations/synthetic_emf_shape.etl",
+  "metamodels": [
+    {"name": "SourceRuntime", "uri": "SyntheticSource"},
+    {"name": "TargetRuntime", "uri": "SyntheticTarget"}
+  ],
+  "tests": [
+    {
+      "name": "concrete_sources_create_exact_target_objects",
+      "models": [
+        {
+          "name": "SourceRuntime",
+          "kind": "emf",
+          "role": "source",
+          "path": "models/synthetic_sources.model",
+          "generated": true,
+          "metamodelUri": "SyntheticSource"
+        },
+        {
+          "name": "TargetRuntime",
+          "kind": "emf",
+          "role": "target",
+          "generated": false,
+          "metamodelUri": "SyntheticTarget"
+        }
+      ],
+      "assertions": [
+        {"kind": "count", "model": "TargetRuntime", "type": "TargetElement", "expected": 2},
+        {
+          "kind": "featureValues",
+          "model": "TargetRuntime",
+          "type": "TargetElement",
+          "feature": "label",
+          "expected": ["alpha", "beta"]
+        },
+        {
+          "kind": "objects",
+          "model": "TargetRuntime",
+          "type": "TargetElement",
+          "features": ["label", "category"],
+          "expected": [
+            {"label": "alpha", "category": "primary"},
+            {"label": "beta", "category": "secondary"}
+          ]
+        }
+      ]
+    }
+  ]
+}
+```
+
+```xml file=models/synthetic_sources.model
+<?xml version="1.0" encoding="UTF-8"?>
+<xmi:XMI xmi:version="2.0"
+    xmlns:xmi="http://www.omg.org/XMI"
+    xmlns:src="SyntheticSource">
+  <src:ConcreteSourceElement name="alpha" kind="primary"/>
+  <src:ConcreteSourceElement name="beta" kind="secondary"/>
+</xmi:XMI>
+```
+
+Example 2: canonical EMF reference assertion shape.
+Use references only when the current target metamodel defines them. For source
+models with containment, serialize contained objects first and point references
+to those contained objects with stable fragment paths.
+
+```json file=semantic_cases.json
+{
+  "schemaVersion": "1.0",
+  "testClass": "GeneratedSyntheticReferenceShapeExample",
+  "transformation": "transformations/synthetic_reference_shape.etl",
+  "metamodels": [
+    {"name": "InputRuntime", "uri": "SyntheticInput"},
+    {"name": "OutputRuntime", "uri": "SyntheticOutput"}
+  ],
+  "tests": [
+    {
+      "name": "source_relationships_create_exact_target_links",
+      "models": [
+        {
+          "name": "InputRuntime",
+          "kind": "emf",
+          "role": "source",
+          "path": "models/synthetic_references.model",
+          "generated": true,
+          "metamodelUri": "SyntheticInput"
+        },
+        {
+          "name": "OutputRuntime",
+          "kind": "emf",
+          "role": "target",
+          "generated": false,
+          "metamodelUri": "SyntheticOutput"
+        }
+      ],
+      "assertions": [
+        {"kind": "count", "model": "OutputRuntime", "type": "TargetNode", "expected": 2},
+        {"kind": "count", "model": "OutputRuntime", "type": "TargetLink", "expected": 1},
+        {
+          "kind": "referencePairs",
+          "model": "OutputRuntime",
+          "type": "TargetLink",
+          "source": "from.label",
+          "target": "to.label",
+          "expected": [{"source": "left", "target": "right"}]
+        }
+      ]
+    }
+  ]
+}
+```
+
+```xml file=models/synthetic_references.model
+<?xml version="1.0" encoding="UTF-8"?>
+<src:SourceRoot xmi:version="2.0"
+    xmlns:xmi="http://www.omg.org/XMI"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:src="SyntheticInput"
+    name="root">
+  <items xsi:type="src:ConcreteItem" label="left" outgoing="#//@links.0"/>
+  <items xsi:type="src:ConcreteItem" label="right" incoming="#//@links.0"/>
+  <links label="left-to-right" source="#//@items.0" target="#//@items.1"/>
+</src:SourceRoot>
+```
+
+Example 3: canonical multi-source EMF response shape.
+When a task has more than one source model, include each source model separately
+with its own runtime model name and metamodelUri from the current contract.
+
+```json file=semantic_cases.json
+{
+  "schemaVersion": "1.0",
+  "testClass": "GeneratedSyntheticMultiSourceShapeExample",
+  "transformation": "transformations/synthetic_multi_source_shape.etl",
+  "metamodels": [
+    {"name": "PrimarySource", "uri": "SyntheticPrimary"},
+    {"name": "LookupSource", "uri": "SyntheticLookup"},
+    {"name": "TargetRuntime", "uri": "SyntheticTarget"}
+  ],
+  "tests": [
+    {
+      "name": "primary_and_lookup_sources_create_exact_target_values",
+      "models": [
+        {
+          "name": "PrimarySource",
+          "kind": "emf",
+          "role": "source",
+          "path": "models/synthetic_primary.model",
+          "generated": true,
+          "metamodelUri": "SyntheticPrimary"
+        },
+        {
+          "name": "LookupSource",
+          "kind": "emf",
+          "role": "source",
+          "path": "models/synthetic_lookup.model",
+          "generated": true,
+          "metamodelUri": "SyntheticLookup"
+        },
+        {
+          "name": "TargetRuntime",
+          "kind": "emf",
+          "role": "target",
+          "generated": false,
+          "metamodelUri": "SyntheticTarget"
+        }
+      ],
+      "assertions": [
+        {"kind": "count", "model": "TargetRuntime", "type": "TargetRecord", "expected": 1},
+        {
+          "kind": "objects",
+          "model": "TargetRuntime",
+          "type": "TargetRecord",
+          "features": ["name", "mappedType"],
+          "expected": [{"name": "source-one", "mappedType": "mapped"}]
+        }
+      ]
+    }
+  ]
+}
+```
+
+```xml file=models/synthetic_primary.model
+<?xml version="1.0" encoding="UTF-8"?>
+<primary:PrimaryRoot xmi:version="2.0"
+    xmlns:xmi="http://www.omg.org/XMI"
+    xmlns:primary="SyntheticPrimary">
+  <records name="source-one" typeName="raw"/>
+</primary:PrimaryRoot>
+```
+
+```xml file=models/synthetic_lookup.model
+<?xml version="1.0" encoding="UTF-8"?>
+<lookup:LookupRoot xmi:version="2.0"
+    xmlns:xmi="http://www.omg.org/XMI"
+    xmlns:lookup="SyntheticLookup">
+  <entries source="raw" target="mapped"/>
+</lookup:LookupRoot>
+```
+
+Example 4: canonical plainXml source-to-plainXml target response shape.
+For plainXml models, use kind="plainXml" and omit metamodelUri. If the source
+XML uses namespaced elements, declare every prefix on the generated source XML
+root.
+
+```json file=semantic_cases.json
+{
+  "schemaVersion": "1.0",
+  "testClass": "GeneratedSyntheticPlainXmlShapeExample",
+  "transformation": "transformations/synthetic_plain_xml_shape.etl",
+  "metamodels": [
+    {"name": "XmlSourceRuntime"},
+    {"name": "XmlTargetRuntime"}
+  ],
+  "tests": [
+    {
+      "name": "namespaced_source_xml_creates_exact_target_elements",
+      "models": [
+        {
+          "name": "XmlSourceRuntime",
+          "kind": "plainXml",
+          "role": "source",
+          "path": "models/synthetic_source.xml",
+          "generated": true
+        },
+        {
+          "name": "XmlTargetRuntime",
+          "kind": "plainXml",
+          "role": "target",
+          "generated": false
+        }
+      ],
+      "assertions": [
+        {"kind": "count", "model": "XmlTargetRuntime", "type": "t_targetItem", "expected": 1},
+        {
+          "kind": "pathValues",
+          "model": "XmlTargetRuntime",
+          "type": "t_targetTitle",
+          "path": "text",
+          "expected": ["Synthetic title"]
+        },
+        {
+          "kind": "pathValues",
+          "model": "XmlTargetRuntime",
+          "type": "t_targetLink",
+          "path": "a_href",
+          "expected": ["https://synthetic.example/item"]
+        }
+      ]
+    }
+  ]
+}
+```
+
+```xml file=models/synthetic_source.xml
+<?xml version="1.0" encoding="UTF-8"?>
+<sourceRoot
+    xmlns:meta="https://synthetic.example/meta"
+    xmlns:content="https://synthetic.example/content">
+  <item>
+    <title>Synthetic title</title>
+    <link>https://synthetic.example/item</link>
+    <meta:author>Example Author</meta:author>
+    <content:body>Example body</content:body>
+  </item>
+</sourceRoot>
+```
