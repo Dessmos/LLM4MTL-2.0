@@ -1,293 +1,219 @@
 ```json file=semantic_cases.json
 {
   "schemaVersion": "1.0",
-  "testClass": "Graph2TreeSemanticTests",
-  "transformation": "Graph2Tree",
+  "testClass": "PrimaryEtlSemanticCases",
+  "transformation": "primary.etl",
   "metamodels": [
     {
-      "name": "IN",
-      "kind": "emf",
-      "role": "source",
-      "metamodelUri": "Graph"
+      "name": "Flowchart",
+      "uri": "flowchart"
     },
     {
-      "name": "OUT",
-      "kind": "emf",
-      "role": "target",
-      "metamodelUri": "Tree"
+      "name": "HTML",
+      "uri": "HTML"
     }
   ],
   "tests": [
     {
-      "name": "empty_graph_produces_no_tree_nodes",
+      "name": "empty_flowchart_produces_empty_div_only",
       "models": [
         {
-          "name": "IN",
+          "name": "Flowchart",
           "kind": "emf",
           "role": "source",
-          "path": "models/empty-graph.model",
-          "generated": true,
-          "metamodelUri": "Graph"
+          "path": "models/empty_flowchart.model",
+          "generated": false,
+          "metamodelUri": "flowchart"
         },
         {
-          "name": "OUT",
+          "name": "HTML",
           "kind": "emf",
           "role": "target",
-          "generated": false,
-          "metamodelUri": "Tree"
+          "generated": true,
+          "metamodelUri": "HTML"
         }
       ],
       "assertions": [
         {
           "kind": "count",
-          "model": "OUT",
-          "type": "Tree",
-          "value": 0
+          "model": "HTML",
+          "type": "DIV",
+          "expected": 1
+        },
+        {
+          "kind": "count",
+          "model": "HTML",
+          "type": "H1",
+          "expected": 0
+        },
+        {
+          "kind": "count",
+          "model": "HTML",
+          "type": "A",
+          "expected": 0
+        },
+        {
+          "kind": "pathValues",
+          "model": "HTML",
+          "type": "DIV",
+          "path": "children.value",
+          "expected": []
+        }
+      ]
+    },
+    {
+      "name": "single_transition_creates_one_div_one_h1_and_two_links",
+      "models": [
+        {
+          "name": "Flowchart",
+          "kind": "emf",
+          "role": "source",
+          "path": "models/single_transition.model",
+          "generated": false,
+          "metamodelUri": "flowchart"
+        },
+        {
+          "name": "HTML",
+          "kind": "emf",
+          "role": "target",
+          "generated": true,
+          "metamodelUri": "HTML"
+        }
+      ],
+      "assertions": [
+        {
+          "kind": "count",
+          "model": "HTML",
+          "type": "DIV",
+          "expected": 1
+        },
+        {
+          "kind": "count",
+          "model": "HTML",
+          "type": "H1",
+          "expected": 1
+        },
+        {
+          "kind": "count",
+          "model": "HTML",
+          "type": "A",
+          "expected": 2
+        },
+        {
+          "kind": "featureValues",
+          "model": "HTML",
+          "type": "H1",
+          "feature": "value",
+          "expected": ["T1"]
         },
         {
           "kind": "objects",
-          "model": "OUT",
-          "type": "Tree",
-          "match": []
-        }
-      ]
-    },
-    {
-      "name": "single_node_graph_maps_to_single_root_tree",
-      "models": [
-        {
-          "name": "IN",
-          "kind": "emf",
-          "role": "source",
-          "path": "models/single-node.model",
-          "generated": true,
-          "metamodelUri": "Graph"
-        },
-        {
-          "name": "OUT",
-          "kind": "emf",
-          "role": "target",
-          "generated": false,
-          "metamodelUri": "Tree"
-        }
-      ],
-      "assertions": [
-        {
-          "kind": "count",
-          "model": "OUT",
-          "type": "Tree",
-          "value": 1
-        },
-        {
-          "kind": "featureValues",
-          "model": "OUT",
-          "type": "Tree",
-          "idFeature": "label",
+          "model": "HTML",
+          "type": "A",
+          "features": ["value", "ahref"],
           "expected": [
             {
-              "id": "A",
-              "values": {
-                "label": "A"
-              }
+              "value": "Start",
+              "ahref": "#Start"
+            },
+            {
+              "value": "T1",
+              "ahref": "#End"
             }
           ]
         },
         {
           "kind": "pathValues",
-          "model": "OUT",
-          "type": "Tree",
-          "expected": [
-            {
-              "idFeature": "label",
-              "id": "A",
-              "path": "parent",
-              "value": null
-            },
-            {
-              "idFeature": "label",
-              "id": "A",
-              "path": "children",
-              "value": []
-            }
-          ]
-        },
-        {
-          "kind": "referencePairs",
-          "model": "OUT",
-          "reference": "children",
-          "sourceType": "Tree",
-          "targetType": "Tree",
-          "sourceIdFeature": "label",
-          "targetIdFeature": "label",
-          "pairs": []
+          "model": "HTML",
+          "type": "DIV",
+          "path": "children.value",
+          "expected": ["T1"]
         }
       ]
     },
     {
-      "name": "two_node_one_edge_creates_parent_child_direction",
+      "name": "multiple_transitions_duplicate_and_empty_names",
       "models": [
         {
-          "name": "IN",
+          "name": "Flowchart",
           "kind": "emf",
           "role": "source",
-          "path": "models/two-nodes-one-edge.model",
-          "generated": true,
-          "metamodelUri": "Graph"
+          "path": "models/multiple_transitions_duplicates_empty.model",
+          "generated": false,
+          "metamodelUri": "flowchart"
         },
         {
-          "name": "OUT",
+          "name": "HTML",
           "kind": "emf",
           "role": "target",
-          "generated": false,
-          "metamodelUri": "Tree"
+          "generated": true,
+          "metamodelUri": "HTML"
         }
       ],
       "assertions": [
         {
           "kind": "count",
-          "model": "OUT",
-          "type": "Tree",
-          "value": 2
+          "model": "HTML",
+          "type": "DIV",
+          "expected": 1
         },
-        {
-          "kind": "featureValues",
-          "model": "OUT",
-          "type": "Tree",
-          "idFeature": "label",
-          "expected": [
-            {
-              "id": "A",
-              "values": {
-                "label": "A"
-              }
-            },
-            {
-              "id": "B",
-              "values": {
-                "label": "B"
-              }
-            }
-          ]
-        },
-        {
-          "kind": "referencePairs",
-          "model": "OUT",
-          "reference": "children",
-          "sourceType": "Tree",
-          "targetType": "Tree",
-          "sourceIdFeature": "label",
-          "targetIdFeature": "label",
-          "pairs": [
-            {
-              "source": "A",
-              "target": "B"
-            }
-          ]
-        },
-        {
-          "kind": "pathValues",
-          "model": "OUT",
-          "type": "Tree",
-          "expected": [
-            {
-              "idFeature": "label",
-              "id": "B",
-              "path": "parent.label",
-              "value": "A"
-            }
-          ]
-        }
-      ]
-    },
-    {
-      "name": "branching_from_one_source_creates_multiple_children",
-      "models": [
-        {
-          "name": "IN",
-          "kind": "emf",
-          "role": "source",
-          "path": "models/branching.model",
-          "generated": true,
-          "metamodelUri": "Graph"
-        },
-        {
-          "name": "OUT",
-          "kind": "emf",
-          "role": "target",
-          "generated": false,
-          "metamodelUri": "Tree"
-        }
-      ],
-      "assertions": [
         {
           "kind": "count",
-          "model": "OUT",
-          "type": "Tree",
-          "value": 3
+          "model": "HTML",
+          "type": "H1",
+          "expected": 3
+        },
+        {
+          "kind": "count",
+          "model": "HTML",
+          "type": "A",
+          "expected": 6
         },
         {
           "kind": "featureValues",
-          "model": "OUT",
-          "type": "Tree",
-          "idFeature": "label",
-          "expected": [
-            {
-              "id": "Root",
-              "values": {
-                "label": "Root"
-              }
-            },
-            {
-              "id": "Left",
-              "values": {
-                "label": "Left"
-              }
-            },
-            {
-              "id": "Right",
-              "values": {
-                "label": "Right"
-              }
-            }
-          ]
+          "model": "HTML",
+          "type": "H1",
+          "feature": "value",
+          "expected": ["Alpha", "Alpha", ""]
         },
         {
-          "kind": "referencePairs",
-          "model": "OUT",
-          "reference": "children",
-          "sourceType": "Tree",
-          "targetType": "Tree",
-          "sourceIdFeature": "label",
-          "targetIdFeature": "label",
-          "pairs": [
+          "kind": "objects",
+          "model": "HTML",
+          "type": "A",
+          "features": ["value", "ahref"],
+          "expected": [
             {
-              "source": "Root",
-              "target": "Left"
+              "value": "S1",
+              "ahref": "#M"
             },
             {
-              "source": "Root",
-              "target": "Right"
+              "value": "Alpha",
+              "ahref": "#S2"
+            },
+            {
+              "value": "M",
+              "ahref": "#S1"
+            },
+            {
+              "value": "Alpha",
+              "ahref": "#S1"
+            },
+            {
+              "value": "",
+              "ahref": "#"
+            },
+            {
+              "value": "",
+              "ahref": "#"
             }
           ]
         },
         {
           "kind": "pathValues",
-          "model": "OUT",
-          "type": "Tree",
-          "expected": [
-            {
-              "idFeature": "label",
-              "id": "Left",
-              "path": "parent.label",
-              "value": "Root"
-            },
-            {
-              "idFeature": "label",
-              "id": "Right",
-              "path": "parent.label",
-              "value": "Root"
-            }
-          ]
+          "model": "HTML",
+          "type": "DIV",
+          "path": "children.value",
+          "expected": ["Alpha", "Alpha", ""]
         }
       ]
     }
@@ -295,44 +221,41 @@
 }
 ```
 
-```xml file=models/empty-graph.model
+```xml file=models/empty_flowchart.model
 <?xml version="1.0" encoding="UTF-8"?>
-<Graph:Graph xmi:version="2.0"
+<flowchart:Flowchart xmi:version="2.0"
     xmlns:xmi="http://www.omg.org/XMI"
-    xmlns:Graph="Graph"/>
+    xmlns:flowchart="flowchart"/>
 ```
 
-```xml file=models/single-node.model
+```xml file=models/single_transition.model
 <?xml version="1.0" encoding="UTF-8"?>
-<Graph:Graph xmi:version="2.0"
+<flowchart:Flowchart xmi:version="2.0"
     xmlns:xmi="http://www.omg.org/XMI"
-    xmlns:Graph="Graph">
-  <nodes name="A"/>
-</Graph:Graph>
+    xmlns:flowchart="flowchart">
+  <transitions name="T1">
+    <source name="Start"/>
+    <target name="End"/>
+  </transitions>
+</flowchart:Flowchart>
 ```
 
-```xml file=models/two-nodes-one-edge.model
+```xml file=models/multiple_transitions_duplicates_empty.model
 <?xml version="1.0" encoding="UTF-8"?>
-<Graph:Graph xmi:version="2.0"
+<flowchart:Flowchart xmi:version="2.0"
     xmlns:xmi="http://www.omg.org/XMI"
-    xmlns:Graph="Graph">
-  <nodes name="A">
-    <outgoing target="//@nodes.1"/>
-  </nodes>
-  <nodes name="B"/>
-</Graph:Graph>
-```
-
-```xml file=models/branching.model
-<?xml version="1.0" encoding="UTF-8"?>
-<Graph:Graph xmi:version="2.0"
-    xmlns:xmi="http://www.omg.org/XMI"
-    xmlns:Graph="Graph">
-  <nodes name="Root">
-    <outgoing target="//@nodes.1"/>
-    <outgoing target="//@nodes.2"/>
-  </nodes>
-  <nodes name="Left"/>
-  <nodes name="Right"/>
-</Graph:Graph>
+    xmlns:flowchart="flowchart">
+  <transitions name="Alpha">
+    <source name="S1"/>
+    <target name="M"/>
+  </transitions>
+  <transitions name="Alpha">
+    <source name="M"/>
+    <target name="S1"/>
+  </transitions>
+  <transitions name="">
+    <source name=""/>
+    <target name=""/>
+  </transitions>
+</flowchart:Flowchart>
 ```

@@ -1,199 +1,163 @@
 ```json file=semantic_cases.json
 {
   "schemaVersion": "1.0",
-  "testClass": "Graph2TreeSemanticCases",
-  "transformation": "Graph2Tree",
+  "testClass": "GreedyEtlSemanticTests",
+  "transformation": "greedy.etl",
   "metamodels": [
     {
-      "name": "Graph",
-      "role": "source",
-      "kind": "emf",
-      "metamodelUri": "Graph"
+      "name": "Flowchart",
+      "uri": "flowchart"
     },
     {
-      "name": "Tree",
-      "role": "target",
-      "kind": "emf",
-      "metamodelUri": "Tree"
+      "name": "HTML",
+      "uri": "HTML"
     }
   ],
   "tests": [
     {
-      "name": "single_node_no_edges",
+      "name": "empty_source_produces_no_h1",
       "models": [
         {
-          "name": "Graph",
+          "name": "Flowchart",
           "kind": "emf",
           "role": "source",
-          "path": "models/single_node.model",
-          "generated": true,
-          "metamodelUri": "Graph"
+          "path": "models/empty_flowchart.model",
+          "generated": false,
+          "metamodelUri": "flowchart"
         },
         {
-          "name": "Tree",
+          "name": "HTML",
           "kind": "emf",
           "role": "target",
-          "generated": false,
-          "metamodelUri": "Tree"
+          "generated": true,
+          "metamodelUri": "HTML"
         }
       ],
       "assertions": [
         {
           "kind": "count",
-          "type": "Tree::Tree",
-          "equals": 1
+          "model": "HTML",
+          "type": "H1",
+          "expected": 0
         },
         {
           "kind": "featureValues",
-          "type": "Tree::Tree",
-          "feature": "label",
-          "values": ["A"]
-        },
-        {
-          "kind": "featureValues",
-          "type": "Tree::Tree",
-          "feature": "parent",
-          "values": [null]
-        },
-        {
-          "kind": "referencePairs",
-          "type": "Tree::Tree",
-          "reference": "children",
-          "pairs": []
+          "model": "HTML",
+          "type": "H1",
+          "feature": "value",
+          "expected": []
         }
       ]
     },
     {
-      "name": "linear_three_nodes",
+      "name": "single_named_element_maps_to_single_h1",
       "models": [
         {
-          "name": "Graph",
+          "name": "Flowchart",
           "kind": "emf",
           "role": "source",
-          "path": "models/linear_three.model",
-          "generated": true,
-          "metamodelUri": "Graph"
+          "path": "models/single_named_element.model",
+          "generated": false,
+          "metamodelUri": "flowchart"
         },
         {
-          "name": "Tree",
+          "name": "HTML",
           "kind": "emf",
           "role": "target",
-          "generated": false,
-          "metamodelUri": "Tree"
+          "generated": true,
+          "metamodelUri": "HTML"
         }
       ],
       "assertions": [
         {
           "kind": "count",
-          "type": "Tree::Tree",
-          "equals": 3
-        },
-        {
-          "kind": "featureValues",
-          "type": "Tree::Tree",
-          "feature": "label",
-          "values": ["A", "B", "C"]
-        },
-        {
-          "kind": "referencePairs",
-          "type": "Tree::Tree",
-          "reference": "children",
-          "pairs": [
-            ["A", "B"],
-            ["B", "C"]
-          ]
-        },
-        {
-          "kind": "referencePairs",
-          "type": "Tree::Tree",
-          "reference": "parent",
-          "pairs": [
-            ["B", "A"],
-            ["C", "B"]
-          ]
-        }
-      ]
-    },
-    {
-      "name": "branching_outgoing_edges",
-      "models": [
-        {
-          "name": "Graph",
-          "kind": "emf",
-          "role": "source",
-          "path": "models/branching.model",
-          "generated": true,
-          "metamodelUri": "Graph"
-        },
-        {
-          "name": "Tree",
-          "kind": "emf",
-          "role": "target",
-          "generated": false,
-          "metamodelUri": "Tree"
-        }
-      ],
-      "assertions": [
-        {
-          "kind": "count",
-          "type": "Tree::Tree",
-          "equals": 3
-        },
-        {
-          "kind": "featureValues",
-          "type": "Tree::Tree",
-          "feature": "label",
-          "values": ["Root", "Left", "Right"]
-        },
-        {
-          "kind": "referencePairs",
-          "type": "Tree::Tree",
-          "reference": "children",
-          "pairs": [
-            ["Root", "Left"],
-            ["Root", "Right"]
-          ]
-        },
-        {
-          "kind": "referencePairs",
-          "type": "Tree::Tree",
-          "reference": "parent",
-          "pairs": [
-            ["Left", "Root"],
-            ["Right", "Root"]
-          ]
-        }
-      ]
-    },
-    {
-      "name": "empty_graph_no_nodes",
-      "models": [
-        {
-          "name": "Graph",
-          "kind": "emf",
-          "role": "source",
-          "path": "models/empty.model",
-          "generated": true,
-          "metamodelUri": "Graph"
-        },
-        {
-          "name": "Tree",
-          "kind": "emf",
-          "role": "target",
-          "generated": false,
-          "metamodelUri": "Tree"
-        }
-      ],
-      "assertions": [
-        {
-          "kind": "count",
-          "type": "Tree::Tree",
-          "equals": 0
+          "model": "HTML",
+          "type": "H1",
+          "expected": 1
         },
         {
           "kind": "objects",
-          "type": "Tree::Tree",
-          "ids": []
+          "model": "HTML",
+          "type": "H1",
+          "features": [
+            "value"
+          ],
+          "expected": [
+            {
+              "value": "Start"
+            }
+          ]
+        },
+        {
+          "kind": "featureValues",
+          "model": "HTML",
+          "type": "H1",
+          "feature": "value",
+          "expected": [
+            "Start"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "multiple_named_elements_preserve_values_including_duplicates_and_empty",
+      "models": [
+        {
+          "name": "Flowchart",
+          "kind": "emf",
+          "role": "source",
+          "path": "models/multiple_named_elements.model",
+          "generated": false,
+          "metamodelUri": "flowchart"
+        },
+        {
+          "name": "HTML",
+          "kind": "emf",
+          "role": "target",
+          "generated": true,
+          "metamodelUri": "HTML"
+        }
+      ],
+      "assertions": [
+        {
+          "kind": "count",
+          "model": "HTML",
+          "type": "H1",
+          "expected": 4
+        },
+        {
+          "kind": "featureValues",
+          "model": "HTML",
+          "type": "H1",
+          "feature": "value",
+          "expected": [
+            "A",
+            "A",
+            "",
+            "B"
+          ]
+        },
+        {
+          "kind": "objects",
+          "model": "HTML",
+          "type": "H1",
+          "features": [
+            "value"
+          ],
+          "expected": [
+            {
+              "value": "A"
+            },
+            {
+              "value": "A"
+            },
+            {
+              "value": ""
+            },
+            {
+              "value": "B"
+            }
+          ]
         }
       ]
     }
@@ -201,47 +165,26 @@
 }
 ```
 
-```xml file=models/single_node.model
+```xml file=models/empty_flowchart.model
 <?xml version="1.0" encoding="UTF-8"?>
-<Graph:Graph xmi:version="2.0"
+<flowchart:NamedElement xmi:version="2.0"
     xmlns:xmi="http://www.omg.org/XMI"
-    xmlns:Graph="Graph">
-  <nodes name="A"/>
-</Graph:Graph>
+    xmlns:flowchart="flowchart"
+    name=""/>
 ```
 
-```xml file=models/linear_three.model
+```xml file=models/single_named_element.model
 <?xml version="1.0" encoding="UTF-8"?>
-<Graph:Graph xmi:version="2.0"
+<flowchart:NamedElement xmi:version="2.0"
     xmlns:xmi="http://www.omg.org/XMI"
-    xmlns:Graph="Graph">
-  <nodes name="A">
-    <outgoing target="//@nodes.1"/>
-  </nodes>
-  <nodes name="B">
-    <outgoing target="//@nodes.2"/>
-  </nodes>
-  <nodes name="C"/>
-</Graph:Graph>
+    xmlns:flowchart="flowchart"
+    name="Start"/>
 ```
 
-```xml file=models/branching.model
+```xml file=models/multiple_named_elements.model
 <?xml version="1.0" encoding="UTF-8"?>
-<Graph:Graph xmi:version="2.0"
+<flowchart:NamedElement xmi:version="2.0"
     xmlns:xmi="http://www.omg.org/XMI"
-    xmlns:Graph="Graph">
-  <nodes name="Root">
-    <outgoing target="//@nodes.1"/>
-    <outgoing target="//@nodes.2"/>
-  </nodes>
-  <nodes name="Left"/>
-  <nodes name="Right"/>
-</Graph:Graph>
-```
-
-```xml file=models/empty.model
-<?xml version="1.0" encoding="UTF-8"?>
-<Graph:Graph xmi:version="2.0"
-    xmlns:xmi="http://www.omg.org/XMI"
-    xmlns:Graph="Graph"/>
+    xmlns:flowchart="flowchart"
+    name="A"/>
 ```

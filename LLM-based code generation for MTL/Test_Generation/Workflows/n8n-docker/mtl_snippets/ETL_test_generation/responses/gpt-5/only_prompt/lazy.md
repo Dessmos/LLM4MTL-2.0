@@ -1,164 +1,261 @@
 ```json file=semantic_cases.json
 {
   "schemaVersion": "1.0",
-  "testClass": "Graph2TreeSemanticCases",
-  "transformation": {
-    "path": "transformations/Graph2Tree.etl",
-    "entryRule": null
-  },
+  "testClass": "lazySemanticCases",
+  "transformation": "lazy.etl",
   "metamodels": [
     {
-      "role": "source",
-      "path": "metamodels/Graph.ecore",
-      "metamodelUri": "Graph"
+      "name": "Flowchart",
+      "uri": "flowchart"
     },
     {
-      "role": "target",
-      "path": "metamodels/Tree.ecore",
-      "metamodelUri": "Tree"
+      "name": "HTML",
+      "uri": "HTML"
     }
   ],
   "tests": [
     {
-      "name": "single_node_graph_to_single_tree",
+      "name": "empty_flowchart_produces_single_empty_div",
       "models": [
         {
-          "name": "IN",
+          "name": "Flowchart",
           "kind": "emf",
           "role": "source",
-          "path": "models/single_node_graph.model",
-          "generated": true,
-          "metamodelUri": "Graph"
+          "path": "models/empty_flowchart.model",
+          "generated": false,
+          "metamodelUri": "flowchart"
         },
         {
-          "name": "OUT",
+          "name": "HTML",
           "kind": "emf",
           "role": "target",
-          "path": "models/single_node_graph_out.model",
-          "generated": false,
-          "metamodelUri": "Tree"
+          "generated": true,
+          "metamodelUri": "HTML"
         }
       ],
       "assertions": [
         {
           "kind": "count",
-          "model": "OUT",
-          "type": "Tree",
-          "equals": 1
+          "model": "HTML",
+          "type": "DIV",
+          "expected": 1
         },
         {
-          "kind": "featureValues",
-          "model": "OUT",
-          "type": "Tree",
-          "matchBy": "label",
-          "values": [
-            {
-              "match": "A",
-              "features": {
-                "label": "A"
-              }
-            }
-          ]
+          "kind": "count",
+          "model": "HTML",
+          "type": "H1",
+          "expected": 0
         },
         {
-          "kind": "referencePairs",
-          "model": "OUT",
-          "type": "Tree",
-          "reference": "children",
-          "pairs": []
-        },
-        {
-          "kind": "objects",
-          "model": "OUT",
-          "type": "Tree",
-          "ids": [
-            "A"
-          ],
-          "idFeature": "label"
+          "kind": "pathValues",
+          "model": "HTML",
+          "type": "DIV",
+          "path": "children",
+          "expected": []
         }
       ]
     },
     {
-      "name": "branching_graph_preserves_direction",
+      "name": "single_action_creates_one_h1_child",
       "models": [
         {
-          "name": "IN",
+          "name": "Flowchart",
           "kind": "emf",
           "role": "source",
-          "path": "models/branching_graph.model",
-          "generated": true,
-          "metamodelUri": "Graph"
+          "path": "models/single_action_flowchart.model",
+          "generated": false,
+          "metamodelUri": "flowchart"
         },
         {
-          "name": "OUT",
+          "name": "HTML",
           "kind": "emf",
           "role": "target",
-          "path": "models/branching_graph_out.model",
-          "generated": false,
-          "metamodelUri": "Tree"
+          "generated": true,
+          "metamodelUri": "HTML"
         }
       ],
       "assertions": [
         {
           "kind": "count",
-          "model": "OUT",
-          "type": "Tree",
-          "equals": 3
+          "model": "HTML",
+          "type": "DIV",
+          "expected": 1
         },
         {
-          "kind": "objects",
-          "model": "OUT",
-          "type": "Tree",
-          "ids": [
-            "A",
-            "B",
-            "C"
-          ],
-          "idFeature": "label"
+          "kind": "count",
+          "model": "HTML",
+          "type": "H1",
+          "expected": 1
+        },
+        {
+          "kind": "featureValues",
+          "model": "HTML",
+          "type": "H1",
+          "feature": "value",
+          "expected": ["A1"]
         },
         {
           "kind": "referencePairs",
-          "model": "OUT",
-          "type": "Tree",
-          "reference": "children",
-          "pairs": [
+          "model": "HTML",
+          "type": "DIV",
+          "source": "children.value",
+          "target": "children.value",
+          "expected": [
             {
-              "sourceId": "A",
-              "targetId": "B"
-            },
-            {
-              "sourceId": "A",
-              "targetId": "C"
+              "source": "A1",
+              "target": "A1"
             }
-          ],
-          "idFeature": "label"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "single_decision_creates_one_h1_child",
+      "models": [
+        {
+          "name": "Flowchart",
+          "kind": "emf",
+          "role": "source",
+          "path": "models/single_decision_flowchart.model",
+          "generated": false,
+          "metamodelUri": "flowchart"
+        },
+        {
+          "name": "HTML",
+          "kind": "emf",
+          "role": "target",
+          "generated": true,
+          "metamodelUri": "HTML"
+        }
+      ],
+      "assertions": [
+        {
+          "kind": "count",
+          "model": "HTML",
+          "type": "DIV",
+          "expected": 1
+        },
+        {
+          "kind": "count",
+          "model": "HTML",
+          "type": "H1",
+          "expected": 1
+        },
+        {
+          "kind": "featureValues",
+          "model": "HTML",
+          "type": "H1",
+          "feature": "value",
+          "expected": ["D1"]
+        },
+        {
+          "kind": "referencePairs",
+          "model": "HTML",
+          "type": "DIV",
+          "source": "children.value",
+          "target": "children.value",
+          "expected": [
+            {
+              "source": "D1",
+              "target": "D1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "mixed_action_decision_and_transition_maps_only_nodes_equivalent_for_lazy_rules",
+      "models": [
+        {
+          "name": "Flowchart",
+          "kind": "emf",
+          "role": "source",
+          "path": "models/mixed_flowchart.model",
+          "generated": false,
+          "metamodelUri": "flowchart"
+        },
+        {
+          "name": "HTML",
+          "kind": "emf",
+          "role": "target",
+          "generated": true,
+          "metamodelUri": "HTML"
+        }
+      ],
+      "assertions": [
+        {
+          "kind": "count",
+          "model": "HTML",
+          "type": "DIV",
+          "expected": 1
+        },
+        {
+          "kind": "count",
+          "model": "HTML",
+          "type": "H1",
+          "expected": 2
+        },
+        {
+          "kind": "featureValues",
+          "model": "HTML",
+          "type": "H1",
+          "feature": "value",
+          "expected": ["Act", "Dec"]
         },
         {
           "kind": "pathValues",
-          "model": "OUT",
-          "paths": [
-            {
-              "from": "A",
-              "via": "children",
-              "values": [
-                "B",
-                "C"
-              ],
-              "idFeature": "label"
-            },
-            {
-              "from": "B",
-              "via": "children",
-              "values": [],
-              "idFeature": "label"
-            },
-            {
-              "from": "C",
-              "via": "children",
-              "values": [],
-              "idFeature": "label"
-            }
-          ]
+          "model": "HTML",
+          "type": "DIV",
+          "path": "children.value",
+          "expected": ["Act", "Dec"]
+        }
+      ]
+    },
+    {
+      "name": "duplicate_and_empty_names_preserved",
+      "models": [
+        {
+          "name": "Flowchart",
+          "kind": "emf",
+          "role": "source",
+          "path": "models/duplicate_empty_names_flowchart.model",
+          "generated": false,
+          "metamodelUri": "flowchart"
+        },
+        {
+          "name": "HTML",
+          "kind": "emf",
+          "role": "target",
+          "generated": true,
+          "metamodelUri": "HTML"
+        }
+      ],
+      "assertions": [
+        {
+          "kind": "count",
+          "model": "HTML",
+          "type": "DIV",
+          "expected": 1
+        },
+        {
+          "kind": "count",
+          "model": "HTML",
+          "type": "H1",
+          "expected": 3
+        },
+        {
+          "kind": "featureValues",
+          "model": "HTML",
+          "type": "H1",
+          "feature": "value",
+          "expected": ["", "Same", "Same"]
+        },
+        {
+          "kind": "pathValues",
+          "model": "HTML",
+          "type": "DIV",
+          "path": "children.value",
+          "expected": ["", "Same", "Same"]
         }
       ]
     }
@@ -166,24 +263,51 @@
 }
 ```
 
-```xml file=models/single_node_graph.model
+```xml file=models/empty_flowchart.model
 <?xml version="1.0" encoding="UTF-8"?>
-<Graph:Graph xmi:version="2.0"
+<flowchart:Flowchart xmi:version="2.0"
     xmlns:xmi="http://www.omg.org/XMI"
-    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-    xmlns:Graph="Graph">
-  <nodes xsi:type="Graph:Node" name="A"/>
-</Graph:Graph>
+    xmlns:flowchart="flowchart"/>
 ```
 
-```xml file=models/branching_graph.model
+```xml file=models/single_action_flowchart.model
 <?xml version="1.0" encoding="UTF-8"?>
-<Graph:Graph xmi:version="2.0"
+<flowchart:Flowchart xmi:version="2.0"
+    xmlns:xmi="http://www.omg.org/XMI"
+    xmlns:flowchart="flowchart"
+    nodes xsi:type="flowchart:Action" name="A1"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"/>
+```
+
+```xml file=models/single_decision_flowchart.model
+<?xml version="1.0" encoding="UTF-8"?>
+<flowchart:Flowchart xmi:version="2.0"
+    xmlns:xmi="http://www.omg.org/XMI"
+    xmlns:flowchart="flowchart"
+    nodes xsi:type="flowchart:Decision" name="D1"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"/>
+```
+
+```xml file=models/mixed_flowchart.model
+<?xml version="1.0" encoding="UTF-8"?>
+<flowchart:Flowchart xmi:version="2.0"
     xmlns:xmi="http://www.omg.org/XMI"
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-    xmlns:Graph="Graph">
-  <nodes xsi:type="Graph:Node" name="A" outgoing="//@nodes.1/@incoming.0 //@nodes.2/@incoming.0"/>
-  <nodes xsi:type="Graph:Node" name="B" incoming="//@nodes.0/@outgoing.0"/>
-  <nodes xsi:type="Graph:Node" name="C" incoming="//@nodes.0/@outgoing.1"/>
-</Graph:Graph>
+    xmlns:flowchart="flowchart">
+  <nodes xsi:type="flowchart:Action" name="Act"/>
+  <nodes xsi:type="flowchart:Decision" name="Dec"/>
+  <nodes xsi:type="flowchart:Transition" name="Tr1"/>
+</flowchart:Flowchart>
+```
+
+```xml file=models/duplicate_empty_names_flowchart.model
+<?xml version="1.0" encoding="UTF-8"?>
+<flowchart:Flowchart xmi:version="2.0"
+    xmlns:xmi="http://www.omg.org/XMI"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:flowchart="flowchart">
+  <nodes xsi:type="flowchart:Action" name=""/>
+  <nodes xsi:type="flowchart:Action" name="Same"/>
+  <nodes xsi:type="flowchart:Decision" name="Same"/>
+</flowchart:Flowchart>
 ```

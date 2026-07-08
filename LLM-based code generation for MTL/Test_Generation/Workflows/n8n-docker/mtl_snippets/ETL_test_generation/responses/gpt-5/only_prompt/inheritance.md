@@ -1,192 +1,130 @@
 ```json file=semantic_cases.json
 {
   "schemaVersion": "1.0",
-  "testClass": "Graph2TreeSemanticTests",
-  "transformation": "Graph2Tree",
+  "testClass": "inheritanceSemanticCases",
+  "transformation": "inheritance.etl",
   "metamodels": [
     {
-      "name": "Graph",
-      "uri": "Graph"
+      "name": "Flowchart",
+      "uri": "flowchart"
     },
     {
-      "name": "Tree",
-      "uri": "Tree"
+      "name": "HTML",
+      "uri": "HTML"
     }
   ],
   "tests": [
     {
-      "name": "singleNode_noEdges_producesSingleTreeNode",
+      "name": "emptyFlowchartNameProducesSingleH1",
       "models": [
         {
-          "name": "Graph",
+          "name": "Flowchart",
           "kind": "emf",
           "role": "source",
-          "path": "models/singleNode_noEdges.model",
-          "generated": true,
-          "metamodelUri": "Graph"
+          "path": "models/empty_name_flowchart.model",
+          "generated": false,
+          "metamodelUri": "flowchart"
         },
         {
-          "name": "Tree",
+          "name": "HTML",
           "kind": "emf",
           "role": "target",
-          "generated": false,
-          "metamodelUri": "Tree"
+          "generated": true,
+          "metamodelUri": "HTML"
         }
       ],
       "assertions": [
         {
           "kind": "count",
-          "type": "Tree::Tree",
-          "equals": 1
+          "model": "HTML",
+          "type": "H1",
+          "expected": 1
         },
         {
           "kind": "featureValues",
-          "type": "Tree::Tree",
-          "key": "label",
-          "values": ["A"]
-        },
-        {
-          "kind": "referencePairs",
-          "type": "Tree::Tree",
-          "reference": "children",
-          "pairs": []
-        },
-        {
-          "kind": "objects",
-          "type": "Tree::Tree",
-          "match": {
-            "label": "A",
-            "parent": null
-          },
-          "count": 1
+          "model": "HTML",
+          "type": "H1",
+          "feature": "value",
+          "expected": [
+            "Flowchart "
+          ]
         }
       ]
     },
     {
-      "name": "twoNodes_oneEdge_producesParentChildDirection",
+      "name": "singleSubflowUsesExtendedRuleValue",
       "models": [
         {
-          "name": "Graph",
+          "name": "Flowchart",
           "kind": "emf",
           "role": "source",
-          "path": "models/twoNodes_oneEdge.model",
-          "generated": true,
-          "metamodelUri": "Graph"
+          "path": "models/single_subflow.model",
+          "generated": false,
+          "metamodelUri": "flowchart"
         },
         {
-          "name": "Tree",
+          "name": "HTML",
           "kind": "emf",
           "role": "target",
-          "generated": false,
-          "metamodelUri": "Tree"
+          "generated": true,
+          "metamodelUri": "HTML"
         }
       ],
       "assertions": [
         {
           "kind": "count",
-          "type": "Tree::Tree",
-          "equals": 2
+          "model": "HTML",
+          "type": "H1",
+          "expected": 1
         },
         {
           "kind": "featureValues",
-          "type": "Tree::Tree",
-          "key": "label",
-          "values": ["A", "B"]
-        },
-        {
-          "kind": "referencePairs",
-          "type": "Tree::Tree",
-          "reference": "children",
-          "pairs": [
-            { "from": { "label": "A" }, "to": { "label": "B" } }
+          "model": "HTML",
+          "type": "H1",
+          "feature": "value",
+          "expected": [
+            "Subflow Flowchart S1"
           ]
-        },
-        {
-          "kind": "objects",
-          "type": "Tree::Tree",
-          "match": {
-            "label": "A",
-            "parent": null
-          },
-          "count": 1
-        },
-        {
-          "kind": "objects",
-          "type": "Tree::Tree",
-          "match": {
-            "label": "B",
-            "parent": { "label": "A" }
-          },
-          "count": 1
         }
       ]
     },
     {
-      "name": "branchingNode_multipleOutgoingEdges_producesMultipleChildren",
+      "name": "mixedFlowchartAndSubflowWithDuplicateAndEmptyNames",
       "models": [
         {
-          "name": "Graph",
+          "name": "Flowchart",
           "kind": "emf",
           "role": "source",
-          "path": "models/branchingNode.model",
-          "generated": true,
-          "metamodelUri": "Graph"
+          "path": "models/mixed_flowchart_subflow_duplicates.model",
+          "generated": false,
+          "metamodelUri": "flowchart"
         },
         {
-          "name": "Tree",
+          "name": "HTML",
           "kind": "emf",
           "role": "target",
-          "generated": false,
-          "metamodelUri": "Tree"
+          "generated": true,
+          "metamodelUri": "HTML"
         }
       ],
       "assertions": [
         {
           "kind": "count",
-          "type": "Tree::Tree",
-          "equals": 3
+          "model": "HTML",
+          "type": "H1",
+          "expected": 4
         },
         {
           "kind": "featureValues",
-          "type": "Tree::Tree",
-          "key": "label",
-          "values": ["A", "B", "C"]
-        },
-        {
-          "kind": "referencePairs",
-          "type": "Tree::Tree",
-          "reference": "children",
-          "pairs": [
-            { "from": { "label": "A" }, "to": { "label": "B" } },
-            { "from": { "label": "A" }, "to": { "label": "C" } }
+          "model": "HTML",
+          "type": "H1",
+          "feature": "value",
+          "expected": [
+            "Flowchart Common",
+            "Subflow Flowchart Common",
+            "Subflow Flowchart ",
+            "Flowchart "
           ]
-        },
-        {
-          "kind": "objects",
-          "type": "Tree::Tree",
-          "match": {
-            "label": "A",
-            "parent": null
-          },
-          "count": 1
-        },
-        {
-          "kind": "objects",
-          "type": "Tree::Tree",
-          "match": {
-            "label": "B",
-            "parent": { "label": "A" }
-          },
-          "count": 1
-        },
-        {
-          "kind": "objects",
-          "type": "Tree::Tree",
-          "match": {
-            "label": "C",
-            "parent": { "label": "A" }
-          },
-          "count": 1
         }
       ]
     }
@@ -194,37 +132,31 @@
 }
 ```
 
-```xml file=models/singleNode_noEdges.model
+```xml file=models/empty_name_flowchart.model
 <?xml version="1.0" encoding="UTF-8"?>
-<Graph:Graph xmi:version="2.0"
+<flowchart:Flowchart xmi:version="2.0"
     xmlns:xmi="http://www.omg.org/XMI"
-    xmlns:Graph="Graph">
-  <nodes name="A"/>
-</Graph:Graph>
+    xmlns:flowchart="flowchart"
+    name=""/>
 ```
 
-```xml file=models/twoNodes_oneEdge.model
+```xml file=models/single_subflow.model
 <?xml version="1.0" encoding="UTF-8"?>
-<Graph:Graph xmi:version="2.0"
+<flowchart:Subflow xmi:version="2.0"
     xmlns:xmi="http://www.omg.org/XMI"
-    xmlns:Graph="Graph">
-  <nodes name="A">
-    <outgoing target="//@nodes.1"/>
-  </nodes>
-  <nodes name="B"/>
-</Graph:Graph>
+    xmlns:flowchart="flowchart"
+    name="S1"/>
 ```
 
-```xml file=models/branchingNode.model
+```xml file=models/mixed_flowchart_subflow_duplicates.model
 <?xml version="1.0" encoding="UTF-8"?>
-<Graph:Graph xmi:version="2.0"
+<flowchart:Flowchart xmi:version="2.0"
     xmlns:xmi="http://www.omg.org/XMI"
-    xmlns:Graph="Graph">
-  <nodes name="A">
-    <outgoing target="//@nodes.1"/>
-    <outgoing target="//@nodes.2"/>
-  </nodes>
-  <nodes name="B"/>
-  <nodes name="C"/>
-</Graph:Graph>
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:flowchart="flowchart"
+    name="Common">
+  <children xsi:type="flowchart:Subflow" name="Common"/>
+  <children xsi:type="flowchart:Subflow" name=""/>
+  <children xsi:type="flowchart:Flowchart" name=""/>
+</flowchart:Flowchart>
 ```

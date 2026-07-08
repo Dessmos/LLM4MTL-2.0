@@ -174,6 +174,8 @@ def _apply_binding(
     old_uri = str(model.get("metamodelUri") or "")
     model["kind"] = contract_model.kind
     model["runtimeName"] = contract_model.runtime_name
+    if model.get("path") and _model_file_key(str(model["path"]), files) is not None:
+        model["generated"] = True
 
     if contract_model.kind == "emf" and contract_model.metamodel_uri:
         model["metamodelUri"] = contract_model.metamodel_uri
