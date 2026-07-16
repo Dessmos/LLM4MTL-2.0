@@ -7,7 +7,7 @@ Inputs remain owned by their producing stages:
 
 ```text
 Test_Generation/generated_tests/etl/<task>/validated/<test_model>/<test_strategy>/<suite_id>/
-ETL_Parser/src/main/resources/<transformation_model>/<transformation_strategy>/<task>.etl
+Workflows/n8n-docker/mtl_snippets/ETL_language/responses/<transformation_model>/<transformation_strategy>/<task>.etl
 ```
 
 Every execution is archived under `artifacts/etl/<task>/<passed|failed>/...` with
@@ -28,7 +28,7 @@ Run one pair:
 ```bash
 python3 Transformation_Validation/scripts/etl/validate_generated_transformations.py \
   --suite Test_Generation/generated_tests/etl/Tree2Graph/validated/gpt-5/few_shot/suite_001 \
-  --transformation ETL_Parser/src/main/resources/gpt-5/grammar/Tree2Graph.etl
+  --transformation Workflows/n8n-docker/mtl_snippets/ETL_language/responses/gpt-5/grammar/Tree2Graph.etl
 ```
 
 Useful filters are `--task`, `--test-model`, `--test-strategy`,

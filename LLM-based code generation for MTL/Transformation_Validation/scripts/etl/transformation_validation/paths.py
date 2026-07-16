@@ -18,7 +18,14 @@ def default_validated_tests_root() -> Path:
 
 
 def default_transformations_root() -> Path:
-    return repo_root() / "ETL_Parser" / "src" / "main" / "resources"
+    return (
+        repo_root()
+        / "Workflows"
+        / "n8n-docker"
+        / "mtl_snippets"
+        / "ETL_language"
+        / "responses"
+    )
 
 
 def default_etl_test_dir() -> Path:
