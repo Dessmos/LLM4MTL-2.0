@@ -142,3 +142,7 @@ dmypy.json
 cython_debug/
 
 # End of https://mrkandreev.name/snippets/gitignore-generator/#Python
+
+# Generated transformation-validation run outputs
+Transformation_Validation/artifacts/
+Transformation_Validation/results/
