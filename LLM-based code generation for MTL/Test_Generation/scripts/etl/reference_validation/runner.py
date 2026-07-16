@@ -6,7 +6,7 @@ from common.injection import Injection
 from common.maven import run_maven, summarize_error
 from etl.reference_validation.maven_status import compiles, executes
 from etl.reference_validation.models import ReferenceValidationContext, ReferenceValidationResult
-from etl.reference_validation.promotion import promote_validated_suite
+from etl.reference_validation.promotion import promote_invalid_suite, promote_validated_suite
 from etl.reference_validation.reference import inject_reference_transformation
 from etl.suites.injection import inject_suite, suite_model_paths
 from etl.suites.java import infer_fqcn
@@ -52,6 +52,13 @@ def validate_suite(
         did_compile = compiles(maven_result)
         did_execute = did_compile and executes(maven_result)
         passed = maven_result.exit_code == 0
+        validation_status = (
+            "VALIDATED"
+            if passed
+            else "INFRASTRUCTURE_ERROR"
+            if maven_result.timed_out or not did_compile or not did_execute
+            else "REFERENCE_INVALID"
+        )
         result = ReferenceValidationResult(
             suite=suite,
             compiles=did_compile,
@@ -59,10 +66,13 @@ def validate_suite(
             reference_pass=passed,
             valid=passed,
             maven_exit_code=maven_result.exit_code,
+            status=validation_status,
             error_summary="" if passed else summarize_error(maven_result.output),
         )
         if result.valid and context.promote:
             promote_validated_suite(suite, result.as_row())
+        elif result.status == "REFERENCE_INVALID" and context.promote:
+            promote_invalid_suite(suite, result.as_row())
         return result
     finally:
         injection.restore()
@@ -76,5 +86,6 @@ def failed_before_maven(suite: CandidateSuite, error: str) -> ReferenceValidatio
         reference_pass=False,
         valid=False,
         maven_exit_code="",
+        status="INFRASTRUCTURE_ERROR",
         error_summary=error,
     )

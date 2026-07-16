@@ -127,7 +127,8 @@ def main(argv: list[str] | None = None) -> int:
         print(
             "  valid="
             f"{result.valid} compiles={result.compiles} "
-            f"executes={result.executes} reference_pass={result.reference_pass}"
+            f"executes={result.executes} reference_pass={result.reference_pass} "
+            f"status={result.status}"
         )
         if result.error_summary:
             print(f"  error: {result.error_summary}")

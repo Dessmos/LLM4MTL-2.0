@@ -21,6 +21,7 @@ RESULT_COLUMNS = [
     "reference_pass",
     "valid",
     "maven_exit_code",
+    "status",
     "error_summary",
 ]
 
@@ -42,6 +43,7 @@ class ReferenceValidationResult:
     reference_pass: bool
     valid: bool
     maven_exit_code: int | str
+    status: str
     error_summary: str
 
     def as_row(self) -> dict[str, str]:
@@ -56,5 +58,6 @@ class ReferenceValidationResult:
             "reference_pass": str(self.reference_pass),
             "valid": str(self.valid),
             "maven_exit_code": str(self.maven_exit_code),
+            "status": self.status,
             "error_summary": self.error_summary,
         }

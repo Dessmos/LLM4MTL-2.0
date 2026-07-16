@@ -17,10 +17,27 @@ def promote_validated_suite(suite: CandidateSuite, row: dict[str, str]) -> Path:
     return destination
 
 
+def promote_invalid_suite(suite: CandidateSuite, row: dict[str, str]) -> Path:
+    destination = invalid_suite_path(suite)
+    copy_suite_files(suite.path, destination)
+    write_reference_validation_metadata(destination, suite, row)
+    return destination
+
+
 def validated_suite_path(suite: CandidateSuite) -> Path:
     return (
         suite.path.parents[3]
         / "validated"
+        / suite.llm
+        / suite.strategy
+        / suite.suite_id
+    )
+
+
+def invalid_suite_path(suite: CandidateSuite) -> Path:
+    return (
+        suite.path.parents[3]
+        / "invalid"
         / suite.llm
         / suite.strategy
         / suite.suite_id
