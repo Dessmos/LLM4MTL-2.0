@@ -1,0 +1,38 @@
+schema_version: 1
+language: etl
+all_tasks: true
+test_suites:
+  models:
+    - gpt-5
+    - claude-sonnet-4
+    - gemini-2-5-pro
+  strategies:
+    - only_prompt
+    - grammar
+    - few_shot
+    - few_shots_AND_grammar
+  extraction:
+    enabled: true
+    overwrite: false
+  validation:
+    technical: true
+    reference: true
+    atomic_suite_policy: true
+transformations:
+  models:
+    - gpt-5
+    - claude-sonnet-4
+    - gemini-2-5-pro
+  strategies:
+    - only_prompt
+    - grammar
+    - few_shot
+    - few_shots_AND_grammar
+  parse: true
+  semantic_validation: true
+execution:
+  start_stage: extract
+  stop_after: semantic
+  resume: true
+  fail_fast: false
+  keep_workspace: false

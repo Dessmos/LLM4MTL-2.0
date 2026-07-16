@@ -1,0 +1,32 @@
+schema_version: 1
+language: etl
+tasks:
+  - Tree2Graph
+test_suites:
+  models:
+    - gpt-5
+  strategies:
+    - few_shot
+  extraction:
+    enabled: true
+    overwrite: false
+  validation:
+    technical: true
+    reference: true
+    atomic_suite_policy: true
+transformations:
+  models:
+    - claude-sonnet-4
+  strategies:
+    - only_prompt
+    - grammar
+    - few_shot
+    - few_shots_AND_grammar
+  parse: true
+  semantic_validation: true
+execution:
+  start_stage: extract
+  stop_after: semantic
+  resume: true
+  fail_fast: false
+  keep_workspace: false
