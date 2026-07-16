@@ -146,3 +146,6 @@ cython_debug/
 # Generated transformation-validation run outputs
 Transformation_Validation/artifacts/
 Transformation_Validation/results/
+Test_Generation/results/
+ETL_Parser/results/
+Experiment_Runner/runs/
