@@ -9,13 +9,13 @@
   ],
   "tests": [
     {
-      "name": "minimal_rss_no_items_creates_only_feed",
+      "name": "empty_channel_items_creates_feed_with_no_children",
       "models": [
         {
           "name": "RSS",
           "kind": "plainXml",
           "role": "source",
-          "path": "models/minimal_no_items.model",
+          "path": "models/rss_empty.model",
           "generated": true
         },
         {
@@ -39,13 +39,13 @@
       ]
     },
     {
-      "name": "single_item_all_mapped_children_create_full_entry",
+      "name": "single_item_all_mapped_children_creates_one_entry_with_all_mapped_targets",
       "models": [
         {
           "name": "RSS",
           "kind": "plainXml",
           "role": "source",
-          "path": "models/single_item_all_mapped.model",
+          "path": "models/rss_single_full.model",
           "generated": true
         },
         {
@@ -66,23 +66,23 @@
         {"kind": "count", "model": "Atom", "type": "t_summary", "expected": 1},
         {"kind": "count", "model": "Atom", "type": "t_content", "expected": 1},
         {"kind": "count", "model": "Atom", "type": "t_published", "expected": 1},
-        {"kind": "pathValues", "model": "Atom", "type": "t_title", "path": "text", "expected": ["Item One Title"]},
-        {"kind": "pathValues", "model": "Atom", "type": "t_link", "path": "a_href", "expected": ["https://example.org/item1"]},
-        {"kind": "pathValues", "model": "Atom", "type": "t_generator", "path": "a_href", "expected": ["https://example.org/gen"]},
+        {"kind": "pathValues", "model": "Atom", "type": "t_title", "path": "text", "expected": ["Item One"]},
+        {"kind": "pathValues", "model": "Atom", "type": "t_link", "path": "a_href", "expected": ["https://example.org/one"]},
+        {"kind": "pathValues", "model": "Atom", "type": "t_generator", "path": "a_href", "expected": ["https://generator.example.org"]},
         {"kind": "pathValues", "model": "Atom", "type": "t_name", "path": "text", "expected": ["Alice"]},
-        {"kind": "pathValues", "model": "Atom", "type": "t_summary", "path": "text", "expected": ["Summary 1"]},
-        {"kind": "pathValues", "model": "Atom", "type": "t_content", "path": "text", "expected": ["Content 1"]},
+        {"kind": "pathValues", "model": "Atom", "type": "t_summary", "path": "text", "expected": ["Summary One"]},
+        {"kind": "pathValues", "model": "Atom", "type": "t_content", "path": "text", "expected": ["Content One"]},
         {"kind": "pathValues", "model": "Atom", "type": "t_published", "path": "text", "expected": ["Mon, 01 Jan 2024 10:00:00 GMT"]}
       ]
     },
     {
-      "name": "mixed_multiple_items_with_duplicates_and_empty_values",
+      "name": "mixed_children_and_duplicates_across_items_only_mapped_children_transformed",
       "models": [
         {
           "name": "RSS",
           "kind": "plainXml",
           "role": "source",
-          "path": "models/mixed_multiple_items.model",
+          "path": "models/rss_mixed_duplicates.model",
           "generated": true
         },
         {
@@ -94,75 +94,69 @@
       ],
       "assertions": [
         {"kind": "count", "model": "Atom", "type": "t_feed", "expected": 1},
-        {"kind": "count", "model": "Atom", "type": "t_entry", "expected": 3},
+        {"kind": "count", "model": "Atom", "type": "t_entry", "expected": 2},
         {"kind": "count", "model": "Atom", "type": "t_title", "expected": 3},
-        {"kind": "count", "model": "Atom", "type": "t_link", "expected": 3},
+        {"kind": "count", "model": "Atom", "type": "t_link", "expected": 2},
         {"kind": "count", "model": "Atom", "type": "t_generator", "expected": 1},
-        {"kind": "count", "model": "Atom", "type": "t_author", "expected": 2},
-        {"kind": "count", "model": "Atom", "type": "t_name", "expected": 2},
+        {"kind": "count", "model": "Atom", "type": "t_author", "expected": 1},
+        {"kind": "count", "model": "Atom", "type": "t_name", "expected": 1},
         {"kind": "count", "model": "Atom", "type": "t_summary", "expected": 1},
-        {"kind": "count", "model": "Atom", "type": "t_content", "expected": 2},
-        {"kind": "count", "model": "Atom", "type": "t_published", "expected": 2},
-        {"kind": "pathValues", "model": "Atom", "type": "t_title", "path": "text", "expected": ["Repeat Title", "Repeat Title", ""]},
-        {"kind": "pathValues", "model": "Atom", "type": "t_link", "path": "a_href", "expected": ["https://example.org/a", "https://example.org/b", ""]},
-        {"kind": "pathValues", "model": "Atom", "type": "t_generator", "path": "a_href", "expected": ["genX"]},
-        {"kind": "pathValues", "model": "Atom", "type": "t_name", "path": "text", "expected": ["", "Bob"]},
-        {"kind": "pathValues", "model": "Atom", "type": "t_summary", "path": "text", "expected": ["Only summary"]},
-        {"kind": "pathValues", "model": "Atom", "type": "t_content", "path": "text", "expected": ["Body A", ""]},
-        {"kind": "pathValues", "model": "Atom", "type": "t_published", "path": "text", "expected": ["Date A", "Date C"]}
+        {"kind": "count", "model": "Atom", "type": "t_content", "expected": 1},
+        {"kind": "count", "model": "Atom", "type": "t_published", "expected": 1},
+        {"kind": "pathValues", "model": "Atom", "type": "t_title", "path": "text", "expected": ["Repeat", "Repeat", ""]},
+        {"kind": "pathValues", "model": "Atom", "type": "t_link", "path": "a_href", "expected": ["https://example.org/a", ""]},
+        {"kind": "pathValues", "model": "Atom", "type": "t_generator", "path": "a_href", "expected": ["genA"]},
+        {"kind": "pathValues", "model": "Atom", "type": "t_name", "path": "text", "expected": ["Bob"]},
+        {"kind": "pathValues", "model": "Atom", "type": "t_summary", "path": "text", "expected": ["Desc A"]},
+        {"kind": "pathValues", "model": "Atom", "type": "t_content", "path": "text", "expected": ["Body A"]},
+        {"kind": "pathValues", "model": "Atom", "type": "t_published", "path": "text", "expected": ["Tue, 02 Jan 2024 11:00:00 GMT"]}
       ]
     }
   ]
 }
 ```
 
-```xml file=models/minimal_no_items.model
+```xml file=models/rss_empty.model
 <?xml version="1.0" encoding="UTF-8"?>
-<t_rss>
-  <channel/>
-</t_rss>
+<t_rss/>
 ```
 
-```xml file=models/single_item_all_mapped.model
+```xml file=models/rss_single_full.model
 <?xml version="1.0" encoding="UTF-8"?>
 <t_rss xmlns:t_dc="urn:dc" xmlns:t_content="urn:content">
   <channel>
     <t_item>
-      <t_title>Item One Title</t_title>
-      <t_link>https://example.org/item1</t_link>
-      <t_generator>https://example.org/gen</t_generator>
+      <t_title>Item One</t_title>
+      <t_link>https://example.org/one</t_link>
+      <t_generator>https://generator.example.org</t_generator>
       <t_dc:creator>Alice</t_dc:creator>
-      <t_description>Summary 1</t_description>
-      <t_content:encoded>Content 1</t_content:encoded>
+      <t_description>Summary One</t_description>
+      <t_content:encoded>Content One</t_content:encoded>
       <t_pubDate>Mon, 01 Jan 2024 10:00:00 GMT</t_pubDate>
     </t_item>
   </channel>
 </t_rss>
 ```
 
-```xml file=models/mixed_multiple_items.model
+```xml file=models/rss_mixed_duplicates.model
 <?xml version="1.0" encoding="UTF-8"?>
 <t_rss xmlns:t_dc="urn:dc" xmlns:t_content="urn:content">
   <channel>
     <t_item>
-      <t_title>Repeat Title</t_title>
+      <t_title>Repeat</t_title>
+      <t_title>Repeat</t_title>
       <t_link>https://example.org/a</t_link>
-      <t_generator>genX</t_generator>
-      <t_dc:creator></t_dc:creator>
-      <t_description>Only summary</t_description>
-      <t_content:encoded>Body A</t_content:encoded>
-      <t_pubDate>Date A</t_pubDate>
-    </t_item>
-    <t_item>
-      <t_title>Repeat Title</t_title>
-      <t_link>https://example.org/b</t_link>
+      <t_generator>genA</t_generator>
       <t_dc:creator>Bob</t_dc:creator>
-      <t_content:encoded></t_content:encoded>
+      <t_description>Desc A</t_description>
+      <t_content:encoded>Body A</t_content:encoded>
+      <t_pubDate>Tue, 02 Jan 2024 11:00:00 GMT</t_pubDate>
+      <unknown>ignored</unknown>
     </t_item>
     <t_item>
       <t_title></t_title>
       <t_link></t_link>
-      <t_pubDate>Date C</t_pubDate>
+      <otherChild>ignored too</otherChild>
     </t_item>
   </channel>
 </t_rss>

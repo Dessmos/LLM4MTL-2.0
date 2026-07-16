@@ -1,253 +1,67 @@
-<!-- BEGIN deterministic-model-contract -->
-## Deterministic model contract (preflight)
+You are generating **draft semantic test cases** for an ETL transformation task.
 
-Use this contract as ground truth. Do not infer or invent model names, metamodel URIs, XML namespaces, or type names.
+## Scope and outputs
+Produce **only**:
+1. `semantic_cases.json`
+2. One or more **source model files** referenced by the JSON (valid instances of the provided **source metamodel**)
 
-| Runtime model name | Role(s) | Kind | metamodelUri | XML nsPrefix | Types used by ETL |
-|---|---|---|---|---|---|
-| DB | target | emf | DB | DB | Column, Database, ForeignKey, Table |
-| OO | source, target | emf | OO | OO | Attribute, Class, Reference |
-| OO2DB | source | emf | TM | TM | TypeMap, TypeMapping |
-| Trace | target | emf | SimpleTrace | SimpleTrace | Trace, TraceLink |
+Do **not** produce Java, JUnit, or any executable test harness code.
 
-Mandatory rules:
-- In semantic_cases.json, each models[].name must equal one runtime model name above exactly.
-- For EMF models, each models[].metamodelUri must equal the listed metamodelUri exactly; do not use the Ecore file stem when it differs.
-- For generated EMF/XMI model files, use the listed XML nsPrefix and metamodelUri exactly in xmlns declarations.
-- For plainXml models, use kind="plainXml" and omit metamodelUri.
-- Do not mention or use any model/metamodel/type that is not listed in this contract.
-<!-- END deterministic-model-contract -->
+## Primary goal
+Create semantic test cases that validate transformation behavior at the model level using task-generic assertions. Cover both typical and edge scenarios (including empty/minimal structures, recursive/self-referential structures where applicable, multiplicities, containment/opposites, and invalid-or-unmapped-risk scenarios when meaningful).
 
-You are generating **semantic test specifications and source input model files** for one ETL transformation task. Base every expectation strictly on the ETL rules and metamodels given below.
+## Required JSON schema style
+Use a task-generic case structure with assertions that use only these canonical payloads:
 
-<!-- BEGIN deterministic-task-context -->
-## Task context (must be used as ground truth)
+- `count`  
+  ```json
+  {"kind":"count","model":"<target|aux>","type":"<QualifiedTypeOrType>","expected":<int>}
+  ```
 
-- Transformation file: `OO2DB.etl`
-- ETL rules (authoritative — derive every expected fact only from these):
+- `featureValues`  
+  ```json
+  {"kind":"featureValues","model":"<target|aux>","type":"<Type>","feature":"<featureName>","expected":["<string>"]}
+  ```
 
-```etl
-pre {
-	"Running ETL".println();
-	var db : new DB!Database;
-}
+- `pathValues`  
+  ```json
+  {"kind":"pathValues","model":"<target|aux>","type":"<Type>","path":"<nav.path>","expected":["<string>"]}
+  ```
 
-post {
-	// Store traceability links in custom model
-	var trace : new Trace!Trace;
-	for (t in transTrace.transformations) {
-		var link : new Trace!TraceLink;
-		link.sources.add(t.source);
-		link.targets = t.targets;
-		link.description = "Transformed by " + t.getRule().name;
-		trace.links.add(link);
-	}
-}
+- `objects`  
+  ```json
+  {"kind":"objects","model":"<target|aux>","type":"<Type>","features":["f1","f2"],"expected":[{"f1":"...","f2":"..."}]}
+  ```
 
-// Transforms a class into a table and 
-// a primary key column
-rule Class2Table
-	transform c : OO!Class 
-	to t : DB!Table, pk : DB!Column {
-	
-	t.name = c.name;	
-	t.database = db;
-	
-	// Fill the details of the primary key 
-	// of the table
-	pk.name = t.primaryKeyName();
-	pk.type = "INT";
-	t.columns.add(pk);
-	t.primaryKeys.add(pk);
-	
-	// If the class extends some other class
-	// create a foreign key pointing towards
-	// the primary key of the parent class
-	if (c.`extends`.isDefined()){
-		
-		var fk : new DB!ForeignKey;
-		var childFkCol : new DB!Column;
-		var parentFkCol : DB!Column;
-		var parentTable : DB!Table;
-		
-		parentTable ::= c.`extends`;
-		parentFkCol = parentTable.primaryKeys.first();
-		
-		childFkCol.name = parentFkCol.name;
-		childFkCol.type = "INT";
-		childFkCol.table = t;
-		
-		fk.database = db;
-		fk.parent = parentFkCol;
-		fk.child = childFkCol;
-		fk.name = c.name + "Extends" + c.`extends`.name;
-	}
-}
+- `referencePairs`  
+  ```json
+  {"kind":"referencePairs","model":"<target|aux>","type":"<Type>","source":"<sourceRef>","target":"<targetRef>","expected":[{"source":"...","target":"..."}]}
+  ```
 
-// Transforms a single-valued attribute
-// to a column
-rule SingleValuedAttribute2Column
-	transform a : OO!Attribute
-	to c : DB!Column {
-	
-	guard : not a.isMany
-	
-	c.name = a.name;
-	c.table ::= a.owner;
-	c.type = a.type.name.toDbType();
-}
+## Hard constraints
+- Do **not** use transformation-specific custom assertion fields.
+- Do **not** use alternate assertion keys such as:  
+  `value`, `values`, `equals`, `ids`, `pairs`, `sourceType`, `targetType`, `where`, `match`.
+- Keep assertions purely semantic and deterministic.
+- Ensure all expected values are explicit and concrete.
+- Ensure source models are well-formed against the provided source metamodel.
 
-// Transforms a multi-valued attribute
-// to a table where its values are stored
-// and a foreign key 
-rule MultiValuedAttribute2Table
-	transform a : OO!Attribute
-	to t : DB!Table, pkCol : DB!Column, valueCol : DB!Column, 
-	   fkCol : DB!Column, fk : DB!ForeignKey {
-	
-	guard : a.isMany
-	
-	// The table that stores the values 
-	// has an "id" column and a "value" column
-	t.name = a.valuesTableName();
-	t.database = db;
-	
-	pkCol.name = "id";
-	pkCol.table = t;
-	pkCol.type = "INT";
-	valueCol.name = "value";
-	valueCol.table = t;
-	valueCol.type = a.type.name.toDbType();
-	
-	// Another column is added into the table
-	// to link with the "id" column of the 
-	// values table
-	fkCol.name = a.name + "Id";
-	fkCol.table ::= a.owner;
-	fkCol.type = "INT";
-	
-	// The foreign key that connects
-	// the two columns is defined
-	fk.parent = pkCol;
-	fk.child = fkCol;
-	fk.database = db;
-} 
+## Input artifacts to use
+- Reference ETL transformation file and code
+- Source and target metamodels
+- ETL grammar excerpt (for contextual understanding)
 
-// Transforms a referecne into a foreign key
-rule Reference2ForeignKey
-	transform r : OO!Reference
-	to fk : DB!ForeignKey, fkCol : DB!Column {
-	
-	fkCol.table ::= r.type;
-	fkCol.name = r.name + "Id";
-	fkCol.type = "INT";
-	fk.database = db;
-	fk.parent = r.owner.equivalent().primaryKeys.first();
-	fk.child = fkCol;
-	fk.name = r.name;
-	
-}
+## Test design guidance
+- Derive assertions from observable target/auxiliary model semantics implied by rules, guards, pre/post blocks, and helper operations.
+- Include coverage for:
+  - rule triggering and non-triggering conditions
+  - guard-dependent behavior
+  - helper/operation-derived naming or typing effects
+  - trace/auxiliary model effects if produced by the transformation
+- Prefer multiple small, focused cases over one monolithic case.
+- Make case names descriptive and stable.
 
-operation DB!Table primaryKeyName() : String {
-	return self.name.firstToLowerCase() + "Id";
-}
-
-operation OO!Attribute valuesTableName() : String {
-	return self.owner.name + "_" + self.name.firstToUpperCase() + "Values";
-}
-
-operation Any toDbType() : String {
-	var mapping : OO2DB!TypeMapping;
-	mapping = OO2DB!TypeMapping.allInstances().
-		select(tm|tm.source = self).first;
-	if (not mapping.isDefined()){
-		("Cannot find DB type for OO type " + self + 
-			". Setting the default.").println();
-		return OO2DB!TypeMap.allInstances().first().`default`.target;
-	}
-	else {
-		return mapping.target;
-	}
-}
-```
-
-- Metamodels for this task (from the deterministic contract; do not use any others):
-  - `DB` (target, emf, metamodelUri `DB`): types Column, Database, ForeignKey, Table
-  - `OO` (source/target, emf, metamodelUri `OO`): types Attribute, Class, Reference
-  - `OO2DB` (source, emf, metamodelUri `TM`): types TypeMap, TypeMapping
-  - `Trace` (target, emf, metamodelUri `SimpleTrace`): types Trace, TraceLink
-<!-- END deterministic-task-context -->
-
-## Critical constraints
-1. **Do NOT generate Java or JUnit code.** The Java test harness is produced
-   deterministically by the pipeline from your JSON.
-2. **Do NOT depend on or reuse existing manually written semantic tests.** Derive
-   cases only from the ETL rules and metamodels above.
-3. **Use only the runtime model names, metamodel URIs, and types from the
-   deterministic contract.** Do not invent, rename, or substitute metamodels,
-   URIs, namespaces, or type names.
-4. Generated suites are accepted only after **technical validation** (schema and
-   contract consistency) and **reference validation** (behaviour matches the
-   reference ETL).
-5. Assertions must state **externally observable target-model facts** inferred
-   from the ETL semantics:
-   - exact target element counts,
-   - exact attribute/feature values,
-   - exact references/links and their direction,
-   - explicit absence of superfluous target elements.
-
-## Output format (strict)
-Return **only** fenced file blocks, with no prose outside them:
-
-```json file=semantic_cases.json
-...content...
-```
-
-```xml file=models/<name>.model
-...content...
-```
-
-## Required JSON schema (task-generic)
-`semantic_cases.json` top-level fields: `schemaVersion`, `testClass`,
-`transformation`, `metamodels`, `tests`.
-
-- `metamodels[]`: `name`, `uri` (the metamodelUri from the contract; omit `uri`
-  for plainXml models).
-- `tests[]`: `name`, `models`, `assertions`.
-- `models[]`: `name` (equal to a runtime model name from the contract), `kind`
-  (`"emf"` or `"plainXml"`), `role` (`"source"` or `"target"`), `path` (for
-  source models you emit), `generated` (boolean), `metamodelUri` (EMF models
-  only, exactly as in the contract).
-- `assertions[]` may use only these generic kinds: `count`, `featureValues`,
-  `objects`, `pathValues`, `referencePairs`.
-
-Canonical assertion payloads:
-
-```json
-{"kind": "count", "model": "<target runtime model>", "type": "<type>", "expected": 0}
-{"kind": "featureValues", "model": "<target runtime model>", "type": "<type>", "feature": "<feature>", "expected": ["value"]}
-{"kind": "pathValues", "model": "<target runtime model>", "type": "<type>", "path": "<feature.or.reference.path>", "expected": ["value"]}
-{"kind": "objects", "model": "<target runtime model>", "type": "<type>", "features": ["feature"], "expected": [{"feature": "value"}]}
-{"kind": "referencePairs", "model": "<target runtime model>", "type": "<type>", "source": "<source.path>", "target": "<target.path>", "expected": [{"source": "a", "target": "b"}]}
-```
-
-Do **not** use alternate primary keys such as `value`, `values`, `equals`,
-`ids`, `pairs`, `sourceType`, `targetType`, `where`, or `match`. Use the
-canonical `expected` field and the canonical path fields above.
-
-Do **not** introduce transformation-specific schema fields such as
-`expectedNodes` / `expectedEdges`.
-
-## Test design requirements
-- Cover positive and edge scenarios implied by the ETL: empty/minimal source,
-  one instance per mapped source type, mixed instances across mapped types, and
-  duplicate/empty values where the metamodel allows.
-- For each scenario, assert the exact number of produced target elements and
-  their exact feature values.
-- Include assertions that rule out unexpected target elements beyond those
-  justified by matched source elements.
-- Keep every assertion precise and machine-checkable using the generic kinds.
-- Emit each source input model as a fenced model file and reference it from
-  `models[].path`.
-
-Now produce the files.
+## Output format expectation
+Return:
+- `semantic_cases.json` content
+- Then each generated source model file content (with filename), consistent with case references in JSON.

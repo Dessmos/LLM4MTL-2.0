@@ -50,7 +50,7 @@
       ]
     },
     {
-      "name": "single_flowchart_maps_with_flowchart_prefix",
+      "name": "single_flowchart_maps_to_flowchart_prefixed_h1",
       "models": [
         {
           "name": "Flowchart",
@@ -76,6 +76,15 @@
           "expected": 1
         },
         {
+          "kind": "featureValues",
+          "model": "HTML",
+          "type": "H1",
+          "feature": "value",
+          "expected": [
+            "Flowchart Main"
+          ]
+        },
+        {
           "kind": "objects",
           "model": "HTML",
           "type": "H1",
@@ -91,7 +100,7 @@
       ]
     },
     {
-      "name": "single_subflow_uses_extended_rule_value",
+      "name": "single_subflow_uses_extended_rule_and_overrides_value",
       "models": [
         {
           "name": "Flowchart",
@@ -117,6 +126,15 @@
           "expected": 1
         },
         {
+          "kind": "featureValues",
+          "model": "HTML",
+          "type": "H1",
+          "feature": "value",
+          "expected": [
+            "Subflow Flowchart Child"
+          ]
+        },
+        {
           "kind": "objects",
           "model": "HTML",
           "type": "H1",
@@ -132,7 +150,7 @@
       ]
     },
     {
-      "name": "mixed_flowchart_and_subflow_instances_map_all",
+      "name": "mixed_flowchart_and_subflow_instances_map_each_once",
       "models": [
         {
           "name": "Flowchart",
@@ -155,7 +173,7 @@
           "kind": "count",
           "model": "HTML",
           "type": "H1",
-          "expected": 4
+          "expected": 3
         },
         {
           "kind": "featureValues",
@@ -163,16 +181,34 @@
           "type": "H1",
           "feature": "value",
           "expected": [
-            "Flowchart Alpha",
-            "Flowchart Beta",
-            "Subflow Flowchart AlphaSub",
-            "Subflow Flowchart BetaSub"
+            "Flowchart Top",
+            "Subflow Flowchart NestedA",
+            "Subflow Flowchart NestedB"
+          ]
+        },
+        {
+          "kind": "objects",
+          "model": "HTML",
+          "type": "H1",
+          "features": [
+            "value"
+          ],
+          "expected": [
+            {
+              "value": "Flowchart Top"
+            },
+            {
+              "value": "Subflow Flowchart NestedA"
+            },
+            {
+              "value": "Subflow Flowchart NestedB"
+            }
           ]
         }
       ]
     },
     {
-      "name": "duplicate_and_empty_names_preserve_exact_output_values",
+      "name": "duplicate_and_empty_names_preserve_exact_string_concatenation",
       "models": [
         {
           "name": "Flowchart",
@@ -207,6 +243,28 @@
             "Flowchart Dup",
             "Subflow Flowchart ",
             "Subflow Flowchart Dup"
+          ]
+        },
+        {
+          "kind": "objects",
+          "model": "HTML",
+          "type": "H1",
+          "features": [
+            "value"
+          ],
+          "expected": [
+            {
+              "value": "Flowchart "
+            },
+            {
+              "value": "Flowchart Dup"
+            },
+            {
+              "value": "Subflow Flowchart "
+            },
+            {
+              "value": "Subflow Flowchart Dup"
+            }
           ]
         }
       ]
@@ -246,10 +304,9 @@
 <xmi:XMI xmi:version="2.0"
     xmlns:xmi="http://www.omg.org/XMI"
     xmlns:flowchart="flowchart">
-  <flowchart:Flowchart name="Alpha"/>
-  <flowchart:Flowchart name="Beta"/>
-  <flowchart:Subflow name="AlphaSub"/>
-  <flowchart:Subflow name="BetaSub"/>
+  <flowchart:Flowchart name="Top"/>
+  <flowchart:Subflow name="NestedA"/>
+  <flowchart:Subflow name="NestedB"/>
 </xmi:XMI>
 ```
 

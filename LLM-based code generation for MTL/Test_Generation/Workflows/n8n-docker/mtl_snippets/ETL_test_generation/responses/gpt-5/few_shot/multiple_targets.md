@@ -4,12 +4,18 @@
   "testClass": "GeneratedMultipleTargetsSemanticTests",
   "transformation": "multiple_targets.etl",
   "metamodels": [
-    {"name": "Flowchart", "uri": "flowchart"},
-    {"name": "HTML", "uri": "HTML"}
+    {
+      "name": "Flowchart",
+      "uri": "flowchart"
+    },
+    {
+      "name": "HTML",
+      "uri": "HTML"
+    }
   ],
   "tests": [
     {
-      "name": "empty_source_produces_no_target_elements",
+      "name": "empty_source_produces_no_html_elements",
       "models": [
         {
           "name": "Flowchart",
@@ -56,8 +62,9 @@
         {"kind": "count", "model": "HTML", "type": "DIV", "expected": 1},
         {"kind": "count", "model": "HTML", "type": "H1", "expected": 1},
         {"kind": "count", "model": "HTML", "type": "A", "expected": 1},
-        {"kind": "featureValues", "model": "HTML", "type": "H1", "feature": "value", "expected": ["Start"]},
-        {"kind": "objects", "model": "HTML", "type": "A", "features": ["value", "ahref"], "expected": [{"value": "Next steps", "ahref": "End"}]}
+        {"kind": "objects", "model": "HTML", "type": "H1", "features": ["value"], "expected": [{"value": "Start"}]},
+        {"kind": "objects", "model": "HTML", "type": "A", "features": ["value", "ahref"], "expected": [{"value": "Next steps", "ahref": "Next"}]},
+        {"kind": "referencePairs", "model": "HTML", "type": "DIV", "source": "children.value", "target": "children.ahref", "expected": [{"source": "Start", "target": null}, {"source": "Next steps", "target": "Next"}]}
       ]
     },
     {
@@ -108,35 +115,8 @@
         {"kind": "count", "model": "HTML", "type": "DIV", "expected": 1},
         {"kind": "count", "model": "HTML", "type": "H1", "expected": 1},
         {"kind": "count", "model": "HTML", "type": "A", "expected": 2},
-        {"kind": "featureValues", "model": "HTML", "type": "H1", "feature": "value", "expected": ["Choose"]},
-        {"kind": "objects", "model": "HTML", "type": "A", "features": ["value", "ahref"], "expected": [{"value": "Approve", "ahref": "Approve"}, {"value": "Reject", "ahref": "Reject"}]}
-      ]
-    },
-    {
-      "name": "mixed_actions_decisions_and_empty_names",
-      "models": [
-        {
-          "name": "Flowchart",
-          "kind": "emf",
-          "role": "source",
-          "path": "models/mixed_cases.model",
-          "generated": true,
-          "metamodelUri": "flowchart"
-        },
-        {
-          "name": "HTML",
-          "kind": "emf",
-          "role": "target",
-          "generated": false,
-          "metamodelUri": "HTML"
-        }
-      ],
-      "assertions": [
-        {"kind": "count", "model": "HTML", "type": "DIV", "expected": 3},
-        {"kind": "count", "model": "HTML", "type": "H1", "expected": 3},
-        {"kind": "count", "model": "HTML", "type": "A", "expected": 4},
-        {"kind": "featureValues", "model": "HTML", "type": "H1", "feature": "value", "expected": ["", "Route", "Route"]},
-        {"kind": "objects", "model": "HTML", "type": "A", "features": ["value", "ahref"], "expected": [{"value": "Next steps", "ahref": ""}, {"value": "", "ahref": ""}, {"value": "Route", "ahref": "Route"}, {"value": "Route", "ahref": "Route"}]}
+        {"kind": "objects", "model": "HTML", "type": "H1", "features": ["value"], "expected": [{"value": "Choose"}]},
+        {"kind": "objects", "model": "HTML", "type": "A", "features": ["value", "ahref"], "expected": [{"value": "PathA", "ahref": "PathA"}, {"value": "PathB", "ahref": "PathB"}]}
       ]
     }
   ]
@@ -156,9 +136,9 @@
 <xmi:XMI xmi:version="2.0"
     xmlns:xmi="http://www.omg.org/XMI"
     xmlns:flowchart="flowchart">
-  <flowchart:Action xmi:id="a1" name="Start" outgoing="#t1"/>
-  <flowchart:Action xmi:id="a2" name="End"/>
-  <transitions xmi:id="t1" source="#a1" target="#a2"/>
+  <flowchart:Action name="Start" outgoing="//@transitions.0"/>
+  <flowchart:Action name="Next"/>
+  <flowchart:Transition source="//@Action.0" target="//@Action.1"/>
 </xmi:XMI>
 ```
 
@@ -167,7 +147,7 @@
 <xmi:XMI xmi:version="2.0"
     xmlns:xmi="http://www.omg.org/XMI"
     xmlns:flowchart="flowchart">
-  <flowchart:Action xmi:id="a1" name="Lonely"/>
+  <flowchart:Action name="Get up"/>
 </xmi:XMI>
 ```
 
@@ -176,28 +156,10 @@
 <xmi:XMI xmi:version="2.0"
     xmlns:xmi="http://www.omg.org/XMI"
     xmlns:flowchart="flowchart">
-  <flowchart:Decision xmi:id="d1" name="Choose" outgoing="#t1 #t2"/>
-  <flowchart:Action xmi:id="a1" name="Approve"/>
-  <flowchart:Action xmi:id="a2" name="Reject"/>
-  <transitions xmi:id="t1" source="#d1" target="#a1"/>
-  <transitions xmi:id="t2" source="#d1" target="#a2"/>
-</xmi:XMI>
-```
-
-```xml file=models/mixed_cases.model
-<?xml version="1.0" encoding="UTF-8"?>
-<xmi:XMI xmi:version="2.0"
-    xmlns:xmi="http://www.omg.org/XMI"
-    xmlns:flowchart="flowchart">
-  <flowchart:Action xmi:id="a1" name="" outgoing="#t1"/>
-  <flowchart:Action xmi:id="a2" name="Route" outgoing="#t2"/>
-  <flowchart:Action xmi:id="a3" name="Ignored"/>
-  <flowchart:Decision xmi:id="d1" name="Route" outgoing="#t3 #t4"/>
-  <flowchart:Action xmi:id="a4" name=""/>
-  <flowchart:Action xmi:id="a5" name="Route"/>
-  <transitions xmi:id="t1" source="#a1" target="#a4"/>
-  <transitions xmi:id="t2" source="#a2" target="#a5"/>
-  <transitions xmi:id="t3" source="#d1" target="#a4"/>
-  <transitions xmi:id="t4" source="#d1" target="#a5"/>
+  <flowchart:Decision name="Choose" outgoing="//@transitions.0 //@transitions.1"/>
+  <flowchart:Action name="PathA"/>
+  <flowchart:Action name="PathB"/>
+  <flowchart:Transition source="//@Decision.0" target="//@Action.0"/>
+  <flowchart:Transition source="//@Decision.0" target="//@Action.1"/>
 </xmi:XMI>
 ```

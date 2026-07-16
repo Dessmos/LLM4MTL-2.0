@@ -15,7 +15,7 @@
   ],
   "tests": [
     {
-      "name": "empty_flowchart_produces_one_div_with_no_children_and_no_h1",
+      "name": "empty_flowchart_creates_div_with_no_children_and_no_h1",
       "models": [
         {
           "name": "Flowchart",
@@ -56,7 +56,7 @@
       ]
     },
     {
-      "name": "single_flowchart_with_one_transition_produces_div_and_one_h1",
+      "name": "single_transition_maps_to_one_h1_and_div_child",
       "models": [
         {
           "name": "Flowchart",
@@ -108,7 +108,7 @@
       ]
     },
     {
-      "name": "single_flowchart_with_multiple_transitions_including_duplicates_and_empty_name",
+      "name": "multiple_transitions_with_duplicate_and_empty_names_preserved",
       "models": [
         {
           "name": "Flowchart",
@@ -181,7 +181,7 @@
 <flowchart:Flowchart xmi:version="2.0"
     xmlns:xmi="http://www.omg.org/XMI"
     xmlns:flowchart="flowchart"
-    transitions="//@transitions.0">
+    transitions="#//@transitions.0">
   <transitions name="Start"/>
 </flowchart:Flowchart>
 ```
@@ -191,7 +191,7 @@
 <flowchart:Flowchart xmi:version="2.0"
     xmlns:xmi="http://www.omg.org/XMI"
     xmlns:flowchart="flowchart"
-    transitions="//@transitions.0 //@transitions.1 //@transitions.2 //@transitions.3">
+    transitions="#//@transitions.0 #//@transitions.1 #//@transitions.2 #//@transitions.3">
   <transitions name="A"/>
   <transitions name=""/>
   <transitions name="A"/>

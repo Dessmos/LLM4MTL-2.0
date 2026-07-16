@@ -4,12 +4,18 @@
   "testClass": "GeneratedPrimaryEtlSemanticTests",
   "transformation": "primary.etl",
   "metamodels": [
-    {"name": "Flowchart", "uri": "flowchart"},
-    {"name": "HTML", "uri": "HTML"}
+    {
+      "name": "Flowchart",
+      "uri": "flowchart"
+    },
+    {
+      "name": "HTML",
+      "uri": "HTML"
+    }
   ],
   "tests": [
     {
-      "name": "empty_flowchart_produces_only_div_without_children",
+      "name": "empty_flowchart_produces_only_empty_div",
       "models": [
         {
           "name": "Flowchart",
@@ -28,9 +34,24 @@
         }
       ],
       "assertions": [
-        {"kind": "count", "model": "HTML", "type": "DIV", "expected": 1},
-        {"kind": "count", "model": "HTML", "type": "H1", "expected": 0},
-        {"kind": "count", "model": "HTML", "type": "A", "expected": 0},
+        {
+          "kind": "count",
+          "model": "HTML",
+          "type": "DIV",
+          "expected": 1
+        },
+        {
+          "kind": "count",
+          "model": "HTML",
+          "type": "H1",
+          "expected": 0
+        },
+        {
+          "kind": "count",
+          "model": "HTML",
+          "type": "A",
+          "expected": 0
+        },
         {
           "kind": "pathValues",
           "model": "HTML",
@@ -41,13 +62,13 @@
       ]
     },
     {
-      "name": "single_transition_creates_heading_and_two_links_with_expected_values",
+      "name": "single_transition_creates_heading_and_two_links",
       "models": [
         {
           "name": "Flowchart",
           "kind": "emf",
           "role": "source",
-          "path": "models/single_transition_flowchart.model",
+          "path": "models/single_transition.model",
           "generated": true,
           "metamodelUri": "flowchart"
         },
@@ -60,26 +81,54 @@
         }
       ],
       "assertions": [
-        {"kind": "count", "model": "HTML", "type": "DIV", "expected": 1},
-        {"kind": "count", "model": "HTML", "type": "H1", "expected": 1},
-        {"kind": "count", "model": "HTML", "type": "A", "expected": 2},
+        {
+          "kind": "count",
+          "model": "HTML",
+          "type": "DIV",
+          "expected": 1
+        },
+        {
+          "kind": "count",
+          "model": "HTML",
+          "type": "H1",
+          "expected": 1
+        },
+        {
+          "kind": "count",
+          "model": "HTML",
+          "type": "A",
+          "expected": 2
+        },
         {
           "kind": "objects",
           "model": "HTML",
           "type": "H1",
-          "features": ["value"],
+          "features": [
+            "value"
+          ],
           "expected": [
-            {"value": "Go"}
+            {
+              "value": "T1"
+            }
           ]
         },
         {
           "kind": "objects",
           "model": "HTML",
           "type": "A",
-          "features": ["value", "ahref"],
+          "features": [
+            "value",
+            "ahref"
+          ],
           "expected": [
-            {"value": "Start", "ahref": "#Start"},
-            {"value": "Go", "ahref": "#End"}
+            {
+              "value": "Start",
+              "ahref": "#Start"
+            },
+            {
+              "value": "T1",
+              "ahref": "#End"
+            }
           ]
         },
         {
@@ -87,18 +136,20 @@
           "model": "HTML",
           "type": "DIV",
           "path": "children.value",
-          "expected": ["Go"]
+          "expected": [
+            "T1"
+          ]
         }
       ]
     },
     {
-      "name": "multiple_transitions_with_duplicate_and_empty_names_preserve_exact_outputs",
+      "name": "multiple_transitions_with_duplicate_and_empty_names",
       "models": [
         {
           "name": "Flowchart",
           "kind": "emf",
           "role": "source",
-          "path": "models/multi_transition_duplicates_empty.model",
+          "path": "models/multiple_transitions_duplicates_empty.model",
           "generated": true,
           "metamodelUri": "flowchart"
         },
@@ -111,28 +162,68 @@
         }
       ],
       "assertions": [
-        {"kind": "count", "model": "HTML", "type": "DIV", "expected": 1},
-        {"kind": "count", "model": "HTML", "type": "H1", "expected": 3},
-        {"kind": "count", "model": "HTML", "type": "A", "expected": 6},
+        {
+          "kind": "count",
+          "model": "HTML",
+          "type": "DIV",
+          "expected": 1
+        },
+        {
+          "kind": "count",
+          "model": "HTML",
+          "type": "H1",
+          "expected": 3
+        },
+        {
+          "kind": "count",
+          "model": "HTML",
+          "type": "A",
+          "expected": 6
+        },
         {
           "kind": "featureValues",
           "model": "HTML",
           "type": "H1",
           "feature": "value",
-          "expected": ["", "T", "T"]
+          "expected": [
+            "Go",
+            "Go",
+            ""
+          ]
         },
         {
           "kind": "objects",
           "model": "HTML",
           "type": "A",
-          "features": ["value", "ahref"],
+          "features": [
+            "value",
+            "ahref"
+          ],
           "expected": [
-            {"value": "N1", "ahref": "#N1"},
-            {"value": "", "ahref": "#N2"},
-            {"value": "N1", "ahref": "#N1"},
-            {"value": "T", "ahref": "#N3"},
-            {"value": "N2", "ahref": "#N2"},
-            {"value": "T", "ahref": "#N1"}
+            {
+              "value": "S",
+              "ahref": "#S"
+            },
+            {
+              "value": "Go",
+              "ahref": "#M"
+            },
+            {
+              "value": "M",
+              "ahref": "#M"
+            },
+            {
+              "value": "Go",
+              "ahref": "#E"
+            },
+            {
+              "value": "E",
+              "ahref": "#E"
+            },
+            {
+              "value": "",
+              "ahref": "#S"
+            }
           ]
         },
         {
@@ -140,7 +231,11 @@
           "model": "HTML",
           "type": "DIV",
           "path": "children.value",
-          "expected": ["", "T", "T"]
+          "expected": [
+            "Go",
+            "Go",
+            ""
+          ]
         }
       ]
     }
@@ -155,27 +250,34 @@
     xmlns:flowchart="flowchart"/>
 ```
 
-```xml file=models/single_transition_flowchart.model
+```xml file=models/single_transition.model
 <?xml version="1.0" encoding="UTF-8"?>
 <flowchart:Flowchart xmi:version="2.0"
     xmlns:xmi="http://www.omg.org/XMI"
     xmlns:flowchart="flowchart">
-  <transitions name="Go" source="#//@transitions.0" target="#//@transitions.1"/>
-  <transitions name="Start"/>
-  <transitions name="End"/>
+  <transitions name="T1">
+    <source name="Start"/>
+    <target name="End"/>
+  </transitions>
 </flowchart:Flowchart>
 ```
 
-```xml file=models/multi_transition_duplicates_empty.model
+```xml file=models/multiple_transitions_duplicates_empty.model
 <?xml version="1.0" encoding="UTF-8"?>
 <flowchart:Flowchart xmi:version="2.0"
     xmlns:xmi="http://www.omg.org/XMI"
     xmlns:flowchart="flowchart">
-  <transitions name="" source="#//@transitions.1" target="#//@transitions.2"/>
-  <transitions name="N1"/>
-  <transitions name="N2"/>
-  <transitions name="T" source="#//@transitions.1" target="#//@transitions.4"/>
-  <transitions name="N3"/>
-  <transitions name="T" source="#//@transitions.2" target="#//@transitions.1"/>
+  <transitions name="Go">
+    <source name="S"/>
+    <target name="M"/>
+  </transitions>
+  <transitions name="Go">
+    <source name="M"/>
+    <target name="E"/>
+  </transitions>
+  <transitions name="">
+    <source name="E"/>
+    <target name="S"/>
+  </transitions>
 </flowchart:Flowchart>
 ```

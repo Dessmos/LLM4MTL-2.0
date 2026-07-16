@@ -21,7 +21,7 @@
           "name": "Flowchart",
           "kind": "emf",
           "role": "source",
-          "path": "models/empty_source.model",
+          "path": "models/empty_flowchart.model",
           "generated": true,
           "metamodelUri": "flowchart"
         },
@@ -50,13 +50,13 @@
       ]
     },
     {
-      "name": "one_instance_per_mapped_type_creates_four_h1",
+      "name": "one_instance_per_mapped_source_type",
       "models": [
         {
           "name": "Flowchart",
           "kind": "emf",
           "role": "source",
-          "path": "models/one_per_type.model",
+          "path": "models/one_each_type.model",
           "generated": true,
           "metamodelUri": "flowchart"
         },
@@ -80,45 +80,30 @@
           "model": "HTML",
           "type": "H1",
           "feature": "value",
-          "expected": [
-            "MainFlow",
-            "DoWork",
-            "CheckCondition",
-            "t1"
-          ]
+          "expected": ["MainFlow", "DoTask", "CheckCondition", "toNext"]
         },
         {
           "kind": "objects",
           "model": "HTML",
           "type": "H1",
-          "features": [
-            "value"
-          ],
+          "features": ["value"],
           "expected": [
-            {
-              "value": "MainFlow"
-            },
-            {
-              "value": "DoWork"
-            },
-            {
-              "value": "CheckCondition"
-            },
-            {
-              "value": "t1"
-            }
+            {"value": "MainFlow"},
+            {"value": "DoTask"},
+            {"value": "CheckCondition"},
+            {"value": "toNext"}
           ]
         }
       ]
     },
     {
-      "name": "mixed_instances_across_types_create_exact_h1_values",
+      "name": "mixed_instances_include_duplicates_and_empty_names",
       "models": [
         {
           "name": "Flowchart",
           "kind": "emf",
           "role": "source",
-          "path": "models/mixed_instances.model",
+          "path": "models/mixed_duplicates_empty.model",
           "generated": true,
           "metamodelUri": "flowchart"
         },
@@ -135,91 +120,29 @@
           "kind": "count",
           "model": "HTML",
           "type": "H1",
-          "expected": 7
+          "expected": 8
         },
         {
           "kind": "featureValues",
           "model": "HTML",
           "type": "H1",
           "feature": "value",
-          "expected": [
-            "FlowA",
-            "FlowB",
-            "ActionA",
-            "ActionB",
-            "DecisionA",
-            "TransitionA",
-            "TransitionB"
-          ]
-        }
-      ]
-    },
-    {
-      "name": "duplicate_and_empty_names_are_preserved_in_h1_values",
-      "models": [
-        {
-          "name": "Flowchart",
-          "kind": "emf",
-          "role": "source",
-          "path": "models/duplicate_empty_names.model",
-          "generated": true,
-          "metamodelUri": "flowchart"
-        },
-        {
-          "name": "HTML",
-          "kind": "emf",
-          "role": "target",
-          "generated": false,
-          "metamodelUri": "HTML"
-        }
-      ],
-      "assertions": [
-        {
-          "kind": "count",
-          "model": "HTML",
-          "type": "H1",
-          "expected": 6
-        },
-        {
-          "kind": "featureValues",
-          "model": "HTML",
-          "type": "H1",
-          "feature": "value",
-          "expected": [
-            "",
-            "same",
-            "same",
-            "",
-            "same",
-            ""
-          ]
+          "expected": ["", "A", "A", "", "D", "D", "T", ""]
         },
         {
           "kind": "objects",
           "model": "HTML",
           "type": "H1",
-          "features": [
-            "value"
-          ],
+          "features": ["value"],
           "expected": [
-            {
-              "value": ""
-            },
-            {
-              "value": "same"
-            },
-            {
-              "value": "same"
-            },
-            {
-              "value": ""
-            },
-            {
-              "value": "same"
-            },
-            {
-              "value": ""
-            }
+            {"value": ""},
+            {"value": "A"},
+            {"value": "A"},
+            {"value": ""},
+            {"value": "D"},
+            {"value": "D"},
+            {"value": "T"},
+            {"value": ""}
           ]
         }
       ]
@@ -228,7 +151,7 @@
 }
 ```
 
-```xml file=models/empty_source.model
+```xml file=models/empty_flowchart.model
 <?xml version="1.0" encoding="UTF-8"?>
 <xmi:XMI xmi:version="2.0"
     xmlns:xmi="http://www.omg.org/XMI"
@@ -236,43 +159,30 @@
 </xmi:XMI>
 ```
 
-```xml file=models/one_per_type.model
+```xml file=models/one_each_type.model
 <?xml version="1.0" encoding="UTF-8"?>
 <xmi:XMI xmi:version="2.0"
     xmlns:xmi="http://www.omg.org/XMI"
     xmlns:flowchart="flowchart">
   <flowchart:Flowchart name="MainFlow"/>
-  <flowchart:Action name="DoWork"/>
+  <flowchart:Action name="DoTask"/>
   <flowchart:Decision name="CheckCondition"/>
-  <flowchart:Transition name="t1"/>
+  <flowchart:Transition name="toNext"/>
 </xmi:XMI>
 ```
 
-```xml file=models/mixed_instances.model
-<?xml version="1.0" encoding="UTF-8"?>
-<xmi:XMI xmi:version="2.0"
-    xmlns:xmi="http://www.omg.org/XMI"
-    xmlns:flowchart="flowchart">
-  <flowchart:Flowchart name="FlowA"/>
-  <flowchart:Flowchart name="FlowB"/>
-  <flowchart:Action name="ActionA"/>
-  <flowchart:Action name="ActionB"/>
-  <flowchart:Decision name="DecisionA"/>
-  <flowchart:Transition name="TransitionA"/>
-  <flowchart:Transition name="TransitionB"/>
-</xmi:XMI>
-```
-
-```xml file=models/duplicate_empty_names.model
+```xml file=models/mixed_duplicates_empty.model
 <?xml version="1.0" encoding="UTF-8"?>
 <xmi:XMI xmi:version="2.0"
     xmlns:xmi="http://www.omg.org/XMI"
     xmlns:flowchart="flowchart">
   <flowchart:Flowchart name=""/>
-  <flowchart:Action name="same"/>
-  <flowchart:Decision name="same"/>
-  <flowchart:Transition name=""/>
-  <flowchart:Action name="same"/>
+  <flowchart:Action name="A"/>
+  <flowchart:Action name="A"/>
+  <flowchart:Decision name=""/>
+  <flowchart:Decision name="D"/>
+  <flowchart:Transition name="D"/>
+  <flowchart:Transition name="T"/>
   <flowchart:Flowchart name=""/>
 </xmi:XMI>
 ```

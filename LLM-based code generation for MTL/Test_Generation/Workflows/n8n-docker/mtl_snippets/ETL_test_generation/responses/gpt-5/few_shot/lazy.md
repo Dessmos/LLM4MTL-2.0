@@ -15,7 +15,7 @@
   ],
   "tests": [
     {
-      "name": "empty_source_flowchart_creates_single_empty_div",
+      "name": "empty_flowchart_produces_one_div_with_no_h1_children",
       "models": [
         {
           "name": "Flowchart",
@@ -56,7 +56,7 @@
       ]
     },
     {
-      "name": "one_action_one_decision_and_transition_create_two_h1_children",
+      "name": "action_decision_and_transition_nodes_map_only_action_and_decision_to_h1",
       "models": [
         {
           "name": "Flowchart",
@@ -92,31 +92,25 @@
           "model": "HTML",
           "type": "H1",
           "feature": "value",
-          "expected": [
-            "Act",
-            "Dec"
-          ]
+          "expected": ["A1", "D1"]
         },
         {
           "kind": "pathValues",
           "model": "HTML",
           "type": "DIV",
           "path": "children.value",
-          "expected": [
-            "Act",
-            "Dec"
-          ]
+          "expected": ["A1", "D1"]
         }
       ]
     },
     {
-      "name": "duplicate_and_empty_names_are_preserved_in_h1_values",
+      "name": "duplicate_and_empty_names_are_preserved_in_created_h1_values",
       "models": [
         {
           "name": "Flowchart",
           "kind": "emf",
           "role": "source",
-          "path": "models/duplicate_empty_names.model",
+          "path": "models/duplicate_and_empty_names.model",
           "generated": true,
           "metamodelUri": "flowchart"
         },
@@ -139,31 +133,21 @@
           "kind": "count",
           "model": "HTML",
           "type": "H1",
-          "expected": 4
+          "expected": 3
         },
         {
           "kind": "featureValues",
           "model": "HTML",
           "type": "H1",
           "feature": "value",
-          "expected": [
-            "",
-            "",
-            "Same",
-            "Same"
-          ]
+          "expected": ["", "dup", "dup"]
         },
         {
           "kind": "pathValues",
           "model": "HTML",
           "type": "DIV",
           "path": "children.value",
-          "expected": [
-            "",
-            "",
-            "Same",
-            "Same"
-          ]
+          "expected": ["", "dup", "dup"]
         }
       ]
     }
@@ -186,22 +170,21 @@
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
     xmlns:flowchart="flowchart"
     name="MixedFlow">
-  <nodes xsi:type="flowchart:Action" name="Act"/>
-  <nodes xsi:type="flowchart:Decision" name="Dec"/>
-  <transitions name="IgnoredTransition"/>
+  <nodes xsi:type="flowchart:Action" name="A1"/>
+  <nodes xsi:type="flowchart:Decision" name="D1"/>
+  <nodes xsi:type="flowchart:Transition" name="T1"/>
 </flowchart:Flowchart>
 ```
 
-```xml file=models/duplicate_empty_names.model
+```xml file=models/duplicate_and_empty_names.model
 <?xml version="1.0" encoding="UTF-8"?>
 <flowchart:Flowchart xmi:version="2.0"
     xmlns:xmi="http://www.omg.org/XMI"
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
     xmlns:flowchart="flowchart"
-    name="DupEmptyFlow">
+    name="DupAndEmptyFlow">
   <nodes xsi:type="flowchart:Action" name=""/>
-  <nodes xsi:type="flowchart:Decision" name=""/>
-  <nodes xsi:type="flowchart:Action" name="Same"/>
-  <nodes xsi:type="flowchart:Decision" name="Same"/>
+  <nodes xsi:type="flowchart:Action" name="dup"/>
+  <nodes xsi:type="flowchart:Decision" name="dup"/>
 </flowchart:Flowchart>
 ```

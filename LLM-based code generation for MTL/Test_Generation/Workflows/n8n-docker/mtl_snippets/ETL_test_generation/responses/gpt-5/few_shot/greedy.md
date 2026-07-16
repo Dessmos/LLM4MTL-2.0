@@ -4,8 +4,14 @@
   "testClass": "GeneratedGreedyEtlSemanticTests",
   "transformation": "greedy.etl",
   "metamodels": [
-    {"name": "Flowchart", "uri": "flowchart"},
-    {"name": "HTML", "uri": "HTML"}
+    {
+      "name": "Flowchart",
+      "uri": "flowchart"
+    },
+    {
+      "name": "HTML",
+      "uri": "HTML"
+    }
   ],
   "tests": [
     {
@@ -28,8 +34,19 @@
         }
       ],
       "assertions": [
-        {"kind": "count", "model": "HTML", "type": "H1", "expected": 0},
-        {"kind": "featureValues", "model": "HTML", "type": "H1", "feature": "value", "expected": []}
+        {
+          "kind": "count",
+          "model": "HTML",
+          "type": "H1",
+          "expected": 0
+        },
+        {
+          "kind": "featureValues",
+          "model": "HTML",
+          "type": "H1",
+          "feature": "value",
+          "expected": []
+        }
       ]
     },
     {
@@ -52,21 +69,38 @@
         }
       ],
       "assertions": [
-        {"kind": "count", "model": "HTML", "type": "H1", "expected": 1},
-        {"kind": "featureValues", "model": "HTML", "type": "H1", "feature": "value", "expected": ["Start"]},
+        {
+          "kind": "count",
+          "model": "HTML",
+          "type": "H1",
+          "expected": 1
+        },
+        {
+          "kind": "featureValues",
+          "model": "HTML",
+          "type": "H1",
+          "feature": "value",
+          "expected": [
+            "Start"
+          ]
+        },
         {
           "kind": "objects",
           "model": "HTML",
           "type": "H1",
-          "features": ["value"],
+          "features": [
+            "value"
+          ],
           "expected": [
-            {"value": "Start"}
+            {
+              "value": "Start"
+            }
           ]
         }
       ]
     },
     {
-      "name": "multiple_named_elements_map_one_to_one_preserving_duplicates_and_empty",
+      "name": "multiple_named_elements_include_duplicates_and_empty_name",
       "models": [
         {
           "name": "Flowchart",
@@ -85,18 +119,44 @@
         }
       ],
       "assertions": [
-        {"kind": "count", "model": "HTML", "type": "H1", "expected": 4},
-        {"kind": "featureValues", "model": "HTML", "type": "H1", "feature": "value", "expected": ["Alpha", "Alpha", "", "Omega"]},
+        {
+          "kind": "count",
+          "model": "HTML",
+          "type": "H1",
+          "expected": 4
+        },
+        {
+          "kind": "featureValues",
+          "model": "HTML",
+          "type": "H1",
+          "feature": "value",
+          "expected": [
+            "Alpha",
+            "",
+            "Alpha",
+            "Omega"
+          ]
+        },
         {
           "kind": "objects",
           "model": "HTML",
           "type": "H1",
-          "features": ["value"],
+          "features": [
+            "value"
+          ],
           "expected": [
-            {"value": "Alpha"},
-            {"value": "Alpha"},
-            {"value": ""},
-            {"value": "Omega"}
+            {
+              "value": "Alpha"
+            },
+            {
+              "value": ""
+            },
+            {
+              "value": "Alpha"
+            },
+            {
+              "value": "Omega"
+            }
           ]
         }
       ]
@@ -128,8 +188,8 @@
     xmlns:xmi="http://www.omg.org/XMI"
     xmlns:flowchart="flowchart">
   <flowchart:NamedElement name="Alpha"/>
-  <flowchart:NamedElement name="Alpha"/>
   <flowchart:NamedElement name=""/>
+  <flowchart:NamedElement name="Alpha"/>
   <flowchart:NamedElement name="Omega"/>
 </xmi:XMI>
 ```
