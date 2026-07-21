@@ -15,6 +15,12 @@ an immutable copy of the transformation, the validated suite, the complete Maven
 output, and machine-readable metadata. A compact index is appended to
 `results/etl/<task>/generated_transformation_validation.csv`.
 
+For direct inspection in a spreadsheet, each task also receives
+`results/etl/<task>/generated_transformation_validation_report.csv`. It contains
+labelled rows such as `Test result, PASS`, `Compilation, PASS`, and an
+explanation or artifact path for failures. Each evaluation is enclosed by clear
+start and end separator rows.
+
 ## Usage
 
 Run all matching validated suites and generated transformations:

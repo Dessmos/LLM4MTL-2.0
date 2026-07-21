@@ -20,6 +20,7 @@ from transformation_validation.discovery import (
     match_pairs,
 )
 from transformation_validation.models import TransformationValidationResult
+from transformation_validation.results import write_results
 from transformation_validation.runner import failure_stage
 
 
@@ -97,6 +98,53 @@ class FailureStageTests(unittest.TestCase):
 
     def test_classifies_assertion_failure(self) -> None:
         self.assertEqual("test_failure", failure_stage("Tests run: 3, Failures: 1", True, True, False))
+
+
+class ReadableReportTests(unittest.TestCase):
+    def test_writes_labelled_pass_fail_rows(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            validated_root = root / "generated_tests" / "etl"
+            suite_dir = validated_root / "Tree2Graph" / "validated" / "gpt-5" / "few_shot" / "suite_001"
+            suite_dir.mkdir(parents=True)
+            transformations_root = root / "transformations"
+            transformation_path = transformations_root / "claude-sonnet-4" / "grammar" / "Tree2Graph.etl"
+            transformation_path.parent.mkdir(parents=True)
+            transformation_path.write_text("rule Tree2Graph {}\n", encoding="utf-8")
+            pair = match_pairs(
+                discover_validated_suites(validated_root),
+                discover_transformations(transformations_root),
+            )[0]
+            result = TransformationValidationResult(
+                pair=pair,
+                run_id="run_test",
+                transformation_sha256="transform-hash",
+                suite_sha256="suite-hash",
+                status="failed",
+                failure_stage="test_failure",
+                compiles=True,
+                executes=True,
+                tests_pass=False,
+                maven_exit_code=1,
+                timed_out=False,
+                error_summary="Expected Graph but found Tree.",
+                maven_output="full error",
+                artifact_dir="artifacts/failed",
+            )
+
+            paths = write_results([result], root / "results", append=False)
+
+            report_path = (
+                root / "results" / "Tree2Graph" / "generated_transformation_validation_report.csv"
+            ).resolve()
+            self.assertIn(report_path, paths)
+            report = report_path.read_text(encoding="utf-8")
+            self.assertIn("=== Task: Tree2Graph | Transformation: claude-sonnet-4/grammar", report)
+            self.assertIn("Test result,FAIL", report)
+            self.assertIn("Compilation,PASS", report)
+            self.assertIn("Test execution,PASS", report)
+            self.assertIn("Explanation,Expected Graph but found Tree.", report)
+            self.assertIn("--- End of evaluation ---", report)
 
 
 if __name__ == "__main__":
