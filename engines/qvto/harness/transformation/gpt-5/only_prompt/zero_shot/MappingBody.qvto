@@ -1,0 +1,37 @@
+import ecore : 'http://www.eclipse.org/emf/2002/Ecore';
+
+modeltype ECORE uses 'http://www.eclipse.org/emf/2002/Ecore';
+
+transformation t(in inModel : ECORE, out outModel : ECORE);
+
+main() {
+	inModel.rootObjects()
+		->select(r | r.oclIsKindOf(ecore::EPackage))
+		->map p2p();
+}
+
+mapping p2p(in inPkg : ecore::EPackage) : ecore::EPackage {
+	name := inPkg.name;
+	eClassifiers := inPkg.eClassifiers->map c2c();
+}
+
+mapping c2c(in inCls : ecore::EClassifier) : ecore::EClassifier {
+	init {
+		if inCls.name = 'A' then {
+			result := object ecore::EDataType {
+				name := 'mapped' + inCls.name;
+			};
+		} else {
+			result := ecore::EClass {
+				initECls('mapped' + inCls.name, null);
+			};
+		}
+	}
+}
+
+constructor ecore::EClass::initECls(newName : String, op : ecore::EOperation) {
+	self.name := newName;
+	if op <> null then {
+		self.eOperations += op;
+	}
+}

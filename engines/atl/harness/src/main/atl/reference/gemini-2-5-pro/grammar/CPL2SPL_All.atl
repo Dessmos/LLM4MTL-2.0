@@ -1,0 +1,249 @@
+module CPL2SPL;
+create OUT : SPL from IN : CPL;
+
+helper context CPL!NodeContainer def: statement() : CPL!Node =
+	if self.contents.oclIsUndefined() then
+		OclUndefined
+	else
+		self.contents
+	endif;
+
+helper context CPL!Proxy def: locations() : Sequence(CPL!Location) =
+	let stmt : CPL!Node = self.statement() in
+	if stmt.oclIsKindOf(CPL!Location) then
+		let loc : CPL!Location = stmt.oclAsType(CPL!Location) in
+		Sequence{loc}->union(
+			if not loc.statement().oclIsUndefined() and loc.statement().oclIsKindOf(CPL!Proxy) then
+				loc.statement().oclAsType(CPL!Proxy).locations()
+			else
+				Sequence{}
+			endif
+		)
+	else
+		Sequence{}
+	endif;
+
+helper context CPL!Proxy def: isSimple() : Boolean =
+	self.busy.oclIsUndefined() and
+	self.noAnswer.oclIsUndefined() and
+	self.redirection.oclIsUndefined() and
+	self.failure.oclIsUndefined() and
+	self.default.oclIsUndefined();
+
+rule CPL2Program {
+	from
+		s : CPL!CPL
+	to
+		t : SPL!Program (
+			service <- u
+		),
+		u : SPL!Service (
+			name <- 'CPLService',
+			declarations <- s.subActions,
+			sessions <- s.incoming
+		)
+}
+
+rule SubAction2Function {
+	from
+		s : CPL!SubAction
+	to
+		t : SPL!LocalFunctionDeclaration (
+			name <- s.id,
+			returnType <- rt,
+			statements <- Sequence{s.statement()}
+		),
+		rt : SPL!SimpleType (
+			type <- #void
+		)
+}
+
+rule Incoming2Method {
+	from
+		s : CPL!Incoming
+	to
+		t : SPL!Method (
+			type <- rt,
+			direction <- #in,
+			methodName <- mn,
+			statements <- Sequence{s.statement()}
+		),
+		mn : SPL!SIPMethodName (
+			name <- #INVITE
+		),
+		rt : SPL!SimpleType (
+			type <- #request
+		)
+}
+
+lazy rule Proxy2Return {
+	from
+		s : CPL!Proxy (s.isSimple())
+	to
+		t : SPL!ReturnStat (
+			returnedValue <- fwd
+		),
+		fwd : SPL!ForwardExp (
+			isParallel <- if s.ordering = 'parallel' then true else false endif,
+			exp <- s.locations()
+		)
+}
+
+lazy rule Proxy2Select {
+	from
+		s : CPL!Proxy (not s.isSimple())
+	to
+		t : SPL!SelectStat (
+			matchedExp <- fwd,
+			selectCases <- s.busy->union(s.noAnswer)->union(s.redirection),
+			selectDefault <- s.default
+		),
+		fwd : SPL!ForwardExp (
+			isParallel <- if s.ordering = 'parallel' then true else false endif,
+			exp <- s.locations()
+		)
+}
+
+rule Busy2SelectCase {
+	from
+		s : CPL!Busy
+	to
+		t : SPL!SelectCase (
+			values <- Sequence{rc},
+			statements <- Sequence{s.statement()}
+		),
+		rc : SPL!ResponseConstant (
+			response <- cer
+		),
+		cer : SPL!ClientErrorResponse (
+			errorKind <- #BUSY_HERE
+		)
+}
+
+rule NoAnswer2SelectCase {
+	from
+		s : CPL!NoAnswer
+	to
+		t : SPL!SelectCase (
+			values <- Sequence{rc},
+			statements <- Sequence{s.statement()}
+		),
+		rc : SPL!ResponseConstant (
+			response <- cer
+		),
+		cer : SPL!ClientErrorResponse (
+			errorKind <- #REQUEST_TIMEOUT
+		)
+}
+
+rule Redirection2SelectCase {
+	from
+		s : CPL!Redirection
+	to
+		t : SPL!SelectCase (
+			values <- Sequence{rc1, rc2, rc3, rc4, rc5},
+			statements <- Sequence{s.statement()}
+		),
+		rc1 : SPL!ResponseConstant (response <- rer1),
+		rer1 : SPL!RedirectionErrorResponse (errorKind <- #MULTIPLE_CHOICES),
+		rc2 : SPL!ResponseConstant (response <- rer2),
+		rer2 : SPL!RedirectionErrorResponse (errorKind <- #MOVED_PERMANENTLY),
+		rc3 : SPL!ResponseConstant (response <- rer3),
+		rer3 : SPL!RedirectionErrorResponse (errorKind <- #MOVED_TEMPORARILY),
+		rc4 : SPL!ResponseConstant (response <- rer4),
+		rer4 : SPL!RedirectionErrorResponse (errorKind <- #USE_PROXY),
+		rc5 : SPL!ResponseConstant (response <- rer5),
+		rer5 : SPL!RedirectionErrorResponse (errorKind <- #ALTERNATIVE_SERVICE)
+}
+
+rule Default2SelectDefault {
+	from
+		s : CPL!Default
+	to
+		t : SPL!SelectDefault (
+			statements <- Sequence{s.statement()}
+		)
+}
+
+rule SubCall2Return {
+	from
+		s : CPL!SubCall
+	to
+		t : SPL!ReturnStat (
+			returnedValue <- fce
+		),
+		fce : SPL!FunctionCallExp (
+			functionCall <- fc
+		),
+		fc : SPL!FunctionCall (
+			function <- CPL!SubAction.allInstances()->select(e | e.id = s.ref)->first()
+		)
+}
+
+rule Redirect2Return {
+	from
+		s : CPL!Redirect
+	to
+		t : SPL!ReturnStat (
+			returnedValue <- we
+		),
+		we : SPL!WithExp (
+			exp <- rc,
+			msgFields <- Sequence{rmf}
+		),
+		rc : SPL!ResponseConstant (
+			response <- if s.permanent = 'yes' then perm else temp endif
+		),
+		perm : SPL!RedirectionErrorResponse (
+			errorKind <- #MOVED_PERMANENTLY
+		),
+		temp : SPL!RedirectionErrorResponse (
+			errorKind <- #MOVED_TEMPORARILY
+		),
+		rmf : SPL!ReasonMessageField (
+			exp <- s.statement()
+		)
+}
+
+rule AddressSwitch2SelectStat {
+	from
+		s : CPL!AddressSwitch
+	to
+		t : SPL!SelectStat (
+			matchedExp <- reqURI,
+			selectCases <- s.addresses,
+			selectDefault <- s.otherwise
+		),
+		reqURI : SPL!RequestURIExp
+}
+
+rule SwitchedAddress2SelectCase {
+	from
+		s : CPL!SwitchedAddress
+	to
+		t : SPL!SelectCase (
+			values <- if not s.is.oclIsUndefined() then Sequence{val} else OclUndefined endif,
+			statements <- Sequence{s.statement()}
+		),
+		val : SPL!URIConstant (
+			uri <- s.is
+		)
+}
+
+rule Otherwise2SelectDefault {
+	from
+		s : CPL!Otherwise
+	to
+		t : SPL!SelectDefault (
+			statements <- Sequence{s.statement()}
+		)
+}
+
+rule Location2URIConstant {
+	from
+		s : CPL!Location
+	to
+		t : SPL!URIConstant (
+			uri <- s.url
+		)
+}

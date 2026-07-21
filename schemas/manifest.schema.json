@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://llm4mtl/schemas/manifest.schema.json",
+  "title": "Run manifest",
+  "description": "Immutable resolved configuration and provenance for one run. Written once at `run init`; never appended to. A run = one combination of task + language + transformation model + test-generation model + strategy + seed + pipeline variant.",
+  "type": "object",
+  "required": ["schema_version", "run_id", "language", "task", "started_at"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {"type": "string"},
+    "run_id": {"type": "string"},
+    "preset": {"type": ["string", "null"]},
+    "language": {"type": "string", "enum": ["etl", "atl", "qvto", "reactions"]},
+    "task": {"type": "string"},
+    "transformation_model": {"type": ["string", "null"]},
+    "test_generation_model": {"type": ["string", "null"]},
+    "strategy": {"type": ["string", "null"]},
+    "seed": {"type": ["integer", "null"]},
+    "pipeline_variant": {"type": "string", "default": "full"},
+    "limits": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "max_syntax_repairs": {"type": "integer", "minimum": 0},
+        "max_semantic_repairs": {"type": "integer", "minimum": 0}
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "git_commit": {"type": "string"},
+        "source_revisions": {"type": "object"},
+        "schema_versions": {"type": "object"}
+      }
+    },
+    "n8n": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "workflow_id": {"type": "string"},
+        "execution_id": {"type": "string"},
+        "workflow_version": {"type": "string"}
+      }
+    },
+    "started_at": {"type": "string", "format": "date-time"}
+  }
+}

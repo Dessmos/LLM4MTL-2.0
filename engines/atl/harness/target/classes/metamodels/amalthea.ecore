@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ecore:EPackage xmi:version="2.0" xmlns:xmi="http://www.omg.org/XMI" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:ecore="http://www.eclipse.org/emf/2002/Ecore" name="amalthea" nsURI="http://vitruv.tools/methodologisttemplate/amalthea" nsPrefix="amalthea">
+
+
+    <eClassifiers xsi:type="ecore:EClass" name="ComponentContainer">
+    <eStructuralFeatures xsi:type="ecore:EReference" name="tasks"
+        upperBound="-1" eType="#//Task" containment="true"/>
+    <eStructuralFeatures xsi:type="ecore:EReference" name="isrs"
+        upperBound="-1" eType="#//ISR" containment="true"/>
+    <eStructuralFeatures xsi:type="ecore:EReference" name="runnables"
+        upperBound="-1" eType="#//Runnable" containment="true"/>
+    <eStructuralFeatures xsi:type="ecore:EReference" name="labels"
+        upperBound="-1" eType="#//Label" containment="true"/>
+    </eClassifiers>
+   
+   <!-- Process -->
+    <eClassifiers xsi:type="ecore:EClass" name="Process" abstract="true"/>
+
+    <!-- ISR -->
+    <eClassifiers xsi:type="ecore:EClass" name="ISR">
+        <eSuperTypes href="#//Process"/>
+    </eClassifiers>
+
+    <!-- Task -->
+    <eClassifiers xsi:type="ecore:EClass" name="Task">
+        <eSuperTypes href="#//Process"/>
+        <eStructuralFeatures xsi:type="ecore:EAttribute" name="name"
+            eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"
+        />
+        <eStructuralFeatures xsi:type="ecore:EAttribute" name="preemption"
+            eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"
+            defaultValueLiteral="cooperative"/>
+        <eStructuralFeatures xsi:type="ecore:EAttribute" name="multipleTaskActivationLimit"
+            eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EInt"
+            defaultValueLiteral="0"/>
+    </eClassifiers>
+
+     <!-- Runnable -->
+    <eClassifiers xsi:type="ecore:EClass" name="Runnable"/>
+
+    <!-- TaskRunnableCall -->
+    <eClassifiers xsi:type="ecore:EClass" name="TaskRunnableCall">
+        <eStructuralFeatures xsi:type="ecore:EReference" name="runnable"
+            eType="#//Runnable" containment="false"/>
+    </eClassifiers>
+
+    <!-- LabelSwitch -->
+    <eClassifiers xsi:type="ecore:EClass" name="LabelSwitch">
+        <eStructuralFeatures xsi:type="ecore:EReference" name="label"
+            eType="#//Label" containment="true"/>
+    </eClassifiers>
+
+    <!-- Label -->
+    <eClassifiers xsi:type="ecore:EClass" name="Label">
+        <eStructuralFeatures xsi:type="ecore:EAttribute" name="initialValue" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EInt"/>
+        <eStructuralFeatures xsi:type="ecore:EAttribute" name="constant" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EBoolean" defaultValueLiteral="false"/>
+        <eStructuralFeatures xsi:type="ecore:EAttribute" name="isVolatile" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EBoolean" defaultValueLiteral="false"/>
+    </eClassifiers>
+
+    <!-- ProbabilitySwitch -->
+    <eClassifiers xsi:type="ecore:EClass" name="ProbabilitySwitchEntry">
+        <eStructuralFeatures xsi:type="ecore:EAttribute" name="probability"
+            eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EDouble"
+            defaultValueLiteral="0.0"/>
+    </eClassifiers>
+
+    <!-- CallGraphEntry -->
+    <eClassifiers xsi:type="ecore:EClass" name="CallGraphEntry">
+        <eStructuralFeatures xsi:type="ecore:EReference" name="graphEntries"
+            upperBound="-1" eType="#//GraphEntryEntry"/>
+    </eClassifiers>
+
+    <!-- GraphEntryEntry -->
+    <eClassifiers xsi:type="ecore:EClass" name="GraphEntryEntry">
+        <eStructuralFeatures xsi:type="ecore:EReference" name="graphEntries"
+            upperBound="-1" eType="#//GraphEntryEntry"/>
+        <eStructuralFeatures xsi:type="ecore:EReference" name="entries"
+            upperBound="-1" eType="#//CallSequence"/>
+    </eClassifiers>
+
+    <!-- CallSequence -->
+    <eClassifiers xsi:type="ecore:EClass" name="CallSequence">
+        <eStructuralFeatures xsi:type="ecore:EReference" name="calls"
+            upperBound="-1" eType="#//CallSequenceEntry"/>
+    </eClassifiers>
+
+    <!-- CallSequenceEntry -->
+    <eClassifiers xsi:type="ecore:EClass" name="CallSequenceEntry"/>
+    
+</ecore:EPackage>

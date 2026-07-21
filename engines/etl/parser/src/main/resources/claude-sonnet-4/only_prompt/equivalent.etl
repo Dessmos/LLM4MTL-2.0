@@ -1,0 +1,11 @@
+rule Flowchart2Div
+transform f : flowchart::Flowchart
+to d : HTML::DIV {
+d.children ::= f.transitions;
+}
+
+rule Transition2Heading
+transform t : flowchart::Transition
+to h : HTML::H1 {
+h.value = t.name;
+}

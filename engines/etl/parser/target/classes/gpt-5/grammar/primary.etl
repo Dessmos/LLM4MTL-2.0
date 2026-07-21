@@ -1,0 +1,25 @@
+rule Flowchart2Heading
+  transform s : Flowchart!Flowchart
+  to t : HTML!DIV {
+  t.children.addAll(s.transitions.collect(tr | tr.equivalent()));
+}
+
+rule Transition2SourceLink
+  transform s : Flowchart!Transition
+  to t : HTML!A {
+  t.value = s.source.name;
+  t.ahref = '#' + s.source.name;
+}
+
+rule Transition2TargetLink
+  transform s : Flowchart!Transition
+  to t : HTML!A {
+  t.value = s.name;
+  t.ahref = '#' + s.target.name;
+}
+
+rule Transition2Heading
+  transform s : Flowchart!Transition
+  to t : HTML!H1 {
+  t.value = s.name;
+}

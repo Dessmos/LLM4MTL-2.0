@@ -1,0 +1,37 @@
+LLM,metric,baseline,strategy,test,p_value,significant
+GPT,ChrF,Baseline,Few-shot,Wilcoxon (one-sided),0.000977,True
+Gemini,ChrF,Baseline,Few-shot,Wilcoxon (one-sided),0.000977,True
+Claude,ChrF,Baseline,Few-shot,Wilcoxon (one-sided),0.27832,False
+GPT,ChrF,Baseline,Grammar,Wilcoxon (one-sided),0.838867,False
+Gemini,ChrF,Baseline,Grammar,Wilcoxon (one-sided),0.975586,False
+Claude,ChrF,Baseline,Grammar,Wilcoxon (one-sided),0.155273,False
+GPT,ChrF,Baseline,FS + GR,Wilcoxon (one-sided),0.000977,True
+Gemini,ChrF,Baseline,FS + GR,Wilcoxon (one-sided),0.000977,True
+Claude,ChrF,Baseline,FS + GR,Wilcoxon (one-sided),0.041992,True
+GPT,Errors/LoC,Baseline,Few-shot,Wilcoxon (one-sided),0.000977,True
+Gemini,Errors/LoC,Baseline,Few-shot,Wilcoxon (one-sided),0.001953,True
+Claude,Errors/LoC,Baseline,Few-shot,Wilcoxon (one-sided),0.000977,True
+GPT,Errors/LoC,Baseline,Grammar,Wilcoxon (one-sided),0.111328,False
+Gemini,Errors/LoC,Baseline,Grammar,Wilcoxon (one-sided),0.039062,True
+Claude,Errors/LoC,Baseline,Grammar,Wilcoxon (one-sided),0.03125,True
+GPT,Errors/LoC,Baseline,FS + GR,Wilcoxon (one-sided),0.000977,True
+Gemini,Errors/LoC,Baseline,FS + GR,Wilcoxon (one-sided),0.001953,True
+Claude,Errors/LoC,Baseline,FS + GR,Wilcoxon (one-sided),0.001953,True
+GPT,Parsability,Baseline,Few-shot,McNemar (one-sided),0.003906,True
+Gemini,Parsability,Baseline,Few-shot,McNemar (one-sided),0.003906,True
+Claude,Parsability,Baseline,Few-shot,McNemar (one-sided),0.000977,True
+GPT,Parsability,Baseline,Grammar,McNemar (one-sided),0.015625,True
+Gemini,Parsability,Baseline,Grammar,McNemar (one-sided),0.125,False
+Claude,Parsability,Baseline,Grammar,McNemar (one-sided),0.5,False
+GPT,Parsability,Baseline,FS + GR,McNemar (one-sided),0.000977,True
+Gemini,Parsability,Baseline,FS + GR,McNemar (one-sided),0.001953,True
+Claude,Parsability,Baseline,FS + GR,McNemar (one-sided),0.003906,True
+GPT,Pass@1,Baseline,Few-shot,McNemar (one-sided),0.015625,True
+Gemini,Pass@1,Baseline,Few-shot,McNemar (one-sided),0.03125,True
+Claude,Pass@1,Baseline,Few-shot,McNemar (one-sided),0.007812,True
+GPT,Pass@1,Baseline,Grammar,McNemar (one-sided),NaN,False
+Gemini,Pass@1,Baseline,Grammar,McNemar (one-sided),0.5,False
+Claude,Pass@1,Baseline,Grammar,McNemar (one-sided),0.5,False
+GPT,Pass@1,Baseline,FS + GR,McNemar (one-sided),0.03125,True
+Gemini,Pass@1,Baseline,FS + GR,McNemar (one-sided),0.015625,True
+Claude,Pass@1,Baseline,FS + GR,McNemar (one-sided),0.015625,True

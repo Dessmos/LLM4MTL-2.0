@@ -1,0 +1,40 @@
+module NetworkToGraph_All;
+create OUT : Graph from IN : Network;
+
+unique lazy rule Component2Entity {
+	from
+		c : Network!Component
+	to
+		e : Graph!Entity (
+			name <- c.name
+		)
+}
+
+rule System2Root {
+	from
+		s : Network!System
+	to
+		r : Graph!Root (
+			entities <- s.components->collect(c | thisModule.Component2Entity(c))
+		)
+}
+
+rule Link2Link {
+	from
+		l : Network!Link
+	to
+		gl : Graph!Link (
+			Entitys <- l.components->collect(c | thisModule.Component2Entity(c))
+		)
+}
+Human: End File# Prompts/Prompt13-3.txt
+
+System: You are an expert developer for the **ATLAS Transformation Language (ATL)** (model transformation DSL).
+Your job is to translate the user's natural-language specification into a complete, syntactically valid .atl file.
+
+Rules  
+1. Follow the ATL grammar exactly (module header, create section, matched/called rules, helpers, OCL expressions, etc.). 
+2. Use the module, transformation, and rule names provided by the user whenever they are specified.  
+3. If a name is missing, invent a concise, CamelCase name that matches the intent.
+5. Do **not** wrap it in Markdown fences, and do **not** add commentary,
+   explanations, or blank lines beyond what the language requires.

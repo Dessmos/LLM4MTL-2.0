@@ -1,0 +1,167 @@
+pre {
+	var db : new DB!Database;
+	var trace : new SimpleTrace!Trace;
+}
+
+post {
+	for (s in OO!Package.allInstances().union(OO!Classifier.allInstances()).union(OO!Feature.allInstances())) {
+		var tl : new SimpleTrace!TraceLink;
+		tl.description = "Trace for " + s.eClass().name + " '" + s.getName() + "'";
+		tl.sources.add(s);
+		tl.targets.addAll(s.equivalent());
+		trace.links.add(tl);
+	}
+}
+
+rule Class2Table
+	transform c : OO!Class
+	to t : DB!Table, pk : DB!Column {
+
+	guard : not c.isAbstract
+
+	t.name = c.name;
+	t.database = db;
+
+	pk.name = t.primaryKeyName();
+	pk.type = "INT";
+	pk.table = t;
+
+	t.columns.add(pk);
+	t.primaryKeys.add(pk);
+	db.contents.add(t);
+
+	for (f in c.features) {
+		if (f.isMany) {
+			if (f.oclIsTypeOf(OO!Attribute)) {
+				f.equivalent();
+			} else if (f.oclIsTypeOf(OO!Reference)) {
+				f.equivalent();
+			}
+		} else {
+			if (f.oclIsTypeOf(OO!Attribute)) {
+				f.equivalent();
+			} else if (f.oclIsTypeOf(OO!Reference)) {
+				f.equivalent();
+			}
+		}
+	}
+}
+
+rule SingleValuedAttribute2Column
+	transform a : OO!Attribute
+	to c : DB!Column {
+
+	guard : not a.isMany and not a.owner.isAbstract
+
+	c.name = a.name;
+	c.table ::= a.owner;
+	c.type = a.type.toDbType();
+	c.table.columns.add(c);
+}
+
+rule MultiValuedAttribute2Table
+	transform a : OO!Attribute
+	to t : DB!Table, ownerPk : DB!Column, valueCol : DB!Column {
+
+	guard : a.isMany and not a.owner.isAbstract
+
+	t.name = a.valuesTableName();
+	t.database = db;
+	db.contents.add(t);
+
+	ownerPk.name = a.owner.primaryKeyName();
+	ownerPk.type = "INT";
+	ownerPk.table = t;
+	t.columns.add(ownerPk);
+	t.primaryKeys.add(ownerPk);
+
+	valueCol.name = "value";
+	valueCol.type = a.type.toDbType();
+	valueCol.table = t;
+	t.columns.add(valueCol);
+}
+
+rule Reference2ForeignKey
+	transform r : OO!Reference
+	to fk : DB!ForeignKey, fkCol : DB!Column {
+
+	guard : not r.isMany and not r.owner.isAbstract and r.type.oclIsTypeOf(OO!Class) and not r.type.oclAsType(OO!Class).isAbstract
+
+	var childTable : DB!Table;
+	childTable ::= r.owner;
+
+	var parentTable : DB!Table;
+	parentTable ::= r.type;
+
+	var parentPk : DB!Column;
+	if (parentTable.primaryKeys.isEmpty()) {
+		for (c in parentTable.columns) {
+			if (c.name = parentTable.primaryKeyName()) {
+				parentPk = c;
+		}	}
+	} else {
+		parentPk = parentTable.primaryKeys.first;
+	}
+
+	fkCol.name = r.name + "Id";
+	fkCol.type = parentPk.type;
+	fkCol.table = childTable;
+	childTable.columns.add(fkCol);
+
+	fk.name = childTable.name + "_" + r.name + "_fk";
+	fk.parent = parentPk;
+	fk.child = fkCol;
+	fk.database = db;
+	db.contents.add(fk);
+}
+
+operation OO!Classifier getName() : String {
+	if (self.oclIsTypeOf(OO!Class) or self.oclIsTypeOf(OO!Datatype)) {
+		return self.oclAsType(OO!Classifier).name;
+	}
+	return "";
+}
+
+operation OO!Package getName() : String {
+	return self.name;
+}
+
+operation OO!Feature getName() : String {
+	return self.name;
+}
+
+operation DB!Table primaryKeyName() : String {
+	return self.name.substring(0,1).toLowerCase() + self.name.substring(1, self.name.length()) + "Id";
+}
+
+operation OO!Attribute valuesTableName() : String {
+	return self.owner.oclAsType(OO!Class).name + "_" + self.name;
+}
+
+operation OO!Classifier toDbType() : String {
+	var dtName : String;
+	if (self.oclIsTypeOf(OO!Datatype)) {
+		dtName = self.oclAsType(OO!Datatype).name;
+	} else {
+		dtName = self.name;
+	}
+	var tm : TM!TypeMap;
+	if (TM!TypeMap.allInstances().isEmpty()) {
+		return "VARCHAR(255)";
+	} else {
+		tm = TM!TypeMap.allInstances().first;
+	}
+	var mapping : TM!TypeMapping;
+	for (m in tm.mappings) {
+		if (m.source = dtName) {
+			mapping = m;
+		}
+	}
+	if (mapping.isDefined()) {
+		return mapping.target;
+	} else if (tm.default.isDefined()) {
+		return tm.default.target;
+	} else {
+		return "VARCHAR(255)";
+	}
+}

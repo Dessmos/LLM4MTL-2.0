@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://llm4mtl/schemas/experiment-manifest.schema.json",
+  "title": "Experiment manifest",
+  "description": "Links the runs that actually executed for one experiment (e.g. an RQ4 ablation) to their aggregated results. Statistical significance is computed at THIS level, over many runs, never inside a single run.",
+  "type": "object",
+  "required": ["schema_version", "experiment_id", "runs"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {"type": "string"},
+    "experiment_id": {"type": "string"},
+    "variant": {"type": ["string", "null"], "description": "Pipeline variant (full, no-parser-feedback, ...)."},
+    "matrix": {"type": ["string", "null"], "description": "Reference to the experiments/matrices file that defined the run set."},
+    "runs": {"type": "array", "items": {"type": "string"}, "description": "run_id values that belong to this experiment."},
+    "created_at": {"type": "string", "format": "date-time"}
+  }
+}

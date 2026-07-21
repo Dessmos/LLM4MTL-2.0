@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://llm4mtl/schemas/contract.schema.json",
+  "title": "Task model contract",
+  "description": "Deterministic ground truth for one task, generated from the .ecore metamodels. Maps runtime model names to metamodel URIs, prefixes, .ecore files and the set of types that exist. GENERATED — must not be hand-edited and must never be overridden by whatever the LLM guessed in semantic_cases.json. Defines structural admissibility only; the reference transformation remains the behavioural oracle.",
+  "type": "object",
+  "required": ["schema_version", "task", "source_hash", "models"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {"type": "string"},
+    "task": {"type": "string"},
+    "transformation": {"type": "string"},
+    "source_hash": {"type": "string", "description": "Hash of the source .ecore metamodels this snapshot was derived from; verified in CI."},
+    "models": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["runtime_name", "roles", "kind"],
+        "additionalProperties": false,
+        "properties": {
+          "runtime_name": {"type": "string"},
+          "roles": {"type": "array", "items": {"type": "string", "enum": ["source", "target"]}},
+          "kind": {"type": "string", "enum": ["emf", "plainXml"]},
+          "metamodel_uri": {"type": ["string", "null"]},
+          "metamodel_ns_prefix": {"type": ["string", "null"]},
+          "metamodel_file": {"type": ["string", "null"]},
+          "types_used_in_etl": {"type": "array", "items": {"type": "string"}},
+          "available_types": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    }
+  }
+}

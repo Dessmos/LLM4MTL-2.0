@@ -1,0 +1,13 @@
+LLM,Strategy,total,passed,failed,pass_rate
+claude-sonnet-4,few_shot,15,9,6,60.0%
+claude-sonnet-4,few_shots_AND_grammar,15,8,7,53.3%
+claude-sonnet-4,grammar,15,5,10,33.3%
+claude-sonnet-4,only_prompt,15,6,9,40.0%
+gemini-2-5-pro,few_shot,15,7,8,46.7%
+gemini-2-5-pro,few_shots_AND_grammar,15,8,7,53.3%
+gemini-2-5-pro,grammar,15,6,9,40.0%
+gemini-2-5-pro,only_prompt,15,6,9,40.0%
+gpt-5,few_shot,15,4,11,26.7%
+gpt-5,few_shots_AND_grammar,15,4,11,26.7%
+gpt-5,grammar,15,3,12,20.0%
+gpt-5,only_prompt,15,4,11,26.7%

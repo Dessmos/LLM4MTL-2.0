@@ -1,0 +1,27 @@
+rule Action2Elements
+  transform a : flowchart::Action
+  to d : HTML::DIV {
+  
+  guard : a.outgoing.size() > 0
+  
+  d.children.add(var h : new HTML::H1);
+  h.value = a.name;
+  
+  d.children.add(var link : new HTML::A);
+  link.value = a.outgoing.first().target.name;
+  link.ahref = "#" + a.outgoing.first().target.name;
+}
+
+rule Decision2Elements
+  transform dec : flowchart::Decision
+  to d : HTML::DIV {
+  
+  d.children.add(var h : new HTML::H1);
+  h.value = dec.name;
+  
+  for (t in dec.outgoing) {
+    d.children.add(var link : new HTML::A);
+    link.value = t.target.name;
+    link.ahref = "#" + t.target.name;
+  }
+}

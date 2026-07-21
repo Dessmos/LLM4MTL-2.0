@@ -1,0 +1,172 @@
+module DSL2KM3;
+create OUT : KM3 from IN : DSL;
+
+helper context DSL!Relationship def: needTurnOnClass() : Boolean =
+	self.roles->exists(r | r.isNavigableFrom = false) or
+	not self.superType.oclIsUndefined() or
+	self.subTypes->notEmpty() or
+	self.properties->notEmpty();
+
+helper def: getRoles(c : DSL!Class) : Sequence(DSL!Role) =
+	DSL!Role.allInstances()->select(r |
+		r.source = c and
+		r.isPropertyGenerator and
+		not r.relation.needTurnOnClass()
+	)->asSequence();
+
+helper context DSL!Role def: isEmbedding() : Boolean =
+	self.relation.isEmbedding and self.isNavigableFrom;
+
+rule Metamodel {
+	from
+		dm : DSL!DomainModel
+	to
+		mm : KM3!Metamodel (
+			location <- dm.namespace,
+			contents <- Sequence{mainPkg, primPkg}
+		),
+		mainPkg : KM3!Package (
+			name <- dm.name,
+			location <- dm.namespace,
+			metamodel <- mm,
+			contents <- dm.classifiers->collect(c | thisModule.resolveTemp(c, 'cls'))
+						->union(dm.classifiers->select(c | c.oclIsTypeOf(DSL!Relationship) and c.needTurnOnClass())->collect(r | thisModule.resolveTemp(r, 'cls')))
+						->union(dm.types->collect(t |
+							if t.oclIsTypeOf(DSL!Enumeration) then
+								thisModule.resolveTemp(t, 'enum')
+							else
+								thisModule.resolveTemp(t, 'dt')
+							endif
+						))
+		),
+		primPkg : KM3!Package (
+			name <- 'PrimitiveTypes',
+			location <- 'PrimitiveTypes',
+			metamodel <- mm
+		)
+}
+
+rule Class {
+	from
+		c : DSL!Class
+	to
+		cls : KM3!Class (
+			name <- c.name,
+			location <- c.namespace,
+			isAbstract <- c.isAbstract,
+			supertypes <- if c.superType.oclIsUndefined() then
+							Sequence{}
+						  else
+							Sequence{c.superType}
+						  endif,
+			structuralFeatures <- c.properties->collect(p | thisModule.resolveTemp(p, 'attr'))
+								  ->union(thisModule.getRoles(c)->collect(r | 
+									if r.relation.needTurnOnClass() then
+										OclUndefined
+									else
+										thisModule.resolveTemp(r, 'ref')
+									endif
+								  )->reject(e | e.oclIsUndefined()))
+		)
+}
+
+rule Relation2Class {
+	from
+		r : DSL!Relationship (r.needTurnOnClass())
+	to
+		cls : KM3!Class (
+			name <- r.name,
+			location <- r.namespace,
+			isAbstract <- r.isAbstract,
+			supertypes <- if r.superType.oclIsUndefined() then
+							Sequence{}
+						  else
+							Sequence{r.superType}
+						  endif,
+			structuralFeatures <- r.properties->collect(p | thisModule.resolveTemp(p, 'attr'))
+								  ->union(r.roles->collect(role | thisModule.ComplexReference(role)))
+		)
+}
+
+rule SimpleReference {
+	from
+		r : DSL!Role (
+			r.isPropertyGenerator and
+			not r.relation.needTurnOnClass()
+		)
+	to
+		ref : KM3!Reference (
+			name <- r.name,
+			location <- r.source.namespace,
+			lower <- r.min,
+			upper <- if r.isUnbounded then -1 else r.max endif,
+			isOrdered <- r.isOrdered,
+			isUnique <- true,
+			isContainer <- r.isEmbedding(),
+			type <- r.type,
+			opposite <- r.relation.roles->any(o | o <> r)
+		)
+}
+
+lazy rule ComplexReference {
+	from
+		r : DSL!Role
+	to
+		ref : KM3!Reference (
+			name <- r.name,
+			location <- r.relation.namespace,
+			lower <- r.min,
+			upper <- if r.isUnbounded then -1 else r.max endif,
+			isOrdered <- r.isOrdered,
+			isUnique <- true,
+			isContainer <- r.isEmbedding(),
+			type <- r.type,
+			opposite <- r.relation.roles->any(o | o <> r)
+		)
+}
+
+rule Attribute {
+	from
+		vp : DSL!ValueProperty
+	to
+		attr : KM3!Attribute (
+			name <- vp.name,
+			location <- vp.owner.namespace,
+			lower <- 0,
+			upper <- 1,
+			isOrdered <- false,
+			isUnique <- true,
+			type <- vp.type
+		)
+}
+
+rule Enumeration {
+	from
+		e : DSL!Enumeration
+	to
+		enum : KM3!Enumeration (
+			name <- e.name,
+			location <- e.namespace,
+			literals <- e.literals->collect(l | thisModule.EnumLiteral(l))
+		)
+}
+
+lazy rule EnumLiteral {
+	from
+		el : DSL!EnumerationLiteral
+	to
+		lit : KM3!EnumLiteral (
+			name <- el.name,
+			location <- el.name
+		)
+}
+
+rule DataType {
+	from
+		st : DSL!SimpleType
+	to
+		dt : KM3!DataType (
+			name <- st.name,
+			location <- st.namespace
+		)
+}

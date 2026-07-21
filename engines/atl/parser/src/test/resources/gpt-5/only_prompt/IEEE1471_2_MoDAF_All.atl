@@ -1,0 +1,241 @@
+module IEEE1471_2_MoDAF;
+
+create OUT : MoDAF from IN : IEEE1471;
+
+helper context IEEE1471!IEEE1471Model def: rationale : String =
+  IEEE1471!Rationale.allInstances()->any(true).name.concat(' : ').concat(IEEE1471!Rationale.allInstances()->any(true).content);
+
+rule IEEE1471Model2MoDAFModel {
+  from
+    s : IEEE1471!IEEE1471Model
+  to
+    t : MoDAF!MoDAFModel (
+      name <- s.name,
+      content <- s.content,
+      enterprise <- e,
+      environment <- env,
+      operationalMissions <- s.missions->collect(m | thisModule.resolveTemp(m, 'om')),
+      architectures <- Sequence{a},
+      architecturalDescription <- Sequence{ad},
+      architecturalFrameworks <- Sequence{af},
+      stakeholders <- s.stakeholders->collect(st | thisModule.resolveTemp(st, 'tStakeholder')),
+      stakeholderHasConcerns <- IEEE1471!Stakeholder.allInstances()
+        ->collect(st | st.has)
+        ->asSequence()
+        ->collect(c | thisModule.resolveTemp(c, 'shc'))
+    ),
+    e : MoDAF!Enterprise (
+      name <- s.system.name,
+      content <- s.system.content
+    ),
+    env : MoDAF!Environment (
+      name <- s.environment.name,
+      content <- s.environment.content,
+      taxonomy <- tax
+    ),
+    a : MoDAF!Architecture (
+      name <- s.architecture.name,
+      content <- s.architecture.content,
+      enterprise <- e,
+      describedBy <- ad
+    ),
+    ad : MoDAF!ArchitecturalDescription (
+      name <- s.architecturalDescription.name,
+      content <- s.architecturalDescription.content,
+      approvialAuthority <- s.architecturalDescription.name,
+      architect <- s.architecturalDescription.name,
+      assumptionAndConstraints <- s.architecturalDescription.content,
+      creatingOrganisation <- s.architecturalDescription.name,
+      dateCompleted <- s.architecturalDescription.name,
+      purpose <- s.architecturalDescription.content,
+      recommendations <- s.architecturalDescription.content,
+      summaryOfFindings <- s.architecturalDescription.content,
+      tollsUsed <- s.architecturalDescription.name,
+      viewpoints <- s.architecturalDescription.selects->collect(v | thisModule.resolveTemp(v, 'vView')),
+      products <- s.architecturalDescription.organizedBy->collect(vw | thisModule.resolveTemp(vw, 'ap')),
+      taxonomy <- tax
+    ),
+    af : MoDAF!ArchitecturalFramework (
+      name <- 'DefaultFramework',
+      content <- s.rationale.name.concat(' / ').concat(s.rationale.content),
+      ownedMember <- s.viewpoints->select(vp | vp.hasSource.oclIsUndefined())
+        ->collect(vp | thisModule.resolveTemp(vp, 'vView'))
+    ),
+    tax : MoDAF!Taxonomy (
+      name <- 'DefaultTaxonomy',
+      content <- s.rationale,
+      date <- 'N/A',
+      url <- 'N/A',
+      version <- '1.0'
+    )
+}
+
+rule System2Enterprise {
+  from
+    s : IEEE1471!System
+  to
+    t : MoDAF!Enterprise (
+      name <- s.name,
+      content <- s.content,
+      inhabits <- thisModule.resolveTemp(s.inhabits, 'tEnv'),
+      fulfills <- s.fulfills->collect(m | thisModule.resolveTemp(m, 'om'))
+    )
+}
+
+rule Environment2Environment {
+  from
+    s : IEEE1471!Environment
+  to
+    tEnv : MoDAF!Environment (
+      name <- s.name,
+      content <- s.content,
+      influences <- thisModule.resolveTemp(s.influences, 'tEnt'),
+      taxonomy <- thisModule.mainTaxonomy()
+    )
+}
+
+rule Mission2OperationalMission {
+  from
+    s : IEEE1471!Mission
+  to
+    om : MoDAF!OperationalMission (
+      name <- s.name,
+      content <- s.content
+    )
+}
+
+rule Architecture2Architecture {
+  from
+    s : IEEE1471!Architecture
+  to
+    t : MoDAF!Architecture (
+      name <- s.name,
+      content <- s.content,
+      describedBy <- thisModule.resolveTemp(s.describedBy, 'tAD')
+    )
+}
+
+rule AD2AD {
+  from
+    s : IEEE1471!ArchitecturalDescription
+  to
+    tAD : MoDAF!ArchitecturalDescription (
+      name <- s.name,
+      content <- s.content,
+      approvialAuthority <- s.name,
+      architect <- s.name,
+      assumptionAndConstraints <- s.content,
+      creatingOrganisation <- s.name,
+      dateCompleted <- s.name,
+      purpose <- s.content,
+      recommendations <- s.content,
+      summaryOfFindings <- s.content,
+      tollsUsed <- s.name,
+      viewpoints <- s.selects->collect(vp | thisModule.resolveTemp(vp, 'vView')),
+      products <- s.organizedBy->collect(v | thisModule.resolveTemp(v, 'ap')),
+      taxonomy <- thisModule.mainTaxonomy()
+    )
+}
+
+rule Stakeholder2Stakeholder {
+  from
+    s : IEEE1471!Stakeholder
+  to
+    tStakeholder : MoDAF!Stakeholder (
+      name <- s.name,
+      content <- s.content
+    )
+}
+
+rule Concern2Concern {
+  from
+    s : IEEE1471!Concern
+  to
+    tConcern : MoDAF!Concern (
+      name <- s.name,
+      content <- s.content
+    )
+}
+
+rule Viewpoint2View {
+  from
+    s : IEEE1471!Viewpoint
+  to
+    vView : MoDAF!View (
+      name <- s.name,
+      content <- s.content,
+      framework <- if s.hasSource.oclIsUndefined() then 'DefaultFramework' else s.hasSource.name endif,
+      frameworkWebsite <- '',
+      viewCode <- s.name,
+      viewDescription <- s.content,
+      viewName <- s.name,
+      usedToCover <- s.usedToCover->collect(c | thisModule.resolveTemp(c, 'tConcern'))
+    )
+}
+
+rule LibraryViewpoint2ArchitecturalFramework {
+  from
+    s : IEEE1471!LibraryViewpoint
+  to
+    af : MoDAF!ArchitecturalFramework (
+      name <- s.name,
+      content <- s.content,
+      ownedMember <- IEEE1471!Viewpoint.allInstances()
+        ->select(vp | vp.hasSource = s)
+        ->collect(vp | thisModule.resolveTemp(vp, 'vView'))
+    )
+}
+
+rule View2ArchitecturalProduct {
+  from
+    s : IEEE1471!View
+  to
+    ap : MoDAF!ArchitecturalProduct (
+      name <- s.name,
+      content <- s.content,
+      description <- s.content,
+      definingView <- thisModule.resolveTemp(s.conformsTo, 'vView'),
+      architecturalElements <- s.consitsOf->collect(m | thisModule.resolveTemp(m, 'el')),
+      addresses <- s.conformsTo.usedToCover->collect(c | thisModule.resolveTemp(c, 'tConcern'))
+    )
+}
+
+rule Model2Element {
+  from
+    s : IEEE1471!Model
+  to
+    el : MoDAF!Elements (
+      name <- s.name,
+      content <- s.content
+    )
+}
+
+rule StakeholderHasConcern {
+  from
+    sc : IEEE1471!Stakeholder (not sc.has.oclIsUndefined())
+  to
+    shc : MoDAF!StakeholderHasConcern (
+      client <- thisModule.resolveTemp(sc, 'tStakeholder'),
+      supplier <- sc.has->any(true).transformConcern(),
+      owner <- thisModule.singleMoDAFModel()
+    )
+}
+
+lazy rule Concern2ConcernCopy {
+  from
+    c : IEEE1471!Concern
+  to
+    tc : MoDAF!Concern (
+      name <- c.name,
+      content <- c.content
+    )
+}
+
+helper def: mainTaxonomy() : MoDAF!Taxonomy =
+  MoDAF!Taxonomy.allInstances()->any(true);
+
+helper def: singleMoDAFModel() : MoDAF!MoDAFModel =
+  MoDAF!MoDAFModel.allInstances()->any(true);
+
+helper context IEEE1471!Concern def: transformConcern() : MoDAF!Concern =
+  thisModule.resolveTemp(self, 'tConcern');

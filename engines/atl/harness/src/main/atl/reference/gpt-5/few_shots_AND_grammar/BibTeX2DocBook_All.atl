@@ -1,0 +1,158 @@
+module BibTeX2DocBook;
+create OUT : DocBook from IN : BibTeX;
+
+helper context BibTeX!BibTeXEntry def: buildEntryPara() : String =
+  self.id + ' [' + self.oclType().name() + '] ' +
+  (if self.oclIsKindOf(BibTeX!TitledEntry) then 'title=' + self.oclAsType(BibTeX!TitledEntry).title + ' ' else '' endif) +
+  (if self.oclIsKindOf(BibTeX!AuthoredEntry) then
+     'authors=' +
+     self.oclAsType(BibTeX!AuthoredEntry).authors->collect(a | a.author)->asSet()->asSequence()->sortedBy(s | s)->iterate(n; acc : String = '' | acc + (if acc = '' then '' else ', ' endif) + n) + ' '
+   else '' endif) +
+  (if self.oclIsKindOf(BibTeX!DatedEntry) then 'year=' + self.oclAsType(BibTeX!DatedEntry).year + ' ' else '' endif) +
+  (if self.oclIsKindOf(BibTeX!BookTitledEntry) then 'booktitle=' + self.oclAsType(BibTeX!BookTitledEntry).booktitle + ' ' else '' endif) +
+  (if self.oclIsKindOf(BibTeX!ThesisEntry) then 'school=' + self.oclAsType(BibTeX!ThesisEntry).school + ' ' else '' endif) +
+  (if self.oclIsKindOf(BibTeX!Article) then 'journal=' + self.oclAsType(BibTeX!Article).journal + ' ' else '' endif) +
+  (if self.oclIsKindOf(BibTeX!Unpublished) then 'note=' + self.oclAsType(BibTeX!Unpublished).note + ' ' else '' endif) +
+  (if self.oclIsKindOf(BibTeX!Book) then 'publisher=' + self.oclAsType(BibTeX!Book).publisher + ' ' else '' endif) +
+  (if self.oclIsKindOf(BibTeX!InBook) then 'chapter=' + self.oclAsType(BibTeX!InBook).chapter.toString() + ' ' else '' endif);
+
+helper context BibTeX!BibTeXFile def: authorSet() : Set(BibTeX!Author) =
+  self.entries->select(e | e.oclIsKindOf(BibTeX!AuthoredEntry))
+    ->collect(e | e.oclAsType(BibTeX!AuthoredEntry).authors)->asSet();
+
+helper context BibTeX!BibTeXFile def: titledEntrySet() : Set(BibTeX!BibTeXEntry) =
+  self.entries->select(e | e.oclIsKindOf(BibTeX!TitledEntry))->asSet();
+
+helper context BibTeX!BibTeXFile def: articleSet() : Set(BibTeX!Article) =
+  self.entries->select(e | e.oclIsKindOf(BibTeX!Article))->collect(e | e.oclAsType(BibTeX!Article))->asSet();
+
+rule Main {
+  from src : BibTeX!BibTeXFile
+  to   dst : DocBook!DocBook (
+         books <- Sequence{ b }
+       ),
+       b   : DocBook!Book (
+         articles <- Sequence{ art }
+       ),
+       art : DocBook!Article (
+         title <- 'BibTeXML to DocBook',
+         sections_1 <- Sequence{ refSect, authSect, titleSect, journalSect }
+       ),
+       refSect : DocBook!Sect1 (
+         title <- 'References List',
+         paras <- src.entries->asSequence()->sortedBy(e | e.id)->collect(e | thisModule.BuildEntryParaRule(e))
+       ),
+       authSect : DocBook!Sect1 (
+         title <- 'Authors List',
+         paras <- src.authorSet()->asSequence()->sortedBy(a | a.author)->collect(a | thisModule.Author(a))
+       ),
+       titleSect : DocBook!Sect1 (
+         title <- 'Titles List',
+         paras <- src.titledEntrySet()->asSequence()->sortedBy(e | e.oclAsType(BibTeX!TitledEntry).title)->collect(e | resolveTemp(e, 'titlePara'))
+       ),
+       journalSect : DocBook!Sect1 (
+         title <- 'Journals List',
+         paras <- src.articleSet()->asSequence()->sortedBy(a | a.journal)->collect(a | resolveTemp(a, 'journalPara'))
+       )
+}
+
+rule BuildEntryParaRule(e : BibTeX!BibTeXEntry) : DocBook!Para {
+  to p : DocBook!Para (
+    content <- e.buildEntryPara()
+  )
+}
+
+rule Author(a : BibTeX!Author) : DocBook!Para {
+  to p : DocBook!Para (
+    content <- a.author
+  )
+}
+
+rule UntitledEntry {
+  from e : BibTeX!BibTeXEntry (
+    not e.oclIsKindOf(BibTeX!TitledEntry)
+  )
+  to   p : DocBook!Para (
+    content <- e.buildEntryPara()
+  )
+}
+
+rule TitledEntry_Title_NoArticle {
+  from e : BibTeX!TitledEntry (
+    not e.oclIsKindOf(BibTeX!Article) and
+    e.oclContainer().oclIsKindOf(BibTeX!BibTeXFile) and
+    e.oclContainer().oclAsType(BibTeX!BibTeXFile).titledEntrySet()->includes(e)
+  )
+  to   entryPara : DocBook!Para (
+         content <- e.buildEntryPara()
+       ),
+       titlePara : DocBook!Para (
+         content <- e.title
+       )
+}
+
+rule TitledEntry_NoTitle_NoArticle {
+  from e : BibTeX!TitledEntry (
+    not e.oclIsKindOf(BibTeX!Article) and
+    not e.oclContainer().oclIsKindOf(BibTeX!BibTeXFile)
+  )
+  to   entryPara : DocBook!Para (
+         content <- e.buildEntryPara()
+       )
+}
+
+rule Article_Title_Journal {
+  from e : BibTeX!Article (
+    e.oclContainer().oclIsKindOf(BibTeX!BibTeXFile) and
+    e.oclContainer().oclAsType(BibTeX!BibTeXFile).titledEntrySet()->includes(e) and
+    e.oclContainer().oclAsType(BibTeX!BibTeXFile).articleSet()->includes(e)
+  )
+  to   entryPara   : DocBook!Para (
+         content <- e.buildEntryPara()
+       ),
+       titlePara   : DocBook!Para (
+         content <- e.title
+       ),
+       journalPara : DocBook!Para (
+         content <- e.journal
+       )
+}
+
+rule Article_NoTitle_Journal {
+  from e : BibTeX!Article (
+    e.oclContainer().oclIsKindOf(BibTeX!BibTeXFile) and
+    not e.oclContainer().oclAsType(BibTeX!BibTeXFile).titledEntrySet()->includes(e) and
+    e.oclContainer().oclAsType(BibTeX!BibTeXFile).articleSet()->includes(e)
+  )
+  to   entryPara   : DocBook!Para (
+         content <- e.buildEntryPara()
+       ),
+       journalPara : DocBook!Para (
+         content <- e.journal
+       )
+}
+
+rule Article_Title_NoJournal {
+  from e : BibTeX!Article (
+    e.oclContainer().oclIsKindOf(BibTeX!BibTeXFile) and
+    e.oclContainer().oclAsType(BibTeX!BibTeXFile).titledEntrySet()->includes(e) and
+    not e.oclContainer().oclAsType(BibTeX!BibTeXFile).articleSet()->includes(e)
+  )
+  to   entryPara : DocBook!Para (
+         content <- e.buildEntryPara()
+       ),
+       titlePara : DocBook!Para (
+         content <- e.title
+       )
+}
+
+rule Article_NoTitle_NoJournal {
+  from e : BibTeX!Article (
+    e.oclContainer().oclIsKindOf(BibTeX!BibTeXFile) and
+    not e.oclContainer().oclAsType(BibTeX!BibTeXFile).titledEntrySet()->includes(e) and
+    not e.oclContainer().oclAsType(BibTeX!BibTeXFile).articleSet()->includes(e)
+  )
+  to   entryPara : DocBook!Para (
+         content <- e.buildEntryPara()
+       )
+}

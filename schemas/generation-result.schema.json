@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://llm4mtl/schemas/generation-result.schema.json",
+  "title": "Generation result",
+  "description": "Written by n8n next to each raw LLM response. Records the provider/model selection made INSIDE n8n; never contains an API key. Downstream depends only on these normalized fields and on `artifact`, not on provider-specific response internals.",
+  "type": "object",
+  "required": ["schema_version", "language", "task", "artifact_type", "provider", "model", "response_file"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {"type": "string"},
+    "language": {"type": "string", "enum": ["etl", "atl", "qvto", "reactions"]},
+    "task": {"type": "string"},
+    "artifact_type": {"type": "string", "enum": ["transformation", "semantic_test", "diagnosis"]},
+    "operation": {
+      "type": "string",
+      "enum": [
+        "transformation-generation",
+        "semantic-test-generation",
+        "failure-diagnosis",
+        "transformation-refinement",
+        "semantic-test-refinement"
+      ]
+    },
+    "provider": {"type": "string"},
+    "model": {"type": "string"},
+    "strategy": {"type": ["string", "null"]},
+    "attempt": {"type": "integer", "minimum": 1, "default": 1},
+    "workflow_name": {"type": "string"},
+    "generated_at": {"type": "string", "format": "date-time"},
+    "parameters": {"type": "object", "additionalProperties": true},
+    "response_file": {"type": "string", "description": "Relative path to raw-content.md."},
+    "artifact": {"type": ["string", "null"], "description": "Relative path to the extracted first-class artifact (e.g. transformations/candidate-NNN/transformation.etl)."}
+  }
+}

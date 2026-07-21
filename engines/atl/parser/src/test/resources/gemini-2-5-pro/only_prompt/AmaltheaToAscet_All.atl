@@ -1,0 +1,27 @@
+module AmaltheaToAscet_All;
+create OUT : Ascet from IN : Amalthea;
+
+rule ComponentContainer2AscetModule {
+	from
+		s : Amalthea!ComponentContainer
+	to
+		t : Ascet!AscetModule (
+			tasks <- s.tasks->collect(e | thisModule.Task2SoftwareTask(e))
+		)
+}
+
+rule TaskRoot2SoftwareTask {
+	from
+		s : Amalthea!Task (s.eContainer().oclIsUndefined())
+	to
+		t : Ascet!SoftwareTask (
+			name <- s.name
+		)
+}
+
+rule Task2SoftwareTask(s : Amalthea!Task) {
+	to
+		t : Ascet!SoftwareTask (
+			name <- s.name
+		)
+}

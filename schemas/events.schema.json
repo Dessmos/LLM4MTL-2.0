@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://llm4mtl/schemas/events.schema.json",
+  "title": "Run event",
+  "description": "One line of the append-only events.jsonl run timeline. The events log is the source of truth for run history; full per-attempt evidence lives in stages/<stage>/attempts/.",
+  "type": "object",
+  "required": ["schema_version", "ts", "stage", "event"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {"type": "string"},
+    "ts": {"type": "string", "format": "date-time"},
+    "stage": {"type": "string"},
+    "event": {"type": "string", "enum": ["started", "finished"]},
+    "outcome_code": {"type": ["string", "null"]},
+    "status": {"type": ["string", "null"], "enum": ["passed", "failed", "infrastructure_error", null]},
+    "attempt": {"type": "integer", "minimum": 1}
+  }
+}

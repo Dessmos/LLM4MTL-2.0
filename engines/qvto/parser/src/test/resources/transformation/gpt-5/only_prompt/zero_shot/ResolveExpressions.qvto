@@ -1,0 +1,42 @@
+modeltype ECORE uses "http://www.eclipse.org/emf/2002/Ecore";
+
+transformation t(in inModel : ECORE, out outModel : ECORE);
+
+main() {
+	inModel.rootObjects()
+		->select(oclIsKindOf(EPackage))
+		->map p2p()
+	;
+	
+	var inFirstClass : EClass := inModel.rootObjects()
+		->select(oclIsKindOf(EPackage))
+		->collect(oclAsType(EPackage).eClassifiers)
+		->select(oclIsKindOf(EClass))
+		->first()
+		.oclAsType(EClass);
+	
+	if inFirstClass <> null then {
+		var inFirstPrefix : String := inFirstClass.name.substring(1,1);
+		outModel.rootObjects()
+			->select(oclIsKindOf(EPackage))
+			->forEach(outPkgObj) {
+				var outPkg : EPackage := outPkgObj.oclAsType(EPackage);
+				var resolvedPkg : EPackage := resolveoneIn(outModel::p2p, outPkg);
+				if resolvedPkg <> null then {
+					resolvedPkg.name := inFirstPrefix + resolvedPkg.name;
+				}
+			};
+	}
+}
+
+mapping EPackage::p2p() : EPackage {
+	result.name := self.name;
+	result.eClassifiers := self.eClassifiers->map c2c();
+}
+
+mapping EClassifier::c2c() : EClass {
+	init {
+		result := object EClass {};
+	}
+	result.name := 'mapped' + self.name;
+}

@@ -1,0 +1,28 @@
+transformation Flowchart2Html
+
+model flowchart alias f uri 'http://vitruv.tools/methodologisttemplate/flowchart';
+model HTML alias h uri 'http://vitruv.tools/methodologisttemplate/HTML';
+
+rule Flowchart2Heading
+  transform fc : f!Flowchart
+  to heading : h!H1 {
+  	heading.value = fc.name;
+}
+
+rule Action2Heading
+  transform action : f!Action
+  to heading : h!H1 {
+  	heading.value = action.name;
+}
+
+rule Decision2Heading
+  transform decision : f!Decision
+  to heading : h!H1 {
+  	heading.value = decision.name;
+}
+
+rule Transition2Heading
+  transform transition : f!Transition
+  to heading : h!H1 {
+  	heading.value = transition.name;
+}

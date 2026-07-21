@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "llm4mtl"
+version = "0.0.0"
+description = "LLM4MTL experiment pipeline (v5 skeleton)"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=7"]
+
+# src layout: the importable package lives under pipeline/src/llm4mtl.
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["llm4mtl*"]
+
+# NOTE: the console entry point
+#   [project.scripts]
+#   llm4mtl = "llm4mtl.cli:main"
+# is added in a later stage, once `llm4mtl/cli.py` exists.
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

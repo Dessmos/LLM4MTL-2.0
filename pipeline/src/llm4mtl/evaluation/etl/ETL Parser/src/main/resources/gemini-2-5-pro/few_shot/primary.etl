@@ -1,0 +1,34 @@
+transformation Flowchart2Html
+
+model Flowchart url "http://vitruv.tools/methodologisttemplate/flowchart"
+model HTML url "http://vitruv.tools/methodologisttemplate/HTML"
+
+rule Flowchart2Heading
+	transform f : Flowchart!Flowchart
+	to div : HTML!DIV {
+	
+	div.children.addAll(f.transitions.equivalent().select(e|e.isTypeOf(HTML!H1)));
+}
+
+rule Transition2SourceLink
+	transform t : Flowchart!Transition
+	to a : HTML!A {
+	
+	a.value = t.source.name;
+	a.ahref = "#" + t.source.name;
+}
+
+rule Transition2TargetLink
+	transform t : Flowchart!Transition
+	to a : HTML!A {
+	
+	a.value = t.name;
+	a.ahref = "#" + t.target.name;
+}
+
+rule Transition2Heading
+	transform t : Flowchart!Transition
+	to h1 : HTML!H1 {
+	
+	h1.value = t.name;
+}

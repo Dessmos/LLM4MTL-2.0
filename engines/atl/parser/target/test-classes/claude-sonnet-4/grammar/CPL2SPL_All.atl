@@ -1,0 +1,239 @@
+module CPL2SPL;
+create OUT : SPL from IN : CPL;
+
+helper context CPL!Node def: statement : CPL!Node =
+	if self.oclIsKindOf(CPL!Location) then
+		if self.contents.oclIsUndefined() then
+			self
+		else
+			self.contents.statement
+		endif
+	else
+		self
+	endif;
+
+helper context CPL!Element def: locations : Sequence(CPL!Location) =
+	if self.refImmediateComposite().oclIsUndefined() then
+		Sequence{}
+	else
+		if self.refImmediateComposite().oclIsKindOf(CPL!Location) then
+			self.refImmediateComposite().locations->prepend(self.refImmediateComposite())
+		else
+			self.refImmediateComposite().locations
+		endif
+	endif;
+
+helper context CPL!Proxy def: isSimple : Boolean =
+	self.busy.oclIsUndefined() and self.noAnswer.oclIsUndefined() and self.redirection.oclIsUndefined() and self.failure.oclIsUndefined() and self.default.oclIsUndefined();
+
+rule CPL2Program {
+	from
+		c : CPL!CPL
+	to
+		p : SPL!Program (
+			service <- s
+		),
+		s : SPL!Service (
+			name <- 'CPLService'
+		)
+}
+
+rule SubAction2Function {
+	from
+		sa : CPL!SubAction
+	to
+		f : SPL!LocalFunctionDeclaration (
+			name <- sa.id,
+			returnType <- rt,
+			statements <- Sequence{r}
+		),
+		rt : SPL!SimpleType (
+			type <- #void
+		),
+		r : SPL!ReturnStat
+}
+
+rule Incoming2Method {
+	from
+		i : CPL!Incoming
+	to
+		m : SPL!Method (
+			type <- t,
+			direction <- #inout,
+			methodName <- mn,
+			statements <- Sequence{r},
+			branches <- Sequence{db}
+		),
+		t : SPL!SimpleType (
+			type <- #void
+		),
+		mn : SPL!SIPMethodName (
+			name <- #INVITE
+		),
+		r : SPL!ReturnStat,
+		db : SPL!DefaultBranch
+}
+
+rule Proxy2Return {
+	from
+		p : CPL!Proxy (
+			p.isSimple and p.locations->size() = 1
+		)
+	to
+		r : SPL!ReturnStat (
+			returnedValue <- ce
+		),
+		ce : SPL!ConstantExp (
+			value <- uc
+		),
+		uc : SPL!URIConstant (
+			uri <- p.locations->first().url
+		)
+}
+
+rule Proxy2Select {
+	from
+		p : CPL!Proxy (
+			p.isSimple and p.locations->size() > 1
+		)
+	to
+		s : SPL!SelectStat (
+			matchedExp <- ve,
+			selectDefault <- sd
+		),
+		ve : SPL!Variable,
+		sd : SPL!SelectDefault (
+			statements <- Sequence{rs}
+		),
+		rs : SPL!ReturnStat
+}
+
+rule Busy2SelectCase {
+	from
+		b : CPL!Busy
+	to
+		sc : SPL!SelectCase (
+			values <- Sequence{rc},
+			statements <- Sequence{r}
+		),
+		rc : SPL!ResponseConstant (
+			response <- cer
+		),
+		cer : SPL!ClientErrorResponse (
+			errorKind <- #BUSY_HERE
+		),
+		r : SPL!ReturnStat
+}
+
+rule NoAnswer2SelectCase {
+	from
+		na : CPL!NoAnswer
+	to
+		sc : SPL!SelectCase (
+			values <- Sequence{rc},
+			statements <- Sequence{r}
+		),
+		rc : SPL!ResponseConstant (
+			response <- cer
+		),
+		cer : SPL!ClientErrorResponse (
+			errorKind <- #REQUEST_TIMEOUT
+		),
+		r : SPL!ReturnStat
+}
+
+rule Redirection2SelectCase {
+	from
+		red : CPL!Redirection
+	to
+		sc : SPL!SelectCase (
+			values <- Sequence{rc},
+			statements <- Sequence{r}
+		),
+		rc : SPL!ResponseConstant (
+			response <- rer
+		),
+		rer : SPL!RedirectionErrorResponse (
+			errorKind <- #MOVED_TEMPORARILY
+		),
+		r : SPL!ReturnStat
+}
+
+rule Default2SelectDefault {
+	from
+		d : CPL!Default
+	to
+		sd : SPL!SelectDefault (
+			statements <- Sequence{r}
+		),
+		r : SPL!ReturnStat
+}
+
+rule SubCall2Return {
+	from
+		sc : CPL!SubCall
+	to
+		r : SPL!ReturnStat (
+			returnedValue <- fce
+		),
+		fce : SPL!FunctionCallExp (
+			functionCall <- fc
+		),
+		fc : SPL!FunctionCall
+}
+
+rule Redirect2Return {
+	from
+		red : CPL!Redirect
+	to
+		r : SPL!ReturnStat (
+			returnedValue <- ce
+		),
+		ce : SPL!ConstantExp (
+			value <- uc
+		),
+		uc : SPL!URIConstant (
+			uri <- red.locations->first().url
+		)
+}
+
+rule AddressSwitch2SelectStat {
+	from
+		as : CPL!AddressSwitch
+	to
+		ss : SPL!SelectStat (
+			matchedExp <- ve,
+			selectCases <- as.addresses,
+			selectDefault <- as.otherwise
+		),
+		ve : SPL!Variable
+}
+
+rule SwitchedAddress2SelectCase {
+	from
+		sa : CPL!SwitchedAddress
+	to
+		sc : SPL!SelectCase (
+			values <- Sequence{uc},
+			statements <- Sequence{r}
+		),
+		uc : SPL!URIConstant (
+			uri <- if not sa.is.oclIsUndefined() then sa.is else if not sa.contains.oclIsUndefined() then sa.contains else sa.subDomainOf endif endif
+		),
+		r : SPL!ReturnStat
+}
+
+rule Otherwise2SelectDefault {
+	from
+		o : CPL!Otherwise
+	to
+		sd : SPL!SelectDefault (
+			statements <- Sequence{r}
+		),
+		r : SPL!ReturnStat
+}
+
+helper def: Location2URIConstant(loc : CPL!Location) : SPL!URIConstant =
+	SPL!URIConstant {
+		uri <- loc.url
+	};

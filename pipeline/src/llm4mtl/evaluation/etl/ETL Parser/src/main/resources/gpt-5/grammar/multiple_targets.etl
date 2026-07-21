@@ -1,0 +1,27 @@
+rule Action2Elements
+  transform s : flowchart!Action
+  to t : HTML!DIV {
+  guard : not s.outgoing.isEmpty()
+  var title : HTML!H1 := new HTML!H1;
+  title.value := s.name;
+  t.children.add(title);
+  var firstTransition : flowchart!Transition := s.outgoing.first();
+  var link : HTML!A := new HTML!A;
+  link.value := firstTransition.target.name;
+  link.ahref := firstTransition.target.name;
+  t.children.add(link);
+}
+
+rule Decision2Elements
+  transform s : flowchart!Decision
+  to t : HTML!DIV {
+  var title : HTML!H1 := new HTML!H1;
+  title.value := s.name;
+  t.children.add(title);
+  for (tr in s.outgoing) {
+    var link : HTML!A := new HTML!A;
+    link.value := tr.target.name;
+    link.ahref := tr.target.name;
+    t.children.add(link);
+  }
+}

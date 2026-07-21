@@ -1,0 +1,168 @@
+import "http://vitruv.tools/methodologisttemplate/ascet" as ascet
+import "http://vitruv.tools/methodologisttemplate/amalthea" as amalthea
+
+reactions: amaltheaToAscet
+in reaction to changes in amalthea
+execute actions in ascet
+
+// Create and register AscetModule when a ComponentContainer is created as root element
+reaction ComponentContainerInsertedAsRoot {
+	after element amalthea::ComponentContainer inserted as root
+	call createAndRegisterRootComponentContainer(newValue)
+}
+
+// Routine to create and register an AscetModule corresponding to the given ComponentContainer
+routine createAndRegisterRootComponentContainer(amalthea::ComponentContainer componentContainer) {
+	match {
+		require absence of ascet::AscetModule corresponding to componentContainer
+	}
+  create {
+    val mRoot = new ascet::AscetModule
+  }
+	update {
+    persistProjectRelative(componentContainer, mRoot, "model/ascet.ascet")
+	addCorrespondenceBetween(componentContainer, mRoot)
+	}
+}
+
+// Delete corresponding Ascet Task when an Amalthea Task is deleted
+reaction TaskDeleted {
+	after element amalthea::Task deleted
+	call deleteTask(affectedEObject)
+}
+
+// Routine to delete the Ascet Task corresponding to the given Amalthea Task
+routine deleteTask(amalthea::Task task) {
+	match {
+		val correspondingAscetTask = retrieve ascet::Task corresponding to task
+	}
+	update {
+		removeObject(correspondingAscetTask)
+		removeCorrespondenceBetween(task, correspondingAscetTask)
+	}
+}
+
+// Create corresponding Ascet Task when an Amalthea Task is created in a ComponentContainer
+reaction TaskCreated {
+	after element amalthea::Task inserted in amalthea::ComponentContainer[tasks]
+	call createAscetTask(newValue,affectedEObject)
+}
+
+// Routine to create an Ascet Task corresponding to the given Amalthea Task in the given ComponentContainer
+routine createAscetTask(amalthea::Task task, amalthea::ComponentContainer container){
+	update {
+		val String userMsg = "A Task has been created. Please decide whether and which corresponding ASCET Task should be created."
+
+        val interruptTaskOption = "Create InterruptTask"
+        val periodicTaskOption = "Create PeriodicTask"
+        val softwareTaskOption = "Create SoftwareTask"
+        val timeTableTaskOption = "Create TimeTableTask"   
+
+        val String[] options = #[
+            interruptTaskOption,
+            periodicTaskOption,
+            softwareTaskOption,
+            timeTableTaskOption
+        ]
+
+        val selected = userInteractor
+        .singleSelectionDialogBuilder
+        .message(userMsg)
+        .choices(options)
+        .startInteraction()
+		
+
+        switch (selected) {
+            case 0: {
+                createInterruptTask(task,container)               
+            }
+            case 1: {
+                createPeriodicTask(task,container)
+            }
+            case 2: {
+                createSoftwareTask(task,container)
+            }
+            case 3: {
+                createTimeTableTask(task,container)
+            }
+            default: {
+                return // do nothing
+            }
+        }
+		
+	}
+}
+
+// Routines to create specific types of Ascet Tasks
+routine createInterruptTask(amalthea::Task task, amalthea::ComponentContainer container){
+	
+	match {
+		val AscetModule = retrieve ascet::AscetModule corresponding to container
+		require absence of ascet::InterruptTask corresponding to task
+		 
+	}
+	create {
+		val interruptTask = new ascet::InterruptTask
+	}
+	update {
+		AscetModule.tasks += interruptTask
+		addCorrespondenceBetween(interruptTask, container)
+		
+	}
+}
+
+// Routines to create specific types of Ascet Tasks
+routine createPeriodicTask(amalthea::Task task, amalthea::ComponentContainer container){
+	
+	match {
+		val AscetModule = retrieve ascet::AscetModule corresponding to container
+		require absence of ascet::PeriodicTask corresponding to task
+		 
+	}
+	create {
+		val periodicTask = new ascet::PeriodicTask
+	}
+	update {
+		AscetModule.tasks += periodicTask
+		addCorrespondenceBetween(periodicTask, container)
+		
+	}
+}
+
+// Routines to create specific types of Ascet Tasks
+routine createSoftwareTask(amalthea::Task task, amalthea::ComponentContainer container){
+	
+	match {
+		val AscetModule = retrieve ascet::AscetModule corresponding to container
+		require absence of ascet::SoftwareTask corresponding to task
+		 
+	}
+	create {
+		val softwareTask = new ascet::SoftwareTask
+	}
+	update {
+		AscetModule.tasks += softwareTask
+		addCorrespondenceBetween(softwareTask, container)
+		
+	}
+}
+
+// Routines to create specific types of Ascet Tasks
+routine createTimeTableTask(amalthea::Task task, amalthea::ComponentContainer container){
+	
+	match {
+		val AscetModule = retrieve ascet::AscetModule corresponding to container
+		require absence of ascet::TimeTableTask corresponding to task
+		 
+	}
+	create {
+		val timeTableTask = new ascet::TimeTableTask
+	}
+	update {
+		AscetModule.tasks += timeTableTask
+		addCorrespondenceBetween(timeTableTask, container)
+		
+	}
+}
+
+

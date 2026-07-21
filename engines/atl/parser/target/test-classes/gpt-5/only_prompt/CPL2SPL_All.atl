@@ -1,0 +1,455 @@
+module CPL2SPL;
+
+create OUT : SPL from IN : CPL;
+
+helper context CPL!Element def: statement() : CPL!Node =
+    if self.oclIsKindOf(CPL!Node) then
+        self.oclAsType(CPL!Node)
+    else
+        if self.oclIsKindOf(CPL!NodeContainer) and not self.oclAsType(CPL!NodeContainer).contents.oclIsUndefined() then
+            self.oclAsType(CPL!NodeContainer).contents.statement()
+        else
+            OclUndefined
+        endif
+    endif;
+
+helper context CPL!Element def: locations() : Sequence(CPL!Location) =
+    if self.oclIsKindOf(CPL!Location) then
+        Sequence{ self.oclAsType(CPL!Location) }->union(
+            if self.oclIsKindOf(CPL!NodeContainer) and not self.oclAsType(CPL!NodeContainer).contents.oclIsUndefined() then
+                self.oclAsType(CPL!NodeContainer).contents.locations()
+            else
+                Sequence{}
+            endif
+        )
+    else
+        if self.oclIsKindOf(CPL!NodeContainer) and not self.oclAsType(CPL!NodeContainer).contents.oclIsUndefined() then
+            self.oclAsType(CPL!NodeContainer).contents.locations()
+        else
+            Sequence{}
+        endif
+    endif;
+
+helper context CPL!Proxy def: isSimple() : Boolean =
+    self.locations()->size() = 1 and
+    self.busy.oclIsUndefined() and
+    self.noAnswer.oclIsUndefined() and
+    self.redirection.oclIsUndefined() and
+    self.failure.oclIsUndefined() and
+    self.default.oclIsUndefined();
+
+rule CPL2Program {
+    from
+        c : CPL!CPL
+    to
+        p : SPL!Program (
+            location <- '',
+            commentsBefore <- Sequence{},
+            commentsAfter <- Sequence{},
+            service <- s
+        ),
+        s : SPL!Service (
+            location <- '',
+            commentsBefore <- Sequence{},
+            commentsAfter <- Sequence{},
+            name <- 'CPLService',
+            declarations <- c.subActions->collect(sa | thisModule.resolveTemp(sa,'functionDecl'))->asSequence()->union(
+                c.subActions->collect(sa | thisModule.resolveTemp(sa,'structDecl'))->asSequence()
+            ),
+            sessions <- Sequence{ dlg }
+        ),
+        dlg : SPL!Dialog (
+            location <- '',
+            commentsBefore <- Sequence{},
+            commentsAfter <- Sequence{},
+            declarations <- Sequence{},
+            methods <- c.incoming->statement().oclAsType(CPL!Node).oclAsSet()->collect(n | thisModule.resolveTemp(n,'method'))->asSequence()
+        )
+}
+
+rule SubAction2Function {
+    from
+        sa : CPL!SubAction
+    to
+        f : SPL!LocalFunctionDeclaration (
+            location <- '',
+            commentsBefore <- Sequence{},
+            commentsAfter <- Sequence{},
+            name <- sa.id,
+            returnType <- rtype,
+            arguments <- Sequence{},
+            statements <- if not sa.contents.oclIsUndefined() then
+                              Sequence{ thisModule.resolveTemp(sa.contents.statement(),'bodyStat') }
+                          else
+                              Sequence{}
+                          endif
+        ),
+        rtype : SPL!SimpleType (
+            location <- '',
+            commentsBefore <- Sequence{},
+            commentsAfter <- Sequence{},
+            type <- Enum!PrimitiveType#void
+        ),
+        struct : SPL!StructureDeclaration (
+            location <- '',
+            commentsBefore <- Sequence{},
+            commentsAfter <- Sequence{},
+            name <- sa.id.concat('Data'),
+            properties <- Sequence{}
+        )
+    do {
+        thisModule.bind(sa,'functionDecl',f);
+        thisModule.bind(sa,'structDecl',struct);
+    }
+}
+
+rule Incoming2Method {
+    from
+        i : CPL!Incoming
+    to
+        m : SPL!Method (
+            location <- '',
+            commentsBefore <- Sequence{},
+            commentsAfter <- Sequence{},
+            type <- t,
+            direction <- Enum!Direction#in,
+            methodName <- mn,
+            arguments <- Sequence{},
+            statements <- Sequence{ thisModule.resolveTemp(i.contents.statement(),'bodyStat') },
+            branches <- Sequence{}
+        ),
+        t : SPL!SimpleType (
+            location <- '',
+            commentsBefore <- Sequence{},
+            commentsAfter <- Sequence{},
+            type <- Enum!PrimitiveType#void
+        ),
+        mn : SPL!SIPMethodName (
+            location <- '',
+            commentsBefore <- Sequence{},
+            commentsAfter <- Sequence{},
+            name <- Enum!SIPMethod#INVITE
+        )
+    do {
+        thisModule.bind(i.contents.statement(),'method',m);
+    }
+}
+
+rule Proxy2Return {
+    from
+        p : CPL!Proxy (p.isSimple())
+    to
+        rs : SPL!ReturnStat (
+            location <- '',
+            commentsBefore <- Sequence{},
+            commentsAfter <- Sequence{},
+            returnedValue <- if not p.locations()->isEmpty() then
+                                 thisModule.resolveTemp(p.locations()->first(),'uriConstExp')
+                             else
+                                 OclUndefined
+                             endif,
+            branch <- OclUndefined
+        ),
+        ce : SPL!ConstantExp (
+            location <- '',
+            commentsBefore <- Sequence{},
+            commentsAfter <- Sequence{},
+            value <- uc
+        ),
+        uc : SPL!URIConstant (
+            location <- '',
+            commentsBefore <- Sequence{},
+            commentsAfter <- Sequence{},
+            uri <- if not p.locations()->isEmpty() then
+                       p.locations()->first().url
+                   else
+                       ''
+                   endif
+        )
+    do {
+        thisModule.bind(p,'bodyStat',rs);
+        thisModule.bind(p.locations()->first(),'uriConstExp',ce);
+    }
+}
+
+rule Proxy2Select {
+    from
+        p : CPL!Proxy (not p.isSimple())
+    to
+        ss : SPL!SelectStat (
+            location <- '',
+            commentsBefore <- Sequence{},
+            commentsAfter <- Sequence{},
+            matchedExp <- re,
+            selectCases <- Sequence{
+                if not p.busy.oclIsUndefined() then thisModule.resolveTemp(p.busy,'case') else OclUndefined endif,
+                if not p.noAnswer.oclIsUndefined() then thisModule.resolveTemp(p.noAnswer,'case') else OclUndefined endif,
+                if not p.redirection.oclIsUndefined() then thisModule.resolveTemp(p.redirection,'case') else OclUndefined endif
+            }->excluding(OclUndefined),
+            selectDefault <- if not p.default.oclIsUndefined() then thisModule.resolveTemp(p.default,'default') else OclUndefined endif
+        ),
+        re : SPL!ReasonExp (
+            location <- '',
+            commentsBefore <- Sequence{},
+            commentsAfter <- Sequence{}
+        )
+    do {
+        thisModule.bind(p,'bodyStat',ss);
+    }
+}
+
+rule Busy2SelectCase {
+    from
+        b : CPL!Busy
+    to
+        sc : SPL!SelectCase (
+            location <- '',
+            commentsBefore <- Sequence{},
+            commentsAfter <- Sequence{},
+            values <- Sequence{ rc },
+            statements <- Sequence{ thisModule.resolveTemp(b.contents.statement(),'bodyStat') }
+        ),
+        rc : SPL!ResponseConstant (
+            location <- '',
+            commentsBefore <- Sequence{},
+            commentsAfter <- Sequence{},
+            response <- r
+        ),
+        r : SPL!ClientErrorResponse (
+            location <- '',
+            commentsBefore <- Sequence{},
+            commentsAfter <- Sequence{},
+            errorKind <- Enum!ClientErrorKind#BUSY_HERE
+        )
+    do {
+        thisModule.bind(b,'case',sc);
+    }
+}
+
+rule NoAnswer2SelectCase {
+    from
+        n : CPL!NoAnswer
+    to
+        sc : SPL!SelectCase (
+            location <- '',
+            commentsBefore <- Sequence{},
+            commentsAfter <- Sequence{},
+            values <- Sequence{ rc },
+            statements <- Sequence{ thisModule.resolveTemp(n.contents.statement(),'bodyStat') }
+        ),
+        rc : SPL!ResponseConstant (
+            location <- '',
+            commentsBefore <- Sequence{},
+            commentsAfter <- Sequence{},
+            response <- r
+        ),
+        r : SPL!ClientErrorResponse (
+            location <- '',
+            commentsBefore <- Sequence{},
+            commentsAfter <- Sequence{},
+            errorKind <- Enum!ClientErrorKind#REQUEST_TIMEOUT
+        )
+    do {
+        thisModule.bind(n,'case',sc);
+    }
+}
+
+rule Redirection2SelectCase {
+    from
+        rd : CPL!Redirection
+    to
+        sc : SPL!SelectCase (
+            location <- '',
+            commentsBefore <- Sequence{},
+            commentsAfter <- Sequence{},
+            values <- Sequence{ rc },
+            statements <- Sequence{ thisModule.resolveTemp(rd.contents.statement(),'bodyStat') }
+        ),
+        rc : SPL!ResponseConstant (
+            location <- '',
+            commentsBefore <- Sequence{},
+            commentsAfter <- Sequence{},
+            response <- r
+        ),
+        r : SPL!RedirectionErrorResponse (
+            location <- '',
+            commentsBefore <- Sequence{},
+            commentsAfter <- Sequence{},
+            errorKind <- Enum!RedirectionErrorKind#MOVED_TEMPORARILY
+        )
+    do {
+        thisModule.bind(rd,'case',sc);
+    }
+}
+
+rule Default2SelectDefault {
+    from
+        d : CPL!Default
+    to
+        sd : SPL!SelectDefault (
+            location <- '',
+            commentsBefore <- Sequence{},
+            commentsAfter <- Sequence{},
+            statements <- if d.contents.oclIsUndefined() then
+                              Sequence{}
+                          else
+                              Sequence{ thisModule.resolveTemp(d.contents.statement(),'bodyStat') }
+                          endif
+        )
+    do {
+        thisModule.bind(d,'default',sd);
+    }
+}
+
+rule SubCall2Return {
+    from
+        sc : CPL!SubCall
+    to
+        rs : SPL!ReturnStat (
+            location <- '',
+            commentsBefore <- Sequence{},
+            commentsAfter <- Sequence{},
+            returnedValue <- fce,
+            branch <- OclUndefined
+        ),
+        fce : SPL!FunctionCallExp (
+            location <- '',
+            commentsBefore <- Sequence{},
+            commentsAfter <- Sequence{},
+            functionCall <- fc
+        ),
+        fc : SPL!FunctionCall (
+            location <- '',
+            commentsBefore <- Sequence{},
+            commentsAfter <- Sequence{},
+            function <- thisModule.resolveTemp(sc,'targetFunction'),
+            parameters <- Sequence{}
+        )
+    do {
+        thisModule.bind(sc,'bodyStat',rs);
+    }
+}
+
+rule Redirect2Return {
+    from
+        r : CPL!Redirect
+    to
+        rs : SPL!ReturnStat (
+            location <- '',
+            commentsBefore <- Sequence{},
+            commentsAfter <- Sequence{},
+            returnedValue <- ce,
+            branch <- OclUndefined
+        ),
+        ce : SPL!ConstantExp (
+            location <- '',
+            commentsBefore <- Sequence{},
+            commentsAfter <- Sequence{},
+            value <- rc
+        ),
+        rc : SPL!ResponseConstant (
+            location <- '',
+            commentsBefore <- Sequence{},
+            commentsAfter <- Sequence{},
+            response <- if r.permanent = 'yes' or r.permanent = 'true' then
+                            pr
+                        else
+                            tr
+                        endif
+        ),
+        pr : SPL!RedirectionErrorResponse (
+            location <- '',
+            commentsBefore <- Sequence{},
+            commentsAfter <- Sequence{},
+            errorKind <- Enum!RedirectionErrorKind#MOVED_PERMANENTLY
+        ),
+        tr : SPL!RedirectionErrorResponse (
+            location <- '',
+            commentsBefore <- Sequence{},
+            commentsAfter <- Sequence{},
+            errorKind <- Enum!RedirectionErrorKind#MOVED_TEMPORARILY
+        )
+    do {
+        thisModule.bind(r,'bodyStat',rs);
+    }
+}
+
+rule AddressSwitch2SelectStat {
+    from
+        asw : CPL!AddressSwitch
+    to
+        ss : SPL!SelectStat (
+            location <- '',
+            commentsBefore <- Sequence{},
+            commentsAfter <- Sequence{},
+            matchedExp <- re,
+            selectCases <- asw.addresses->collect(a | thisModule.resolveTemp(a,'case'))->asSequence(),
+            selectDefault <- if not asw.otherwise.oclIsUndefined() then thisModule.resolveTemp(asw.otherwise,'default') else OclUndefined endif
+        ),
+        re : SPL!RequestURIExp (
+            location <- '',
+            commentsBefore <- Sequence{},
+            commentsAfter <- Sequence{}
+        )
+    do {
+        thisModule.bind(asw,'bodyStat',ss);
+    }
+}
+
+rule SwitchedAddress2SelectCase {
+    from
+        sa : CPL!SwitchedAddress
+    to
+        sc : SPL!SelectCase (
+            location <- '',
+            commentsBefore <- Sequence{},
+            commentsAfter <- Sequence{},
+            values <- Sequence{ thisModule.resolveTemp(sa,'uriConst') },
+            statements <- if sa.contents.oclIsUndefined() then
+                              Sequence{}
+                          else
+                              Sequence{ thisModule.resolveTemp(sa.contents.statement(),'bodyStat') }
+                          endif
+        ),
+        uc : SPL!URIConstant (
+            location <- '',
+            commentsBefore <- Sequence{},
+            commentsAfter <- Sequence{},
+            uri <- sa.is
+        )
+    do {
+        thisModule.bind(sa,'case',sc);
+        thisModule.bind(sa,'uriConst',uc);
+    }
+}
+
+rule Otherwise2SelectDefault {
+    from
+        o : CPL!Otherwise
+    to
+        sd : SPL!SelectDefault (
+            location <- '',
+            commentsBefore <- Sequence{},
+            commentsAfter <- Sequence{},
+            statements <- if o.contents.oclIsUndefined() then
+                              Sequence{}
+                          else
+                              Sequence{ thisModule.resolveTemp(o.contents.statement(),'bodyStat') }
+                          endif
+        )
+    do {
+        thisModule.bind(o,'default',sd);
+    }
+}
+
+lazy rule Location2URIConstant {
+    from
+        l : CPL!Location
+    to
+        uc : SPL!URIConstant (
+            location <- '',
+            commentsBefore <- Sequence{},
+            commentsAfter <- Sequence{},
+            uri <- l.url
+        )
+}

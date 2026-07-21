@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xmi:XMI xmlns:xmi="http://www.omg.org/XMI" xmlns:amalthea="http://vitruv.tools/methodologisttemplate/amalthea">
+  <amalthea:ComponentContainer>
+    <!-- Two tasks belonging to the component container -->
+    <tasks xmi:id="T1" name="TaskA"/>
+    <tasks xmi:id="T2" name="TaskB"/>
+  </amalthea:ComponentContainer>
+</xmi:XMI>

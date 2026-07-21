@@ -1,0 +1,468 @@
+module CPL2SPL;
+create OUT : SPL from IN : CPL;
+
+helper context CPL!Node def: statement : CPL!Element =
+	if self.oclIsTypeOf(CPL!Location) then
+		self
+	else
+		if self.oclIsTypeOf(CPL!NodeContainer) then
+			if not self.oclAsType(CPL!NodeContainer).contents.oclIsUndefined() then
+				self.oclAsType(CPL!NodeContainer).contents.statement
+			else
+				self
+			endif
+		else
+			self
+		endif
+	endif;
+
+helper context CPL!Element def: locations : Sequence(CPL!Location) =
+	if self.oclIsTypeOf(CPL!Location) then
+		Sequence{self.oclAsType(CPL!Location)}
+	else
+		if self.oclIsTypeOf(CPL!NodeContainer) then
+			if not self.oclAsType(CPL!NodeContainer).contents.oclIsUndefined() then
+				self.oclAsType(CPL!NodeContainer).contents.locations
+			else
+				Sequence{}
+			endif
+		else
+			Sequence{}
+		endif
+	endif;
+
+helper context CPL!Proxy def: isSimple : Boolean =
+	self.busy.oclIsUndefined() and
+	self.noAnswer.oclIsUndefined() and
+	self.redirection.oclIsUndefined() and
+	self.failure.oclIsUndefined() and
+	self.default.oclIsUndefined();
+
+rule CPL2Program {
+	from
+		c : CPL!CPL
+	to
+		p : SPL!Program (
+			location <- '',
+			service <- s
+		),
+		s : SPL!Service (
+			location <- '',
+			name <- 'CPLService'
+		)
+	do {
+		c.subActions->forAll(sa |
+			thisModule.SubAction2Function(sa, s)
+		);
+		if not c.incoming.oclIsUndefined() then
+			thisModule.Incoming2Method(c.incoming, s)
+		endif;
+		if not c.outgoing.oclIsUndefined() then
+			thisModule.Incoming2Method(c.outgoing, s)
+		endif;
+	}
+}
+
+rule SubAction2Function(inSA : CPL!SubAction, inService : SPL!Service) {
+	to
+		f : SPL!LocalFunctionDeclaration (
+			location <- '',
+			name <- inSA.id,
+			returnType <- rt,
+			arguments <- Sequence{},
+			statements <- Sequence{}
+		),
+		rt : SPL!SimpleType (
+			location <- '',
+			type <- #void
+		)
+	do {
+		inService.declarations <- inService.declarations->including(f);
+		if not inSA.contents.oclIsUndefined() then
+			let stmt : CPL!Element = inSA.contents.statement in
+				if stmt.oclIsKindOf(CPL!Proxy) then
+					thisModule.Proxy2Return(stmt.oclAsType(CPL!Proxy), f)
+				else
+					if stmt.oclIsKindOf(CPL!Redirect) then
+						thisModule.Redirect2Return(stmt.oclAsType(CPL!Redirect), f)
+					else
+						if stmt.oclIsKindOf(CPL!SubCall) then
+							thisModule.SubCall2Return(stmt.oclAsType(CPL!SubCall), f)
+						else
+							if stmt.oclIsKindOf(CPL!AddressSwitch) then
+								thisModule.AddressSwitch2SelectStat(stmt.oclAsType(CPL!AddressSwitch), f)
+							endif
+						endif
+					endif
+				endif
+		endif;
+	}
+}
+
+rule Incoming2Method(inInc : CPL!Incoming, inService : SPL!Service) {
+	to
+		m : SPL!Method (
+			location <- '',
+			type <- t,
+			direction <- #in,
+			methodName <- mn,
+			arguments <- Sequence{},
+			statements <- Sequence{},
+			branches <- Sequence{}
+		),
+		t : SPL!SimpleType (
+			location <- '',
+			type <- #void
+		),
+		mn : SPL!SIPMethodName (
+			location <- '',
+			name <- #INVITE
+		)
+	do {
+		inService.sessions <- inService.sessions->including(m);
+		if not inInc.contents.oclIsUndefined() then
+			let stmt : CPL!Element = inInc.contents.statement in
+				if stmt.oclIsKindOf(CPL!Proxy) then
+					if stmt.oclAsType(CPL!Proxy).isSimple then
+						thisModule.Proxy2Return(stmt.oclAsType(CPL!Proxy), m)
+					else
+						thisModule.Proxy2Select(stmt.oclAsType(CPL!Proxy), m)
+					endif
+				else
+					if stmt.oclIsKindOf(CPL!Redirect) then
+						thisModule.Redirect2Return(stmt.oclAsType(CPL!Redirect), m)
+					else
+						if stmt.oclIsKindOf(CPL!SubCall) then
+							thisModule.SubCall2Return(stmt.oclAsType(CPL!SubCall), m)
+						else
+							if stmt.oclIsKindOf(CPL!AddressSwitch) then
+								thisModule.AddressSwitch2SelectStat(stmt.oclAsType(CPL!AddressSwitch), m)
+							endif
+						endif
+					endif
+				endif
+		endif;
+	}
+}
+
+rule Proxy2Return(inProxy : CPL!Proxy, inOwner : SPL!LocatedElement) {
+	to
+		rs : SPL!ReturnStat (
+			location <- '',
+			returnedValue <- re
+		),
+		re : SPL!ResponseConstant (
+			location <- '',
+			response <- sr
+		),
+		sr : SPL!SuccessResponse (
+			location <- '',
+			successKind <- #OK
+		)
+	do {
+		if inOwner.oclIsKindOf(SPL!Method) then
+			inOwner.oclAsType(SPL!Method).statements <- inOwner.oclAsType(SPL!Method).statements->including(rs)
+		else
+			if inOwner.oclIsKindOf(SPL!LocalFunctionDeclaration) then
+				inOwner.oclAsType(SPL!LocalFunctionDeclaration).statements <- inOwner.oclAsType(SPL!LocalFunctionDeclaration).statements->including(rs)
+			endif
+		endif;
+	}
+}
+
+rule Proxy2Select(inProxy : CPL!Proxy, inOwner : SPL!LocatedElement) {
+	to
+		sel : SPL!SelectStat (
+			location <- '',
+			matchedExp <- me
+		),
+		me : SPL!ConstantExp (
+			location <- '',
+			value <- rc
+		),
+		rc : SPL!ResponseConstant (
+			location <- '',
+			response <- er
+		),
+		er : SPL!ClientErrorResponse (
+			location <- '',
+			errorKind <- #REQUEST_TIMEOUT
+		)
+	do {
+		if inOwner.oclIsKindOf(SPL!Method) then
+			inOwner.oclAsType(SPL!Method).statements <- inOwner.oclAsType(SPL!Method).statements->including(sel)
+		else
+			if inOwner.oclIsKindOf(SPL!LocalFunctionDeclaration) then
+				inOwner.oclAsType(SPL!LocalFunctionDeclaration).statements <- inOwner.oclAsType(SPL!LocalFunctionDeclaration).statements->including(sel)
+			endif
+		endif;
+		if not inProxy.busy.oclIsUndefined() then
+			thisModule.Busy2SelectCase(inProxy.busy, sel)
+		endif;
+		if not inProxy.noAnswer.oclIsUndefined() then
+			thisModule.NoAnswer2SelectCase(inProxy.noAnswer, sel)
+		endif;
+		if not inProxy.redirection.oclIsUndefined() then
+			thisModule.Redirection2SelectCase(inProxy.redirection, sel)
+		endif;
+		if not inProxy.default.oclIsUndefined() then
+			thisModule.Default2SelectDefault(inProxy.default, sel)
+		endif;
+	}
+}
+
+rule Busy2SelectCase(inBusy : CPL!Busy, inSelect : SPL!SelectStat) {
+	to
+		sc : SPL!SelectCase (
+			location <- '',
+			values <- Sequence{bc}
+		),
+		bc : SPL!ResponseConstant (
+			location <- '',
+			response <- ber
+		),
+		ber : SPL!ClientErrorResponse (
+			location <- '',
+			errorKind <- #BUSY_HERE
+		)
+	do {
+		inSelect.selectCases <- inSelect.selectCases->including(sc);
+		if not inBusy.contents.oclIsUndefined() then
+			let stmt : CPL!Element = inBusy.contents.statement in
+				if stmt.oclIsKindOf(CPL!Redirect) then
+					thisModule.Redirect2Return(stmt.oclAsType(CPL!Redirect), sc)
+				else
+					if stmt.oclIsKindOf(CPL!SubCall) then
+						thisModule.SubCall2Return(stmt.oclAsType(CPL!SubCall), sc)
+					endif
+				endif
+		endif;
+	}
+}
+
+rule NoAnswer2SelectCase(inNoAnswer : CPL!NoAnswer, inSelect : SPL!SelectStat) {
+	to
+		sc : SPL!SelectCase (
+			location <- '',
+			values <- Sequence{rc}
+		),
+		rc : SPL!ResponseConstant (
+			location <- '',
+			response <- ner
+		),
+		ner : SPL!ClientErrorResponse (
+			location <- '',
+			errorKind <- #REQUEST_TIMEOUT
+		)
+	do {
+		inSelect.selectCases <- inSelect.selectCases->including(sc);
+		if not inNoAnswer.contents.oclIsUndefined() then
+			let stmt : CPL!Element = inNoAnswer.contents.statement in
+				if stmt.oclIsKindOf(CPL!Redirect) then
+					thisModule.Redirect2Return(stmt.oclAsType(CPL!Redirect), sc)
+				else
+					if stmt.oclIsKindOf(CPL!SubCall) then
+						thisModule.SubCall2Return(stmt.oclAsType(CPL!SubCall), sc)
+					endif
+				endif
+		endif;
+	}
+}
+
+rule Redirection2SelectCase(inRedir : CPL!Redirection, inSelect : SPL!SelectStat) {
+	to
+		sc : SPL!SelectCase (
+			location <- '',
+			values <- Sequence{rc}
+		),
+		rc : SPL!ResponseConstant (
+			location <- '',
+			response <- rer
+		),
+		rer : SPL!RedirectionErrorResponse (
+			location <- '',
+			errorKind <- #MOVED_TEMPORARILY
+		)
+	do {
+		inSelect.selectCases <- inSelect.selectCases->including(sc);
+		if not inRedir.contents.oclIsUndefined() then
+			let locs : Sequence(CPL!Location) = inRedir.contents.locations in
+				if not locs->isEmpty() then
+					locs->first().Location2URIConstant(sc)
+				endif
+		endif;
+	}
+}
+
+rule Default2SelectDefault(inDef : CPL!Default, inSelect : SPL!SelectStat) {
+	to
+		sd : SPL!SelectDefault (
+			location <- ''
+		)
+	do {
+		inSelect.selectDefault <- sd;
+		if not inDef.contents.oclIsUndefined() then
+			let stmt : CPL!Element = inDef.contents.statement in
+				if stmt.oclIsKindOf(CPL!Redirect) then
+					thisModule.Redirect2Return(stmt.oclAsType(CPL!Redirect), sd)
+				else
+					if stmt.oclIsKindOf(CPL!SubCall) then
+						thisModule.SubCall2Return(stmt.oclAsType(CPL!SubCall), sd)
+					endif
+				endif
+		endif;
+	}
+}
+
+rule SubCall2Return(inSubCall : CPL!SubCall, inOwner : SPL!LocatedElement) {
+	to
+		fs : SPL!FunctionCallStat (
+			location <- '',
+			functionCall <- fc
+		),
+		fc : SPL!FunctionCall (
+			location <- '',
+			function <- f
+		),
+		f : SPL!LocalFunctionDeclaration (
+			location <- '',
+			name <- inSubCall.ref,
+			returnType <- rt,
+			arguments <- Sequence{}
+		),
+		rt : SPL!SimpleType (
+			location <- '',
+			type <- #void
+		)
+	do {
+		if inOwner.oclIsKindOf(SPL!Method) then
+			inOwner.oclAsType(SPL!Method).statements <- inOwner.oclAsType(SPL!Method).statements->including(fs)
+		else
+			if inOwner.oclIsKindOf(SPL!LocalFunctionDeclaration) then
+				inOwner.oclAsType(SPL!LocalFunctionDeclaration).statements <- inOwner.oclAsType(SPL!LocalFunctionDeclaration).statements->including(fs)
+			else
+				if inOwner.oclIsKindOf(SPL!SelectMember) then
+					inOwner.oclAsType(SPL!SelectMember).statements <- inOwner.oclAsType(SPL!SelectMember).statements->including(fs)
+				endif
+			endif
+		endif;
+	}
+
+}
+
+rule Redirect2Return(inRedirect : CPL!Redirect, inOwner : SPL!LocatedElement) {
+	to
+	rs : SPL!ReturnStat (
+		location <- '',
+		returnedValue <- ce
+	),
+	ce : SPL!ConstantExp (
+		location <- '',
+		value <- rc
+	),
+	rc : SPL!ResponseConstant (
+		location <- '',
+		response <- r
+	),
+	r : SPL!RedirectionErrorResponse (
+		location <- '',
+		errorKind <- if inRedirect.permanent = 'yes' then #MOVED_PERMANENTLY else #MOVED_TEMPORARILY endif
+	)
+	do {
+		if inOwner.oclIsKindOf(SPL!Method) then
+			inOwner.oclAsType(SPL!Method).statements <- inOwner.oclAsType(SPL!Method).statements->including(rs)
+		else
+			if inOwner.oclIsKindOf(SPL!LocalFunctionDeclaration) then
+				inOwner.oclAsType(SPL!LocalFunctionDeclaration).statements <- inOwner.oclAsType(SPL!LocalFunctionDeclaration).statements->including(rs)
+			else
+				if inOwner.oclIsKindOf(SPL!SelectMember) then
+					inOwner.oclAsType(SPL!SelectMember).statements <- inOwner.oclAsType(SPL!SelectMember).statements->including(rs)
+				endif
+			endif
+		endif;
+	}
+}
+
+rule AddressSwitch2SelectStat(inAS : CPL!AddressSwitch, inOwner : SPL!LocatedElement) {
+	to
+	sel : SPL!SelectStat (
+		location <- '',
+		matchedExp <- me
+	),
+	me : SPL!RequestURIExp (
+		location <- ''
+	)
+	do {
+		if inOwner.oclIsKindOf(SPL!Method) then
+			inOwner.oclAsType(SPL!Method).statements <- inOwner.oclAsType(SPL!Method).statements->including(sel)
+		else
+			if inOwner.oclIsKindOf(SPL!LocalFunctionDeclaration) then
+				inOwner.oclAsType(SPL!LocalFunctionDeclaration).statements <- inOwner.oclAsType(SPL!LocalFunctionDeclaration).statements->including(sel)
+			endif
+		endif;
+		inAS.addresses->forAll(a |
+			thisModule.SwitchedAddress2SelectCase(a, sel)
+		);
+		if not inAS.otherwise.oclIsUndefined() then
+			thisModule.Otherwise2SelectDefault(inAS.otherwise, sel)
+		endif;
+	}
+}
+
+rule SwitchedAddress2SelectCase(inSA : CPL!SwitchedAddress, inSelect : SPL!SelectStat) {
+	to
+		sc : SPL!SelectCase (
+			location <- '',
+			values <- Sequence{uc}
+		),
+		uc : SPL!URIConstant (
+			location <- '',
+			uri <- inSA.is
+		)
+	do {
+		inSelect.selectCases <- inSelect.selectCases->including(sc);
+		if not inSA.contents.oclIsUndefined() then
+			let stmt : CPL!Element = inSA.contents.statement in
+				if stmt.oclIsKindOf(CPL!Redirect) then
+					thisModule.Redirect2Return(stmt.oclAsType(CPL!Redirect), sc)
+				else
+					if stmt.oclIsKindOf(CPL!SubCall) then
+						thisModule.SubCall2Return(stmt.oclAsType(CPL!SubCall), sc)
+					endif
+				endif
+		endif;
+	}
+}
+
+rule Otherwise2SelectDefault(inO : CPL!Otherwise, inSelect : SPL!SelectStat) {
+	to
+		sd : SPL!SelectDefault (
+			location <- ''
+		)
+	do {
+		inSelect.selectDefault <- sd;
+		if not inO.contents.oclIsUndefined() then
+			let stmt : CPL!Element = inO.contents.statement in
+				if stmt.oclIsKindOf(CPL!Redirect) then
+					thisModule.Redirect2Return(stmt.oclAsType(CPL!Redirect), sd)
+				else
+					if stmt.oclIsKindOf(CPL!SubCall) then
+						thisModule.SubCall2Return(stmt.oclAsType(CPL!SubCall), sd)
+					endif
+				endif
+		endif;
+	}
+}
+
+lazy rule Location2URIConstant {
+	from
+		l : CPL!Location
+	to
+		uc : SPL!URIConstant (
+			location <- '',
+			uri <- l.url
+		)
+}
+
+helper context CPL!Location def: Location2URIConstant(inOwner : SPL!SelectMember) : SPL!URIConstant =
+	thisModule.Location2URIConstant(self);

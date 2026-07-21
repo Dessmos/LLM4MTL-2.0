@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xmi:XMI xmlns:xmi="http://www.omg.org/XMI" xmlns:document="http://vitruv.tools/methodologisttemplate/document" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <document:DocumentModel>
+    <documents xmi:id="D1" title="Project Report" author="John Doe">
+      <sections xmi:id="S1" title="Introduction" content="This is the introduction section." order="1"/>
+      <sections xmi:id="S2" title="Methodology" content="This section describes the methodology." order="2"/>
+      <sections xmi:id="S3" title="Conclusion" content="This is the conclusion." order="3"/>
+    </documents>
+  </document:DocumentModel>
+</xmi:XMI>
+

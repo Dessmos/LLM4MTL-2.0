@@ -1,0 +1,165 @@
+import "http://vitruv.tools/methodologisttemplate/families" as families
+import "http://vitruv.tools/methodologisttemplate/persons" as persons
+
+reactions: familiesToPersons
+in reaction to changes in families
+execute actions in persons
+
+// Create and register PersonRegister when a FamilyRegister is created as root element
+reaction InsertedFamilyRegister {
+	after element families::FamilyRegister inserted as root
+	call createPersonRegister(newValue)
+}
+
+// Routine to create and register a PersonRegister corresponding to the given FamilyRegister
+routine createPersonRegister(families::FamilyRegister familyRegister) {
+	match {
+		require absence of persons::PersonRegister corresponding to familyRegister
+	}
+	create {
+		val personRegister = new persons::PersonRegister
+	}
+	update {
+		persistProjectRelative(familyRegister, personRegister, "model/persons.persons")
+		addCorrespondenceBetween(personRegister, familyRegister)
+	}
+}
+
+// Delete all corresponding Persons when a Family is deleted
+reaction DeletedFamily {
+	after element families::Family deleted
+	call deleteAllFamilyMembers(affectedEObject)
+}
+
+// Routine to delete all Persons corresponding to the given Family
+routine deleteAllFamilyMembers(families::Family deletedFamily) {
+	update {
+		if (deletedFamily.father !== null) {
+			deletePerson(deletedFamily.father)
+		}
+		if (deletedFamily.mother !== null) {
+			deletePerson(deletedFamily.mother)
+		}
+		for (daughter : deletedFamily.daughters) {
+			deletePerson(daughter)
+		}
+		for (son : deletedFamily.sons) {
+			deletePerson(son)
+		}
+	}
+}
+
+// Delete corresponding Person when a Member is deleted
+reaction DeletedMember {
+	after element families::Member deleted
+	call deletePerson(affectedEObject)
+}
+
+// Routine to delete the Person corresponding to the given Member
+routine deletePerson(families::Member member) {
+	match {
+		val person = retrieve persons::Person corresponding to member
+		val family = retrieve families::Family corresponding to person
+	}
+	update {
+		removeObject(person)
+		removeCorrespondenceBetween(member, person)
+		removeCorrespondenceBetween(family, person)
+	}
+}
+
+// Create or update corresponding Person when a Member is inserted as father in a Family
+reaction CreatedFather {
+	after element families::Member replaced at families::Family[father]
+	with newValue !== null
+	call {
+		updateNameAndCorrespondencesOfCorrespondingPerson(newValue, affectedEObject)
+		createMaleFromNewMember(newValue, affectedEObject)
+	}
+}
+
+// Update name and add correspondence to Family for corresponding Person when a Member is inserted as father in a Family
+routine updateNameAndCorrespondencesOfCorrespondingPerson(families::Member newMember, families::Family newFamily) {
+	match {
+		val correspondingPerson = retrieve persons::Person corresponding to newMember
+	}
+	update {
+		correspondingPerson.fullName = newMember.firstName + " " + newFamily.lastName
+		addCorrespondenceBetween(correspondingPerson, newFamily)
+	}
+}
+
+// Create corresponding Male Person from new Father Member when a Member is inserted as father in a Family
+routine createMaleFromNewMember(families::Member newFather, families::Family family) {
+	match {
+		require absence of persons::Person corresponding to newFather
+	}
+	update {
+		createMale(newFather, family)
+	}
+}
+
+// Routine to create a Male Person from a Member in a Family
+routine createMale(families::Member newMember, families::Family family) {
+	match {
+		val personsRegister = retrieve persons::PersonRegister corresponding to family.eContainer
+	}
+	create {
+		val person = new persons::Male
+	}
+	update {
+		person.fullName = newMember.firstName + " " + family.lastName
+		personsRegister.persons.add(person)
+		addCorrespondenceBetween(newMember, person)
+		addCorrespondenceBetween(family, person)
+	}
+}
+
+// Create or update corresponding Person when a Member is inserted as daughter in a Family
+reaction InsertedDaughter {
+	after element families::Member inserted in families::Family[daughters]
+	with newValue !== null
+	call {
+		createOrFindFemale(newValue, affectedEObject)
+		updateNameAndCorrespondencesOfCorrespondingPerson(newValue, affectedEObject)
+	}
+}
+
+// Create or update corresponding Person when a Member is inserted as daughter in a Family
+routine createOrFindFemale(families::Member newMember, families::Family family) {
+	match {
+		require absence of persons::Female corresponding to newMember
+	}
+	update {
+		createFemale(newMember, family)
+	}
+}
+
+// Routine to create a Female Person from a Member in a Family
+routine createFemale(families::Member newMember, families::Family family) {
+	match {
+		val personsRegister = retrieve persons::PersonRegister corresponding to family.eContainer
+	}
+	create {
+		val person = new persons::Female
+	}
+	update {
+		person.fullName = newMember.firstName + " " + family.lastName
+		personsRegister.persons.add(person)
+		addCorrespondenceBetween(newMember, person)
+		addCorrespondenceBetween(family, person)
+	}
+}
+
+
+
+
+
+
+
+
+
+
+
+
+

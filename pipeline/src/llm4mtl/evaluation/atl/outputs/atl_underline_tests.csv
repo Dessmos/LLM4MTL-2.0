@@ -1,0 +1,17 @@
+Language,TestType,StatTest,Metric,Strategy,LLM,stat_value,p_value,Significant
+ATL,Underline,Friedman,ChrF,Baseline,All,0.666667,0.716531,No
+ATL,Underline,Friedman,ChrF,Few-shot,All,12.448276,0.001981,Yes
+ATL,Underline,Friedman,ChrF,Grammar,All,0.142857,0.931063,No
+ATL,Underline,Friedman,ChrF,FS + GR,All,12.254545,0.002183,Yes
+ATL,Underline,Friedman,Errors/LoC,Baseline,All,0.3,0.860708,No
+ATL,Underline,Friedman,Errors/LoC,Few-shot,All,0.352941,0.838223,No
+ATL,Underline,Friedman,Errors/LoC,Grammar,All,10.827586,0.004455,Yes
+ATL,Underline,Friedman,Errors/LoC,FS + GR,All,0.0,1.0,No
+ATL,Underline,Cochran's Q,Parsability,Baseline,All,0.5,0.778801,No
+ATL,Underline,Cochran's Q,Parsability,Few-shot,All,0.5,0.778801,No
+ATL,Underline,Cochran's Q,Parsability,Grammar,All,11.142857,0.003805,Yes
+ATL,Underline,Cochran's Q,Parsability,FS + GR,All,0.0,1.0,No
+ATL,Underline,Cochran's Q,Pass@1,Baseline,All,1.6,0.449329,No
+ATL,Underline,Cochran's Q,Pass@1,Few-shot,All,4.75,0.093014,No
+ATL,Underline,Cochran's Q,Pass@1,Grammar,All,2.8,0.246597,No
+ATL,Underline,Cochran's Q,Pass@1,FS + GR,All,4.0,0.135335,No

@@ -1,0 +1,141 @@
+pre {
+	var db : new DB!Database;
+	var trace : new SimpleTrace!Trace;
+}
+
+post {
+	for (s in OO!Package.all + OO!Classifier.all + OO!Feature.all) {
+		var results = s.equivalent();
+		if (results.isEmpty()) continue;
+		var link : new SimpleTrace!TraceLink;
+		link.description = "Trace for " + s.eClass.name + " '" + (s.hasProperty("name") ? s.name : "") + "'";
+		link.sources.add(s);
+		link.targets.addAll(results);
+		trace.links.add(link);
+	}
+}
+
+rule Class2Table
+	transform c : OO!Class
+	to t : DB!Table, pk : DB!Column {
+
+	guard : not c.isAbstract
+
+	t.name = c.name;
+	t.database = db;
+
+	pk.name = t.primaryKeyName();
+	pk.type = "INT";
+	t.columns.add(pk);
+	t.primaryKeys.add(pk);
+
+	if (c.extends.isDefined() and not c.extends.isAbstract) {
+		var parentTable : DB!Table := c.extends;
+		var parentPk : DB!Column = parentTable.primaryKeys.first;
+		var fkCol : new DB!Column;
+		fkCol.name = parentPk.name;
+		fkCol.type = parentPk.type;
+		fkCol.table = t;
+		t.columns.add(fkCol);
+		var fk : new DB!ForeignKey;
+		fk.name = t.name + "_to_" + parentTable.name;
+		fk.parent = parentPk;
+		fk.child = fkCol;
+		fk.database = db;
+	}
+}
+
+rule SingleValuedAttribute2Column
+	transform a : OO!Attribute
+	to c : DB!Column {
+
+	guard : not a.isMany and not a.owner.isAbstract
+
+	c.name = a.name;
+	c.table ::= a.owner;
+	if (a.type.isKindOf(OO!Datatype)) {
+		c.type = a.type.toDbType();
+	} else {
+		c.type = "INT";
+	}
+}
+
+rule MultiValuedAttribute2Table
+	transform a : OO!Attribute
+	to t : DB!Table, ownerFkCol : DB!Column, valueCol : DB!Column {
+
+	guard : a.isMany and not a.owner.isAbstract
+
+	t.name = a.valuesTableName();
+	t.database = db;
+
+	var ownerTable : DB!Table := a.owner;
+	var ownerPk : DB!Column = ownerTable.primaryKeys.first;
+
+	ownerFkCol.name = ownerTable.primaryKeyName();
+	ownerFkCol.type = ownerPk.type;
+	ownerFkCol.table = t;
+	t.columns.add(ownerFkCol);
+
+	valueCol.name = "value";
+	if (a.type.isKindOf(OO!Datatype)) {
+		valueCol.type = a.type.toDbType();
+	} else {
+		valueCol.type = "INT";
+	}
+	valueCol.table = t;
+	t.columns.add(valueCol);
+
+	var fk : new DB!ForeignKey;
+	fk.name = t.name + "_to_" + ownerTable.name;
+	fk.parent = ownerPk;
+	fk.child = ownerFkCol;
+	fk.database = db;
+}
+
+rule Reference2ForeignKey
+	transform r : OO!Reference
+	to col : DB!Column, fk : DB!ForeignKey {
+
+	guard : not r.isMany and not r.owner.isAbstract and r.type.isKindOf(OO!Class) and not r.type.isAbstract
+
+	var ownerTable : DB!Table := r.owner;
+	var targetTable : DB!Table := r.type;
+
+	var targetPk : DB!Column = targetTable.primaryKeys.first;
+
+	col.name = r.name + "Id";
+	col.type = targetPk.type;
+	col.table = ownerTable;
+	ownerTable.columns.add(col);
+
+	fk.name = ownerTable.name + "_to_" + targetTable.name + "_" + r.name;
+	fk.parent = targetPk;
+	fk.child = col;
+	fk.database = db;
+}
+
+operation DB!Table primaryKeyName() : String {
+	return self.name.firstToLowerCase() + "Id";
+}
+
+operation OO!Attribute valuesTableName() : String {
+	return self.owner.name + "_" + self.name + "_values";
+}
+
+operation OO!Classifier toDbType() : String {
+	var tm : TM!TypeMap = TM!TypeMap.all.first;
+	if (tm.isDefined()) {
+		var mapping = tm.mappings.selectOne(m | m.source = self.name);
+		if (mapping.isDefined()) {
+			return mapping.target;
+		} else if (tm.default.isDefined()) {
+			return tm.default.target;
+		}
+	}
+	if (self.name = "String") return "VARCHAR(255)";
+	if (self.name = "Integer" or self.name = "Int") return "INT";
+	if (self.name = "Boolean") return "BOOLEAN";
+	if (self.name = "Double" or self.name = "Float") return "DOUBLE";
+	return "VARCHAR(255)";
+}

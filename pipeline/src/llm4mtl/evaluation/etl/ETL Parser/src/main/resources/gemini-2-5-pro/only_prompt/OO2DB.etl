@@ -1,0 +1,134 @@
+transformation OO2DB
+
+model OO uri "http://vitruv.tools/methodologisttemplate/OO"
+model DB uri "http://vitruv.tools/methodologisttemplate/DB" alias DB
+model SimpleTrace uri "http://vitruv.tools/methodologisttemplate/SimpleTrace" alias Trace
+
+pre {
+	var db = new DB!Database;
+}
+
+post {
+	var trace = new Trace!Trace;
+	for (t in _tracemap.values()) {
+		var link = new Trace!TraceLink;
+		link.description = t.rule.name;
+		link.sources.add(t.source);
+		link.targets.addAll(t.targets);
+		trace.links.add(link);
+	}
+}
+
+rule Class2Table
+	transform c : OO!Class
+	to t : DB!Table {
+	
+	guard : not c.isAbstract
+
+	t.name = c.name;
+	t.database = db;
+	db.contents.add(t);
+
+	var pk = new DB!Column;
+	pk.name = c.primaryKeyName();
+	pk.type = "INTEGER";
+	t.columns.add(pk);
+	t.primaryKeys.add(pk);
+	
+	if (c.extends.isDefined()) {
+		var superTable = c.extends.equivalent();
+		var fkColumn = new DB!Column;
+		fkColumn.name = superTable.name + "_id";
+		fkColumn.type = "INTEGER";
+		t.columns.add(fkColumn);
+		
+		var fk = new DB!ForeignKey;
+		fk.name = "FK_" + t.name + "_" + superTable.name;
+		fk.parent = superTable.primaryKeys.first();
+		fk.child = fkColumn;
+		fk.database = db;
+		db.contents.add(fk);
+	}
+	
+	t.columns.addAll(c.features.select(f|f.isTypeOf(OO!Attribute) and not f.isMany).equivalent());
+}
+
+rule SingleValuedAttribute2Column
+	transform a : OO!Attribute
+	to c : DB!Column {
+	
+	guard : not a.isMany
+	
+	c.name = a.name;
+	c.type = a.type.toDbType();
+}
+
+rule MultiValuedAttribute2Table
+	transform a : OO!Attribute
+	to t : DB!Table {
+	
+	guard : a.isMany
+
+	t.name = a.valuesTableName();
+	t.database = db;
+	db.contents.add(t);
+	
+	var ownerTable = a.owner.equivalent();
+	
+	var fkColumn = new DB!Column;
+	fkColumn.name = ownerTable.name + "_id";
+	fkColumn.type = "INTEGER";
+	t.columns.add(fkColumn);
+	t.primaryKeys.add(fkColumn);
+	
+	var valueColumn = new DB!Column;
+	valueColumn.name = "value";
+	valueColumn.type = a.type.toDbType();
+	t.columns.add(valueColumn);
+	t.primaryKeys.add(valueColumn);
+	
+	var fk = new DB!ForeignKey;
+	fk.name = "FK_" + t.name + "_" + ownerTable.name;
+	fk.parent = ownerTable.primaryKeys.first();
+	fk.child = fkColumn;
+	fk.database = db;
+	db.contents.add(fk);
+}
+
+rule Reference2ForeignKey
+	transform r : OO!Reference
+	to fk : DB!ForeignKey {
+
+	guard : not r.isMany
+	
+	var ownerTable = r.owner.equivalent();
+	var referencedTable = r.type.equivalent();
+	
+	var fkColumn = new DB!Column;
+	fkColumn.name = r.name + "_id";
+	fkColumn.type = "INTEGER";
+	ownerTable.columns.add(fkColumn);
+	
+	fk.name = "FK_" + ownerTable.name + "_" + referencedTable.name + "_" + r.name;
+	fk.parent = referencedTable.primaryKeys.first();
+	fk.child = fkColumn;
+	fk.database = db;
+	db.contents.add(fk);
+}
+
+operation OO!Class primaryKeyName() : String {
+	return self.name + "_id";
+}
+
+operation OO!Attribute valuesTableName() : String {
+	return self.owner.name + "_" + self.name;
+}
+
+operation OO!Classifier toDbType() : String {
+	switch (self.name) {
+		case "String": return "VARCHAR";
+		case "Integer": return "INTEGER";
+		case "Boolean": return "BOOLEAN";
+		default: return "VARCHAR";
+	}
+}

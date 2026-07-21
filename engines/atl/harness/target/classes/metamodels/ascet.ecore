@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ecore:EPackage xmi:version="2.0" xmlns:xmi="http://www.omg.org/XMI" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:ecore="http://www.eclipse.org/emf/2002/Ecore" name="ascet" nsURI="http://vitruv.tools/methodologisttemplate/ascet" nsPrefix="ascet">
+
+    <eClassifiers xsi:type="ecore:EClass" name="AscetModule">
+    <eStructuralFeatures xsi:type="ecore:EReference" name="tasks"
+        upperBound="-1" eType="#//Task" containment="true"/>
+    </eClassifiers> 
+
+
+    <!-- Named -->
+    <eClassifiers xsi:type="ecore:EClass" name="Named" abstract="true">
+        <eStructuralFeatures xsi:type="ecore:EAttribute" name="name" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+    </eClassifiers>
+
+    <!-- Task -->
+    <eClassifiers xsi:type="ecore:EClass" name="Task">
+        <eSuperTypes href="#//Named"/>
+        <eStructuralFeatures xsi:type="ecore:EAttribute" name="priority" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EInt" defaultValueLiteral="0"/>
+        <eStructuralFeatures xsi:type="ecore:EReference" name="processes" eType="#//Method" lowerBound="0" upperBound="1"/>
+    </eClassifiers>
+
+    <!-- Method -->
+    <eClassifiers xsi:type="ecore:EClass" name="Method"/>
+
+    <!-- subTasks -->
+    <eClassifiers xsi:type="ecore:EClass" name="InterruptTask">
+        <eSuperTypes href="#//Task"/>
+    </eClassifiers>
+
+    <eClassifiers xsi:type="ecore:EClass" name="InitTask">
+        <eSuperTypes href="#//Task"/>
+    </eClassifiers>
+
+    <eClassifiers xsi:type="ecore:EClass" name="PeriodicTask">
+        <eSuperTypes href="#//Task"/>
+        <eStructuralFeatures xsi:type="ecore:EAttribute" name="period" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EDouble" defaultValueLiteral="0.0"/>
+        <eStructuralFeatures xsi:type="ecore:EAttribute" name="delay" eType="ecore:EDataType http://www.eclipse.org/emf/2002/Ecore#//EDouble" defaultValueLiteral="0.0"/>
+    </eClassifiers>
+
+    <eClassifiers xsi:type="ecore:EClass" name="SoftwareTask">
+        <eSuperTypes href="#//Task"/>
+    </eClassifiers>
+
+    <eClassifiers xsi:type="ecore:EClass" name="TimeTableTask">
+        <eSuperTypes href="#//Task"/>
+    </eClassifiers>
+</ecore:EPackage>

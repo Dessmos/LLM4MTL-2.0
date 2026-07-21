@@ -141,3 +141,14 @@ dmypy.json
 cython_debug/
 
 # End of https://mrkandreev.name/snippets/gitignore-generator/#Python
+
+# ---- v5 architecture migration ----
+# Working plan document (maintainer-only, not a committed deliverable).
+docs/migration-plan.md
+# Behavioural baseline snapshots (environment-specific; capture script is tracked).
+baseline/snapshot-*/
+# Runtime experiment output (canonical run/experiment artifacts).
+artifacts/work/
+# Engine runtime outputs written by drivers (relocated to engines/ in Stage 2).
+engines/*/*/results/
+

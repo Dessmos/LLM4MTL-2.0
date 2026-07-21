@@ -1,0 +1,21 @@
+import ecore "http://vitruv.tools/methodologisttemplate/network" as network
+import ecore "http://vitruv.tools/methodologisttemplate/graph" as graph
+transformation networkToGraph {
+  reactions {
+    reaction SystemInsertedAsRoot {
+      after inserted root network::System as system {
+        call createAndRegisterRoot(system)
+      }
+    }
+  }
+  routines {
+    routine createAndRegisterRoot(system: network::System) {
+      guard {
+        not exists correspondence from system to graph::Root
+      }
+      create root: graph::Root {}
+      persist root to "graph/root.xmi"
+      create correspondence between system and root
+    }
+  }
+}

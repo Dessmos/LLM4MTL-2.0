@@ -1,0 +1,239 @@
+module DSL2KM3;
+
+create OUT : KM3 from IN : DSL;
+
+helper context DSL!Relationship def: needTurnOnClass() : Boolean =
+  self.roles->exists(r | r.source <> r.type) or
+  self.superType <> OclUndefined or
+  self.subTypes->notEmpty() or
+  self.properties->notEmpty();
+
+helper def: getRoles(c : DSL!Class) : Sequence(DSL!Role) =
+  DSL!Role.allInstances()
+    ->select(r | r.source = c and not r.relation.needTurnOnClass())
+    ->asSequence();
+
+helper context DSL!Role def: isEmbedding() : Boolean =
+  self.relation.isEmbedding;
+
+helper def: getAllClassifiers(dm : DSL!DomainModel) : Sequence(DSL!Classifier) =
+  dm.classifiers->asSequence();
+
+helper def: getAllRelationships(dm : DSL!DomainModel) : Sequence(DSL!Relationship) =
+  dm.classifiers->select(c | c.oclIsTypeOf(DSL!Relationship)).oclAsType(DSL!Relationship)->asSequence();
+
+helper def: getAllClasses(dm : DSL!DomainModel) : Sequence(DSL!Class) =
+  dm.classifiers->select(c | c.oclIsTypeOf(DSL!Class)).oclAsType(DSL!Class)->asSequence();
+
+helper def: getAllTypes(dm : DSL!DomainModel) : Sequence(DSL!Type) =
+  dm.types->asSequence();
+
+helper def: getAllSimpleTypes(dm : DSL!DomainModel) : Sequence(DSL!SimpleType) =
+  dm.types->select(t | t.oclIsTypeOf(DSL!SimpleType)).oclAsType(DSL!SimpleType)->asSequence();
+
+helper def: getAllEnumerations(dm : DSL!DomainModel) : Sequence(DSL!Enumeration) =
+  dm.types->select(t | t.oclIsTypeOf(DSL!Enumeration)).oclAsType(DSL!Enumeration)->asSequence();
+
+lazy rule Metamodel {
+  from dm : DSL!DomainModel
+  to   mm : KM3!Metamodel (
+         location <- dm.location,
+         contents <- Sequence{ mainPkg, primPkg }
+       ),
+       mainPkg : KM3!Package (
+         name      <- dm.name,
+         location  <- dm.location,
+         metamodel <- mm,
+         contents  <- dm.getAllClassifiers()->select(c | c.oclIsTypeOf(DSL!Class))
+                        ->collect(c | thisModule.resolveTemp(c, 'class'))
+                      ->union(
+                          dm.getAllRelationships()->select(r | r.needTurnOnClass())
+                            ->collect(r | thisModule.resolveTemp(r, 'relClass'))
+                      )
+                      ->union(
+                          dm.getAllTypes()->collect(t |
+                            if t.oclIsTypeOf(DSL!SimpleType) then
+                              thisModule.resolveTemp(t, 'dt')
+                            else
+                              thisModule.resolveTemp(t, 'enum')
+                            endif
+                          )
+                      )
+       ),
+       primPkg : KM3!Package (
+         name      <- 'PrimitiveTypes',
+         location  <- dm.location,
+         metamodel <- mm,
+         contents  <- Sequence{ booleanDT, integerDT, stringDT }
+       ),
+       booleanDT : KM3!DataType (
+         name      <- 'Boolean',
+         location  <- dm.location,
+         package   <- primPkg
+       ),
+       integerDT : KM3!DataType (
+         name      <- 'Integer',
+         location  <- dm.location,
+         package   <- primPkg
+       ),
+       stringDT  : KM3!DataType (
+         name      <- 'String',
+         location  <- dm.location,
+         package   <- primPkg
+       )
+}
+
+lazy rule Class {
+  from c : DSL!Class
+  to   kc : KM3!Class (
+         name               <- c.name,
+         location           <- c.location,
+         package            <- thisModule.resolveTemp(c.domainModel, 'mainPkg'),
+         isAbstract         <- c.isAbstract,
+         supertypes         <- if c.superType.oclIsUndefined() or c.superType.oclIsTypeOf(DSL!Relationship) then
+                                  Set{}
+                                else
+                                  Set{ thisModule.resolveTemp(c.superType, 'class') }
+                                endif,
+         structuralFeatures <- c.properties->collect(p | thisModule.ValueProperty2Attribute(p))
+                               ->union(
+                                 thisModule.getRoles(c)->collect(r |
+                                   if r.type.oclIsUndefined() then
+                                     OclUndefined
+                                   else
+                                     if r.type.oclIsTypeOf(DSL!Relationship) and r.type.needTurnOnClass() then
+                                       thisModule.Relation2ComplexReference(r)
+                                     else
+                                       thisModule.Role2SimpleReference(r)
+                                     endif
+                                   endif
+                                 )->reject(sf | sf = OclUndefined)
+                               )
+       )
+}
+
+lazy rule Relation2Class {
+  from r : DSL!Relationship (r.needTurnOnClass())
+  to   kc : KM3!Class (
+         name               <- r.name,
+         location           <- r.location,
+         package            <- thisModule.resolveTemp(r.domainModel, 'mainPkg'),
+         isAbstract         <- r.isAbstract,
+         supertypes         <- if r.superType.oclIsUndefined() or r.superType.oclIsTypeOf(DSL!Relationship) then
+                                  Set{}
+                                else
+                                  Set{ thisModule.resolveTemp(r.superType, 'class') }
+                                endif,
+         structuralFeatures <- r.properties->collect(p | thisModule.ValueProperty2Attribute(p))
+                               ->union(
+                                 r.roles->collect(role |
+                                   thisModule.Relation2ComplexReference(role)
+                                 )
+                               )
+       )
+}
+
+lazy rule SimpleReference {
+  from r : DSL!Role (not r.relation.needTurnOnClass())
+  to   ref : KM3!Reference (
+         name       <- r.name,
+         location   <- r.location,
+         owner      <- thisModule.resolveTemp(r.source, 'class'),
+         type       <- thisModule.resolveTemp(r.type, 'class'),
+         lower      <- r.min,
+         upper      <- if r.isUnbounded then -1 else r.max endif,
+         isOrdered  <- r.isOrdered,
+         isUnique   <- true,
+         isContainer<- r.isEmbedding(),
+         opposite   <- if r.isNavigableFrom and r.relation.roles->exists(o | o <> r and o.isNavigableFrom) then
+                          thisModule.resolveTemp(r.relation.roles->any(o | o <> r), 'ref')
+                        else
+                          OclUndefined
+                        endif
+       )
+}
+
+lazy rule ComplexReference {
+  from r : DSL!Role (r.relation.needTurnOnClass())
+  to   ref : KM3!Reference (
+         name       <- r.name,
+         location   <- r.location,
+         owner      <- thisModule.resolveTemp(r.source, 'class'),
+         type       <- thisModule.resolveTemp(r.relation, 'relClass'),
+         lower      <- r.min,
+         upper      <- if r.isUnbounded then -1 else r.max endif,
+         isOrdered  <- r.isOrdered,
+         isUnique   <- true,
+         isContainer<- r.isEmbedding(),
+         opposite   <- if r.isNavigableFrom and r.relation.roles->exists(o | o <> r and o.isNavigableFrom) then
+                          thisModule.resolveTemp(r.relation.roles->any(o | o <> r), 'cref')
+                        else
+                          OclUndefined
+                        endif
+       )
+}
+
+lazy rule Attribute {
+  from vp : DSL!ValueProperty
+  to   att : KM3!Attribute (
+         name      <- vp.name,
+         location  <- vp.location,
+         owner     <- if vp.owner.oclIsTypeOf(DSL!Class) then
+                        thisModule.resolveTemp(vp.owner, 'class')
+                      else
+                        thisModule.resolveTemp(vp.owner, 'relClass')
+                      endif,
+         type      <- thisModule.Type2KM3Type(vp.type),
+         lower     <- 1,
+         upper     <- 1,
+         isOrdered <- false,
+         isUnique  <- true
+       )
+}
+
+lazy rule Enumeration {
+  from e : DSL!Enumeration
+  to   ke : KM3!Enumeration (
+         name      <- e.name,
+         location  <- e.location,
+         package   <- thisModule.resolveTemp(e.domainModel, 'mainPkg'),
+         literals  <- e.literals->collect(l | thisModule.EnumLiteral2EnumLiteral(l))
+       )
+}
+
+lazy rule EnumLiteral {
+  from l : DSL!EnumerationLiteral
+  to   kl : KM3!EnumLiteral (
+         name      <- l.name,
+         location  <- l.location,
+         package   <- thisModule.resolveTemp(l.oclContainer(), 'mainPkg')
+       )
+}
+
+lazy rule DataType {
+  from t : DSL!SimpleType
+  to   dt : KM3!DataType (
+         name     <- t.name,
+         location <- t.location,
+         package  <- thisModule.resolveTemp(t.oclContainer(), 'mainPkg')
+       )
+}
+
+helper def: Type2KM3Type(t : DSL!Type) : KM3!Classifier =
+  if t.oclIsTypeOf(DSL!SimpleType) then
+    thisModule.resolveTemp(t.oclAsType(DSL!SimpleType), 'dt')
+  else
+    thisModule.resolveTemp(t.oclAsType(DSL!Enumeration), 'enum')
+  endif;
+
+helper def: ValueProperty2Attribute(vp : DSL!ValueProperty) : KM3!Attribute =
+  thisModule.resolveTemp(vp, 'att');
+
+helper def: EnumLiteral2EnumLiteral(el : DSL!EnumerationLiteral) : KM3!EnumLiteral =
+  thisModule.resolveTemp(el, 'kl');
+
+helper def: Relation2ComplexReference(r : DSL!Role) : KM3!Reference =
+  thisModule.resolveTemp(r, 'ref');
+
+helper def: Role2SimpleReference(r : DSL!Role) : KM3!Reference =
+  thisModule.resolveTemp(r, 'ref');

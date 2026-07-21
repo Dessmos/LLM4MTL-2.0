@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://llm4mtl/schemas/semantic_cases.schema.json",
+  "title": "Semantic cases",
+  "description": "Task-generic semantic test specification authored by the LLM. Describes how the deterministic harness runs the transformation and which observable target-model facts to check. The deterministic codegen renders JUnit from this; the task contract (not this file) is authoritative for model names, metamodel URIs and types.",
+  "type": "object",
+  "required": ["schemaVersion", "tests"],
+  "additionalProperties": true,
+  "properties": {
+    "schemaVersion": {"type": "integer"},
+    "testClass": {"type": "string"},
+    "transformation": {"type": "string"},
+    "metamodels": {"type": "array", "items": {"type": "string"}},
+    "tests": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "assertions"],
+        "additionalProperties": true,
+        "properties": {
+          "name": {"type": "string"},
+          "models": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["name", "kind", "role"],
+              "additionalProperties": true,
+              "properties": {
+                "name": {"type": "string"},
+                "kind": {"type": "string", "enum": ["emf", "plainXml"]},
+                "role": {"type": "string", "enum": ["source", "target"]},
+                "path": {"type": "string"},
+                "generated": {"type": "boolean"},
+                "metamodelUri": {"type": "string"}
+              }
+            }
+          },
+          "assertions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["kind"],
+              "additionalProperties": true,
+              "properties": {
+                "kind": {"type": "string", "enum": ["count", "featureValues", "pathValues", "objects", "referencePairs"]}
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

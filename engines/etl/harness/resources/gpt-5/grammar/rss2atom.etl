@@ -1,0 +1,96 @@
+rule Rss2Atom
+  transform
+    r : RSS!Rss
+  to
+    f : Atom!Feed {
+      root = f;
+      entries.addAll(r.items.equivalent());
+      f.appendEquivalentsOfChildrenOf(r);
+  }
+
+rule Item2Entry
+  transform
+    i : RSS!Item
+  to
+    e : Atom!Entry {
+      e.appendEquivalentsOfChildrenOf(i);
+  }
+
+rule Title2Title
+  transform
+    s : RSS!Title
+  to
+    t : Atom!Title {
+      t.value = s.value;
+  }
+
+rule Link2Link
+  transform
+    s : RSS!Link
+  to
+    l : Atom!Link {
+      l.href = s.href;
+      l.value = s.value;
+  }
+
+rule Generator2Generator
+  transform
+    s : RSS!Generator
+  to
+    g : Atom!Generator {
+      g.value = s.value;
+  }
+
+rule Creator2Author
+  transform
+    s : RSS!Creator
+  to
+    a : Atom!Author {
+      a.name = s.value;
+  }
+
+rule Description2Summary
+  transform
+    s : RSS!Description
+  to
+    sm : Atom!Summary {
+      sm.value = s.value;
+  }
+
+rule ContentEncoded2Content
+  transform
+    s : RSS!ContentEncoded
+  to
+    c : Atom!Content {
+      c.value = s.value;
+  }
+
+rule PubDate2Published
+  transform
+    s : RSS!PubDate
+  to
+    p : Atom!Published {
+      p.value = s.value;
+  }
+
+operation Atom!Feed appendChildren(children : Sequence(Atom!Element)) {
+  for (c in children) {
+    self.children.add(c);
+  }
+}
+
+operation Atom!Entry appendChildren(children : Sequence(Atom!Element)) {
+  for (c in children) {
+    self.children.add(c);
+  }
+}
+
+operation Atom!Feed appendEquivalentsOfChildrenOf(source : RSS!Element) {
+  var converted = source.children.equivalent();
+  self.appendChildren(converted);
+}
+
+operation Atom!Entry appendEquivalentsOfChildrenOf(source : RSS!Element) {
+  var converted = source.children.equivalent();
+  self.appendChildren(converted);
+}

@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://llm4mtl/schemas/stage-result.schema.json",
+  "title": "Stage result",
+  "description": "The standard result a Python stage returns to n8n. Python reports FACTS (status + outcome_code + artifacts); routing decisions live only in n8n. Stored as stages/<stage>/attempts/attempt-NNN/result.json (immutable) with a stages/<stage>/latest.json projection.",
+  "type": "object",
+  "required": ["schema_version", "stage", "status", "outcome_code"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {"type": "string"},
+    "stage": {
+      "type": "string",
+      "enum": [
+        "prompt-building",
+        "syntax-validation",
+        "technical-validation",
+        "reference-validation",
+        "execution",
+        "diagnosis",
+        "evaluation"
+      ]
+    },
+    "status": {"type": "string", "enum": ["passed", "failed", "infrastructure_error"]},
+    "outcome_code": {"type": "string"},
+    "attempt": {"type": "integer", "minimum": 1, "default": 1},
+    "artifacts": {"type": "object", "additionalProperties": {"type": "string"}},
+    "started_at": {"type": "string", "format": "date-time"},
+    "finished_at": {"type": "string", "format": "date-time"},
+    "duration_ms": {"type": "integer", "minimum": 0}
+  }
+}

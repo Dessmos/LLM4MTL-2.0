@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xmi:XMI xmi:version="2.0" xmlns:xmi="http://www.omg.org/XMI" xmlns:IEEE1471="IEEE1471">
+  <IEEE1471:IEEE1471Model xmi:id="model1" name="TestModel" content="Test Model">
+    <system xmi:id="sys1" name="TestSystem" content="Test system" fulfills="mission1" inhabits="env1" hasAn="arch1" has="sh1"/>
+    <environment xmi:id="env1" name="TestEnvironment" content="Test environment" influences="sys1"/>
+    <missions xmi:id="mission1" name="TestMission" content="Test mission"/>
+    <architecture xmi:id="arch1" name="TestArchitecture" content="Test architecture" describedBy="ad1"/>
+    <stakeholders xmi:id="sh1" name="TestStakeholder" content="Test stakeholder" has="concern1"/>
+    <concerns xmi:id="concern1" name="TestConcern" content="Test concern" isImportantTo="sh1"/>
+    <viewpoints xmi:id="vp1" name="TestViewpoint" content="Test viewpoint" usedToCover="concern1" establishesMethodsFor="m1"/>
+    <architecturalDescription xmi:id="ad1" name="TestAD" content="Test architectural description" identifiesS="sh1" identifiesC="concern1" selects="vp1">
+      <organizedBy xmi:id="view1" name="TestView" content="Test view" conformsTo="vp1" consitsOf="m1"/>
+      <aggregates xmi:id="m1" name="TestADModel" content="Test model" participatesInV="view1" participatesInAD="ad1"/>
+    </architecturalDescription>
+    <rationale xmi:id="rat1" name="TestRationale" content="Test rationale" provides="ad1"/>
+  </IEEE1471:IEEE1471Model>
+</xmi:XMI>

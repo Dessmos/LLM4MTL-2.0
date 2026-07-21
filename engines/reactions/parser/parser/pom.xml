@@ -1,0 +1,157 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <!-- This module contains the actual parser implementation.-->
+    <parent>
+        <groupId>tools.vitruv</groupId>
+        <artifactId>tools.vitruv.reactionsparser</artifactId>
+        <version>0.1.0-SNAPSHOT</version>
+    </parent>
+    <artifactId>tools.vitruv.reactionsparser.parser</artifactId>
+    <name>Reactions Parser</name>
+    <packaging>jar</packaging>
+
+    <dependencies>
+        <!-- Reactions language runtime and parser -->
+        <dependency>
+            <groupId>tools.vitruv</groupId>
+            <artifactId>tools.vitruv.dsls.reactions.language</artifactId>
+        </dependency>
+
+        <!-- runtime services that provide 'affectedEObject', 'newValue', etc. -->
+        <dependency>
+            <groupId>tools.vitruv</groupId>
+            <artifactId>tools.vitruv.dsls.reactions.runtime</artifactId>
+            <version>3.2.3</version>
+        </dependency>
+
+        <!-- Xbase runtime used by the Reactions language -->
+        <dependency>
+            <groupId>org.eclipse.xtext</groupId>
+            <artifactId>org.eclipse.xtext.xbase</artifactId>
+            <version>2.36.0</version>
+        </dependency>
+        <dependency>
+            <groupId>org.eclipse.xtext</groupId>
+            <artifactId>org.eclipse.xtext.xbase.lib</artifactId>
+            <version>2.36.0</version>
+        </dependency>
+        <!-- EMF libraries for saving XMI and working with Ecore -->
+        <dependency>
+            <groupId>org.eclipse.emf</groupId>
+            <artifactId>org.eclipse.emf.common</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.eclipse.emf</groupId>
+            <artifactId>org.eclipse.emf.ecore</artifactId>
+        </dependency>
+        <!-- Xtext runtime -->
+        <dependency>
+            <groupId>org.eclipse.xtext</groupId>
+            <artifactId>org.eclipse.xtext</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.eclipse.xtext</groupId>
+            <artifactId>org.eclipse.xtext.util</artifactId>
+        </dependency>
+        <!-- Eclipse core runtime used by Xtext internally -->
+        <dependency>
+            <groupId>org.eclipse.platform</groupId>
+            <artifactId>org.eclipse.core.runtime</artifactId>
+        </dependency>
+        <!-- Utility wrapper providing EMF helper classes.  This
+             dependency is shaded into the final JAR. -->
+        <dependency>
+            <groupId>tools.vitruv</groupId>
+            <artifactId>tools.vitruv.change.p2wrappers.emfutils</artifactId>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <!-- Compile against Java version configured in parent -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.11.0</version>
+                <configuration>
+                    <source>${maven.compiler.source}</source>
+                    <target>${maven.compiler.target}</target>
+                </configuration>
+            </plugin>
+
+            <!-- Set the main class in the generated MANIFEST.MF -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <version>3.3.0</version>
+                <configuration>
+                    <archive>
+                        <manifest>
+                            <mainClass>tools.vitruv.reactionsparser.cli.ReactionsCli</mainClass>
+                        </manifest>
+                    </archive>
+                </configuration>
+            </plugin>
+
+            <!-- Build an uber-jar containing all dependencies.  The
+                 resulting file will have the classifier "all" so that
+                 users can pick it easily from the target directory. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-shade-plugin</artifactId>
+                <version>3.5.0</version>
+                <executions>
+                    <execution>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>shade</goal>
+                        </goals>
+                        <configuration>
+                            <!-- Do not generate a dependency-reduced POM because
+                                 this would interfere with installation into local
+                                 repositories.  Instead attach the shaded
+                                 artifact alongside the normal one. -->
+                            <createDependencyReducedPom>false</createDependencyReducedPom>
+                            <shadedArtifactAttached>true</shadedArtifactAttached>
+                            <shadedClassifierName>all</shadedClassifierName>
+                            <!-- Explicitly include all classes from the EMF
+                                 utilities wrapper.  Without this filter the
+                                 classes would be omitted because the wrapper is
+                                 provided via a p2 repository rather than the
+                                 Maven reactor. -->
+                            <filters>
+                                <filter>
+                                    <artifact>tools.vitruv:tools.vitruv.change.p2wrappers.emfutils</artifact>
+                                    <includes>
+                                        <include>**</include>
+                                    </includes>
+                                </filter>
+                                <!-- Exclude these manifest files from all dependencies -->
+                                <filter>
+                                    <artifact>*:*</artifact>
+                                    <excludes>
+                                        <exclude>META-INF/*.SF</exclude>
+                                        <exclude>META-INF/*.DSA</exclude>
+                                        <exclude>META-INF/*.RSA</exclude>
+                                    </excludes>
+                                </filter>
+                            </filters>
+                            <!-- Ensure that the MANIFEST.MF in the shaded jar
+                                 contains the correct Main-Class entry. -->
+                            <transformers>
+                                <transformer
+                                    implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                                    <mainClass>tools.vitruv.reactionsparser.cli.ReactionsCli</mainClass>
+                                </transformer>
+                            </transformers>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+
+</project>

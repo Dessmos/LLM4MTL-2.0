@@ -1,0 +1,54 @@
+module Make2Ant;
+create OUT : Ant from IN : Make;
+
+rule Makefile2Project {
+	from
+		mf : Make!Makefile
+	to
+		p : Ant!Project (
+			name <- mf.name,
+			properties <- mf.elements->select(e | e.oclIsKindOf(Make!Macro))->collect(m | thisModule.Macro2Property(m)),
+			targets <- mf.elements->select(e | e.oclIsKindOf(Make!Rule))->collect(r | thisModule.Rule2Target(r)),
+			default <- thisModule.Rule2Target(mf.elements->select(e | e.oclIsKindOf(Make!Rule))->asSequence()->first())
+		)
+}
+
+helper def : Macro2Property(m : Make!Macro) : Ant!PropertyValue =
+	let pv : Ant!PropertyValue = Ant!PropertyValue.newInstance() in
+	(
+		pv.name <- m.name;
+		pv.value <- m.value;
+		pv
+	);
+
+helper def : Rule2Target(r : Make!Rule) : Ant!Target =
+	let t : Ant!Target = Ant!Target.newInstance() in
+	(
+		t.name <- r.name;
+		t.tasks <- r.shellLines->collect(sl | thisModule.ShellLine2Tasks(sl, t))->flatten();
+		t.depends <- r.dependencies->select(d | d.oclIsKindOf(Make!RuleDep))->collect(rd | thisModule.Rule2Target(rd.oclAsType(Make!RuleDep).ruledep));
+		t
+	);
+
+helper def : ShellLine2Tasks(sl : Make!ShellLine, owningTarget : Ant!Target) : Sequence(Ant!Task) =
+	if sl.display
+	then
+		let e : Ant!Echo = Ant!Echo.newInstance(),
+			x : Ant!Exec = Ant!Exec.newInstance() in
+		(
+			e.message <- sl.command;
+			e.target <- owningTarget;
+			x.executable <- sl.command;
+			x.dir <- "";
+			x.target <- owningTarget;
+			Sequence{e, x}
+		)
+	else
+		let x : Ant!Exec = Ant!Exec.newInstance() in
+		(
+			x.executable <- sl.command;
+			x.dir <- "";
+			x.target <- owningTarget;
+			Sequence{x}
+		)
+;

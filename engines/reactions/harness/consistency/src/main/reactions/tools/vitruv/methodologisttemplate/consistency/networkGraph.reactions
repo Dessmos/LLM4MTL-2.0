@@ -1,0 +1,79 @@
+import "http://vitruv.tools/methodologisttemplate/network" as network
+import "http://vitruv.tools/methodologisttemplate/graph" as graph
+
+reactions: networkToGraph
+in reaction to changes in network
+execute actions in graph
+
+// Create and register Root when a System is created as root element
+reaction SystemInsertedAsRoot {
+	after element network::System inserted as root
+	call createAndRegisterRoot(newValue)
+}
+
+// Routine to create and register a Root corresponding to the given System
+routine createAndRegisterRoot(network::System system) {
+	match {
+		require absence of graph::Root corresponding to system
+	}
+  	create {
+    	val mRoot = new graph::Root
+  	}
+	update {
+    	persistProjectRelative(system, mRoot, "model/graph.graph")
+		addCorrespondenceBetween(system, mRoot)
+	}
+}
+
+// Create corresponding Entity when a Component is created in a System
+reaction ComponentInsertedIntoSystem {
+	after element network::Component inserted in network::System[components]
+	call createAndInsertEntity(affectedEObject, newValue)
+}
+
+// Routine to create an Entity corresponding to the given Component in the given System
+routine createAndInsertEntity(network::System system, network::Component component) {
+	match {
+		require absence of graph::Entity corresponding to component
+    	val mRoot = retrieve graph::Root corresponding to system
+	}
+  	create {
+    	val entity = new graph::Entity
+  	}
+	update {
+    	entity.name = component.name
+    	mRoot.entities.add(entity)
+		addCorrespondenceBetween(component, entity)
+	}
+}
+
+// Update name of corresponding Entity when a Component is renamed
+reaction ComponentRenamed {
+	after attribute replaced at network::Component[name]
+	call renameEntity(affectedEObject)
+}
+
+// Routine to rename the Entity corresponding to the given Component
+routine renameEntity(network::Component component) {
+	match {
+    	val entity = retrieve graph::Entity corresponding to component
+	}
+	update {
+    	entity.name = component.name
+	}
+}
+
+reaction ComponentDeleted {
+	after element network::Component deleted
+	call deleteEntity(affectedEObject)
+}
+
+routine deleteEntity(network::Component component) {
+	match {
+		val entity = retrieve graph::Entity corresponding to component
+	}
+	update {
+		removeObject(entity)
+		removeCorrespondenceBetween(component, entity)
+	}
+}

@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://maven.apache.org/surefire/maven-surefire-plugin/xsd/surefire-test-report-3.0.xsd" version="3.0" name="com.example.atlparser.AtlParserTest" time="0.511" tests="1" errors="0" skipped="0" failures="0">
+  <properties>
+    <property name="java.specification.version" value="17"/>
+    <property name="sun.jnu.encoding" value="UTF-8"/>
+    <property name="java.class.path" value="/Users/resres/Desktop/propa/LLM4MTL-2.0/LLM-based code generation for MTL/ATL_Parser/target/test-classes:/Users/resres/Desktop/propa/LLM4MTL-2.0/LLM-based code generation for MTL/ATL_Parser/target/classes:/Users/resres/.m2/repository/org/eclipse/m2m/atl/org.eclipse.m2m.atl.engine/4.6.0/org.eclipse.m2m.atl.engine-4.6.0.jar:/Users/resres/.m2/repository/org/eclipse/m2m/atl/org.eclipse.m2m.atl.dsls/4.6.0/org.eclipse.m2m.atl.dsls-4.6.0.jar:/Users/resres/.m2/repository/org/eclipse/m2m/atl/org.eclipse.m2m.atl.emftvm/4.6.0/org.eclipse.m2m.atl.emftvm-4.6.0.jar:/Users/resres/.m2/repository/org/eclipse/m2m/atl/org.eclipse.m2m.atl.emftvm.trace/4.6.0/org.eclipse.m2m.atl.emftvm.trace-4.6.0.jar:/Users/resres/.m2/repository/org/ow2/asm/asm/9.0-beta/asm-9.0-beta.jar:/Users/resres/.m2/repository/org/antlr/antlr-runtime/3.2/antlr-runtime-3.2.jar:/Users/resres/.m2/repository/org/antlr/stringtemplate/3.2/stringtemplate-3.2.jar:/Users/resres/.m2/repository/antlr/antlr/2.7.7/antlr-2.7.7.jar:/Users/resres/.m2/repository/org/eclipse/m2m/atl/org.eclipse.m2m.atl.engine.emfvm/4.6.0/org.eclipse.m2m.atl.engine.emfvm-4.6.0.jar:/Users/resres/.m2/repository/org/eclipse/equinox/org.eclipse.equinox.common/3.6.200.v20130402-1505/org.eclipse.equinox.common-3.6.200.v20130402-1505.jar:/Users/resres/.m2/repository/org/eclipse/emf/org.eclipse.emf.ecore.xmi/2.40.0/org.eclipse.emf.ecore.xmi-2.40.0.jar:/Users/resres/.m2/repository/org/eclipse/m2m/atl/org.eclipse.m2m.atl.common/4.6.0/org.eclipse.m2m.atl.common-4.6.0.jar:/Users/resres/.m2/repository/org/eclipse/emf/org.eclipse.emf.common/2.45.0/org.eclipse.emf.common-2.45.0.jar:/Users/resres/.m2/repository/org/eclipse/emf/org.eclipse.emf.ecore/2.42.0/org.eclipse.emf.ecore-2.42.0.jar:/Users/resres/.m2/repository/org/eclipse/platform/org.eclipse.osgi/3.23.100/org.eclipse.osgi-3.23.100.jar:/Users/resres/.m2/repository/org/eclipse/m2m/atl/org.eclipse.m2m.atl.core/4.6.0/org.eclipse.m2m.atl.core-4.6.0.jar:/Users/resres/.m2/repository/org/eclipse/m2m/atl/org.eclipse.m2m.atl.core.emf/4.6.0/org.eclipse.m2m.atl.core.emf-4.6.0.jar:/Users/resres/.m2/repository/org/junit/jupiter/junit-jupiter/5.10.0/junit-jupiter-5.10.0.jar:/Users/resres/.m2/repository/org/junit/jupiter/junit-jupiter-api/5.10.0/junit-jupiter-api-5.10.0.jar:/Users/resres/.m2/repository/org/opentest4j/opentest4j/1.3.0/opentest4j-1.3.0.jar:/Users/resres/.m2/repository/org/junit/platform/junit-platform-commons/1.10.0/junit-platform-commons-1.10.0.jar:/Users/resres/.m2/repository/org/apiguardian/apiguardian-api/1.1.2/apiguardian-api-1.1.2.jar:/Users/resres/.m2/repository/org/junit/jupiter/junit-jupiter-params/5.10.0/junit-jupiter-params-5.10.0.jar:/Users/resres/.m2/repository/org/junit/jupiter/junit-jupiter-engine/5.10.0/junit-jupiter-engine-5.10.0.jar:/Users/resres/.m2/repository/org/junit/platform/junit-platform-engine/1.10.0/junit-platform-engine-1.10.0.jar:"/>
+    <property name="java.vm.vendor" value="Homebrew"/>
+    <property name="sun.arch.data.model" value="64"/>
+    <property name="java.vendor.url" value="https://github.com/Homebrew/homebrew-core/issues"/>
+    <property name="user.timezone" value="Europe/Berlin"/>
+    <property name="os.name" value="Mac OS X"/>
+    <property name="java.vm.specification.version" value="17"/>
+    <property name="sun.java.launcher" value="SUN_STANDARD"/>
+    <property name="user.country" value="DE"/>
+    <property name="sun.boot.library.path" value="/opt/homebrew/Cellar/openjdk@17/17.0.19/libexec/openjdk.jdk/Contents/Home/lib"/>
+    <property name="sun.java.command" value="/Users/resres/Desktop/propa/LLM4MTL-2.0/LLM-based code generation for MTL/ATL_Parser/target/surefire/surefirebooter-20260531192532685_3.jar /Users/resres/Desktop/propa/LLM4MTL-2.0/LLM-based code generation for MTL/ATL_Parser/target/surefire 2026-05-31T19-25-31_976-jvmRun1 surefire-20260531192532685_1tmp surefire_0-20260531192532685_2tmp"/>
+    <property name="http.nonProxyHosts" value="local|*.local|169.254/16|*.169.254/16"/>
+    <property name="jdk.debug" value="release"/>
+    <property name="test" value="AtlParserTest"/>
+    <property name="surefire.test.class.path" value="/Users/resres/Desktop/propa/LLM4MTL-2.0/LLM-based code generation for MTL/ATL_Parser/target/test-classes:/Users/resres/Desktop/propa/LLM4MTL-2.0/LLM-based code generation for MTL/ATL_Parser/target/classes:/Users/resres/.m2/repository/org/eclipse/m2m/atl/org.eclipse.m2m.atl.engine/4.6.0/org.eclipse.m2m.atl.engine-4.6.0.jar:/Users/resres/.m2/repository/org/eclipse/m2m/atl/org.eclipse.m2m.atl.dsls/4.6.0/org.eclipse.m2m.atl.dsls-4.6.0.jar:/Users/resres/.m2/repository/org/eclipse/m2m/atl/org.eclipse.m2m.atl.emftvm/4.6.0/org.eclipse.m2m.atl.emftvm-4.6.0.jar:/Users/resres/.m2/repository/org/eclipse/m2m/atl/org.eclipse.m2m.atl.emftvm.trace/4.6.0/org.eclipse.m2m.atl.emftvm.trace-4.6.0.jar:/Users/resres/.m2/repository/org/ow2/asm/asm/9.0-beta/asm-9.0-beta.jar:/Users/resres/.m2/repository/org/antlr/antlr-runtime/3.2/antlr-runtime-3.2.jar:/Users/resres/.m2/repository/org/antlr/stringtemplate/3.2/stringtemplate-3.2.jar:/Users/resres/.m2/repository/antlr/antlr/2.7.7/antlr-2.7.7.jar:/Users/resres/.m2/repository/org/eclipse/m2m/atl/org.eclipse.m2m.atl.engine.emfvm/4.6.0/org.eclipse.m2m.atl.engine.emfvm-4.6.0.jar:/Users/resres/.m2/repository/org/eclipse/equinox/org.eclipse.equinox.common/3.6.200.v20130402-1505/org.eclipse.equinox.common-3.6.200.v20130402-1505.jar:/Users/resres/.m2/repository/org/eclipse/emf/org.eclipse.emf.ecore.xmi/2.40.0/org.eclipse.emf.ecore.xmi-2.40.0.jar:/Users/resres/.m2/repository/org/eclipse/m2m/atl/org.eclipse.m2m.atl.common/4.6.0/org.eclipse.m2m.atl.common-4.6.0.jar:/Users/resres/.m2/repository/org/eclipse/emf/org.eclipse.emf.common/2.45.0/org.eclipse.emf.common-2.45.0.jar:/Users/resres/.m2/repository/org/eclipse/emf/org.eclipse.emf.ecore/2.42.0/org.eclipse.emf.ecore-2.42.0.jar:/Users/resres/.m2/repository/org/eclipse/platform/org.eclipse.osgi/3.23.100/org.eclipse.osgi-3.23.100.jar:/Users/resres/.m2/repository/org/eclipse/m2m/atl/org.eclipse.m2m.atl.core/4.6.0/org.eclipse.m2m.atl.core-4.6.0.jar:/Users/resres/.m2/repository/org/eclipse/m2m/atl/org.eclipse.m2m.atl.core.emf/4.6.0/org.eclipse.m2m.atl.core.emf-4.6.0.jar:/Users/resres/.m2/repository/org/junit/jupiter/junit-jupiter/5.10.0/junit-jupiter-5.10.0.jar:/Users/resres/.m2/repository/org/junit/jupiter/junit-jupiter-api/5.10.0/junit-jupiter-api-5.10.0.jar:/Users/resres/.m2/repository/org/opentest4j/opentest4j/1.3.0/opentest4j-1.3.0.jar:/Users/resres/.m2/repository/org/junit/platform/junit-platform-commons/1.10.0/junit-platform-commons-1.10.0.jar:/Users/resres/.m2/repository/org/apiguardian/apiguardian-api/1.1.2/apiguardian-api-1.1.2.jar:/Users/resres/.m2/repository/org/junit/jupiter/junit-jupiter-params/5.10.0/junit-jupiter-params-5.10.0.jar:/Users/resres/.m2/repository/org/junit/jupiter/junit-jupiter-engine/5.10.0/junit-jupiter-engine-5.10.0.jar:/Users/resres/.m2/repository/org/junit/platform/junit-platform-engine/1.10.0/junit-platform-engine-1.10.0.jar:"/>
+    <property name="sun.cpu.endian" value="little"/>
+    <property name="user.home" value="/Users/resres"/>
+    <property name="user.language" value="ru"/>
+    <property name="java.specification.vendor" value="Oracle Corporation"/>
+    <property name="java.version.date" value="2026-04-21"/>
+    <property name="java.home" value="/opt/homebrew/Cellar/openjdk@17/17.0.19/libexec/openjdk.jdk/Contents/Home"/>
+    <property name="file.separator" value="/"/>
+    <property name="basedir" value="/Users/resres/Desktop/propa/LLM4MTL-2.0/LLM-based code generation for MTL/ATL_Parser"/>
+    <property name="java.vm.compressedOopsMode" value="Zero based"/>
+    <property name="line.separator" value="&#10;"/>
+    <property name="java.vm.specification.vendor" value="Oracle Corporation"/>
+    <property name="java.specification.name" value="Java Platform API Specification"/>
+    <property name="surefire.real.class.path" value="/Users/resres/Desktop/propa/LLM4MTL-2.0/LLM-based code generation for MTL/ATL_Parser/target/surefire/surefirebooter-20260531192532685_3.jar"/>
+    <property name="sun.management.compiler" value="HotSpot 64-Bit Tiered Compilers"/>
+    <property name="ftp.nonProxyHosts" value="local|*.local|169.254/16|*.169.254/16"/>
+    <property name="java.runtime.version" value="17.0.19+0"/>
+    <property name="user.name" value="resres"/>
+    <property name="path.separator" value=":"/>
+    <property name="os.version" value="26.4"/>
+    <property name="java.runtime.name" value="OpenJDK Runtime Environment"/>
+    <property name="file.encoding" value="UTF-8"/>
+    <property name="java.vm.name" value="OpenJDK 64-Bit Server VM"/>
+    <property name="java.vendor.version" value="Homebrew"/>
+    <property name="localRepository" value="/Users/resres/.m2/repository"/>
+    <property name="java.vendor.url.bug" value="https://github.com/Homebrew/homebrew-core/issues"/>
+    <property name="java.io.tmpdir" value="/var/folders/4l/g99_22ln1gn8n8bc_h5nvgcr0000gn/T/"/>
+    <property name="java.version" value="17.0.19"/>
+    <property name="user.dir" value="/Users/resres/Desktop/propa/LLM4MTL-2.0/LLM-based code generation for MTL/ATL_Parser"/>
+    <property name="os.arch" value="aarch64"/>
+    <property name="java.vm.specification.name" value="Java Virtual Machine Specification"/>
+    <property name="native.encoding" value="UTF-8"/>
+    <property name="java.library.path" value="/Users/resres/Library/Java/Extensions:/Library/Java/Extensions:/Network/Library/Java/Extensions:/System/Library/Java/Extensions:/usr/lib/java:."/>
+    <property name="java.vm.info" value="mixed mode, sharing"/>
+    <property name="java.vendor" value="Homebrew"/>
+    <property name="java.vm.version" value="17.0.19+0"/>
+    <property name="java.specification.maintenance.version" value="1"/>
+    <property name="sun.io.unicode.encoding" value="UnicodeBig"/>
+    <property name="socksNonProxyHosts" value="local|*.local|169.254/16|*.169.254/16"/>
+    <property name="java.class.version" value="61.0"/>
+  </properties>
+  <testcase name="testParseAllAtlFiles" classname="com.example.atlparser.AtlParserTest" time="0.5">
+    <system-out><![CDATA[OK: AmaltheaToAscet_All.atl
+OK: FamiliesToPersons_All.atl
+OK: BibTeX2DocBook_All.atl
+OK: CPL2SPL_All.atl
+OK: DSL2KM3_All.atl
+OK: Grafcet2PetriNet_All.atl
+OK: IEEE1471_2_MoDAF_All.atl
+OK: Make2Ant_All.atl
+OK: PetriNet2Grafcet_All.atl
+OK: XML2DSL_All.atl
+OK: NetworkToGraph_All.atl
+OK: User2Account_All.atl
+OK: Class2Interface_All.atl
+OK: Item2Product_All.atl
+OK: Document2Report_All.atl
+]]></system-out>
+  </testcase>
+</testsuite>

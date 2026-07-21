@@ -1,0 +1,31 @@
+module Item2Product_All;
+create OUT : product from IN : item;
+
+helper context item!Item def: getCategory() : String =
+  if self.type = 'Electronics' then
+    'Tech'
+  else
+    if self.type = 'Clothing' then
+      'Apparel'
+    else
+      'General'
+    endif
+  endif;
+
+rule ItemModel2ProductModel {
+  from src : item!ItemModel
+  to   dst : product!ProductModel (
+    products <- item!Item.allInstances()->collect(i | thisModule.Item2Product(i))
+  )
+}
+
+unique lazy rule Item2Product {
+  from i : item!Item
+  to   p : product!Product (
+    name        <- i.name,
+    price       <- i.price,
+    description <- i.description,
+    category    <- i.getCategory(),
+    inStock     <- i.quantity > 0
+  )
+}

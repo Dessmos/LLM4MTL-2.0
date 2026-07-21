@@ -1,0 +1,180 @@
+module IEEE1471_2_MoDAF;
+create OUT : MoDAF from IN : IEEE1471;
+
+helper context IN!IEEE1471Model def: rationale : String =
+	self.rationale->first().name.concat(': ').concat(self.rationale->first().content);
+
+rule IEEE1471Model2MoDAFModel {
+	from
+		s : IN!IEEE1471Model
+	to
+		t : OUT!MoDAFModel (
+			name <- s.name,
+			content <- s.content,
+			enterprise <- s.system,
+			environment <- s.environment,
+			operationalMissions <- s.missions,
+			architectures <- s.architecture,
+			architecturalDescription <- s.architecturalDescription,
+			stakeholders <- s.stakeholders,
+			architecturalFrameworks <- Sequence { af, s.libraryViewpoints }
+		),
+		af : OUT!ArchitecturalFramework (
+			name <- 'DefaultFramework',
+			ownedMember <- IN!Viewpoint.allInstances()->select(v | v.hasSource.oclIsUndefined())
+		)
+}
+
+rule System2Enterprise {
+	from
+		s : IN!System
+	to
+		t : OUT!Enterprise (
+			name <- s.name,
+			content <- s.content,
+			fulfills <- s.fulfills,
+			inhabits <- s.inhabits
+		)
+}
+
+rule Environment2Environment {
+	from
+		s : IN!Environment
+	to
+		t : OUT!Environment (
+			name <- s.name,
+			content <- s.content
+		)
+}
+
+rule Mission2OperationalMission {
+	from
+		s : IN!Mission
+	to
+		t : OUT!OperationalMission (
+			name <- s.name,
+			content <- s.content
+		)
+}
+
+rule Architecture2Architecture {
+	from
+		s : IN!Architecture
+	to
+		t : OUT!Architecture (
+			name <- s.name,
+			content <- s.content,
+			describedBy <- s.describedBy,
+			enterprise <- IN!System.allInstances()->select(sys | sys.hasAn = s)->first()
+		)
+}
+
+rule AD2AD {
+	from
+		s : IN!ArchitecturalDescription
+	to
+		t : OUT!ArchitecturalDescription (
+			name <- s.name,
+			content <- s.content,
+			approvialAuthority <- '',
+			architect <- '',
+			assumptionAndConstraints <- '',
+			creatingOrganisation <- '',
+			dateCompleted <- '',
+			purpose <- IN!IEEE1471Model.allInstances()->first().rationale,
+			recommendations <- '',
+			summaryOfFindings <- '',
+			tollsUsed <- '',
+			viewpoints <- s.selects,
+			products <- s.organizedBy,
+			taxonomy <- tax
+		),
+		tax : OUT!Taxonomy (
+			name <- s.name + '_Taxonomy',
+			date <- '',
+			url <- '',
+			version <- ''
+		)
+}
+
+rule Stakeholder2Stakeholder {
+	from
+		s : IN!Stakeholder
+	to
+		t : OUT!Stakeholder (
+			name <- s.name,
+			content <- s.content
+		)
+}
+
+rule Viewpoint2View {
+	from
+		s : IN!Viewpoint
+	to
+		t : OUT!View (
+			name <- s.name,
+			content <- s.content,
+			framework <- '',
+			frameworkWebsite <- '',
+			viewCode <- '',
+			viewDescription <- '',
+			viewName <- s.name,
+			usedToCover <- s.usedToCover
+		)
+}
+
+rule View2ArchitecturalProduct {
+	from
+		s : IN!View
+	to
+		t : OUT!ArchitecturalProduct (
+			name <- s.name,
+			content <- s.content,
+			description <- s.content,
+			architecturalElements <- s.consitsOf,
+			definingView <- s.conformsTo,
+			addresses <- s.conformsTo.usedToCover
+		)
+}
+
+rule Model2Element {
+	from
+		s : IN!Model
+	to
+		t : OUT!Elements (
+			name <- s.name,
+			content <- s.content
+		)
+}
+
+rule Concern2Concern {
+	from
+		s : IN!Concern
+	to
+		t : OUT!Concern (
+			name <- s.name,
+			content <- s.content
+		)
+}
+
+rule LibraryViewpoint2ArchitecturalFramework {
+	from
+		s : IN!LibraryViewpoint
+	to
+		t : OUT!ArchitecturalFramework (
+			name <- s.name,
+			content <- s.content,
+			ownedMember <- IN!Viewpoint.allInstances()->select(v | v.hasSource = s)
+		)
+}
+
+rule StakeholderHasConcern {
+	from
+		s : IN!Stakeholder (s.has->notEmpty())
+	to
+		t : distinct OUT!StakeholderHasConcern foreach (c in s.has) (
+			client <- s,
+			supplier <- c,
+			owner <- IN!IEEE1471Model.allInstances()->first()
+		)
+}

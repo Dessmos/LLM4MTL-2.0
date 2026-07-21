@@ -1,0 +1,190 @@
+module BibTeX2DocBook;
+
+create OUT : DocBook from IN : BibTex;
+
+helper context BibTex!BibTeXFile def: authorSet() : Set(BibTex!Author) =
+	self.entries->select(e | e.oclIsKindOf(BibTex!AuthoredEntry))
+		->collect(e | e.oclAsType(BibTex!AuthoredEntry).authors)->flatten()
+		->asSet()
+		->sortedBy(a | a.author);
+
+helper context BibTex!BibTeXFile def: titledEntrySet() : Set(BibTex!TitledEntry) =
+	self.entries->select(e | e.oclIsKindOf(BibTex!TitledEntry))
+		->collect(e | e.oclAsType(BibTex!TitledEntry))
+		->asSet()
+		->sortedBy(t | t.title);
+
+helper context BibTex!BibTeXFile def: articleSet() : Set(BibTex!Article) =
+	self.entries->select(e | e.oclIsKindOf(BibTex!Article))
+		->collect(e | e.oclAsType(BibTex!Article))
+		->asSet()
+		->sortedBy(a | a.journal);
+
+helper context BibTex!BibTeXEntry def: buildEntryPara() : String =
+	let idStr : String = self.id in
+	let typeStr : String = self.oclType().name in
+	let titleStr : String = if self.oclIsKindOf(BibTex!TitledEntry) then ', title=' + self.oclAsType(BibTex!TitledEntry).title else '' endif in
+	let authorsStr : String = if self.oclIsKindOf(BibTex!AuthoredEntry) then
+			', authors=' + self.oclAsType(BibTex!AuthoredEntry).authors->collect(a | a.author)->iterate(s; acc : String = '' | if acc = '' then s else acc + ' and ' + s endif)
+		else '' endif in
+	let yearStr : String = if self.oclIsKindOf(BibTex!DatedEntry) then ', year=' + self.oclAsType(BibTex!DatedEntry).year else '' endif in
+	let booktitleStr : String = if self.oclIsKindOf(BibTex!BookTitledEntry) then ', booktitle=' + self.oclAsType(BibTex!BookTitledEntry).booktitle else '' endif in
+	let schoolStr : String = if self.oclIsKindOf(BibTex!ThesisEntry) then ', school=' + self.oclAsType(BibTex!ThesisEntry).school else '' endif in
+	let journalStr : String = if self.oclIsKindOf(BibTex!Article) then ', journal=' + self.oclAsType(BibTex!Article).journal else '' endif in
+	let noteStr : String = if self.oclIsKindOf(BibTex!Unpublished) then ', note=' + self.oclAsType(BibTex!Unpublished).note else '' endif in
+	let publisherStr : String = if self.oclIsKindOf(BibTex!Book) then ', publisher=' + self.oclAsType(BibTex!Book).publisher else '' endif in
+	let chapterStr : String = if self.oclIsKindOf(BibTex!InBook) then ', chapter=' + self.oclAsType(BibTex!InBook).chapter.toString() else '' endif in
+	idStr + ' (' + typeStr + ')' + titleStr + authorsStr + yearStr + booktitleStr + schoolStr + journalStr + noteStr + publisherStr + chapterStr;
+
+rule Main {
+	from
+		s : BibTex!BibTeXFile
+	to
+		db : DocBook!DocBook (
+			books <- Sequence{b}
+		),
+		b : DocBook!Book (
+			articles <- Sequence{a}
+		),
+		a : DocBook!Article (
+			title <- 'BibTeXML to DocBook',
+			sections_1 <- Sequence{
+				sectRefList,
+				sectAuthors,
+				sectTitles,
+				sectJournals
+			}
+		),
+		sectRefList : DocBook!Sect1 (
+			title <- 'References List',
+			paras <- s.entries->sortedBy(e | e.id)->collect(e |
+				let pe : DocBook!Para = thisModule.resolveTemp(e, 'entryPara') in
+				pe
+			)
+		),
+		sectAuthors : DocBook!Sect1 (
+			title <- 'Authors list',
+			paras <- s.authorSet()->collect(a1 |
+				thisModule.resolveTemp(a1, 'authorPara')
+			)
+		),
+		sectTitles : DocBook!Sect1 (
+			title <- 'Titles List',
+			paras <- s.titledEntrySet()->collect(t1 |
+				thisModule.resolveTemp(t1, 'titlePara')
+			)
+		),
+		sectJournals : DocBook!Sect1 (
+			title <- 'Journals List',
+			paras <- s.articleSet()->collect(j1 |
+				thisModule.resolveTemp(j1, 'journalPara')
+			)
+		)
+}
+
+rule Author {
+	from
+		a : BibTex!Author
+	to
+		p : DocBook!Para (
+			content <- a.author
+		)
+}
+
+rule UntitledEntry {
+	from
+		e : BibTex!BibTeXEntry (
+			not e.oclIsKindOf(BibTex!TitledEntry)
+		)
+	to
+		entryPara : DocBook!Para (
+			content <- e.buildEntryPara()
+		)
+}
+
+rule TitledEntry_Title_NoArticle {
+	from
+		e : BibTex!TitledEntry (
+			not e.oclIsKindOf(BibTex!Article) and
+			e.oclAsType(BibTex!BibTeXEntry).bibtexfile().titledEntrySet()->includes(e)
+		)
+	to
+		entryPara : DocBook!Para (
+			content <- e.oclAsType(BibTex!BibTeXEntry).buildEntryPara()
+		),
+		titlePara : DocBook!Para (
+			content <- e.title
+		)
+}
+
+rule TitledEntry_NoTitle_NoArticle {
+	from
+		e : BibTex!TitledEntry (
+			not e.oclIsKindOf(BibTex!Article) and
+			not e.oclAsType(BibTex!BibTeXEntry).bibtexfile().titledEntrySet()->includes(e)
+		)
+	to
+		entryPara : DocBook!Para (
+			content <- e.oclAsType(BibTex!BibTeXEntry).buildEntryPara()
+		)
+}
+
+rule Article_Title_Journal {
+	from
+		e : BibTex!Article (
+			e.oclAsType(BibTex!BibTeXEntry).bibtexfile().titledEntrySet()->includes(e) and
+			e.oclAsType(BibTex!BibTeXEntry).bibtexfile().articleSet()->includes(e)
+		)
+	to
+		entryPara : DocBook!Para (
+			content <- e.oclAsType(BibTex!BibTeXEntry).buildEntryPara()
+		),
+		titlePara : DocBook!Para (
+			content <- e.title
+		),
+		journalPara : DocBook!Para (
+			content <- e.journal
+		)
+}
+
+rule Article_NoTitle_Journal {
+	from
+		e : BibTex!Article (
+			not e.oclAsType(BibTex!BibTeXEntry).bibtexfile().titledEntrySet()->includes(e) and
+			e.oclAsType(BibTex!BibTeXEntry).bibtexfile().articleSet()->includes(e)
+		)
+	to
+		entryPara : DocBook!Para (
+			content <- e.oclAsType(BibTex!BibTeXEntry).buildEntryPara()
+		),
+		journalPara : DocBook!Para (
+			content <- e.journal
+		)
+}
+
+rule Article_Title_NoJournal {
+	from
+		e : BibTex!Article (
+			e.oclAsType(BibTex!BibTeXEntry).bibtexfile().titledEntrySet()->includes(e) and
+			not e.oclAsType(BibTex!BibTeXEntry).bibtexfile().articleSet()->includes(e)
+		)
+	to
+		entryPara : DocBook!Para (
+			content <- e.oclAsType(BibTex!BibTeXEntry).buildEntryPara()
+		),
+		titlePara : DocBook!Para (
+			content <- e.title
+		)
+}
+
+rule Article_NoTitle_NoJournal {
+	from
+		e : BibTex!Article (
+			not e.oclAsType(BibTex!BibTeXEntry).bibtexfile().titledEntrySet()->includes(e) and
+			not e.oclAsType(BibTex!BibTeXEntry).bibtexfile().articleSet()->includes(e)
+		)
+	to
+		entryPara : DocBook!Para (
+			content <- e.oclAsType(BibTex!BibTeXEntry).buildEntryPara()
+		)
+}
