@@ -1,0 +1,68 @@
+{
+  "name": "LLM4MTL Agent Pipeline",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "start-node",
+      "name": "Start",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "cfg-language", "name": "language", "value": "etl", "type": "string" },
+            { "id": "cfg-task", "name": "task", "value": "Tree2Graph", "type": "string" },
+            { "id": "cfg-transformation-model", "name": "transformation_model", "value": "claude-sonnet-4", "type": "string" },
+            { "id": "cfg-strategy", "name": "strategy", "value": "grammar", "type": "string" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "config-node",
+      "name": "Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://stage-service:8129/runs",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"language\": $json.language, \"task\": $json.task, \"transformation_model\": $json.transformation_model } }}",
+        "options": {}
+      },
+      "id": "create-run-node",
+      "name": "Create Run",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=http://stage-service:8129/runs/{{ $json.run_id }}/stages/syntax-validation",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"tasks\": [$('Config').item.json.task], \"transformation_models\": [$('Config').item.json.transformation_model], \"transformation_strategies\": [$('Config').item.json.strategy] } }}",
+        "options": {}
+      },
+      "id": "syntax-stage-node",
+      "name": "Stage: syntax-validation",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 300]
+    }
+  ],
+  "connections": {
+    "Start": { "main": [[{ "node": "Config", "type": "main", "index": 0 }]] },
+    "Config": { "main": [[{ "node": "Create Run", "type": "main", "index": 0 }]] },
+    "Create Run": { "main": [[{ "node": "Stage: syntax-validation", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "active": false
+}

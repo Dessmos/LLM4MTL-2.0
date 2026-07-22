@@ -13,9 +13,11 @@ from llm4mtl.experiment_runner.models import PipelineConfig, StageResult
 class TestGenerationAdapter:
     def __init__(self, repo_root: Path) -> None:
         self.repo_root = repo_root.resolve()
-        self.test_generation_root = self.repo_root / "Test_Generation"
         # v5 migration (Stage 3): the test-generation n8n tree moved to workflows/n8n/tests.
+        # v5 final cleanup: generated-test output lives under artifacts/work/test_generation.
         from llm4mtl.paths import TARGET
+
+        self.test_generation_root = TARGET.artifacts_work / "test_generation"
 
         self.responses_root = (
             TARGET.workflows

@@ -41,7 +41,11 @@ def repo_root() -> Path:
 
 
 def test_generation_root() -> Path:
-    return repo_root() / "Test_Generation"
+    # v5 final cleanup: generated test suites and their metrics are OUTPUT; they now
+    # live under artifacts/work/ (the old nested Test_Generation dir is retired).
+    from llm4mtl.paths import TARGET
+
+    return TARGET.artifacts_work / "test_generation"
 
 
 def _n8n_tests_root() -> Path:

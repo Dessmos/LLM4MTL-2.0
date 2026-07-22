@@ -15,11 +15,17 @@ def repo_root() -> Path:
 
 
 def validation_root() -> Path:
-    return repo_root() / "Transformation_Validation"
+    # v5 final cleanup: transformation-validation output lives under artifacts/work/.
+    from llm4mtl.paths import TARGET
+
+    return TARGET.artifacts_work / "transformation_validation"
 
 
 def default_validated_tests_root() -> Path:
-    return repo_root() / "Test_Generation" / "generated_tests" / "etl"
+    # v5 final cleanup: generated test suites live under artifacts/work/test_generation.
+    from llm4mtl.paths import TARGET
+
+    return TARGET.artifacts_work / "test_generation" / "generated_tests" / "etl"
 
 
 def default_transformations_root() -> Path:

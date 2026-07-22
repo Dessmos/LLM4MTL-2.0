@@ -165,6 +165,18 @@ class TargetLayout:
         return self.root / "experiments"
 
     @property
+    def experiments_presets(self) -> Path:
+        return self.experiments / "presets"
+
+    @property
+    def experiments_variants(self) -> Path:
+        return self.experiments / "variants"
+
+    @property
+    def experiments_matrices(self) -> Path:
+        return self.experiments / "matrices"
+
+    @property
     def artifacts(self) -> Path:
         return self.root / "artifacts"
 
@@ -179,6 +191,9 @@ class TargetLayout:
     @property
     def artifact_experiments(self) -> Path:
         return self.artifacts_work / "experiments"
+
+    def experiment_dir(self, experiment_id: str) -> Path:
+        return self.artifact_experiments / experiment_id
 
     # Engines, uniform per language
     def engine_parser(self, language: str) -> Path:

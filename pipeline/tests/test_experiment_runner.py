@@ -9,16 +9,15 @@ from llm4mtl.experiment_runner.config import ConfigError, load_pipeline_config, 
 from llm4mtl.experiment_runner.models import PipelineConfig
 from llm4mtl.experiment_runner.orchestrator import ExperimentOrchestrator
 from llm4mtl.experiment_runner.adapters.transformation_validation import TransformationValidationAdapter
-from llm4mtl.paths import LEGACY_PROJECT_ROOT
+from llm4mtl.paths import LEGACY_PROJECT_ROOT, TARGET
 
 
-# During the v5 migration the experiment configs still live in the nested project.
 REPO_ROOT = LEGACY_PROJECT_ROOT
 
 
 class ConfigTests(unittest.TestCase):
     def test_loads_repository_experiment_yaml(self) -> None:
-        config = load_pipeline_config(REPO_ROOT / "experiments" / "etl" / "gpt_tests_vs_claude.yaml")
+        config = load_pipeline_config(TARGET.experiments_presets / "etl" / "gpt_tests_vs_claude.yaml")
         self.assertEqual(["Tree2Graph"], config.tasks)
         self.assertEqual(["gpt-5"], config.test_models)
         self.assertEqual(["claude-sonnet-4"], config.transformation_models)

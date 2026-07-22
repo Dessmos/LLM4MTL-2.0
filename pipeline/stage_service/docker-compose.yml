@@ -1,0 +1,14 @@
+# Runs the stage service. n8n reaches it at http://stage-service:8129 on a shared
+# Docker network; from the host it is http://localhost:8129.
+services:
+  stage-service:
+    build:
+      context: ../..                       # repository root
+      dockerfile: pipeline/stage_service/Dockerfile
+    container_name: llm4mtl-stage-service
+    ports:
+      - "8129:8129"
+    volumes:
+      # Mount the working tree so runs land on the host under artifacts/work/runs
+      # and engines/benchmark/workflows are read live (not a baked-in copy).
+      - ../..:/app

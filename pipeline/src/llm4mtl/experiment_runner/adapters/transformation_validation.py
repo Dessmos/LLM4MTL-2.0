@@ -13,7 +13,10 @@ from llm4mtl.experiment_runner.models import PipelineConfig, StageResult
 class TransformationValidationAdapter:
     def __init__(self, repo_root: Path) -> None:
         self.repo_root = repo_root.resolve()
-        self.validated_tests_root = self.repo_root / "Test_Generation" / "generated_tests" / "etl"
+        from llm4mtl.paths import TARGET
+
+        # v5 final cleanup: generated test suites live under artifacts/work/test_generation.
+        self.validated_tests_root = TARGET.artifacts_work / "test_generation" / "generated_tests" / "etl"
         # v5 migration (Stage 3): the transformation-generation n8n tree moved to
         # workflows/n8n/transformations.
         from llm4mtl.paths import TARGET
