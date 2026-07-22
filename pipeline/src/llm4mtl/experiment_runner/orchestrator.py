@@ -14,6 +14,8 @@ from llm4mtl.experiment_runner.adapters.transformation_parser import Transformat
 from llm4mtl.experiment_runner.adapters.transformation_validation import TransformationValidationAdapter
 from llm4mtl.experiment_runner.config import PIPELINE_STAGES, ConfigError, validate_config
 from llm4mtl.experiment_runner.models import PipelineConfig, RunResult, StageResult
+from llm4mtl import run_store
+from llm4mtl.paths import REPO_ROOT, TARGET
 
 
 StageCallable = Callable[[PipelineConfig, bool], StageResult]
@@ -27,7 +29,8 @@ class ExperimentOrchestrator:
         from llm4mtl.paths import LEGACY_PROJECT_ROOT
 
         self.repo_root = (repo_root or LEGACY_PROJECT_ROOT).resolve()
-        self.runs_root = self.repo_root / "Experiment_Runner" / "runs"
+        # v5 migration (Stage 4): runs are now run-centric under artifacts/work/runs.
+        self.runs_root = TARGET.runs
         self.tests = TestGenerationAdapter(self.repo_root)
         self.parser = TransformationParserAdapter(self.repo_root)
         self.transformations = TransformationValidationAdapter(self.repo_root)
@@ -55,16 +58,20 @@ class ExperimentOrchestrator:
         if config.keep_workspace:
             config.etl_test_dir = str(self.prepare_workspace(run_dir))
         write_json(run_dir / "config.resolved.yaml", config.to_dict())
-        write_json(
-            run_dir / "manifest.json",
-            {
-                "schema_version": 1,
-                "run_id": run_id,
-                "command": config.command,
-                "created_at": datetime.now(timezone.utc).isoformat(),
-                "config_hash": config_hash,
-            },
-        )
+        paths = run_store.open_run(self.runs_root, run_id)
+        if config.resume and paths.manifest.exists():
+            run_store.append_event(paths, "run_resumed")
+        else:
+            run_store.create_run(
+                self.runs_root,
+                run_id,
+                {
+                    "command": config.command,
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                    "config_hash": config_hash,
+                },
+                force=True,
+            )
 
         results: list[StageResult] = []
         for name, callback in stages:
@@ -74,11 +81,13 @@ class ExperimentOrchestrator:
                 results.append(resumed)
                 self.apply_stage_outputs(name, resumed, config)
                 self.persist_progress(run_dir, results)
+                run_store.append_event(paths, "stage_skipped_resume", stage=name, status=resumed.status)
                 continue
             if plan.status == "error":
                 plan.config_hash = config_hash
                 results.append(plan)
                 self.persist_progress(run_dir, results)
+                self._record_stage(paths, plan)
                 if config.fail_fast:
                     break
                 continue
@@ -100,16 +109,26 @@ class ExperimentOrchestrator:
             results.append(result)
             self.apply_stage_outputs(name, result, config)
             self.persist_progress(run_dir, results)
+            self._record_stage(paths, result)
             if config.fail_fast and (
                 result.status in {"error", "infrastructure_error"} or result.domain_failures
             ):
                 break
 
         status = run_status(results)
-        run_result = RunResult(run_id, status, config.command, results, str(run_dir.relative_to(self.repo_root)))
+        run_result = RunResult(run_id, status, config.command, results, str(run_dir.relative_to(REPO_ROOT)))
         write_json(run_dir / "summary.json", run_result.to_dict())
         self.write_log(run_dir, run_result)
+        run_store.append_event(paths, "run_finished", status=status)
         return run_result
+
+    def _record_stage(self, paths: run_store.RunPaths, result: StageResult) -> None:
+        """Record one stage outcome in the run-centric store (immutable attempt + latest)."""
+        run_store.append_event(paths, "stage_started", stage=result.name)
+        attempt = run_store.record_attempt(paths, result.name, result.to_dict())
+        run_store.append_event(
+            paths, "stage_finished", stage=result.name, status=result.status, attempt=attempt
+        )
 
     def apply_stage_outputs(
         self,

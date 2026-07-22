@@ -23,10 +23,13 @@ def default_validated_tests_root() -> Path:
 
 
 def default_transformations_root() -> Path:
+    # v5 migration (Stage 3): the transformation-generation n8n tree moved to
+    # workflows/n8n/transformations.
+    from llm4mtl.paths import TARGET
+
     return (
-        repo_root()
-        / "Workflows"
-        / "n8n-docker"
+        TARGET.workflows
+        / "transformations"
         / "mtl_snippets"
         / "ETL_language"
         / "responses"

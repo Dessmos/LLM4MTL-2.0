@@ -1,0 +1,35 @@
+services:
+  n8n-test-generation:
+    image: n8nio/n8n:latest
+    container_name: n8n-test-generation
+    ports:
+      - "5679:5678"
+    environment:
+      - GENERIC_TIMEZONE=Europe/Berlin
+      - TZ=Europe/Berlin
+      - N8N_SECURE_COOKIE=false
+      - N8N_RESTRICT_FILE_ACCESS_TO=/data
+    volumes:
+      # Keep this test-generation n8n instance separate from the baseline n8n.
+      - n8n_test_generation_data:/home/node/.n8n
+
+      # Test-generation workflow workspace. v5 migration (Stage 3): prompt material
+      # moved to prompt_assets/ and metamodels to benchmark/; container paths unchanged.
+      - "./workflows:/data/workflows"
+      - "./mtl_snippets:/data/snippets"
+      # v5 migration (Stage 3): references + task_contracts moved to benchmark/tasks/etl;
+      # nested-mounted back to their container paths so n8n draft workflows keep working.
+      - "../../../benchmark/tasks/etl/references:/data/snippets/ETL_test_generation/references:ro"
+      - "../../../benchmark/tasks/etl/task_contracts:/data/snippets/ETL_test_generation/task_contracts:ro"
+      - "../../../prompt_assets/tests/few_shot:/data/examples"
+      - "../../../prompt_assets/tests/grammar:/data/grammar"
+      - "../../../benchmark/metamodels/etl:/data/models"
+
+      # Baseline ETL artifacts used as read-only prompt context.
+      # v5 migration: engines moved to engines/<lang>/{parser,harness}; container
+      # paths (/data/baseline/...) are kept so n8n File nodes are unchanged.
+      - "../../../engines/etl/harness/src/test/resources:/data/baseline/ETL_Test/resources:ro"
+      - "../../../engines/etl/parser/src/main/resources:/data/baseline/ETL_Parser/resources:ro"
+
+volumes:
+  n8n_test_generation_data:

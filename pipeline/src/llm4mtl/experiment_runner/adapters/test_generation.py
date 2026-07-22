@@ -14,10 +14,12 @@ class TestGenerationAdapter:
     def __init__(self, repo_root: Path) -> None:
         self.repo_root = repo_root.resolve()
         self.test_generation_root = self.repo_root / "Test_Generation"
+        # v5 migration (Stage 3): the test-generation n8n tree moved to workflows/n8n/tests.
+        from llm4mtl.paths import TARGET
+
         self.responses_root = (
-            self.test_generation_root
-            / "Workflows"
-            / "n8n-docker"
+            TARGET.workflows
+            / "tests"
             / "mtl_snippets"
             / "ETL_test_generation"
             / "responses"

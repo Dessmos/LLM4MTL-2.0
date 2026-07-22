@@ -16,7 +16,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from llm4mtl.conventions import default_etl_test_dir, default_responses_root, repo_root
+from llm4mtl.conventions import (
+    default_etl_test_dir,
+    default_references_root,
+    default_responses_root,
+    default_task_contracts_root,
+    repo_root,
+)
 from llm4mtl.task_contracts import TaskContract, contract_from_mapping
 from llm4mtl.task_contracts.render import (
     CONTRACT_MARKER_END,
@@ -51,7 +57,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--references-root",
         type=Path,
-        default=default_responses_root().parent / "references",
+        default=default_references_root(),
         help="Directory containing reference ETL files.",
     )
     parser.add_argument(
@@ -69,7 +75,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--contracts-root",
         type=Path,
-        default=default_responses_root().parent / "task_contracts",
+        default=default_task_contracts_root(),
         help="Output directory for JSON and text contracts.",
     )
     parser.add_argument(

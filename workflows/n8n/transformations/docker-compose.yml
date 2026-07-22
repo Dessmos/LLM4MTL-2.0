@@ -13,12 +13,14 @@ services:
     volumes:
       # 1️⃣ keep n8n’s internal data (workflows, creds, etc.)
       - n8n_data:/home/node/.n8n
-      # 2️⃣ **bind-mount** the folder you want n8n to read
+      # 2️⃣ **bind-mount** the folders n8n reads. v5 migration (Stage 3): hand-authored
+      # prompt material moved to prompt_assets/ and metamodels to benchmark/; container
+      # paths (/data/...) are unchanged so n8n File nodes keep working.
       - "./mtl_snippets:/data/snippets"
-      - "./few_shot_examples:/data/examples"
-      - "./models:/data/models"
-      - "./helper_methods:/data/helper_methods"
-      - "./Grammar:/data/grammar"
+      - "../../../prompt_assets/transformations/few_shot:/data/examples"
+      - "../../../benchmark/metamodels:/data/models"
+      - "../../../prompt_assets/transformations/helper_methods:/data/helper_methods"
+      - "../../../prompt_assets/transformations/grammar:/data/grammar"
 
 volumes:
   n8n_data:

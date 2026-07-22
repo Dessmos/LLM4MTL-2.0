@@ -44,11 +44,16 @@ def test_generation_root() -> Path:
     return repo_root() / "Test_Generation"
 
 
+def _n8n_tests_root() -> Path:
+    # v5 migration (Stage 3): the test-generation n8n tree moved to workflows/n8n/tests.
+    from llm4mtl.paths import TARGET
+
+    return TARGET.workflows / "tests"
+
+
 def n8n_snippets_root(config: LanguageConfig = ETL_CONFIG) -> Path:
     return (
-        test_generation_root()
-        / "Workflows"
-        / "n8n-docker"
+        _n8n_tests_root()
         / "mtl_snippets"
         / config.snippets_dir
     )
@@ -56,9 +61,7 @@ def n8n_snippets_root(config: LanguageConfig = ETL_CONFIG) -> Path:
 
 def n8n_workflows_root(config: LanguageConfig = ETL_CONFIG) -> Path:
     return (
-        test_generation_root()
-        / "Workflows"
-        / "n8n-docker"
+        _n8n_tests_root()
         / "workflows"
         / f"{config.language_key}_variants"
     )
@@ -76,12 +79,20 @@ def default_prompts_root(config: LanguageConfig = ETL_CONFIG) -> Path:
     return n8n_snippets_root(config) / "prompts"
 
 
+def _benchmark_tasks_root(config: LanguageConfig = ETL_CONFIG) -> Path:
+    # v5 migration (Stage 3): hand-authored task inputs (references, task contracts)
+    # moved out of the n8n tree into benchmark/tasks/<lang>/.
+    from llm4mtl.paths import TARGET
+
+    return TARGET.benchmark / "tasks" / config.language_key
+
+
 def default_task_contracts_root(config: LanguageConfig = ETL_CONFIG) -> Path:
-    return n8n_snippets_root(config) / "task_contracts"
+    return _benchmark_tasks_root(config) / "task_contracts"
 
 
 def default_references_root(config: LanguageConfig = ETL_CONFIG) -> Path:
-    return n8n_snippets_root(config) / "references"
+    return _benchmark_tasks_root(config) / "references"
 
 
 def default_test_project_dir(config: LanguageConfig = ETL_CONFIG) -> Path:

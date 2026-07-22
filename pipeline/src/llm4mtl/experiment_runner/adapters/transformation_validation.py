@@ -14,10 +14,13 @@ class TransformationValidationAdapter:
     def __init__(self, repo_root: Path) -> None:
         self.repo_root = repo_root.resolve()
         self.validated_tests_root = self.repo_root / "Test_Generation" / "generated_tests" / "etl"
+        # v5 migration (Stage 3): the transformation-generation n8n tree moved to
+        # workflows/n8n/transformations.
+        from llm4mtl.paths import TARGET
+
         self.transformations_root = (
-            self.repo_root
-            / "Workflows"
-            / "n8n-docker"
+            TARGET.workflows
+            / "transformations"
             / "mtl_snippets"
             / "ETL_language"
             / "responses"
