@@ -119,15 +119,9 @@ def config_from_args(args: argparse.Namespace) -> PipelineConfig:
         validate_config(config)
         return config
     if command == "pipeline.run" and args.resume and args.run_id and not has_pipeline_selection(args):
-        from llm4mtl.paths import LEGACY_PROJECT_ROOT
+        from llm4mtl.paths import TARGET
 
-        resolved = (
-            LEGACY_PROJECT_ROOT
-            / "Experiment_Runner"
-            / "runs"
-            / args.run_id
-            / "config.resolved.yaml"
-        )
+        resolved = TARGET.runs / args.run_id / "config.resolved.yaml"
         config = load_resolved_config(resolved)
         apply_execution_overrides(config, args)
         config.command = command

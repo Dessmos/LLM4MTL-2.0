@@ -1,46 +1,17 @@
-# Generated Transformation Validation
+# Transformation execution
 
-This stage executes reference-validated generated test suites against LLM-generated
-ETL transformations.
+This package executes validated generated test suites against generated ETL
+transformations. It owns deterministic execution and evidence collection; it
+does not make routing or LLM decisions.
 
-Inputs remain owned by their producing stages:
+Default inputs:
 
-```text
-Test_Generation/generated_tests/etl/<task>/validated/<test_model>/<test_strategy>/<suite_id>/
-Workflows/n8n-docker/mtl_snippets/ETL_language/responses/<transformation_model>/<transformation_strategy>/<task>.etl
-```
+    artifacts/work/test_generation/generated_tests/etl/<task>/validated/<model>/<strategy>/<suite>/
+    workflows/n8n/transformations/mtl_snippets/ETL_language/responses/<model>/<strategy>/<task>.etl
 
-Every execution is archived under `artifacts/etl/<task>/<passed|failed>/...` with
-an immutable copy of the transformation, the validated suite, the complete Maven
-output, and machine-readable metadata. A compact index is appended to
-`results/etl/<task>/generated_transformation_validation.csv`.
+Run the facade from the repository root:
 
-For direct inspection in a spreadsheet, each task also receives
-`results/etl/<task>/generated_transformation_validation_report.csv`. It contains
-labelled rows such as `Test result, PASS`, `Compilation, PASS`, and an
-explanation or artifact path for failures. Each evaluation is enclosed by clear
-start and end separator rows.
+    PYTHONPATH=pipeline/src .venv/bin/python pipeline/src/llm4mtl/transformation_execution/validate_generated_transformations.py --suite artifacts/work/test_generation/generated_tests/etl/Tree2Graph/validated/gpt-5/few_shot/suite_001 --transformation workflows/n8n/transformations/mtl_snippets/ETL_language/responses/gpt-5/grammar/Tree2Graph.etl
 
-## Usage
-
-Run all matching validated suites and generated transformations:
-
-```bash
-python3 Transformation_Validation/scripts/etl/validate_generated_transformations.py
-```
-
-Run one pair:
-
-```bash
-python3 Transformation_Validation/scripts/etl/validate_generated_transformations.py \
-  --suite Test_Generation/generated_tests/etl/Tree2Graph/validated/gpt-5/few_shot/suite_001 \
-  --transformation Workflows/n8n-docker/mtl_snippets/ETL_language/responses/gpt-5/grammar/Tree2Graph.etl
-```
-
-Useful filters are `--task`, `--test-model`, `--test-strategy`,
-`--transformation-model`, and `--transformation-strategy`. Use `--dry-run` to
-inspect the selected pairs without modifying `ETL_Test` or creating artifacts.
-
-The runner temporarily injects the selected transformation, Java tests, and test
-models into `ETL_Test`. All injected source/resource files are restored even when
-Maven fails or times out.
+Results and injected Maven workspaces are written below
+artifacts/work/transformation_validation/.

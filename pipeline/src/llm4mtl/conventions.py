@@ -32,12 +32,9 @@ ETL_CONFIG = LanguageConfig(
 
 
 def repo_root() -> Path:
-    # v5 migration: this package now lives under pipeline/llm4mtl/, but the ETL_Test
-    # engine, Workflows/n8n and Test_Generation resources it references still live
-    # in the nested project folder. Resolve that root from the central path config.
-    from llm4mtl.paths import LEGACY_PROJECT_ROOT
+    from llm4mtl.paths import REPO_ROOT
 
-    return LEGACY_PROJECT_ROOT
+    return REPO_ROOT
 
 
 def test_generation_root() -> Path:

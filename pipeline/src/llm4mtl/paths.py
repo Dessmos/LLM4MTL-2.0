@@ -1,4 +1,4 @@
-"""Single source of truth for repository paths — v5 migration (Stage 0).
+"""Single source of truth for repository paths.
 
 Rationale
 ---------
@@ -8,21 +8,13 @@ paths.py`` (``parents[3]`` plus string literals ``"ETL_Test"`` /
 and ``docker-compose`` volume mounts. Every migration step therefore becomes a
 wide, error-prone edit.
 
-This module centralises *all* repository paths so that later migration stages
-(moving engines, unifying n8n, relocating artifacts) change paths in exactly one
-file. It declares two coordinated views:
+This module centralises repository paths. It declares two coordinated views:
 
-* ``LEGACY`` — where components live **today**, inside the
-  ``LLM-based code generation for MTL/`` project folder.
-* ``TARGET`` — where components will live in the **v5** layout, at the git
-  repository root.
+* LEGACY — historical pre-v5 locations, retained only for migration audits.
+* TARGET — the active v5 layout at the git repository root.
 
-During a migration stage a component is "flipped" by switching its accessor in
-``ACTIVE`` from the legacy path to the target path. Consumers never hard-code a
-path; they import from here.
-
-Run ``python3 pipeline/llm4mtl/paths.py`` to print the resolved paths and see
-which legacy locations currently exist on disk.
+Active code must use REPO_ROOT or TARGET. Run this module to print the historical
+migration map.
 """
 
 from __future__ import annotations
@@ -153,8 +145,8 @@ class TargetLayout:
         return self.root / "benchmark"
 
     @property
-    def prompting(self) -> Path:
-        return self.root / "prompting"
+    def prompt_assets(self) -> Path:
+        return self.root / "prompt_assets"
 
     @property
     def workflows(self) -> Path:
@@ -206,9 +198,6 @@ class TargetLayout:
     def benchmark_task(self, language: str, task: str) -> Path:
         return self.benchmark / "tasks" / language / task
 
-    def prompting_for(self, language: str) -> Path:
-        return self.prompting / language
-
     def run_dir(self, run_id: str) -> Path:
         return self.runs / run_id
 
@@ -229,17 +218,17 @@ MIGRATION_MAP: dict[str, tuple[Path, Path]] = {
     "reactions/parser-antlr": (LEGACY.reactions_parser_antlr, TARGET.engines / "reactions" / "parser-antlr"),
     "reactions/harness": (LEGACY.reactions_harness, TARGET.engine_harness("reactions")),
     "pipeline/test_generation": (LEGACY.test_generation, TARGET.package),
-    "pipeline/transformation_validation": (LEGACY.transformation_validation, TARGET.package / "execution"),
+    "pipeline/transformation_validation": (LEGACY.transformation_validation, TARGET.package / "transformation_execution"),
     "pipeline/experiment_runner": (LEGACY.experiment_runner, TARGET.package),
     "pipeline/significant_test": (LEGACY.significant_test, TARGET.package / "evaluation"),
-    "n8n/transformations": (LEGACY.n8n_transformations, TARGET.workflows),
-    "n8n/tests": (LEGACY.n8n_tests, TARGET.workflows),
+    "n8n/transformations": (LEGACY.n8n_transformations, TARGET.workflows / "transformations"),
+    "n8n/tests": (LEGACY.n8n_tests, TARGET.workflows / "tests"),
 }
 
 
 def _report() -> str:
     lines = [
-        "LLM4MTL path configuration (v5, Stage 0)",
+        "LLM4MTL path configuration (v5)",
         f"REPO_ROOT           : {REPO_ROOT}",
         f"LEGACY_PROJECT_ROOT : {LEGACY_PROJECT_ROOT}  (exists={LEGACY_PROJECT_ROOT.is_dir()})",
         "",

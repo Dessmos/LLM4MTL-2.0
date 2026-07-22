@@ -6,12 +6,9 @@ from pathlib import Path
 
 
 def repo_root() -> Path:
-    # v5 migration: this package now lives under pipeline/llm4mtl/, but the
-    # Transformation_Validation output dirs, Test_Generation suites, Workflows and
-    # ETL_Test it references still live in the nested project folder.
-    from llm4mtl.paths import LEGACY_PROJECT_ROOT
+    from llm4mtl.paths import REPO_ROOT
 
-    return LEGACY_PROJECT_ROOT
+    return REPO_ROOT
 
 
 def validation_root() -> Path:

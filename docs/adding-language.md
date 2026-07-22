@@ -10,7 +10,7 @@ Required:
   `parser_engine`, `harness_engine`, formats, `prepare_engine_inputs`,
   `capabilities`). NOT a God object; the stage owns the use case.
 - `benchmark/tasks/<lang>/<task>/` — task inputs.
-- `prompting/<lang>/` — hand-authored material.
+- `prompt_assets/{tests,transformations}/.../<lang>/` — hand-authored material.
 
 Possibly:
 - a new deterministic code generator, or a new validation capability.

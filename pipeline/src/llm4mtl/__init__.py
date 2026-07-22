@@ -1,8 +1,7 @@
-"""LLM4MTL experiment pipeline (v5).
+"""LLM4MTL deterministic experiment pipeline.
 
-Stage 0 skeleton: only the path-configuration module (`paths.py`) exists so far.
-Subsequent migration stages populate the deep-module packages described in
-`docs/migration-plan.md`.
+The package contains pipeline stages, run and experiment stores, local
+orchestration, and the transport-only stage service used by n8n.
 """
 
 __version__ = "0.0.0"

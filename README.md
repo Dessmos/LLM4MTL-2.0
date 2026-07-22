@@ -1,28 +1,44 @@
-# Reactions Language & ATL Transformation Projects
+# LLM4MTL
 
-This repository contains several modules that demonstrate model transformations and synchronisation using the Reactions Language, the ATLAS Transformation Language (ATL) and related tooling.  It also includes an `n8n` setup to automate parts of the workflow.
+LLM4MTL is an experiment pipeline for generating and evaluating model
+transformations with large language models. n8n owns LLM calls and routing;
+Python performs deterministic extraction, validation, execution and evaluation.
 
-## Modules
+## Repository layout
 
-- **Reactions_Language_Parser** – a Maven module that builds a shaded JAR capable of parsing and validating Reactions Language code.  See [`Reactions_Language_Parser/README.md`](Reactions_Language_Parser/README.md) for details.
-- **Reactions_Language_Tests** – tests written using the Vitruv Methodologist template to validate Reactions Language transformations on a Virtual Single Underlying Model (V‑SUM).  See [`Reactions_Language_Tests/README.md`](Reactions_Language_Tests/README.md).
-- **ATL_Tests** – example transformations written in the ATLAS Transformation Language (ATL) along with JUnit tests for scenarios such as Amalthea‑to‑Ascet, Families‑to‑Persons and Network‑to‑Graph.  See [`ATL_Tests/README.md`](ATL_Tests/README.md).
-- **Docker** – a Docker Compose configuration for running an `n8n` instance.  The provided workflows automate the creation of prompts and evaluation of generated code.  See [`Docker/n8n-docker/README.md`](Docker/n8n-docker/README.md).
+- pipeline/ — the installable llm4mtl Python package, tests and stage HTTP service.
+- engines/ — language-specific parsers and Maven test harnesses.
+- benchmark/ — task contracts, references, metamodels and fixtures.
+- prompt_assets/ — grammar, few-shot examples and helper material.
+- workflows/n8n/ — transformation/test workflows and the master scaffold.
+- experiments/ — presets, variants and experiment matrices.
+- schemas/ — JSON contracts shared by n8n, Python and stored artifacts.
+- artifacts/work/ — generated per-run output; intentionally not tracked by Git.
 
-## Building the code
+See docs/architecture.md for ownership rules and docs/data-flow.md for the
+end-to-end flow.
 
-All modules use Maven.  To compile and run the tests for all modules at once, execute:
+## Python setup and tests
 
-```sh
-mvn clean verify
-```
+    python3 -m venv .venv
+    .venv/bin/pip install -e 'pipeline[dev]'
+    .venv/bin/pytest -q pipeline/tests
 
-## Running tests
+Run a non-mutating selection check:
 
-The test suites in `Reactions_Language_Tests` and `ATL_Tests` can be run from your IDE or via Maven.  These tests instantiate metamodels, run the transformations and assert structural and semantic correctness of the results.
+    PYTHONPATH=pipeline/src .venv/bin/python -m llm4mtl.experiment_runner pipeline run --config experiments/presets/etl/tree2graph_smoke.yaml --dry-run
 
-## Automated prompt generation and prompting
+Maven modules are built from their engine directories, for example:
 
-The `Docker/n8n-docker` module contains an `n8n` workflow that automates the generation of prompts for large language models, the invocation of the models (e.g. via the OpenAI API) and the execution of parser and unit tests on the generated code.  This workflow is central to reproducing the evaluation results and can be run locally via Docker.
+    mvn -f engines/etl/parser/pom.xml verify
+    mvn -f engines/etl/harness/pom.xml verify
 
-Refer to the individual module readmes for further usage instructions.
+## n8n and stage service
+
+- Transformation workflows: workflows/n8n/transformations/
+- Test-generation workflows: workflows/n8n/tests/
+- Master workflow scaffold: workflows/n8n/main/
+- Python stage service: pipeline/stage_service/
+
+Each directory contains its own deployment or import instructions. API keys stay
+in n8n credentials and are never passed to the Python subsystem.

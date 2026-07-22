@@ -17,7 +17,7 @@ Follow these steps to build and start the n8n container:
 1. Open a terminal and navigate to this directory:
 
    ```sh
-   cd 03-Code/Docker/n8n-docker
+   cd workflows/n8n/transformations
    ```
 
 2. Build and launch the services:

@@ -23,7 +23,8 @@ services:
       - "../../../benchmark/tasks/etl/task_contracts:/data/snippets/ETL_test_generation/task_contracts:ro"
       - "../../../prompt_assets/tests/few_shot:/data/examples"
       - "../../../prompt_assets/tests/grammar:/data/grammar"
-      - "../../../benchmark/metamodels/etl:/data/models"
+      # Workflows select /data/models/etl/*.ecore, so preserve the language level.
+      - "../../../benchmark/metamodels:/data/models:ro"
 
       # Baseline ETL artifacts used as read-only prompt context.
       # v5 migration: engines moved to engines/<lang>/{parser,harness}; container

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 import unittest
+from pathlib import Path
 
 from llm4mtl.experiment_runner.models import StageResult
 from llm4mtl.stage_contract import outcome_code, stage_status, to_stage_payload
@@ -65,6 +67,20 @@ class PayloadTests(unittest.TestCase):
         self.assertEqual("syntax-validation", payload["stage"])
         self.assertEqual("passed", payload["status"])
         self.assertEqual(1, payload["attempt"])
+
+    def test_payload_shape_is_declared_by_json_schema(self) -> None:
+        payload = to_stage_payload(
+            "extract",
+            result("extraction", "completed", selected=1, failed=0),
+            attempt=1,
+        )
+        schema_path = Path(__file__).resolve().parents[2] / "schemas" / "stage-result.schema.json"
+        schema = json.loads(schema_path.read_text(encoding="utf-8"))
+        properties = schema["properties"]
+        self.assertLessEqual(set(payload), set(properties))
+        self.assertIn(payload["stage"], properties["stage"]["enum"])
+        self.assertIn(payload["status"], properties["status"]["enum"])
+        self.assertTrue(set(schema["required"]).issubset(payload))
 
 
 if __name__ == "__main__":

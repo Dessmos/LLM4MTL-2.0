@@ -28,8 +28,7 @@ class TestGenerationAdapter:
         )
         self.generated_tests_root = self.test_generation_root / "generated_tests" / "etl"
         self.results_root = self.test_generation_root / "results" / "etl"
-        # v5 migration: the test-generation driver scripts moved into the pipeline
-        # package; the data dirs above still live in the nested Test_Generation folder.
+        # Driver scripts are package-owned; runtime output is artifact-owned.
         from llm4mtl.paths import TARGET
 
         semantic_tests = TARGET.package / "semantic_tests"

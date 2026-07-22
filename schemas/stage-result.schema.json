@@ -11,6 +11,7 @@
     "stage": {
       "type": "string",
       "enum": [
+        "extract",
         "prompt-building",
         "syntax-validation",
         "technical-validation",
@@ -23,6 +24,10 @@
     "status": {"type": "string", "enum": ["passed", "failed", "infrastructure_error"]},
     "outcome_code": {"type": "string"},
     "attempt": {"type": "integer", "minimum": 1, "default": 1},
+    "counts": {
+      "type": "object",
+      "additionalProperties": {"type": "integer", "minimum": 0}
+    },
     "artifacts": {"type": "object", "additionalProperties": {"type": "string"}},
     "started_at": {"type": "string", "format": "date-time"},
     "finished_at": {"type": "string", "format": "date-time"},

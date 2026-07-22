@@ -23,12 +23,9 @@ StageCallable = Callable[[PipelineConfig, bool], StageResult]
 
 class ExperimentOrchestrator:
     def __init__(self, repo_root: Path | None = None) -> None:
-        # v5 migration: the orchestrator moved under pipeline/llm4mtl/, but ETL_Test,
-        # Experiment_Runner/runs and the data dirs it references still live in the
-        # nested project folder. Default to that root unless one is supplied.
-        from llm4mtl.paths import LEGACY_PROJECT_ROOT
-
-        self.repo_root = (repo_root or LEGACY_PROJECT_ROOT).resolve()
+        # Adapter subprocesses use this path as their cwd. After the v5 migration
+        # every active component lives below the repository root.
+        self.repo_root = (repo_root or REPO_ROOT).resolve()
         # v5 migration (Stage 4): runs are now run-centric under artifacts/work/runs.
         self.runs_root = TARGET.runs
         self.tests = TestGenerationAdapter(self.repo_root)
@@ -262,7 +259,9 @@ class ExperimentOrchestrator:
 
 def generate_run_id(config: PipelineConfig) -> str:
     task = config.tasks[0].lower() if len(config.tasks) == 1 else "all"
-    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    # Microseconds prevent two requests for the same task in one second from
+    # sharing a run directory. Explicit IDs are still protected by the store.
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S-%f")
     return f"{config.language}-{task}-{timestamp}"
 
 

@@ -1,8 +1,7 @@
 # LLM4MTL — Architecture (v5)
 
-> Status: **skeleton (Stage 0)**. Content is filled in during the migration.
-> The staged migration plan is maintainer-only in `docs/migration-plan.md`
-> (git-ignored).
+> Status: active v5 architecture. The migration plan is maintainer-only and
+> intentionally git-ignored.
 
 ## Layers and ownership
 
@@ -48,12 +47,11 @@ Names describe domain responsibility, not technical form. Established so far:
 - `experiment_runner/` — local orchestration glue and CLI; production orchestration
   is n8n.
 
-Planned for later stages (names fixed now): `syntax_validation/`,
-`execution_evidence/` (normalizes Maven/JUnit output), `failure_diagnosis/`
-(prepares/validates the LLM diagnosis; the LLM call stays in n8n),
-`feedback_refinement/`, `language_adapters/` (`interfaces.py` + `registry.py`),
-`ci_scenarios/` (linear CI runner, no routing), `run_store/`, `identifiers.py`,
-`cli.py`, and `stage_service/`.
+Established infrastructure also includes run_store/, experiment_store/,
+stage_service/, external_tools/, serialization/ and workspace/. Planned
+extensions are syntax_validation/, execution_evidence/, failure_diagnosis/,
+feedback_refinement/, language_adapters/, ci_scenarios/ and a package-level
+cli.py.
 
 Facade convention: each deep package exposes its public API from `__init__.py`
 (`__all__`); internals move under `_internal/`. Per-package facade files carry a

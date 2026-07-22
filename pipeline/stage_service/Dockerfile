@@ -2,7 +2,7 @@
 # behind the thin FastAPI wrapper that n8n calls.
 #
 # Build context is the REPOSITORY ROOT (the container needs engines/, benchmark/,
-# workflows/, pipeline/, and the nested data project):
+# workflows/ and pipeline/):
 #
 #   docker build -f pipeline/stage_service/Dockerfile -t llm4mtl-stage-service .
 #

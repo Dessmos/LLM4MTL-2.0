@@ -28,8 +28,7 @@ class TransformationValidationAdapter:
             / "ETL_language"
             / "responses"
         )
-        # v5 migration: the validation driver script moved into the pipeline package;
-        # the data dirs above still live in the nested project folder.
+        # The validation driver is package-owned; selected data remains external.
         from llm4mtl.paths import TARGET
 
         self.script = (

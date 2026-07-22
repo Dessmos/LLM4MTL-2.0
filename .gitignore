@@ -26,8 +26,8 @@ share/python-wheels/
 *.egg
 MANIFEST
 
-#Java
-.class
+# Java
+*.class
 
 # PyInstaller
 #  Usually these files are written by a python script from a template
@@ -152,3 +152,8 @@ artifacts/work/
 # Engine runtime outputs written by drivers (relocated to engines/ in Stage 2).
 engines/*/*/results/
 
+
+# OS and editor metadata
+.DS_Store
+*.swp
+*.kate-swp

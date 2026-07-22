@@ -8,7 +8,7 @@ from typing import Any
 from fastapi import FastAPI, HTTPException
 
 from llm4mtl import run_store
-from llm4mtl.experiment_runner.models import PipelineConfig
+from llm4mtl.experiment_runner.models import PipelineConfig, StageResult
 from llm4mtl.experiment_runner.orchestrator import ExperimentOrchestrator, generate_run_id
 from llm4mtl.paths import TARGET
 from llm4mtl.stage_contract import STAGE_DISPATCH, to_stage_payload
@@ -36,22 +36,24 @@ def create_run(request: RunCreateRequest) -> RunCreateResponse:
     run_id = request.run_id or generate_run_id(
         PipelineConfig(language=request.language, tasks=[request.task] if request.task else [])
     )
-    run_store.create_run(
-        _runs_root(),
-        run_id,
-        {
-            "language": request.language,
-            "task": request.task,
-            "transformation_model": request.transformation_model,
-            "test_generation_model": request.test_generation_model,
-            "strategy": request.strategy,
-            "seed": request.seed,
-            "pipeline_variant": request.pipeline_variant,
-            "preset": request.preset,
-            "created_at": datetime.now(timezone.utc).isoformat(),
-        },
-        force=True,
-    )
+    try:
+        run_store.create_run(
+            _runs_root(),
+            run_id,
+            {
+                "language": request.language,
+                "task": request.task,
+                "transformation_model": request.transformation_model,
+                "test_generation_model": request.test_generation_model,
+                "strategy": request.strategy,
+                "seed": request.seed,
+                "pipeline_variant": request.pipeline_variant,
+                "preset": request.preset,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            },
+        )
+    except run_store.ManifestExistsError as exc:
+        raise HTTPException(status_code=409, detail=f"run already exists: {run_id}") from exc
     return RunCreateResponse(run_id=run_id)
 
 
@@ -79,7 +81,16 @@ def run_stage(run_id: str, stage: str, request: StageRunRequest) -> dict[str, An
     adapter = getattr(_orchestrator, adapter_attr)
 
     run_store.append_event(paths, "stage_started", stage=stage)
-    result = getattr(adapter, method_name)(config, False)
+    try:
+        result = getattr(adapter, method_name)(config, False)
+    except Exception as exc:
+        result = StageResult(
+            stage,
+            "infrastructure_error",
+            {"infrastructure_errors": 1},
+            {"error": f"{type(exc).__name__}: {exc}"},
+            exit_code=1,
+        )
     payload = to_stage_payload(stage, result)
     attempt = run_store.record_attempt(paths, stage, payload)
     payload["attempt"] = attempt
