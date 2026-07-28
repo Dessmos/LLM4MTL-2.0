@@ -68,7 +68,7 @@
     {
       "parameters": {
         "operation": "write",
-        "fileName": "=/data/snippets/ETL_language/prompts/{{ $node[\"Save reaction name\"].json.baseName }}.txt",
+        "fileName": "=/data/artifacts/transformation_generation/etl/prompts/{{ $node[\"Save reaction name\"].json.baseName }}.txt",
         "dataPropertyName": "={{ $('Generate Prompt from Input').item.json.text }}",
         "options": {
           "append": false

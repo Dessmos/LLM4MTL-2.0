@@ -23,11 +23,22 @@ Mounted paths inside the container:
 ```text
 /data/workflows
 /data/snippets
+/data/artifacts
 /data/examples
 /data/grammar
 /data/models
 /data/baseline/ETL_Test/resources
 /data/baseline/ETL_Parser/resources
+```
+
+Immutable inputs remain under `benchmark/` and `prompt_assets/` on the host.
+Generated data is written to:
+
+```text
+artifacts/work/test_generation/etl/prompts/
+artifacts/work/test_generation/etl/prompts_smoke/
+artifacts/work/test_generation/etl/prompt_drafts/
+artifacts/work/test_generation/etl/responses/
 ```
 
 File access is explicitly restricted to the mounted workflow workspace:

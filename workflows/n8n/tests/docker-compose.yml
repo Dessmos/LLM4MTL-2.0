@@ -15,14 +15,17 @@ services:
 
       # Test-generation workflow workspace. v5 migration (Stage 3): prompt material
       # moved to prompt_assets/ and metamodels to benchmark/; container paths unchanged.
-      - "./workflows:/data/workflows"
-      - "./mtl_snippets:/data/snippets"
+      - "./workflows:/data/workflows:ro"
+      - "./mtl_snippets:/data/snippets:ro"
+      # Generated prompt drafts, prompts, and model responses.
+      - "../../../artifacts/work:/data/artifacts"
       # v5 migration (Stage 3): references + task_contracts moved to benchmark/tasks/etl;
       # nested-mounted back to their container paths so n8n draft workflows keep working.
       - "../../../benchmark/tasks/etl/references:/data/snippets/ETL_test_generation/references:ro"
       - "../../../benchmark/tasks/etl/task_contracts:/data/snippets/ETL_test_generation/task_contracts:ro"
-      - "../../../prompt_assets/tests/few_shot:/data/examples"
-      - "../../../prompt_assets/tests/grammar:/data/grammar"
+      - "../../../prompt_assets/tests/few_shot:/data/examples:ro"
+      - "../../../prompt_assets/tests/grammar:/data/grammar:ro"
+      - "../../../prompt_assets/diagnosis:/data/diagnosis_prompts:ro"
       # Workflows select /data/models/etl/*.ecore, so preserve the language level.
       - "../../../benchmark/metamodels:/data/models:ro"
 

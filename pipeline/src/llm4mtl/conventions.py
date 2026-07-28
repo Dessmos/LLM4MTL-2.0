@@ -52,12 +52,10 @@ def _n8n_tests_root() -> Path:
     return TARGET.workflows / "tests"
 
 
-def n8n_snippets_root(config: LanguageConfig = ETL_CONFIG) -> Path:
-    return (
-        _n8n_tests_root()
-        / "mtl_snippets"
-        / config.snippets_dir
-    )
+def generated_test_artifacts_root(config: LanguageConfig = ETL_CONFIG) -> Path:
+    """Generated n8n prompts and raw model responses for one language."""
+
+    return test_generation_root() / config.language_key
 
 
 def n8n_workflows_root(config: LanguageConfig = ETL_CONFIG) -> Path:
@@ -69,7 +67,7 @@ def n8n_workflows_root(config: LanguageConfig = ETL_CONFIG) -> Path:
 
 
 def default_responses_root(config: LanguageConfig = ETL_CONFIG) -> Path:
-    return n8n_snippets_root(config) / "responses"
+    return generated_test_artifacts_root(config) / "responses"
 
 
 def default_generated_tests_root(config: LanguageConfig = ETL_CONFIG) -> Path:
@@ -77,7 +75,7 @@ def default_generated_tests_root(config: LanguageConfig = ETL_CONFIG) -> Path:
 
 
 def default_prompts_root(config: LanguageConfig = ETL_CONFIG) -> Path:
-    return n8n_snippets_root(config) / "prompts"
+    return generated_test_artifacts_root(config) / "prompts"
 
 
 def _benchmark_tasks_root(config: LanguageConfig = ETL_CONFIG) -> Path:

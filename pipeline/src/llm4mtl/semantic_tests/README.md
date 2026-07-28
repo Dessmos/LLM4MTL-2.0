@@ -15,9 +15,8 @@ The stages are:
 Active inputs live under:
 
     benchmark/tasks/etl/{references,task_contracts}/
-    workflows/n8n/tests/mtl_snippets/ETL_test_generation/{prompts,responses}/
     prompt_assets/tests/{few_shot,grammar}/
 
-Generated candidates and validation results live under
-artifacts/work/test_generation/. The ETL harness source of truth is
-engines/etl/harness/.
+Generated prompts, raw responses, candidates, and validation results live
+under `artifacts/work/test_generation/`. The ETL harness source of truth is
+`engines/etl/harness/`.

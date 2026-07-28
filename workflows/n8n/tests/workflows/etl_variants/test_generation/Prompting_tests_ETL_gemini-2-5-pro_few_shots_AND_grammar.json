@@ -52,7 +52,7 @@
     {
       "parameters": {
         "operation": "write",
-        "fileName": "=/data/snippets/ETL_test_generation/responses/gemini-2-5-pro/few_shots_AND_grammar/{{ $node[\"Merge\"].json.baseName }}.md",
+        "fileName": "=/data/artifacts/test_generation/etl/responses/gemini-2-5-pro/few_shots_AND_grammar/{{ $node[\"Merge\"].json.baseName }}.md",
         "dataPropertyName": "={{$node[\"(Re-)Generate test suite\"].json.text}}",
         "options": {}
       },
@@ -159,7 +159,7 @@
     },
     {
       "parameters": {
-        "fileSelector": "=/data/snippets/ETL_test_generation/prompts/gemini-2-5-pro/*.txt",
+        "fileSelector": "=/data/artifacts/test_generation/etl/prompts/gemini-2-5-pro/*.txt",
         "options": {
           "dataPropertyName": "data"
         }

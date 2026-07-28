@@ -93,7 +93,7 @@
     },
     {
       "parameters": {
-        "fileSelector": "/data/snippets/reactions_language/responses/claude-sonnet-4/few_shots_AND_grammar_AND_helper/*",
+        "fileSelector": "/data/artifacts/transformation_generation/reactions/responses/claude-sonnet-4/few_shots_AND_grammar_AND_helper/*",
         "options": {}
       },
       "type": "n8n-nodes-base.readWriteFile",

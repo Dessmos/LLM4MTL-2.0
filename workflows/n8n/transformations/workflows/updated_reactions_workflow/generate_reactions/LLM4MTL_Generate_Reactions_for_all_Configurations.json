@@ -30,7 +30,7 @@
     {
       "parameters": {
         "operation": "write",
-        "fileName": "=/home/node/.n8n-files/snippets/reactions_language/responses/{{ $json.llmName }}/{{ $json.strategyName }}/{{ $json.baseName }}.reactions",
+        "fileName": "=/data/artifacts/transformation_generation/reactions/responses/{{ $json.llmName }}/{{ $json.strategyName }}/{{ $json.baseName }}.reactions",
         "options": {}
       },
       "type": "n8n-nodes-base.readWriteFile",
@@ -105,7 +105,7 @@
     },
     {
       "parameters": {
-        "fileSelector": "=/home/node/.n8n-files/snippets/reactions_language/prompts/*",
+        "fileSelector": "=/data/artifacts/transformation_generation/reactions/prompts/*",
         "options": {
           "dataPropertyName": "data"
         }

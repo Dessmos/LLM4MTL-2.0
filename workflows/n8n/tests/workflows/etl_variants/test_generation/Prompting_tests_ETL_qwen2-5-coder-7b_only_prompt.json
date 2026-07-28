@@ -14,7 +14,7 @@
     },
     {
       "parameters": {
-        "fileSelector": "=/data/snippets/ETL_test_generation/prompts_smoke/qwen2-5-coder-7b/*.qwen-smoke.txt",
+        "fileSelector": "=/data/artifacts/test_generation/etl/prompts_smoke/qwen2-5-coder-7b/*.qwen-smoke.txt",
         "options": {
           "dataPropertyName": "data"
         }
@@ -217,7 +217,7 @@
     {
       "parameters": {
         "operation": "write",
-        "fileName": "=/data/snippets/ETL_test_generation/responses/qwen2-5-coder-7b/only_prompt/{{ $node[\"Merge prompt, task and models\"].json.baseName }}.md",
+        "fileName": "=/data/artifacts/test_generation/etl/responses/qwen2-5-coder-7b/only_prompt/{{ $node[\"Merge prompt, task and models\"].json.baseName }}.md",
         "dataPropertyName": "={{ $('Extract Qwen test text').item.json.text }}",
         "options": {
           "append": false

@@ -52,7 +52,7 @@
     {
       "parameters": {
         "operation": "write",
-        "fileName": "=/data/snippets/ETL_test_generation/responses/claude-sonnet-4/few_shots_AND_grammar/{{ $node[\"Merge\"].json.baseName }}.md",
+        "fileName": "=/data/artifacts/test_generation/etl/responses/claude-sonnet-4/few_shots_AND_grammar/{{ $node[\"Merge\"].json.baseName }}.md",
         "dataPropertyName": "={{$node[\"(Re-)Generate test suite\"].json.text}}",
         "options": {}
       },
@@ -159,7 +159,7 @@
     },
     {
       "parameters": {
-        "fileSelector": "=/data/snippets/ETL_test_generation/prompts/claude-sonnet-4/*.txt",
+        "fileSelector": "=/data/artifacts/test_generation/etl/prompts/claude-sonnet-4/*.txt",
         "options": {
           "dataPropertyName": "data"
         }

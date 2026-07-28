@@ -13,19 +13,12 @@ from llm4mtl.experiment_runner.models import PipelineConfig, StageResult
 class TestGenerationAdapter:
     def __init__(self, repo_root: Path) -> None:
         self.repo_root = repo_root.resolve()
-        # v5 migration (Stage 3): the test-generation n8n tree moved to workflows/n8n/tests.
-        # v5 final cleanup: generated-test output lives under artifacts/work/test_generation.
+        # Generated prompts, raw responses, extracted suites, and validation results
+        # all live below artifacts/work/test_generation.
         from llm4mtl.paths import TARGET
 
         self.test_generation_root = TARGET.artifacts_work / "test_generation"
-
-        self.responses_root = (
-            TARGET.workflows
-            / "tests"
-            / "mtl_snippets"
-            / "ETL_test_generation"
-            / "responses"
-        )
+        self.responses_root = self.test_generation_root / "etl" / "responses"
         self.generated_tests_root = self.test_generation_root / "generated_tests" / "etl"
         self.results_root = self.test_generation_root / "results" / "etl"
         # Driver scripts are package-owned; runtime output is artifact-owned.

@@ -52,7 +52,7 @@
     {
       "parameters": {
         "operation": "write",
-        "fileName": "=/data/snippets/ATLAS_transformation_language/responses/claude-sonnet-4/only_prompt/{{ $node[\"Save file name\"].json.baseName }}.atl",
+        "fileName": "=/data/artifacts/transformation_generation/atl/responses/claude-sonnet-4/only_prompt/{{ $node[\"Save file name\"].json.baseName }}.atl",
         "dataPropertyName": "={{$node[\"(Re-)Generate code\"].json.text}}",
         "options": {}
       },
@@ -159,7 +159,7 @@
     },
     {
       "parameters": {
-        "fileSelector": "=/data/snippets/ATLAS_transformation_language/prompts/*",
+        "fileSelector": "=/data/artifacts/transformation_generation/atl/prompts/*",
         "options": {
           "dataPropertyName": "data"
         }

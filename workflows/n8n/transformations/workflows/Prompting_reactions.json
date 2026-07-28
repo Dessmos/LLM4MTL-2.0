@@ -52,7 +52,7 @@
     {
       "parameters": {
         "operation": "write",
-        "fileName": "=/data/snippets/reactions_language/responses/claude-sonnet-4/{{ $node[\"Save reaction name\"].json.baseName }}.reactions",
+        "fileName": "=/data/artifacts/transformation_generation/reactions/responses/claude-sonnet-4/{{ $node[\"Save reaction name\"].json.baseName }}.reactions",
         "dataPropertyName": "={{$node[\"(Re-)Generate code\"].json.text}}",
         "options": {}
       },
@@ -159,7 +159,7 @@
     },
     {
       "parameters": {
-        "fileSelector": "=/data/snippets/reactions_language/prompts/*",
+        "fileSelector": "=/data/artifacts/transformation_generation/reactions/prompts/*",
         "options": {
           "dataPropertyName": "data"
         }

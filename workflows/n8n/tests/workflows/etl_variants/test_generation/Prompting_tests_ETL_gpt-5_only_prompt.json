@@ -52,7 +52,7 @@
     {
       "parameters": {
         "operation": "write",
-        "fileName": "=/data/snippets/ETL_test_generation/responses/gpt-5/only_prompt/{{ $node[\"Merge\"].json.baseName }}.md",
+        "fileName": "=/data/artifacts/test_generation/etl/responses/gpt-5/only_prompt/{{ $node[\"Merge\"].json.baseName }}.md",
         "dataPropertyName": "={{$node[\"(Re-)Generate test suite\"].json.text}}",
         "options": {}
       },
@@ -159,7 +159,7 @@
     },
     {
       "parameters": {
-        "fileSelector": "=/data/snippets/ETL_test_generation/prompts/gpt-5/*.txt",
+        "fileSelector": "=/data/artifacts/test_generation/etl/prompts/gpt-5/*.txt",
         "options": {
           "dataPropertyName": "data"
         }

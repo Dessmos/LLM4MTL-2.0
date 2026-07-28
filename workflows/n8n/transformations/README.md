@@ -40,7 +40,9 @@ Follow these steps to build and start the n8n container:
    - Open the **Credentials** section in n8n and add your API keys (e.g. OpenAI, Google Cloud).
    - Update the workflow nodes to reference your credentials if necessary.
 
-6. Run the workflows to generate prompts and evaluate model transformation code.  Results will be stored in the specified output directories on your host.
+6. Run the workflows to generate prompts and evaluate model transformation code.
+   Generated prompts and responses are stored under
+   `artifacts/work/transformation_generation/<language>/` on the host.
 
 To stop the service, run:
 
@@ -57,7 +59,16 @@ This directory contains:
 - `grammar/` – grammar definitions of the Reactions Language and ATL in EBNF format.
 - `helper_methods/` – helper functions available to the language models during prompt construction.
 - `models/` – example metamodel files referenced by the workflows.
-- `mtl_snippets/` – sample model transformation code snippets.
+- `mtl_snippets/` – legacy/static workflow inputs; new generated data is not written here.
 - `workflows/` – the actual n8n workflow definitions (`*.json`) to be imported into the running instance.
+
+Generated output paths:
+
+```text
+artifacts/work/transformation_generation/etl/{prompts,responses}/
+artifacts/work/transformation_generation/atl/{prompts,responses}/
+artifacts/work/transformation_generation/qvto/{prompts,responses}/
+artifacts/work/transformation_generation/reactions/{prompts,responses}/
+```
 
 Use this setup to replicate the evaluation pipeline described in the thesis or to experiment with new prompts and strategies.

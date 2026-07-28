@@ -26,17 +26,11 @@ def default_validated_tests_root() -> Path:
 
 
 def default_transformations_root() -> Path:
-    # v5 migration (Stage 3): the transformation-generation n8n tree moved to
-    # workflows/n8n/transformations.
+    # Generated transformation responses are runtime artifacts, not workflow
+    # definitions or immutable prompt assets.
     from llm4mtl.paths import TARGET
 
-    return (
-        TARGET.workflows
-        / "transformations"
-        / "mtl_snippets"
-        / "ETL_language"
-        / "responses"
-    )
+    return TARGET.artifacts_work / "transformation_generation" / "etl" / "responses"
 
 
 def default_etl_test_dir() -> Path:

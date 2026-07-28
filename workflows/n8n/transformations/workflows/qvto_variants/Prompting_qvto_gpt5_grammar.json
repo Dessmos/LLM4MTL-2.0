@@ -52,7 +52,7 @@
     {
       "parameters": {
         "operation": "write",
-        "fileName": "=/data/snippets/QVTO_language/responses/gpt-5/grammar/{{ $node[\"Save file name\"].json.baseName }}.qvto",
+        "fileName": "=/data/artifacts/transformation_generation/qvto/responses/gpt-5/grammar/{{ $node[\"Save file name\"].json.baseName }}.qvto",
         "dataPropertyName": "={{$node[\"(Re-)Generate code\"].json.text}}",
         "options": {}
       },
@@ -159,7 +159,7 @@
     },
     {
       "parameters": {
-        "fileSelector": "=/data/snippets/QVTO_language/prompts/*",
+        "fileSelector": "=/data/artifacts/transformation_generation/qvto/prompts/*",
         "options": {
           "dataPropertyName": "data"
         }

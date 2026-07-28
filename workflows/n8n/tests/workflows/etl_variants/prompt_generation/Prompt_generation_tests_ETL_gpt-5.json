@@ -68,7 +68,7 @@
     {
       "parameters": {
         "operation": "write",
-        "fileName": "=/data/snippets/ETL_test_generation/prompt_drafts/gpt-5/{{ $node[\"Merge models, reference and grammar\"].json.baseName }}.txt",
+        "fileName": "=/data/artifacts/test_generation/etl/prompt_drafts/gpt-5/{{ $node[\"Merge models, reference and grammar\"].json.baseName }}.txt",
         "dataPropertyName": "={{ $('Generate Prompt from Input').item.json.text }}",
         "options": {
           "append": false
@@ -373,7 +373,7 @@
         ]
       ]
     },
-    "Write prompt to disk": {
+    "Write draft prompt to disk": {
       "main": [
         [
           {

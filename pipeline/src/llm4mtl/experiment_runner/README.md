@@ -12,8 +12,8 @@ execution pairs without writing run artifacts.
 
 ## Active paths
 
-- Test-generation responses: workflows/n8n/tests/mtl_snippets/ETL_test_generation/responses/
-- Transformation responses: workflows/n8n/transformations/mtl_snippets/ETL_language/responses/
+- Test-generation responses: artifacts/work/test_generation/etl/responses/
+- Transformation responses: artifacts/work/transformation_generation/etl/responses/
 - Generated suites: artifacts/work/test_generation/generated_tests/etl/
 - Run metadata: artifacts/work/runs/<run-id>/
 - Parser and harness: engines/etl/{parser,harness}/
