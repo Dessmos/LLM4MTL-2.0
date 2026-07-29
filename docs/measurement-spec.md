@@ -4,6 +4,33 @@
 > boundaries are expected to fall out of this document; where this spec and the
 > current code disagree, this spec wins and the code is the debt.
 
+## Implementation boundary
+
+The current implementation provides the measurement foundation, but not the
+mutation experiment itself.
+
+Implemented:
+
+- immutable schema-validated run identity and provenance;
+- append-only events and immutable stage attempts;
+- extraction, syntax validation, technical validation, reference validation,
+  and generated-transformation execution;
+- one run-local reference execution observation shared by the technical and
+  reference stages;
+- the language adapter boundary and the ETL adapter;
+- typed, language-neutral scenario and execution-outcome records.
+
+Not implemented yet:
+
+- the shared semantic outcome comparator described in §4;
+- mutation operators, qualification-corpus execution, and `M_Q`;
+- mutation scoring, kill audits, coverage instrumentation, and aggregation;
+- ingestion of n8n LLM-call telemetry into the run event journal.
+
+Current stage success therefore establishes validation and execution facts; it
+must not be reported as an adjusted mutation score or as evidence that the
+measurement layer below has been completed.
+
 ## 0. What this project measures
 
 Prior LLM4MTL generated **transformations**. This work generates **semantic
@@ -106,13 +133,16 @@ mutation operators are per-language while this comparator is shared.
 - Implementation (deep): element matching by structural identity (not by
   generated id), order-independence for unordered references, containment
   awareness, canonicalisation.
-- **Outcome taxonomy** — an outcome is not always "a successful target model":
-  `success+model` / `compile-fail` / `runtime-exception` / `empty-output`. `≢`
-  is defined across outcome *types*, not only between two models.
+- **Outcome taxonomy** — an outcome is not always a successful target-model
+  snapshot. The shared record already distinguishes `success`,
+  `parse_failed`, `compile_failed`, `runtime_failed`, `empty_output`,
+  `timed_out`, and `infrastructure_failed`. A successful outcome contains
+  canonical target-model snapshots. `≢` must be defined across outcome types,
+  not only between two models.
 
 This is the one place where the "deep modules" goal genuinely pays rent: large
 implementation behind a narrow interface, reused in both qualification (§2.2)
-and kill audit (§5).
+and kill audit (§5). The comparator itself is still a target-state module.
 
 ## 5. Coherence: numerator vs denominator use different comparisons
 
@@ -179,12 +209,12 @@ Two distinct ownerships:
 - **evidence ownership** — the Python artifact layer validates the event and
   appends it to the run's append-only journal.
 
-Therefore:
+Target contract:
 
 - a single authoritative store: the run's `events.jsonl` (no side CSV, no
   parallel cost-log — a second source of truth breaks reproducibility);
-- n8n emits a typed `llm_call` event through the same `stage_service` ingest;
-- schema `schemas/llm-call.schema.json`, keyed `run_id / stage / attempt`;
+- n8n emits a typed `llm_call` event through the stage service;
+- a future versioned LLM-call schema is keyed by `run_id / stage / attempt`;
 - fields: `model`, `prompt_tokens`, `completion_tokens`, `latency_ms`,
   `cost_estimate`.
 
@@ -193,14 +223,21 @@ generation's suite; cost is per LLM call; correlating model↔quality↔cost req
 both facts on the same key. Refinement matters here — each iteration costs tokens,
 and cost must be attributed to the **exact attempt** whose tests were scored.
 
+No LLM-call ingest endpoint or `schemas/llm-call.schema.json` exists in the
+current implementation. Introducing them is a versioned contract change, not a
+documentation-only assumption.
+
 ## 7. Architectural consequences (boundaries this spec re-cuts)
 
 - **`transformation_outcome_comparison/`** — new shared deep module; single
   source of truth for `≢`.
-- **mutation subsystem** — operators live in per-language providers
-  (`language_adapters/*` becomes load-bearing: each language owns
-  `{parse, execute, mutate, instrument}`); qualification + scoring is a shared
-  module parameterised by language, built on the comparator.
+- **mutation subsystem** — operators live beside each language implementation
+  under `pipeline/src/llm4mtl/languages/<language>/`, behind a separate mutation
+  capability. The active `LanguageAdapter` remains the narrow execution
+  boundary; mutation and instrumentation must not be added to it merely because
+  they are language-specific.
+- **qualification + scoring** — shared modules parameterised by the language's
+  mutation capability and built on the comparator.
 - **`execution`** gains two passes: reference×mutant (builds `M_Q`) and
   suite×mutant (kill).
 - **`evaluation`** gains a new aggregation axis: *a test across the mutant set*,
@@ -215,6 +252,11 @@ and cost must be attributed to the **exact attempt** whose tests were scored.
 
 1. This spec is authoritative first; **facade / `_internal/` polishing is frozen**
    until the boundaries below settle.
-2. Module boundaries fall out of §4–§7.
-3. Only the modules that survive get the facade convention applied — then
+2. Preserve the implemented identity, integrity, validation-funnel, and language
+   adapter foundations while adding the remaining modules from §4–§7.
+3. Define the shared comparator before qualification and kill scoring so both
+   consume the same semantic equivalence rule.
+4. Add mutation and instrumentation as explicit adjacent capabilities rather
+   than widening the execution adapter speculatively.
+5. Only the modules that survive get the facade convention applied — then
    `_internal/` and `__all__` stop being aspirational.
