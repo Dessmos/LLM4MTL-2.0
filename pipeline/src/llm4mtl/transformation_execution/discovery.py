@@ -1,4 +1,4 @@
-"""Discover validated suites and generated ETL transformations."""
+"""Discover run-validated candidate suites and generated ETL transformations."""
 
 from __future__ import annotations
 
@@ -13,42 +13,67 @@ from llm4mtl.transformation_execution.models import (
 
 def discover_validated_suites(
     root: Path,
+    observations_root: Path,
     explicit: list[Path] | None = None,
     task: str | None = None,
     llm: str | None = None,
     strategy: str | None = None,
 ) -> list[ValidatedSuite]:
+    """Candidates whose reference-valid observation belongs to this run."""
+    # Deferred to break the language adapter -> suite execution -> legacy
+    # transformation facade import cycle.
+    from llm4mtl.languages import language_adapter
+    from llm4mtl.semantic_tests.suite_execution import read_observation
+
     root = root.resolve()
-    paths = [path.resolve() for path in explicit] if explicit else sorted(root.glob("*/validated/*/*/suite_*"))
-    suites = [validated_suite_from_path(path, root) for path in paths if path.is_dir()]
-    return [
+    paths = (
+        [path.resolve() for path in explicit]
+        if explicit
+        else sorted(root.glob("*/candidates/*/*/suite_*"))
+    )
+    suites = [candidate_suite_from_path(path, root) for path in paths if path.is_dir()]
+    selected = [
         suite
         for suite in suites
         if (not task or suite.task == task)
         and (not llm or suite.llm == llm)
         and (not strategy or suite.strategy == strategy)
     ]
+    adapter = language_adapter("etl")
+    return [
+        suite
+        for suite in selected
+        if (
+            observation := read_observation(
+                observations_root.resolve(),
+                suite.as_candidate(),
+                adapter.reference_transformation(suite.task),
+            )
+        )
+        is not None
+        and observation.is_reference_valid
+    ]
 
 
-def validated_suite_from_path(path: Path, root: Path) -> ValidatedSuite:
+def candidate_suite_from_path(path: Path, root: Path) -> ValidatedSuite:
     path = path.resolve()
     try:
         rel = path.relative_to(root.resolve())
     except ValueError:
         rel = None
 
-    if rel and len(rel.parts) >= 5 and rel.parts[1] == "validated":
+    if rel and len(rel.parts) >= 5 and rel.parts[1] == "candidates":
         task, _, llm, strategy, suite_id = rel.parts[:5]
     else:
         parts = path.parts
         try:
-            idx = parts.index("validated")
+            idx = parts.index("candidates")
             task = parts[idx - 1]
             llm = parts[idx + 1]
             strategy = parts[idx + 2]
             suite_id = parts[idx + 3]
         except (ValueError, IndexError):
-            raise SystemExit(f"Cannot infer validated suite metadata from {path}")
+            raise SystemExit(f"Cannot infer candidate suite metadata from {path}")
 
     return ValidatedSuite(path=path, task=task, llm=llm, strategy=strategy, suite_id=suite_id)
 

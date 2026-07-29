@@ -61,7 +61,7 @@ def build_parser() -> argparse.ArgumentParser:
     pipeline_actions = pipeline.add_subparsers(dest="action", required=True)
     pipeline_run = pipeline_actions.add_parser("run", help="Run configured workflow stages.")
     pipeline_run.add_argument("--config", type=Path)
-    add_language(pipeline_run, default=None)
+    add_language(pipeline_run, required=False)
     add_task_selection(pipeline_run)
     add_test_selection(pipeline_run)
     add_transformation_selection(pipeline_run)
@@ -76,8 +76,12 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def add_language(parser: argparse.ArgumentParser, default: str | None = "etl") -> None:
-    parser.add_argument("--language", choices=("etl",), default=default)
+def add_language(parser: argparse.ArgumentParser, *, required: bool = True) -> None:
+    # Every thesis language is offered; `validate_config` rejects the ones whose
+    # adapter is not implemented yet, with a message naming what is missing.
+    from llm4mtl.languages import REQUIRED_LANGUAGES
+
+    parser.add_argument("--language", choices=REQUIRED_LANGUAGES, required=required)
 
 
 def add_task_selection(parser: argparse.ArgumentParser) -> None:
@@ -129,7 +133,7 @@ def config_from_args(args: argparse.Namespace) -> PipelineConfig:
         return config
 
     config = PipelineConfig(
-        language=args.language or "etl",
+        language=args.language,
         tasks=list(args.task or []),
         all_tasks=bool(args.all_tasks),
         responses=[str(path) for path in getattr(args, "response", None) or []],
@@ -236,9 +240,12 @@ def emit_result(result: RunResult, output_format: str) -> None:
         counts = " ".join(f"{key}={value}" for key, value in stage.counts.items())
         print(f"{stage.name}: {stage.status} {counts}".rstrip())
         if stage.status == "dry_run" and stage.name == "transformation_validation":
-            print(f"Selected validated suites: {stage.counts.get('selected_suites', 0)}")
+            print(
+                "Candidate suites awaiting reference validation: "
+                f"{stage.counts.get('selected_suites', 0)}"
+            )
             print(f"Selected transformations: {stage.counts.get('selected_transformations', 0)}")
-            print(f"Execution pairs: {stage.counts.get('execution_pairs', 0)}")
+            print(f"Potential execution pairs: {stage.counts.get('execution_pairs', 0)}")
             for pair in stage.details.get("pairs", []):
                 print(pair)
         results_file = stage.details.get("results_file")

@@ -7,16 +7,18 @@ import sys
 from pathlib import Path
 
 from llm4mtl.conventions import (
-    default_etl_test_dir,
+    ETL_CONFIG,
+    default_test_project_dir,
     default_generated_tests_root,
     default_references_root,
     default_results_root,
 )
-from llm4mtl.semantic_tests.reference_validation.models import ReferenceValidationContext
+from llm4mtl.languages import language_adapter
 from llm4mtl.semantic_tests.reference_validation.results import write_results
-from llm4mtl.semantic_tests.reference_validation.runner import validate_suite
-from llm4mtl.semantic_tests.reference_validation.technical_status import filter_technically_valid_suites
+from llm4mtl.semantic_tests.reference_validation.runner import reference_row, validate_suite
 from llm4mtl.semantic_tests.suites.discovery import discover_suites
+from llm4mtl.semantic_tests.validation import REFERENCE_INVALID, ValidationContext, workspace_for
+from llm4mtl.workspace import materialize_engine
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -36,26 +38,37 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--generated-tests-root",
         type=Path,
-        default=default_generated_tests_root(),
+        default=default_generated_tests_root(ETL_CONFIG),
         help="Root containing <task>/candidates/<llm>/<strategy>/<suite_id>.",
     )
     parser.add_argument(
         "--etl-test-dir",
         type=Path,
-        default=default_etl_test_dir(),
+        default=default_test_project_dir(ETL_CONFIG),
         help="ETL_Test Maven project directory.",
     )
     parser.add_argument(
         "--references-root",
         type=Path,
-        default=default_references_root(),
+        default=default_references_root(ETL_CONFIG),
         help="Root containing reference <task>.etl files.",
     )
     parser.add_argument(
         "--results-root",
         type=Path,
-        default=default_results_root(),
+        default=default_results_root(ETL_CONFIG),
         help="Root where per-task reference-validation CSV files are written.",
+    )
+    parser.add_argument(
+        "--observations-root",
+        type=Path,
+        required=True,
+        help=(
+            "Root holding THIS run's suite-execution observations. A recorded "
+            "observation for the same suite and reference is reused instead of "
+            "executing the harness a second time. Required: a shared default "
+            "would let one run reuse another run's observation."
+        ),
     )
     parser.add_argument(
         "--timeout",
@@ -69,41 +82,19 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Append to existing CSV files instead of overwriting them.",
     )
     parser.add_argument(
-        "--include-unchecked",
-        action="store_true",
-        help=(
-            "Validate suites even when generated_suite_technical_validation.csv "
-            "does not mark them technically_valid=True."
-        ),
-    )
-    parser.add_argument(
-        "--no-promote",
-        action="store_true",
-        help="Do not copy passing suites into <task>/validated/<llm>/<strategy>/<suite_id>.",
-    )
-    parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="Discover and filter suites, but do not inject files or run Maven.",
+        help="Discover suites, but do not inject files or run Maven.",
     )
     return parser.parse_args(argv)
 
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
-    suites = discover_suites(args)
+    suites = discover_suites(args, "etl")
     if not suites:
         task = args.task or "*"
         print(f"No candidate suites found for task {task}", file=sys.stderr)
-        return 1
-
-    suites = filter_technically_valid_suites(suites, args)
-    if not suites:
-        print(
-            "No technically valid candidate suites to reference-validate. "
-            "Use --include-unchecked to override.",
-            file=sys.stderr,
-        )
         return 1
 
     if args.dry_run:
@@ -111,28 +102,30 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Would validate {suite.path}")
         return 0
 
-    context = ReferenceValidationContext(
-        etl_test_dir=args.etl_test_dir.resolve(),
-        references_root=args.references_root.resolve(),
-        results_root=args.results_root.resolve(),
+    engine_dir = materialize_engine(
+        args.etl_test_dir,
+        args.observations_root.resolve().parent / "workspaces",
+        "etl",
+    )
+    context = ValidationContext(
+        adapter=language_adapter("etl"),
+        workspace=workspace_for(engine_dir, args.observations_root),
         timeout=args.timeout,
-        promote=not args.no_promote,
     )
 
     rows: list[dict[str, str]] = []
     for suite in suites:
         print(f"Validating {suite.task} | {suite.llm} | {suite.strategy} | {suite.suite_id}")
-        result = validate_suite(suite, context)
-        rows.append(result.as_row())
+        verdict = validate_suite(suite, context)
+        row = reference_row(verdict)
+        rows.append(row)
         print(
-            "  valid="
-            f"{result.valid} compiles={result.compiles} "
-            f"executes={result.executes} reference_pass={result.reference_pass} "
-            f"status={result.status}"
+            f"  valid={row['valid']} compiles={row['compiles']} "
+            f"executes={row['executes']} status={verdict.status}"
         )
-        if result.error_summary:
-            print(f"  error: {result.error_summary}")
+        if verdict.error_summary:
+            print(f"  error: {verdict.error_summary}")
 
     write_results(rows, args)
-    failed = sum(1 for row in rows if row["valid"] != "True")
-    return 0 if failed == 0 else 1
+    invalid = sum(1 for row in rows if row["status"] == REFERENCE_INVALID)
+    return 0 if invalid == 0 else 1

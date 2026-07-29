@@ -33,11 +33,11 @@ def default_transformations_root() -> Path:
     return TARGET.artifacts_work / "transformation_generation" / "etl" / "responses"
 
 
-def default_etl_test_dir() -> Path:
-    # v5 migration (Stage 2): the ETL test-harness engine moved to engines/etl/harness.
-    from llm4mtl.paths import TARGET
+def default_test_project_dir() -> Path:
+    """The ETL harness. One owner: the shared per-language convention."""
+    from llm4mtl.conventions import ETL_CONFIG, default_test_project_dir as engine_harness
 
-    return TARGET.engine_harness("etl")
+    return engine_harness(ETL_CONFIG)
 
 
 def default_artifacts_root() -> Path:

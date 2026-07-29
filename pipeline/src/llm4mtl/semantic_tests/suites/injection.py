@@ -6,11 +6,11 @@ from pathlib import Path
 
 from llm4mtl.workspace.injection import Injection
 from llm4mtl.semantic_tests.suites.java import infer_fqcn, java_destination, slug
-from llm4mtl.semantic_tests.suites.models import CandidateSuite
+from llm4mtl.domain import GeneratedSuite
 
 
 def inject_suite(
-    suite: CandidateSuite,
+    suite: GeneratedSuite,
     java_paths: list[Path],
     model_paths: list[Path],
     test_project_dir: Path,

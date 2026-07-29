@@ -3,16 +3,43 @@ from __future__ import annotations
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
+from llm4mtl.domain import SuiteExecutionObservation
 from llm4mtl.transformation_execution.artifacts import archive_result
 from llm4mtl.transformation_execution.discovery import (
     discover_transformations,
     discover_validated_suites,
     match_pairs,
 )
-from llm4mtl.transformation_execution.models import TransformationValidationResult
+from llm4mtl.transformation_execution.models import (
+    TransformationValidationResult,
+    ValidatedSuite,
+)
 from llm4mtl.transformation_execution.results import write_results
 from llm4mtl.transformation_execution.executor import failure_stage
+
+
+REFERENCE_VALID = SuiteExecutionObservation(
+    compiled=True,
+    tests_discovered=True,
+    models_loaded=True,
+    engine_started=True,
+    assertions_evaluated=True,
+    assertions_passed=True,
+    timed_out=False,
+    maven_exit_code=0,
+    failure_stage="",
+    error_summary="",
+)
+
+
+def discover_for_run(root: Path) -> list[ValidatedSuite]:
+    with patch(
+        "llm4mtl.semantic_tests.suite_execution.read_observation",
+        return_value=REFERENCE_VALID,
+    ):
+        return discover_validated_suites(root, root / "run-observations")
 
 
 class DiscoveryTests(unittest.TestCase):
@@ -20,7 +47,7 @@ class DiscoveryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             validated_root = root / "generated_tests" / "etl"
-            suite = validated_root / "Tree2Graph" / "validated" / "gpt-5" / "few_shot" / "suite_001"
+            suite = validated_root / "Tree2Graph" / "candidates" / "gpt-5" / "few_shot" / "suite_001"
             suite.mkdir(parents=True)
             transformations_root = root / "resources"
             tree = transformations_root / "gpt-5" / "grammar" / "Tree2Graph.etl"
@@ -29,7 +56,7 @@ class DiscoveryTests(unittest.TestCase):
             other = transformations_root / "gpt-5" / "grammar" / "OO2DB.etl"
             other.write_text("rule Class2Table {}\n", encoding="utf-8")
 
-            suites = discover_validated_suites(validated_root)
+            suites = discover_for_run(validated_root)
             transformations = discover_transformations(transformations_root)
             pairs = match_pairs(suites, transformations)
 
@@ -37,13 +64,34 @@ class DiscoveryTests(unittest.TestCase):
             self.assertEqual("Tree2Graph", pairs[0].suite.task)
             self.assertEqual("grammar", pairs[0].transformation.strategy)
 
+    def test_a_candidate_without_this_runs_observation_is_not_eligible(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "generated_tests" / "etl"
+            suite = (
+                root
+                / "Tree2Graph"
+                / "candidates"
+                / "gpt-5"
+                / "few_shot"
+                / "suite_001"
+            )
+            suite.mkdir(parents=True)
+
+            with patch(
+                "llm4mtl.semantic_tests.suite_execution.read_observation",
+                return_value=None,
+            ):
+                selected = discover_validated_suites(root, root / "run-observations")
+
+            self.assertEqual([], selected)
+
 
 class ArtifactTests(unittest.TestCase):
     def test_failed_result_is_archived_with_repair_payload(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             validated_root = root / "generated_tests" / "etl"
-            suite_dir = validated_root / "Tree2Graph" / "validated" / "gpt-5" / "few_shot" / "suite_001"
+            suite_dir = validated_root / "Tree2Graph" / "candidates" / "gpt-5" / "few_shot" / "suite_001"
             (suite_dir / "models").mkdir(parents=True)
             (suite_dir / "GeneratedTest.java").write_text("class GeneratedTest {}\n", encoding="utf-8")
             (suite_dir / "models" / "input.model").write_text("<model/>\n", encoding="utf-8")
@@ -53,7 +101,7 @@ class ArtifactTests(unittest.TestCase):
             transformation_path.write_text("invalid ETL\n", encoding="utf-8")
 
             pair = match_pairs(
-                discover_validated_suites(validated_root),
+                discover_for_run(validated_root),
                 discover_transformations(transformations_root),
             )[0]
             result = TransformationValidationResult(
@@ -96,14 +144,14 @@ class ReadableReportTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             validated_root = root / "generated_tests" / "etl"
-            suite_dir = validated_root / "Tree2Graph" / "validated" / "gpt-5" / "few_shot" / "suite_001"
+            suite_dir = validated_root / "Tree2Graph" / "candidates" / "gpt-5" / "few_shot" / "suite_001"
             suite_dir.mkdir(parents=True)
             transformations_root = root / "transformations"
             transformation_path = transformations_root / "claude-sonnet-4" / "grammar" / "Tree2Graph.etl"
             transformation_path.parent.mkdir(parents=True)
             transformation_path.write_text("rule Tree2Graph {}\n", encoding="utf-8")
             pair = match_pairs(
-                discover_validated_suites(validated_root),
+                discover_for_run(validated_root),
                 discover_transformations(transformations_root),
             )[0]
             result = TransformationValidationResult(

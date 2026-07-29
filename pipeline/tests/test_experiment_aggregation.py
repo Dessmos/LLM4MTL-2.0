@@ -5,6 +5,8 @@ import unittest
 from pathlib import Path
 
 from llm4mtl import run_store
+from llm4mtl.provenance import build_provenance
+from llm4mtl.stage_contract import SCHEMA_VERSION as STAGE_SCHEMA_VERSION
 from llm4mtl.evaluation.experiment_aggregation import aggregate_stage
 from llm4mtl.evaluation.experiment_significance import mcnemar
 
@@ -16,12 +18,28 @@ class AggregationTests(unittest.TestCase):
 
             def make_run(run_id: str, model: str, outcome: str) -> None:
                 paths = run_store.create_run(
-                    root, run_id, {"transformation_model": model, "pipeline_variant": "full", "strategy": "grammar"}
+                    root,
+                    run_id,
+                    {
+                        "language": "etl",
+                        "task": "Tree2Graph",
+                        "transformation_model": model,
+                        "test_generation_model": "gpt-5",
+                        "transformation_strategy": "grammar",
+                        "test_generation_strategy": "few_shot",
+                        "seed": 1,
+                        "pipeline_variant": "full",
+                        "provenance": build_provenance("etl", "Tree2Graph"),
+                    },
                 )
                 run_store.record_attempt(
                     paths,
                     "syntax-validation",
-                    {"outcome_code": outcome, "status": "passed" if outcome == "SYNTAX_VALID" else "failed"},
+                    {
+                        "schema_version": STAGE_SCHEMA_VERSION,
+                        "outcome_code": outcome,
+                        "status": "passed" if outcome == "SYNTAX_VALID" else "failed",
+                    },
                 )
 
             make_run("r1", "claude-sonnet-4", "SYNTAX_VALID")
@@ -34,7 +52,7 @@ class AggregationTests(unittest.TestCase):
             self.assertEqual(1, agg["totals"]["SYNTAX_INVALID"])
             self.assertEqual(
                 {"SYNTAX_VALID": 1, "SYNTAX_INVALID": 1},
-                agg["by_group"]["full/claude-sonnet-4/grammar"],
+                agg["by_group"]["full/claude-sonnet-4/grammar/gpt-5/few_shot"],
             )
 
 

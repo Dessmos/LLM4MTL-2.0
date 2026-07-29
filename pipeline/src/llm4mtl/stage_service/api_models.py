@@ -5,17 +5,31 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
+
+# The four languages the thesis must cover. Kept as a closed set so a run can
+# never be created for a language the pipeline does not implement.
+Language = Literal["etl", "atl", "qvto", "reactions"]
 
 
 class RunCreateRequest(BaseModel):
+    """Identity of a new run. These fields become the immutable manifest.
+
+    A run is exactly one combination, so every axis is required. Leaving one out
+    would let a stage select every value and attribute the results to a run id
+    that does not describe them.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
     run_id: str | None = None
-    language: str = "etl"
-    task: str | None = None
-    transformation_model: str | None = None
-    test_generation_model: str | None = None
-    strategy: str | None = None
-    seed: int | None = None
+    language: Language
+    task: str = Field(min_length=1)
+    transformation_model: str = Field(min_length=1)
+    test_generation_model: str = Field(min_length=1)
+    transformation_strategy: str = Field(min_length=1)
+    test_generation_strategy: str = Field(min_length=1)
+    seed: int = 1
     pipeline_variant: str = "full"
     preset: str | None = None
 
@@ -26,21 +40,23 @@ class RunCreateResponse(BaseModel):
 
 
 class StageRunRequest(BaseModel):
-    """Selection for one stage. n8n owns which stage runs and what comes next."""
+    """Attempt-specific parameters for one stage.
 
-    language: str = "etl"
-    tasks: list[str] = Field(default_factory=list)
-    all_tasks: bool = False
-    test_models: list[str] = Field(default_factory=list)
-    test_strategies: list[str] = Field(default_factory=list)
-    transformation_models: list[str] = Field(default_factory=list)
-    transformation_strategies: list[str] = Field(default_factory=list)
-    suite_id: str | None = None
+    Identity belongs only to the immutable run manifest and is deliberately not
+    representable here. Rejecting unknown fields makes a stale workflow fail
+    loudly instead of appearing to select a different task/model/strategy.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    suite_id: str | None = Field(default=None, pattern=r"^[A-Za-z0-9._-]+$")
     verbose: bool = False
 
 
 class DiagnosisRecordRequest(BaseModel):
     """Normalized failure diagnosis returned by an n8n LLM node."""
+
+    model_config = ConfigDict(extra="forbid")
 
     schema_version: Literal["1.0"]
     classification: Literal["TRANSFORMATION_DEFECT", "TEST_DEFECT", "AMBIGUOUS"]

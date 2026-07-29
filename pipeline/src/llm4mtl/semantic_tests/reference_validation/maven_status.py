@@ -26,6 +26,14 @@ TEST_EXECUTION_MARKERS = (
     "Surefire report",
 )
 
+# The transformation engine rejected the transformation itself. Against a
+# generated transformation that is a defect under test; against the trusted
+# reference it means the harness is broken, so it is never an oracle verdict.
+TRANSFORMATION_PARSE_MARKERS = (
+    "ETL parse errors",
+    "ParseProblem",
+)
+
 
 def compiles(result: CommandResult) -> bool:
     return not contains_any(result.output, COMPILE_MARKERS)
@@ -37,6 +45,10 @@ def executes(result: CommandResult) -> bool:
     if contains_any(result.output, NO_TEST_MARKERS):
         return False
     return result.exit_code == 0 or contains_any(result.output, TEST_EXECUTION_MARKERS)
+
+
+def transformation_parse_failed(output: str) -> bool:
+    return contains_any(output, TRANSFORMATION_PARSE_MARKERS)
 
 
 def contains_any(output: str, markers: tuple[str, ...]) -> bool:

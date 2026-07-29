@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://llm4mtl/schemas/run-index.schema.json",
+  "title": "Experiment run index",
+  "description": "Mutable membership index for one experiment. Updates are serialized and atomically replaced; the experiment manifest itself remains immutable.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "runs"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "2.0"
+    },
+    "runs": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._-]+$"
+      },
+      "uniqueItems": true
+    }
+  }
+}

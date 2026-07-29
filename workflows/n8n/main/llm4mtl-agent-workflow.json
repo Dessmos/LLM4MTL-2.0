@@ -7,16 +7,57 @@
       "name": "Start",
       "type": "n8n-nodes-base.manualTrigger",
       "typeVersion": 1,
-      "position": [240, 300]
+      "position": [
+        240,
+        300
+      ]
     },
     {
       "parameters": {
         "assignments": {
           "assignments": [
-            { "id": "cfg-language", "name": "language", "value": "etl", "type": "string" },
-            { "id": "cfg-task", "name": "task", "value": "Tree2Graph", "type": "string" },
-            { "id": "cfg-transformation-model", "name": "transformation_model", "value": "claude-sonnet-4", "type": "string" },
-            { "id": "cfg-strategy", "name": "strategy", "value": "grammar", "type": "string" }
+            {
+              "id": "cfg-language",
+              "name": "language",
+              "value": "etl",
+              "type": "string"
+            },
+            {
+              "id": "cfg-task",
+              "name": "task",
+              "value": "Tree2Graph",
+              "type": "string"
+            },
+            {
+              "id": "cfg-transformation-model",
+              "name": "transformation_model",
+              "value": "claude-sonnet-4",
+              "type": "string"
+            },
+            {
+              "id": "cfg-strategy",
+              "name": "strategy",
+              "value": "grammar",
+              "type": "string"
+            },
+            {
+              "id": "cfg-test-generation-model",
+              "name": "test_generation_model",
+              "value": "gpt-5",
+              "type": "string"
+            },
+            {
+              "id": "cfg-seed",
+              "name": "seed",
+              "value": 1,
+              "type": "number"
+            },
+            {
+              "id": "cfg-pipeline-variant",
+              "name": "pipeline_variant",
+              "value": "full",
+              "type": "string"
+            }
           ]
         },
         "options": {}
@@ -25,7 +66,10 @@
       "name": "Config",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
-      "position": [460, 300]
+      "position": [
+        460,
+        300
+      ]
     },
     {
       "parameters": {
@@ -33,14 +77,17 @@
         "url": "http://stage-service:8129/runs",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ { \"language\": $json.language, \"task\": $json.task, \"transformation_model\": $json.transformation_model } }}",
+        "jsonBody": "={{ { \"language\": $json.language, \"task\": $json.task, \"transformation_model\": $json.transformation_model, \"test_generation_model\": $json.test_generation_model, \"transformation_strategy\": $json.strategy, \"test_generation_strategy\": $json.strategy, \"seed\": $json.seed, \"pipeline_variant\": $json.pipeline_variant } }}",
         "options": {}
       },
       "id": "create-run-node",
       "name": "Create Run",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [680, 300]
+      "position": [
+        680,
+        300
+      ]
     },
     {
       "parameters": {
@@ -48,21 +95,56 @@
         "url": "=http://stage-service:8129/runs/{{ $json.run_id }}/stages/syntax-validation",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ { \"tasks\": [$('Config').item.json.task], \"transformation_models\": [$('Config').item.json.transformation_model], \"transformation_strategies\": [$('Config').item.json.strategy] } }}",
+        "jsonBody": "={{ {} }}",
         "options": {}
       },
       "id": "syntax-stage-node",
       "name": "Stage: syntax-validation",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [900, 300]
+      "position": [
+        900,
+        300
+      ]
     }
   ],
   "connections": {
-    "Start": { "main": [[{ "node": "Config", "type": "main", "index": 0 }]] },
-    "Config": { "main": [[{ "node": "Create Run", "type": "main", "index": 0 }]] },
-    "Create Run": { "main": [[{ "node": "Stage: syntax-validation", "type": "main", "index": 0 }]] }
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "Create Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Run": {
+      "main": [
+        [
+          {
+            "node": "Stage: syntax-validation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
   },
-  "settings": { "executionOrder": "v1" },
+  "settings": {
+    "executionOrder": "v1"
+  },
   "active": false
 }

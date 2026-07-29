@@ -1,0 +1,207 @@
+"""The ETL implementation of :class:`~llm4mtl.languages.base.LanguageAdapter`.
+
+Everything ETL-specific the pipeline depends on is reachable from here: where
+reference transformations live, how a rendered suite is executed against the
+Epsilon harness through Maven, and how the Epsilon parser is invoked.
+
+The parser is an external Java tool, so it stays a subprocess — but its JSON
+output is parsed as data rather than scraped from human-readable text, which is
+what lets the pipeline report typed observations instead of regex matches.
+"""
+
+from __future__ import annotations
+
+import json
+import subprocess
+import sys
+import xml.etree.ElementTree as ET
+from pathlib import Path
+from typing import Sequence
+
+from llm4mtl.conventions import ETL_CONFIG, default_references_root
+from llm4mtl.domain import (
+    ArtifactValidation,
+    GeneratedSuite,
+    OutcomeStatus,
+    ParseObservation,
+    SuiteExecutionObservation,
+    TransformationOutcome,
+)
+from llm4mtl.languages.base import Workspace
+from llm4mtl.paths import TARGET
+from llm4mtl.semantic_tests.suite_execution import execute_suite_against
+from llm4mtl.semantic_tests.extraction.semantic_cases import render_generated_suite
+from llm4mtl.semantic_tests.suites.metadata import artifact_invalid_reason
+from llm4mtl.semantic_tests.technical_validation.resources import check_models_load
+from llm4mtl.semantic_tests.technical_validation.smoke import junit_test_method_counts
+
+PARSER_TIMEOUT_SECONDS = 900
+
+
+class EtlAdapter:
+    """ETL: Epsilon transformations executed through the Maven/JUnit harness."""
+
+    language_id = "etl"
+    renderer_version = "etl-junit-v1"
+
+    def __init__(self, references_root: Path | None = None) -> None:
+        self._references_root = references_root or default_references_root(ETL_CONFIG)
+
+    def reference_transformation(self, task: str) -> Path:
+        return self._references_root / f"{task}.etl"
+
+    def runtime_tool_versions(self) -> dict[str, str]:
+        """Versions fixed by the ETL harness template's Maven contract."""
+        pom = TARGET.engine_harness(self.language_id) / "pom.xml"
+        try:
+            root = ET.parse(pom).getroot()
+        except (OSError, ET.ParseError) as exc:
+            raise RuntimeError(f"cannot read ETL harness versions from {pom}") from exc
+        namespace = {"m": "http://maven.apache.org/POM/4.0.0"}
+        properties = root.find("m:properties", namespace)
+        if properties is None:
+            raise RuntimeError(f"ETL harness has no Maven properties: {pom}")
+        versions = {
+            "epsilon": properties.findtext("m:epsilon.version", namespaces=namespace),
+            "junit": properties.findtext("m:junit.version", namespaces=namespace),
+        }
+        missing = [name for name, value in versions.items() if not value]
+        if missing:
+            raise RuntimeError(
+                f"ETL harness omits version properties: {', '.join(missing)}"
+            )
+        return {name: str(value) for name, value in versions.items()}
+
+    def render_suite_artifacts(
+        self,
+        task: str,
+        extracted: dict[str, str],
+    ) -> tuple[dict[str, str], ArtifactValidation]:
+        """Validate semantic cases and replace all LLM Java with ETL JUnit."""
+        return render_generated_suite(
+            task,
+            extracted,
+            language=self.language_id,
+        )
+
+    def validate_suite_artifacts(self, suite: GeneratedSuite) -> ArtifactValidation:
+        """Everything that disqualifies a suite without running Maven.
+
+        Cheap, and it keeps a malformed suite from reaching the engine only to
+        fail with a diagnostic about a missing test selector.
+        """
+        reason = artifact_invalid_reason(suite.path) or self._static_rejection(suite)
+        if reason:
+            return ArtifactValidation(
+                valid=False, reason_code="ARTIFACT_INVALID", violations=(reason,)
+            )
+        return ArtifactValidation(valid=True)
+
+    @staticmethod
+    def _static_rejection(suite: GeneratedSuite) -> str:
+        java_paths = sorted(suite.path.glob("*.java"))
+        if not java_paths:
+            return "No rendered Java harness found in suite root"
+
+        models_dir = suite.path / "models"
+        model_paths = (
+            [path for path in models_dir.rglob("*") if path.is_file()]
+            if models_dir.is_dir()
+            else []
+        )
+        if not model_paths:
+            return "No generated model/resource files found under models/"
+
+        if not any(junit_test_method_counts(java_paths).values()):
+            return "No JUnit @Test methods found in the rendered harness"
+
+        models_load, model_error = check_models_load(model_paths)
+        return "" if models_load else model_error
+
+    def execute_suite(
+        self,
+        suite: GeneratedSuite,
+        transformation: Path,
+        workspace: Workspace,
+        timeout: int,
+    ) -> SuiteExecutionObservation:
+        return execute_suite_against(suite, transformation, workspace.engine_dir, timeout)
+
+    def normalize_transformation_failure(
+        self,
+        observation: SuiteExecutionObservation,
+    ) -> TransformationOutcome | None:
+        """Map ETL engine failures without inventing a semantic snapshot."""
+        if observation.timed_out:
+            return TransformationOutcome(
+                status=OutcomeStatus.TIMED_OUT,
+                diagnostic=observation.error_summary,
+            )
+        status = {
+            "transformation_parse": OutcomeStatus.PARSE_FAILED,
+            "engine_runtime": OutcomeStatus.RUNTIME_FAILED,
+            "infrastructure": OutcomeStatus.INFRASTRUCTURE_FAILED,
+        }.get(observation.failure_stage)
+        if status is None:
+            return None
+        return TransformationOutcome(status=status, diagnostic=observation.error_summary)
+
+    def parse_transformations(
+        self,
+        transformations: Sequence[Path],
+        workspace: Workspace,
+    ) -> dict[Path, ParseObservation]:
+        """Run the Epsilon parser driver and read its JSON report."""
+        if not transformations:
+            return {}
+
+        command = [sys.executable, str(self._parser_driver())]
+        for transformation in transformations:
+            command.extend(("--transformation", str(transformation)))
+        workspace.observations_dir.mkdir(parents=True, exist_ok=True)
+        results_file = workspace.observations_dir / "generated_transformation_syntax.csv"
+        command.extend(
+            (
+                "--results-file",
+                str(results_file),
+                "--output-format",
+                "json",
+            )
+        )
+
+        completed = subprocess.run(
+            command,
+            cwd=TARGET.root,
+            capture_output=True,
+            text=True,
+            timeout=PARSER_TIMEOUT_SECONDS,
+        )
+        payload = _last_json_object(completed.stdout)
+        if payload.get("status") != "completed":
+            diagnostic = str(payload.get("error") or completed.stderr.strip() or "parser driver failed")
+            return {
+                path: ParseObservation(parsed=False, diagnostic=diagnostic)
+                for path in transformations
+            }
+
+        parsed_paths = {Path(item).resolve() for item in payload.get("passed_transformations", [])}
+        return {
+            path: ParseObservation(parsed=path.resolve() in parsed_paths)
+            for path in transformations
+        }
+
+    @staticmethod
+    def _parser_driver() -> Path:
+        return TARGET.engine_parser("etl") / "validate_etl_syntax.py"
+
+
+def _last_json_object(stdout: str) -> dict[str, object]:
+    """The driver prints its JSON report last; anything before it is noise."""
+    for line in reversed(stdout.strip().splitlines()):
+        try:
+            value = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(value, dict):
+            return value
+    return {}

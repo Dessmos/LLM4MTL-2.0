@@ -12,7 +12,7 @@ from itertools import product
 from pathlib import Path
 from typing import Any
 
-from llm4mtl.experiment_runner.config import load_mapping
+from llm4mtl.experiment_runner.config import ConfigError, load_mapping
 
 
 @dataclass(frozen=True)
@@ -49,7 +49,10 @@ def load_matrix(path: Path) -> dict[str, Any]:
 def expand_matrix(matrix: dict[str, Any]) -> list[RunSpec]:
     """Return one :class:`RunSpec` per cell of the matrix's cartesian product."""
     experiment_id = str(matrix.get("experiment_id", "experiment"))
-    language = str(matrix.get("language", "etl"))
+    language_value = matrix.get("language")
+    if not isinstance(language_value, str) or not language_value.strip():
+        raise ConfigError("Experiment matrix must declare a non-empty language.")
+    language = language_value
     axes = product(
         matrix.get("tasks", []),
         matrix.get("transformation_models", []),

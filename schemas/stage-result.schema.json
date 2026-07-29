@@ -2,12 +2,19 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://llm4mtl/schemas/stage-result.schema.json",
   "title": "Stage result",
-  "description": "The standard result a Python stage returns to n8n. Python reports FACTS (status + outcome_code + artifacts); routing decisions live only in n8n. Stored as stages/<stage>/attempts/attempt-NNN/result.json (immutable) with a stages/<stage>/latest.json projection.",
+  "description": "The standard result a Python stage returns to n8n. Python reports FACTS (status + outcome_code + artifacts); routing decisions live only in n8n. Stored as stages/<stage>/attempts/attempt-NNN/result.json (immutable); the latest result is derived from the recorded attempts on read. This is the ONLY persisted stage-result shape: the local experiment runner and the stage service both write it, and internal debugging detail belongs beside it in evidence.json. `skipped` means the stage produced no observation at all and must never be counted as `passed`.",
   "type": "object",
-  "required": ["schema_version", "stage", "status", "outcome_code"],
+  "required": [
+    "schema_version",
+    "stage",
+    "status",
+    "outcome_code"
+  ],
   "additionalProperties": false,
   "properties": {
-    "schema_version": {"type": "string"},
+    "schema_version": {
+      "const": "2.0"
+    },
     "stage": {
       "type": "string",
       "enum": [
@@ -21,16 +28,47 @@
         "evaluation"
       ]
     },
-    "status": {"type": "string", "enum": ["passed", "failed", "infrastructure_error"]},
-    "outcome_code": {"type": "string"},
-    "attempt": {"type": "integer", "minimum": 1, "default": 1},
+    "status": {
+      "type": "string",
+      "enum": [
+        "passed",
+        "failed",
+        "skipped",
+        "infrastructure_error"
+      ]
+    },
+    "outcome_code": {
+      "type": "string"
+    },
+    "attempt": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 1
+    },
     "counts": {
       "type": "object",
-      "additionalProperties": {"type": "integer", "minimum": 0}
+      "additionalProperties": {
+        "type": "integer",
+        "minimum": 0
+      }
     },
-    "artifacts": {"type": "object", "additionalProperties": {"type": "string"}},
-    "started_at": {"type": "string", "format": "date-time"},
-    "finished_at": {"type": "string", "format": "date-time"},
-    "duration_ms": {"type": "integer", "minimum": 0}
+    "artifacts": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "started_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "finished_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "duration_ms": {
+      "type": "integer",
+      "minimum": 0
+    }
   }
 }

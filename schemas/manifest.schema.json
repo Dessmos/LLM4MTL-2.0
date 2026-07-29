@@ -2,47 +2,184 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://llm4mtl/schemas/manifest.schema.json",
   "title": "Run manifest",
-  "description": "Immutable resolved configuration and provenance for one run. Written once at `run init`; never appended to. A run = one combination of task + language + transformation model + test-generation model + strategy + seed + pipeline variant.",
+  "description": "Immutable resolved configuration and provenance for one run. Written once and never replaced. A run = ONE combination of language + task + transformation model/strategy + test-generation model/strategy + seed + pipeline variant. An axis may be null only when no stage in the run consumes it; null never means unconstrained.",
   "type": "object",
-  "required": ["schema_version", "run_id", "language", "task", "started_at"],
+  "required": [
+    "schema_version",
+    "run_id",
+    "language",
+    "task",
+    "transformation_model",
+    "test_generation_model",
+    "transformation_strategy",
+    "test_generation_strategy",
+    "seed",
+    "pipeline_variant",
+    "provenance",
+    "started_at"
+  ],
   "additionalProperties": false,
   "properties": {
-    "schema_version": {"type": "string"},
-    "run_id": {"type": "string"},
-    "preset": {"type": ["string", "null"]},
-    "language": {"type": "string", "enum": ["etl", "atl", "qvto", "reactions"]},
-    "task": {"type": "string"},
-    "transformation_model": {"type": ["string", "null"]},
-    "test_generation_model": {"type": ["string", "null"]},
-    "strategy": {"type": ["string", "null"]},
-    "seed": {"type": ["integer", "null"]},
-    "pipeline_variant": {"type": "string", "default": "full"},
+    "schema_version": {
+      "const": "2.0"
+    },
+    "run_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9._-]+$"
+    },
+    "preset": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "language": {
+      "type": "string",
+      "enum": [
+        "etl",
+        "atl",
+        "qvto",
+        "reactions"
+      ]
+    },
+    "task": {
+      "type": "string",
+      "not": {
+        "const": "all"
+      },
+      "description": "The one concrete task fixed by this run. Multi-task experiments are expanded into one run per task."
+    },
+    "transformation_model": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "The one value this run fixes for this axis, or null when the axis is not applicable to the stages this run executes. Null never means 'any value': a stage that needs an axis the run left null must refuse rather than select every value."
+    },
+    "test_generation_model": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "The one value this run fixes for this axis, or null when the axis is not applicable to the stages this run executes. Null never means 'any value': a stage that needs an axis the run left null must refuse rather than select every value."
+    },
+    "transformation_strategy": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "The one transformation-generation strategy fixed by this run, or null when no stage consumes it."
+    },
+    "test_generation_strategy": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "The one semantic-test-generation strategy fixed by this run, or null when no stage consumes it."
+    },
+    "seed": {
+      "type": "integer"
+    },
+    "pipeline_variant": {
+      "type": "string",
+      "default": "full"
+    },
     "limits": {
       "type": "object",
       "additionalProperties": true,
       "properties": {
-        "max_syntax_repairs": {"type": "integer", "minimum": 0},
-        "max_semantic_repairs": {"type": "integer", "minimum": 0}
+        "max_syntax_repairs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "max_semantic_repairs": {
+          "type": "integer",
+          "minimum": 0
+        }
       }
     },
     "provenance": {
       "type": "object",
       "additionalProperties": true,
       "properties": {
-        "git_commit": {"type": "string"},
-        "source_revisions": {"type": "object"},
-        "schema_versions": {"type": "object"}
-      }
+        "git_commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40,64}$"
+        },
+        "git_dirty": {
+          "type": "boolean"
+        },
+        "renderer_version": {
+          "type": "string"
+        },
+        "tool_versions": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "source_revisions": {
+          "type": "object"
+        },
+        "schema_versions": {
+          "type": "object"
+        },
+        "input_hashes": {
+          "type": "object",
+          "description": "Content hashes of the hand-authored inputs that decide the run's outcome: the reference transformation, the task contract, and the metamodels. Without them a stored result cannot be tied to the inputs it was produced from.",
+          "required": [
+            "reference_transformation",
+            "task_contract",
+            "metamodels"
+          ],
+          "additionalProperties": true,
+          "properties": {
+            "reference_transformation": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "task_contract": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "metamodels": {
+              "type": "object",
+              "minProperties": 1,
+              "additionalProperties": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              }
+            }
+          }
+        }
+      },
+      "required": [
+        "git_commit",
+        "git_dirty",
+        "schema_versions",
+        "input_hashes",
+        "renderer_version",
+        "tool_versions"
+      ]
     },
     "n8n": {
       "type": "object",
       "additionalProperties": true,
       "properties": {
-        "workflow_id": {"type": "string"},
-        "execution_id": {"type": "string"},
-        "workflow_version": {"type": "string"}
+        "workflow_id": {
+          "type": "string"
+        },
+        "execution_id": {
+          "type": "string"
+        },
+        "workflow_version": {
+          "type": "string"
+        }
       }
     },
-    "started_at": {"type": "string", "format": "date-time"}
+    "started_at": {
+      "type": "string",
+      "format": "date-time"
+    }
   }
 }

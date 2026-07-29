@@ -7,12 +7,13 @@
   "required": ["schemaVersion", "tests"],
   "additionalProperties": true,
   "properties": {
-    "schemaVersion": {"type": "integer"},
+    "schemaVersion": {"type": "integer", "minimum": 1},
     "testClass": {"type": "string"},
     "transformation": {"type": "string"},
     "metamodels": {"type": "array", "items": {"type": "string"}},
     "tests": {
       "type": "array",
+      "minItems": 1,
       "items": {
         "type": "object",
         "required": ["name", "assertions"],
@@ -37,12 +38,24 @@
           },
           "assertions": {
             "type": "array",
+            "minItems": 1,
             "items": {
               "type": "object",
               "required": ["kind"],
               "additionalProperties": true,
               "properties": {
-                "kind": {"type": "string", "enum": ["count", "featureValues", "pathValues", "objects", "referencePairs"]}
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "count",
+                    "featureValues",
+                    "pathValues",
+                    "treePaths",
+                    "collectionSize",
+                    "objects",
+                    "referencePairs"
+                  ]
+                }
               }
             }
           }

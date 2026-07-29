@@ -17,7 +17,8 @@ from pathlib import Path
 from typing import Any
 
 from llm4mtl.conventions import (
-    default_etl_test_dir,
+    ETL_CONFIG,
+    default_test_project_dir,
     default_references_root,
     default_responses_root,
     default_task_contracts_root,
@@ -57,25 +58,25 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--references-root",
         type=Path,
-        default=default_references_root(),
+        default=default_references_root(ETL_CONFIG),
         help="Directory containing reference ETL files.",
     )
     parser.add_argument(
         "--metamodels-root",
         type=Path,
-        default=default_etl_test_dir() / "src/test/resources/metamodels",
+        default=default_test_project_dir(ETL_CONFIG) / "src/test/resources/metamodels",
         help="Directory containing Ecore metamodels.",
     )
     parser.add_argument(
         "--prompts-root",
         type=Path,
-        default=default_responses_root().parent / "prompts/gpt-5",
+        default=default_responses_root(ETL_CONFIG).parent / "prompts/gpt-5",
         help="Prompt directory to enrich when --inject-prompts is set.",
     )
     parser.add_argument(
         "--contracts-root",
         type=Path,
-        default=default_task_contracts_root(),
+        default=default_task_contracts_root(ETL_CONFIG),
         help="Output directory for JSON and text contracts.",
     )
     parser.add_argument(

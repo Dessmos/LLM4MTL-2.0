@@ -34,13 +34,29 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(["Tree2Graph"], payload["tasks"])
         self.assertTrue(payload["execution"]["resume"])
 
+    def test_a_config_cannot_silently_default_to_etl(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "missing-language.yaml"
+            config_path.write_text("tasks: [Tree2Graph]\n", encoding="utf-8")
+
+            with self.assertRaises(ConfigError):
+                load_pipeline_config(config_path)
+
 
 class CliTests(unittest.TestCase):
+    def test_a_direct_command_requires_an_explicit_language(self) -> None:
+        with self.assertRaises(SystemExit):
+            build_parser().parse_args(
+                ["tests", "extract", "--task", "Tree2Graph"]
+            )
+
     def test_suite_id_builds_identity_selection(self) -> None:
         args = build_parser().parse_args(
             [
                 "transformations",
                 "validate",
+                "--language",
+                "etl",
                 "--task",
                 "Tree2Graph",
                 "--test-model",
@@ -60,7 +76,16 @@ class CliTests(unittest.TestCase):
 
     def test_extract_suite_id_requires_explicit_response(self) -> None:
         args = build_parser().parse_args(
-            ["tests", "extract", "--task", "Tree2Graph", "--suite-id", "suite_001"]
+            [
+                "tests",
+                "extract",
+                "--language",
+                "etl",
+                "--task",
+                "Tree2Graph",
+                "--suite-id",
+                "suite_001",
+            ]
         )
         with self.assertRaises(ConfigError):
             config_from_args(args)
@@ -87,6 +112,7 @@ class OrchestratorTests(unittest.TestCase):
             orchestrator = ExperimentOrchestrator(REPO_ROOT)
             orchestrator.runs_root = repo_root / "runs"
             config = PipelineConfig(
+                language="etl",
                 tasks=["Tree2Graph"],
                 test_models=["gpt-5"],
                 test_strategies=["few_shot"],
@@ -101,6 +127,7 @@ class OrchestratorTests(unittest.TestCase):
 
     def test_semantic_stage_skips_when_parser_passed_nothing(self) -> None:
         config = PipelineConfig(
+            language="etl",
             tasks=["Tree2Graph"],
             transformation_selection_locked=True,
             transformations=[],

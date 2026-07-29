@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 from llm4mtl.conventions import (
+    ETL_CONFIG,
     default_prompts_root,
     default_references_root,
     default_task_contracts_root,
@@ -35,19 +36,19 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--references-root",
         type=Path,
-        default=default_references_root(),
+        default=default_references_root(ETL_CONFIG),
         help="Directory containing reference <task>.etl files.",
     )
     parser.add_argument(
         "--contracts-root",
         type=Path,
-        default=default_task_contracts_root(),
+        default=default_task_contracts_root(ETL_CONFIG),
         help="Directory containing <task>.json contracts.",
     )
     parser.add_argument(
         "--prompts-root",
         type=Path,
-        default=default_prompts_root(),
+        default=default_prompts_root(ETL_CONFIG),
         help="Root under which <llm>/<task>.txt prompts are written.",
     )
     parser.add_argument(

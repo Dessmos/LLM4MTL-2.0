@@ -4,15 +4,22 @@
   "title": "Failure diagnosis",
   "description": "Classification of a semantic failure where a reference-validated test passes on the reference transformation but fails on a generated transformation. The LLM call and model selection happen in n8n; Python prepares/normalizes the evidence and validates the returned structure against this schema.",
   "type": "object",
-  "required": ["schema_version", "classification", "provider", "model"],
+  "required": [
+    "schema_version",
+    "classification",
+    "rationale",
+    "provider",
+    "model",
+    "created_at"
+  ],
   "additionalProperties": false,
   "properties": {
-    "schema_version": {"type": "string"},
+    "schema_version": {"const": "1.0"},
     "classification": {"type": "string", "enum": ["TRANSFORMATION_DEFECT", "TEST_DEFECT", "AMBIGUOUS"]},
     "evidence_ref": {"type": "string", "description": "Relative path to the normalized evidence bundle."},
-    "rationale": {"type": "string"},
+    "rationale": {"type": "string", "minLength": 1},
     "provider": {"type": "string", "enum": ["openai", "anthropic", "google"], "description": "Provider selected by n8n."},
-    "model": {"type": "string", "description": "Provider/model that produced the classification (recorded by n8n)."},
+    "model": {"type": "string", "minLength": 1, "description": "Provider/model that produced the classification (recorded by n8n)."},
     "created_at": {"type": "string", "format": "date-time"}
   }
 }

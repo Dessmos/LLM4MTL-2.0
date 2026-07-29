@@ -2,24 +2,22 @@
 
 from __future__ import annotations
 
-from llm4mtl.conventions import ETL_CONFIG
-from llm4mtl.semantic_tests.suites.models import CandidateSuite
-
-
-LANGUAGE = ETL_CONFIG.language
+# `assertions_passed` is recorded but is NOT part of the technical verdict: it is
+# the oracle observation that reference validation classifies.
 RESULT_COLUMNS = [
     "language",
     "task",
     "suite_id",
     "llm",
     "strategy",
-    "java_present",
-    "models_present",
-    "contract_valid",
+    "artifact_valid",
     "compiles",
     "models_load",
     "junit_executes",
+    "assertions_passed",
     "technically_valid",
+    "status",
+    "failure_stage",
     "maven_exit_code",
     "error_summary",
 ]

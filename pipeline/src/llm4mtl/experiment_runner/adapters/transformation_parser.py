@@ -1,30 +1,32 @@
-"""Adapter for ETL parser syntax validation."""
+"""Syntax validation of generated transformations, through the language adapter."""
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
-from llm4mtl.experiment_runner.adapters.base import hash_paths, python_command, run_command
+from llm4mtl.experiment_runner.adapters.base import hash_paths
 from llm4mtl.experiment_runner.adapters.transformation_validation import TransformationValidationAdapter
+from llm4mtl.experiment_runner.config import ConfigError
 from llm4mtl.experiment_runner.models import PipelineConfig, StageResult
+from llm4mtl.languages import language_adapter
+from llm4mtl.semantic_tests.validation import workspace_for
 
 
 class TransformationParserAdapter:
     def __init__(self, repo_root: Path) -> None:
         self.repo_root = repo_root.resolve()
         self.selector = TransformationValidationAdapter(repo_root)
-        # v5 migration (Stage 2): the ETL parser engine moved to engines/etl/parser.
-        from llm4mtl.paths import TARGET
-
-        self.script = TARGET.engine_parser("etl") / "validate_etl_syntax.py"
 
     def parse(self, config: PipelineConfig, dry_run: bool) -> StageResult:
         transformations = self.selector.select_transformations(config)
         input_hash = hash_paths(transformations)
-        details = {"transformations": [str(path) for path in transformations]}
+        details: dict[str, object] = {
+            "transformations": [str(path) for path in transformations]
+        }
         if not transformations:
-            return StageResult("transformation_parsing", "error", {"selected": 0, "failed": 1}, details, input_hash)
+            return StageResult(
+                "transformation_parsing", "error", {"selected": 0, "failed": 1}, details, input_hash
+            )
         if dry_run:
             return StageResult(
                 "transformation_parsing",
@@ -34,34 +36,35 @@ class TransformationParserAdapter:
                 input_hash,
             )
 
-        command = python_command(self.script)
-        for transformation in transformations:
-            command.extend(("--transformation", str(transformation)))
-        command.extend(("--output-format", "json"))
-        execution = run_command(command, self.repo_root, config.verbose)
-        try:
-            payload = json.loads(execution.stdout.strip().splitlines()[-1])
-        except (json.JSONDecodeError, IndexError):
-            payload = {}
-        counts = {
-            "selected": int(payload.get("selected", len(transformations))),
-            "passed": int(payload.get("passed", 0)),
-            "failed": int(payload.get("failed", 0)),
-        }
-        details.update(
-            command=command,
-            stdout=execution.stdout,
-            stderr=execution.stderr,
-            results_file=payload.get("results_file"),
-            passed_transformations=payload.get("passed_transformations", []),
-            failed_transformations=payload.get("failed_transformations", []),
+        if not config.run_dir:
+            raise ConfigError(
+                "transformation parsing requires a resolved run directory for evidence"
+            )
+        run_dir = Path(config.run_dir).resolve()
+        adapter = language_adapter(config.language)
+        workspace = workspace_for(
+            Path(config.engine_dir).resolve()
+            if config.engine_dir
+            else run_dir / "workspaces" / config.language,
+            run_dir / "observations" / "syntax-validation",
         )
-        status = "completed" if payload.get("status") == "completed" else "infrastructure_error"
+        observations = adapter.parse_transformations(transformations, workspace)
+
+        passed = [path for path in transformations if observations[path].parsed]
+        failed = [path for path in transformations if not observations[path].parsed]
+        details.update(
+            passed_transformations=[str(path) for path in passed],
+            failed_transformations=[str(path) for path in failed],
+            diagnostics={
+                str(path): observations[path].diagnostic
+                for path in failed
+                if observations[path].diagnostic
+            },
+        )
         return StageResult(
             "transformation_parsing",
-            status,
-            counts,
+            "completed",
+            {"selected": len(transformations), "passed": len(passed), "failed": len(failed)},
             details,
             input_hash,
-            exit_code=execution.exit_code,
         )

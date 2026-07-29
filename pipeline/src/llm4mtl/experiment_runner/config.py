@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from llm4mtl.experiment_runner.models import PipelineConfig
+from llm4mtl.run_store.identity import RUN_ID_PATTERN
 
 
 ALLOWED_MODELS = {"gpt-5", "claude-sonnet-4", "gemini-2-5-pro"}
@@ -21,6 +22,8 @@ class ConfigError(ValueError):
 
 def load_pipeline_config(path: Path) -> PipelineConfig:
     payload = load_mapping(path)
+    if not isinstance(payload.get("language"), str) or not payload["language"].strip():
+        raise ConfigError("Experiment config must declare a non-empty language.")
     test_suites = mapping(payload.get("test_suites"))
     extraction = mapping(test_suites.get("extraction"))
     validation = mapping(test_suites.get("validation"))
@@ -28,7 +31,7 @@ def load_pipeline_config(path: Path) -> PipelineConfig:
     execution = mapping(payload.get("execution"))
 
     config = PipelineConfig(
-        language=str(payload.get("language", "etl")),
+        language=str(payload["language"]),
         tasks=string_list(payload.get("tasks")),
         all_tasks=bool(payload.get("all_tasks", False)),
         test_models=string_list(test_suites.get("models")),
@@ -82,14 +85,30 @@ def load_resolved_config(path: Path) -> PipelineConfig:
 
 
 def validate_config(config: PipelineConfig, require_selection: bool = True) -> None:
-    if config.language.lower() != "etl":
-        raise ConfigError(f"Unsupported language: {config.language}. Currently only etl is supported.")
-    if config.tasks and config.all_tasks:
-        raise ConfigError("--task and --all-tasks are mutually exclusive.")
-    if require_selection and not config.tasks and not config.all_tasks and not any(
-        (config.responses, config.suites, config.transformations)
-    ):
-        raise ConfigError("Select at least one --task, use --all-tasks, or provide an explicit input path.")
+    # The language must have an adapter. Rejecting here rather than deep in a
+    # stage keeps an unimplemented language from producing partial artifacts
+    # attributed to a language that never ran.
+    from llm4mtl.languages import REQUIRED_LANGUAGES, UnsupportedLanguageError, language_adapter
+
+    if not isinstance(config.language, str) or not config.language.strip():
+        raise ConfigError("A run must declare a non-empty language.")
+    if config.suite_id and not RUN_ID_PATTERN.fullmatch(config.suite_id):
+        raise ConfigError(
+            f"Invalid suite id {config.suite_id!r}: expected a non-empty "
+            f"{RUN_ID_PATTERN.pattern} identifier."
+        )
+    try:
+        language_adapter(config.language)
+    except UnsupportedLanguageError as exc:
+        raise ConfigError(
+            f"Unsupported language: {config.language}. "
+            f"The thesis requires {', '.join(REQUIRED_LANGUAGES)}; {exc}"
+        ) from exc
+    if config.all_tasks or len(config.tasks) != 1:
+        raise ConfigError(
+            "A run must fix exactly one task. Expand several or all tasks through "
+            "an experiment matrix so each task receives its own run identity."
+        )
     unknown_models = (
         set(config.test_models) | set(config.transformation_models)
     ) - ALLOWED_MODELS

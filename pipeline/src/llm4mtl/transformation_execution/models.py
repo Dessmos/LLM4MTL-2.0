@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from pathlib import Path
 
-from llm4mtl.semantic_tests.suites.models import CandidateSuite
+from llm4mtl.domain import GeneratedSuite
 
 
 RESULT_COLUMNS = [
@@ -41,8 +41,9 @@ class ValidatedSuite:
     strategy: str
     suite_id: str
 
-    def as_candidate(self) -> CandidateSuite:
-        return CandidateSuite(
+    def as_candidate(self) -> GeneratedSuite:
+        return GeneratedSuite(
+            language="etl",
             path=self.path,
             task=self.task,
             llm=self.llm,

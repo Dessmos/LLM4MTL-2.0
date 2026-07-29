@@ -8,7 +8,10 @@ from typing import Any
 
 @dataclass
 class PipelineConfig:
-    language: str = "etl"
+    # Language is an experiment identity axis, not a shared-pipeline default.
+    # Every boundary must state it explicitly so a missing value cannot silently
+    # execute ETL and be attributed to another language.
+    language: str
     tasks: list[str] = field(default_factory=list)
     all_tasks: bool = False
     responses: list[str] = field(default_factory=list)
@@ -28,6 +31,9 @@ class PipelineConfig:
     start_stage: str = "extract"
     stop_after: str = "semantic"
     run_id: str | None = None
+    # Identity axes recorded in the immutable manifest alongside language/task/models.
+    seed: int = 1
+    pipeline_variant: str = "full"
     resume: bool = False
     force: bool = False
     dry_run: bool = False
@@ -35,7 +41,11 @@ class PipelineConfig:
     verbose: bool = False
     keep_workspace: bool = False
     fail_fast: bool = False
-    etl_test_dir: str | None = None
+    engine_dir: str | None = None
+    # Runtime scope resolved by the run store. This is deliberately not an
+    # experiment identity axis; adapters use it to keep evidence inside the
+    # current run even when the orchestrator has a non-default runs root.
+    run_dir: str | None = None
     transformation_selection_locked: bool = False
     command: str = "pipeline.run"
 

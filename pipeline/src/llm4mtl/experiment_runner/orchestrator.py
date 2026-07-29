@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
@@ -16,6 +15,16 @@ from llm4mtl.experiment_runner.config import PIPELINE_STAGES, ConfigError, valid
 from llm4mtl.experiment_runner.models import PipelineConfig, RunResult, StageResult
 from llm4mtl import run_store
 from llm4mtl.paths import REPO_ROOT, TARGET
+from llm4mtl.provenance import build_provenance
+from llm4mtl.run_store.attempts import existing_attempts
+from llm4mtl.serialization.json_io import read_json, write_json
+from llm4mtl.stage_contract import (
+    CONTRACT_STAGE_IDS,
+    contract_stage_id,
+    stage_status,
+    to_stage_payload,
+)
+from llm4mtl.workspace import materialize_engine
 
 
 StageCallable = Callable[[PipelineConfig, bool], StageResult]
@@ -39,10 +48,25 @@ class ExperimentOrchestrator:
         stages = self.stage_sequence(config)
         config_hash = stable_hash(
             config.to_dict(),
-            ignored={"resume", "force", "dry_run", "verbose", "output_format", "etl_test_dir"},
+            ignored={
+                "resume",
+                "force",
+                "dry_run",
+                "verbose",
+                "output_format",
+                "engine_dir",
+                "run_dir",
+            },
         )
-        run_dir = self.runs_root / run_id
-        previous = self.load_previous(run_dir) if config.resume else {}
+        # Resolve through the run store first: it validates that ``run_id`` is a
+        # contained identifier. Deriving the directory here would let a
+        # traversing id create files before anything checked it.
+        paths = run_store.open_run(self.runs_root, run_id)
+        run_dir = paths.root
+        config.run_dir = str(run_dir)
+        previous = self.load_previous(paths) if config.resume else {}
+        identity = run_identity(config, config_hash)
+        run_exists = paths.manifest.exists()
 
         if run_dir.exists() and not config.dry_run and not config.resume and not config.force:
             raise ConfigError(f"Run already exists: {run_id}. Use --resume or --force.")
@@ -51,24 +75,34 @@ class ExperimentOrchestrator:
             results = [self.plan_stage(name, callback, config, config_hash) for name, callback in stages]
             return RunResult(run_id, "dry_run", config.command, results)
 
-        run_dir.mkdir(parents=True, exist_ok=True)
-        if config.keep_workspace:
-            config.etl_test_dir = str(self.prepare_workspace(run_dir))
-        write_json(run_dir / "config.resolved.yaml", config.to_dict())
-        paths = run_store.open_run(self.runs_root, run_id)
-        if config.resume and paths.manifest.exists():
+        if run_exists:
+            # Identity is checked before any write or workspace materialization.
+            # A rejected resume must leave every byte of the existing run intact.
+            reject_identity_drift(run_store.read_manifest(paths) or {}, identity, run_id)
+
+        if run_exists:
             run_store.append_event(paths, "run_resumed")
         else:
-            run_store.create_run(
-                self.runs_root,
-                run_id,
-                {
-                    "command": config.command,
-                    "created_at": datetime.now(timezone.utc).isoformat(),
-                    "config_hash": config_hash,
-                },
-                force=True,
-            )
+            # Claim the immutable identity before creating any secondary run
+            # artifact. Concurrent creators cannot materialize workspaces under
+            # an identity they did not win.
+            run_store.create_run(self.runs_root, run_id, identity)
+
+        if any(
+            name
+            in {
+                "technical_validation",
+                "reference_validation",
+                "transformation_validation",
+            }
+            for name, _ in stages
+        ):
+            # Execution always uses a run-local engine copy. `keep_workspace`
+            # controls retention policy only; it must never decide whether runs
+            # are isolated from the shared harness.
+            config.engine_dir = str(self.prepare_workspace(run_dir, config.language))
+        if not run_exists:
+            write_json(run_dir / "config.resolved.yaml", config.to_dict())
 
         results: list[StageResult] = []
         for name, callback in stages:
@@ -77,13 +111,17 @@ class ExperimentOrchestrator:
             if resumed:
                 results.append(resumed)
                 self.apply_stage_outputs(name, resumed, config)
-                self.persist_progress(run_dir, results)
-                run_store.append_event(paths, "stage_skipped_resume", stage=name, status=resumed.status)
+                stage_id = contract_stage_id(name)
+                run_store.append_event(
+                    paths,
+                    "stage_skipped_resume",
+                    stage=stage_id,
+                    status=stage_status(stage_id, resumed),
+                )
                 continue
             if plan.status == "error":
                 plan.config_hash = config_hash
                 results.append(plan)
-                self.persist_progress(run_dir, results)
                 self._record_stage(paths, plan)
                 if config.fail_fast:
                     break
@@ -105,7 +143,6 @@ class ExperimentOrchestrator:
                 result.input_hash = plan.input_hash
             results.append(result)
             self.apply_stage_outputs(name, result, config)
-            self.persist_progress(run_dir, results)
             self._record_stage(paths, result)
             if config.fail_fast and (
                 result.status in {"error", "infrastructure_error"} or result.domain_failures
@@ -116,15 +153,26 @@ class ExperimentOrchestrator:
         run_result = RunResult(run_id, status, config.command, results, str(run_dir.relative_to(REPO_ROOT)))
         write_json(run_dir / "summary.json", run_result.to_dict())
         self.write_log(run_dir, run_result)
-        run_store.append_event(paths, "run_finished", status=status)
+        run_store.append_event(paths, "run_finished", run_status=status)
         return run_result
 
     def _record_stage(self, paths: run_store.RunPaths, result: StageResult) -> None:
-        """Record one stage outcome in the run-centric store (immutable attempt + latest)."""
-        run_store.append_event(paths, "stage_started", stage=result.name)
-        attempt = run_store.record_attempt(paths, result.name, result.to_dict())
+        """Record one stage outcome in the run-centric store (immutable attempt + latest).
+
+        The persisted result is the same contract payload the stage service writes;
+        the runner's internal detail is kept beside it as evidence.
+        """
+        stage = contract_stage_id(result.name)
+        payload = to_stage_payload(stage, result)
+        run_store.append_event(paths, "stage_started", stage=stage)
+        attempt = run_store.record_attempt(paths, stage, payload, evidence=result.to_dict())
         run_store.append_event(
-            paths, "stage_finished", stage=result.name, status=result.status, attempt=attempt
+            paths,
+            "stage_finished",
+            stage=stage,
+            status=payload["status"],
+            outcome_code=payload["outcome_code"],
+            attempt=attempt,
         )
 
     def apply_stage_outputs(
@@ -219,30 +267,36 @@ class ExperimentOrchestrator:
             return previous
         return None
 
-    def load_previous(self, run_dir: Path) -> dict[str, dict[str, object]]:
-        path = run_dir / "stage_results.json"
-        if not path.is_file():
-            return {}
-        payload = json.loads(path.read_text(encoding="utf-8"))
-        return payload if isinstance(payload, dict) else {}
+    def load_previous(self, paths: run_store.RunPaths) -> dict[str, dict[str, object]]:
+        """Prior stage results, read from the run store's own evidence.
 
-    def persist_progress(self, run_dir: Path, results: list[StageResult]) -> None:
-        write_json(run_dir / "stage_results.json", {result.name: result.to_dict() for result in results})
+        Resume reads the same records everything else does. A separate progress
+        file would be a second source of truth for what already ran, and the two
+        could disagree about whether a stage may be skipped.
+        """
+        previous: dict[str, dict[str, object]] = {}
+        for internal_name, stage in CONTRACT_STAGE_IDS.items():
+            attempts = paths.stage_attempts_dir(stage)
+            if not attempts.is_dir():
+                continue
+            for attempt in sorted(existing_attempts(attempts), reverse=True):
+                evidence = paths.stage_attempt_evidence(stage, attempt)
+                if evidence.is_file():
+                    previous[internal_name] = read_json(evidence)
+                    break
+        return previous
 
-    def prepare_workspace(self, run_dir: Path) -> Path:
-        # v5 migration (Stage 2): the ETL test-harness engine moved to engines/etl/harness.
-        from llm4mtl.paths import TARGET
+    def prepare_workspace(self, run_dir: Path, language: str) -> Path:
+        """Atomically materialize a run-local copy of the language's engine."""
+        from llm4mtl.conventions import default_test_project_dir, language_config
 
-        source = TARGET.engine_harness("etl")
-        destination = run_dir / "workspace" / "ETL_Test"
-        if destination.exists():
-            return destination
-        shutil.copytree(
+        config = language_config(language)
+        source = default_test_project_dir(config)
+        return materialize_engine(
             source,
-            destination,
-            ignore=shutil.ignore_patterns("target", ".git", "*.class"),
+            run_dir / "workspaces",
+            config.language_key,
         )
-        return destination
 
     def write_log(self, run_dir: Path, result: RunResult) -> None:
         lines = [f"run_id={result.run_id}", f"status={result.status}", f"command={result.command}"]
@@ -255,6 +309,87 @@ class ExperimentOrchestrator:
             if stderr:
                 lines.append(str(stderr).rstrip())
         (run_dir / "runner.log").write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def run_identity(config: PipelineConfig, config_hash: str) -> dict[str, object]:
+    """The immutable manifest fields for a locally started run.
+
+    A run is exactly one combination, so each identity axis must resolve to one
+    value. Leaving an axis open used to mean "select every value at stage time",
+    which produced results a run id could not account for.
+    """
+    language = config.language.lower()
+    task = exactly_one("task", config.tasks, required=True)
+    return {
+        "language": language,
+        "task": task,
+        # An axis no stage in this run consumes is recorded as null: not
+        # applicable, which is different from unconstrained. A stage that needs a
+        # null axis refuses rather than selecting every value.
+        "transformation_model": exactly_one(
+            "transformation model", config.transformation_models, required=False
+        ),
+        "test_generation_model": exactly_one(
+            "test-generation model", config.test_models, required=False
+        ),
+        "transformation_strategy": exactly_one(
+            "transformation strategy", config.transformation_strategies, required=False
+        ),
+        "test_generation_strategy": exactly_one(
+            "test-generation strategy", config.test_strategies, required=False
+        ),
+        "seed": config.seed,
+        "pipeline_variant": config.pipeline_variant,
+        "provenance": build_provenance(language, task, command=config.command, config_hash=config_hash),
+    }
+
+
+def exactly_one(axis: str, values: list[str], *, required: bool) -> str | None:
+    """The single value this run fixes for one identity axis.
+
+    Several values are always a refusal: a run is one combination, and recording
+    a set would make every result it produced unattributable.
+    """
+    if len(values) == 1:
+        return values[0]
+    if not values:
+        if required:
+            raise ConfigError(f"a run must fix its {axis}: none was selected")
+        return None
+    raise ConfigError(
+        f"a run must fix its {axis}: {values!r} were selected. Use an experiment "
+        "matrix to expand several values into one run each."
+    )
+
+
+IDENTITY_AXES = (
+    "language",
+    "task",
+    "transformation_model",
+    "test_generation_model",
+    "transformation_strategy",
+    "test_generation_strategy",
+    "seed",
+    "pipeline_variant",
+)
+
+
+def reject_identity_drift(manifest: dict[str, object], identity: dict[str, object], run_id: str) -> None:
+    """Refuse to continue a run under a different identity than it was created with."""
+    drifted = {
+        axis: (manifest.get(axis), identity.get(axis))
+        for axis in IDENTITY_AXES
+        if manifest.get(axis) != identity.get(axis)
+    }
+    if drifted:
+        described = "; ".join(
+            f"{axis}: run is {was!r} but this invocation asks for {now!r}"
+            for axis, (was, now) in sorted(drifted.items())
+        )
+        raise ConfigError(
+            f"run {run_id} was created with a different identity ({described}). "
+            "Start a new run instead of re-labelling an existing one."
+        )
 
 
 def generate_run_id(config: PipelineConfig) -> str:
@@ -272,12 +407,14 @@ def stable_hash(payload: dict[str, object], ignored: set[str] | None = None) -> 
 
 
 def run_status(results: list[StageResult]) -> str:
-    if any(result.status in {"error", "infrastructure_error"} for result in results):
+    statuses = [
+        stage_status(contract_stage_id(result.name), result)
+        for result in results
+    ]
+    if any(status == "infrastructure_error" for status in statuses):
         return "failed"
-    if any(result.domain_failures for result in results):
+    if any(status == "failed" for status in statuses):
         return "completed_with_failures"
+    if any(status == "skipped" for status in statuses):
+        return "incomplete"
     return "completed"
-
-
-def write_json(path: Path, payload: object) -> None:
-    path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")

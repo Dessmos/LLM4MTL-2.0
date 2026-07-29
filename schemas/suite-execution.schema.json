@@ -1,0 +1,153 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://llm4mtl/schemas/suite-execution.schema.json",
+  "title": "Suite execution observation",
+  "description": "One execution of a rendered generated suite against a known transformation, recorded as independent facts. This is the raw observation the validation funnel's denominators are derived from: `technically_executable` and `reference_valid` are stated explicitly so a later reader never re-derives them from a different rule. `inputs` pins the suite and transformation the observation is about, so a record made for other inputs is ignored rather than reused as a stale gate.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "language",
+    "task",
+    "llm",
+    "strategy",
+    "suite_id",
+    "inputs",
+    "observation"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "2.0"
+    },
+    "language": {
+      "type": "string",
+      "minLength": 1
+    },
+    "task": {
+      "type": "string"
+    },
+    "llm": {
+      "type": "string"
+    },
+    "strategy": {
+      "type": "string"
+    },
+    "suite_id": {
+      "type": "string"
+    },
+    "inputs": {
+      "type": "object",
+      "required": [
+        "suite",
+        "transformation"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "suite": {
+          "$ref": "#/$defs/artifactRef"
+        },
+        "transformation": {
+          "$ref": "#/$defs/artifactRef"
+        }
+      }
+    },
+    "observation": {
+      "type": "object",
+      "required": [
+        "compiled",
+        "tests_discovered",
+        "models_loaded",
+        "engine_started",
+        "assertions_evaluated",
+        "assertions_passed",
+        "timed_out",
+        "maven_exit_code",
+        "failure_stage",
+        "error_summary",
+        "technically_executable",
+        "reference_valid"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "compiled": {
+          "type": "boolean"
+        },
+        "tests_discovered": {
+          "type": "boolean"
+        },
+        "models_loaded": {
+          "type": "boolean"
+        },
+        "engine_started": {
+          "type": "boolean"
+        },
+        "assertions_passed": {
+          "type": "boolean"
+        },
+        "timed_out": {
+          "type": "boolean"
+        },
+        "maven_exit_code": {
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "failure_stage": {
+          "type": "string",
+          "enum": [
+            "",
+            "artifact_validation",
+            "java_compilation",
+            "test_discovery",
+            "model_loading",
+            "transformation_parse",
+            "engine_runtime",
+            "test_runtime",
+            "assertion_failure",
+            "timeout",
+            "infrastructure"
+          ]
+        },
+        "error_summary": {
+          "type": "string"
+        },
+        "technically_executable": {
+          "type": "boolean"
+        },
+        "reference_valid": {
+          "type": "boolean"
+        },
+        "assertions_evaluated": {
+          "type": "boolean",
+          "description": "Whether the run reached a verdict about the assertions at all. False when the harness threw first, which is what separates an unusable test from an oracle that disagrees with the reference."
+        }
+      }
+    }
+  },
+  "$defs": {
+    "artifactRef": {
+      "type": "object",
+      "required": [
+        "path",
+        "sha256",
+        "role"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "role": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}

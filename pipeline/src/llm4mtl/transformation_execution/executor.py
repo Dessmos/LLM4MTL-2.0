@@ -7,7 +7,11 @@ from pathlib import Path
 
 from llm4mtl.workspace.injection import Injection
 from llm4mtl.external_tools.maven import run_maven, summarize_error
-from llm4mtl.semantic_tests.reference_validation.maven_status import compiles, executes
+from llm4mtl.semantic_tests.reference_validation.maven_status import (
+    compiles,
+    executes,
+    transformation_parse_failed,
+)
 from llm4mtl.semantic_tests.reference_validation.reference import transformation_destination
 from llm4mtl.semantic_tests.suites.injection import inject_suite, suite_model_paths
 from llm4mtl.semantic_tests.suites.java import infer_fqcn
@@ -112,7 +116,7 @@ def failure_stage(output: str, did_compile: bool, did_execute: bool, timed_out: 
         return "timeout"
     if not did_compile:
         return "java_compilation"
-    if "ETL parse errors" in output or "ParseProblem" in output:
+    if transformation_parse_failed(output):
         return "transformation_parse"
     if not did_execute:
         return "test_discovery"

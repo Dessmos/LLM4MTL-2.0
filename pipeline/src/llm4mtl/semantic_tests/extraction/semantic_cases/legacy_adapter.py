@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from .errors import SemanticCasesError
 
 def is_legacy_tree2graph_spec(spec: dict[str, Any]) -> bool:
     tests = spec.get("tests")
@@ -72,7 +73,7 @@ def normalize_legacy_tree2graph_spec(spec: dict[str, Any]) -> dict[str, Any]:
 
 def expected_node_names(raw_nodes: Any) -> list[str]:
     if not isinstance(raw_nodes, list):
-        raise SystemExit("expectedNodes must be an array")
+        raise SemanticCasesError("expectedNodes must be an array")
     names: list[str] = []
     for node in raw_nodes:
         if isinstance(node, str):
@@ -80,16 +81,18 @@ def expected_node_names(raw_nodes: Any) -> list[str]:
         elif isinstance(node, dict) and isinstance(node.get("name"), str):
             names.append(node["name"])
         else:
-            raise SystemExit("expectedNodes entries must be strings or objects with a name")
+            raise SemanticCasesError(
+                "expectedNodes entries must be strings or objects with a name"
+            )
     return names
 
 
 def expected_edge_pairs(raw_edges: Any) -> list[str]:
     if not isinstance(raw_edges, list):
-        raise SystemExit("expectedEdges must be an array")
+        raise SemanticCasesError("expectedEdges must be an array")
     pairs: list[str] = []
     for edge in raw_edges:
         if not isinstance(edge, dict) or not edge.get("source") or not edge.get("target"):
-            raise SystemExit("expectedEdges entries must contain source and target")
+            raise SemanticCasesError("expectedEdges entries must contain source and target")
         pairs.append(f"{edge['source']}->{edge['target']}")
     return pairs

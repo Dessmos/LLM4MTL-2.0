@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import unittest
 
+from llm4mtl.experiment_runner.config import ConfigError
 from llm4mtl.experiment_runner.matrix import expand_matrix, load_matrix
 from llm4mtl.paths import TARGET
 
@@ -35,6 +36,10 @@ class MatrixTests(unittest.TestCase):
             }
         )
         self.assertEqual(4, len(specs))  # 1*2*1*1*1*1*2
+
+    def test_a_matrix_cannot_silently_default_to_etl(self) -> None:
+        with self.assertRaises(ConfigError):
+            expand_matrix({"tasks": ["Tree2Graph"]})
 
 
 if __name__ == "__main__":

@@ -6,11 +6,12 @@ import argparse
 import sys
 from pathlib import Path
 
-from llm4mtl.conventions import default_generated_tests_root, default_responses_root
+from llm4mtl.conventions import ETL_CONFIG, default_generated_tests_root, default_responses_root
+from llm4mtl.languages.base import LanguageAdapter
+from llm4mtl.languages import language_adapter
 from llm4mtl.semantic_tests.extraction.discovery import discover_responses
 from llm4mtl.semantic_tests.extraction.models import ResponseTarget
-from llm4mtl.semantic_tests.extraction.parser import extract_files, java_files, semantic_case_files
-from llm4mtl.semantic_tests.extraction.semantic_cases import can_generate_java_from_semantic_cases
+from llm4mtl.semantic_tests.extraction.parser import extract_files
 from llm4mtl.semantic_tests.extraction.writer import write_suite
 
 
@@ -30,13 +31,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--responses-root",
         type=Path,
-        default=default_responses_root(),
+        default=default_responses_root(ETL_CONFIG),
         help="Root containing <llm>/<strategy>/<task>.md responses.",
     )
     parser.add_argument(
         "--generated-tests-root",
         type=Path,
-        default=default_generated_tests_root(),
+        default=default_generated_tests_root(ETL_CONFIG),
         help="Root where <task>/candidates suites are written.",
     )
     parser.add_argument(
@@ -61,12 +62,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--overwrite",
         action="store_true",
-        help="Overwrite the target suite directory if it already exists.",
-    )
-    parser.add_argument(
-        "--allow-incomplete",
-        action="store_true",
-        help="Write extracted files even if no Java file or semantic_cases.json is found.",
+        help=(
+            "Deprecated compatibility flag. Existing candidate suites are immutable; "
+            "choose a new --suite-id instead."
+        ),
     )
     parser.add_argument(
         "--dry-run",
@@ -76,25 +75,31 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def extract_one(target: ResponseTarget, args: argparse.Namespace) -> tuple[bool, str]:
+def extract_one(
+    target: ResponseTarget,
+    args: argparse.Namespace,
+    adapter: LanguageAdapter,
+) -> tuple[bool, str]:
+    """Extract one response. Returns whether it yielded a usable suite, and why not.
+
+    An artifact-invalid suite is still written: it is the evidence behind the
+    funnel's artifact-valid rate, and dropping it would quietly shrink that
+    denominator. It is reported as a failure because the response did not
+    produce a usable semantic-test specification.
+    """
     if not target.response_path.exists():
         return False, f"response not found: {target.response_path}"
 
     markdown = target.response_path.read_text(encoding="utf-8")
     extracted = extract_files(markdown)
-    has_java = bool(java_files(extracted))
-    has_semantic_cases = bool(semantic_case_files(extracted))
-    has_supported_semantic_cases = has_semantic_cases and can_generate_java_from_semantic_cases(target.task)
-    if not has_java and not has_supported_semantic_cases and not args.allow_incomplete:
-        if has_semantic_cases:
-            return False, f"semantic_cases.json is not supported for {target.task} yet: {target.response_path}"
-        return False, f"no Java file block or supported semantic_cases.json block found in {target.response_path}"
+    if not extracted:
+        return False, f"no extractable artifact blocks found in {target.response_path}"
 
-    suite_dir, enforcement = write_suite(target, extracted, args)
+    suite_dir, validation = write_suite(target, extracted, args, adapter)
     action = "would write" if args.dry_run else "wrote"
-    if not enforcement.valid:
-        reason = "; ".join(enforcement.violations)
-        return True, f"{action} {suite_dir} [INVALID: contract violation] {reason}"
+    if not validation.valid:
+        reason = "; ".join(validation.violations)
+        return False, f"{action} {suite_dir} [INVALID: {validation.reason_code}] {reason}"
     return True, f"{action} {suite_dir}"
 
 
@@ -108,8 +113,9 @@ def main(argv: list[str] | None = None) -> int:
 
     ok_count = 0
     fail_count = 0
+    adapter = language_adapter("etl")
     for target in targets:
-        ok, message = extract_one(target, args)
+        ok, message = extract_one(target, args, adapter)
         if ok:
             ok_count += 1
             print(f"OK: {message}")

@@ -1,15 +1,15 @@
-"""Data structures and constants for reference validation."""
+"""Constants for reference validation.
+
+The verdict type and the status vocabulary live in
+:mod:`llm4mtl.semantic_tests.validation`, which both gates share; only the CSV
+projection of this stage is defined here.
+"""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from pathlib import Path
-
-from llm4mtl.conventions import ETL_CONFIG
-from llm4mtl.semantic_tests.suites.models import CandidateSuite
-
-
-LANGUAGE = ETL_CONFIG.language
+# NOT_EXECUTABLE and ARTIFACT_INVALID mean the oracle question could not be
+# asked; only VALIDATED and REFERENCE_INVALID are verdicts about the generated
+# oracle, and only they belong in the reference-pass population.
 RESULT_COLUMNS = [
     "language",
     "task",
@@ -22,42 +22,6 @@ RESULT_COLUMNS = [
     "valid",
     "maven_exit_code",
     "status",
+    "failure_stage",
     "error_summary",
 ]
-
-
-@dataclass(frozen=True)
-class ReferenceValidationContext:
-    etl_test_dir: Path
-    references_root: Path
-    results_root: Path
-    timeout: int
-    promote: bool
-
-
-@dataclass(frozen=True)
-class ReferenceValidationResult:
-    suite: CandidateSuite
-    compiles: bool
-    executes: bool
-    reference_pass: bool
-    valid: bool
-    maven_exit_code: int | str
-    status: str
-    error_summary: str
-
-    def as_row(self) -> dict[str, str]:
-        return {
-            "language": LANGUAGE,
-            "task": self.suite.task,
-            "suite_id": self.suite.suite_id,
-            "llm": self.suite.llm,
-            "strategy": self.suite.strategy,
-            "compiles": str(self.compiles),
-            "executes": str(self.executes),
-            "reference_pass": str(self.reference_pass),
-            "valid": str(self.valid),
-            "maven_exit_code": str(self.maven_exit_code),
-            "status": self.status,
-            "error_summary": self.error_summary,
-        }

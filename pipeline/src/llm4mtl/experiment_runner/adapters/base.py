@@ -3,28 +3,9 @@
 from __future__ import annotations
 
 import hashlib
-import subprocess
-import sys
-from dataclasses import dataclass
 from pathlib import Path
 
-
-@dataclass(frozen=True)
-class CommandExecution:
-    command: list[str]
-    exit_code: int
-    stdout: str
-    stderr: str
-
-
-def run_command(command: list[str], cwd: Path, verbose: bool) -> CommandExecution:
-    completed = subprocess.run(command, cwd=cwd, capture_output=True, text=True)
-    if verbose:
-        if completed.stdout:
-            print(completed.stdout, file=sys.stderr, end="" if completed.stdout.endswith("\n") else "\n")
-        if completed.stderr:
-            print(completed.stderr, file=sys.stderr, end="" if completed.stderr.endswith("\n") else "\n")
-    return CommandExecution(command, completed.returncode, completed.stdout, completed.stderr)
+from llm4mtl.experiment_runner.config import ConfigError
 
 
 def hash_paths(paths: list[Path]) -> str:
@@ -41,7 +22,16 @@ def hash_paths(paths: list[Path]) -> str:
                 digest.update(relative)
                 digest.update(child.read_bytes())
     return digest.hexdigest()
+def fixed_selection(axis: str, values: list[str]) -> set[str]:
+    """The values a stage may select for one identity axis.
 
-
-def python_command(script: Path) -> list[str]:
-    return [sys.executable, str(script)]
+    Never falls back to "every known value": a stage that selected the whole
+    matrix would produce results attributed to a run whose identity names one
+    combination.
+    """
+    if not values:
+        raise ConfigError(
+            f"this stage needs the run's {axis}, but the run fixed none. "
+            "Select it explicitly instead of running against every value."
+        )
+    return set(values)

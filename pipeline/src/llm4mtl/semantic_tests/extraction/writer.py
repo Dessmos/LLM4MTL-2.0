@@ -5,14 +5,20 @@ from __future__ import annotations
 import argparse
 import json
 import re
-import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 
-from llm4mtl.conventions import ETL_CONFIG, default_prompts_root, n8n_workflows_root, relative_or_absolute
-from llm4mtl.semantic_tests.extraction.models import LANGUAGE, ResponseTarget
+from llm4mtl.conventions import (
+    default_prompts_root,
+    language_config,
+    n8n_workflows_root,
+    relative_or_absolute,
+)
+from llm4mtl.domain import ArtifactValidation
+from llm4mtl.languages.base import LanguageAdapter
+from llm4mtl.run_store.identity import resolve_contained_dir
+from llm4mtl.semantic_tests.extraction.models import ResponseTarget
 from llm4mtl.semantic_tests.extraction.parser import java_files, model_files, semantic_case_files
-from llm4mtl.semantic_tests.extraction.semantic_cases import EnforcementOutcome, augment_with_generated_java
 
 
 def next_suite_id(strategy_dir: Path) -> str:
@@ -30,8 +36,9 @@ def write_suite(
     target: ResponseTarget,
     extracted: dict[str, str],
     args: argparse.Namespace,
-) -> tuple[Path, EnforcementOutcome]:
-    extracted, enforcement = augment_with_generated_java(target.task, extracted)
+    adapter: LanguageAdapter,
+) -> tuple[Path, ArtifactValidation]:
+    extracted, validation = adapter.render_suite_artifacts(target.task, extracted)
     strategy_dir = (
         args.generated_tests_root.resolve()
         / target.task
@@ -40,18 +47,16 @@ def write_suite(
         / target.strategy
     )
     suite_id = args.suite_id or next_suite_id(strategy_dir)
-    suite_dir = strategy_dir / suite_id
+    suite_dir = resolve_contained_dir(strategy_dir, suite_id, kind="suite")
 
     if suite_dir.exists():
-        if not args.overwrite:
-            raise SystemExit(
-                f"Target suite already exists: {suite_dir}. Use --overwrite or --suite-id."
-            )
-        if not args.dry_run:
-            shutil.rmtree(suite_dir)
+        raise SystemExit(
+            f"Target suite already exists and is immutable: {suite_dir}. "
+            "Choose a new --suite-id; --overwrite cannot replace scientific evidence."
+        )
 
     if args.dry_run:
-        return suite_dir, enforcement
+        return suite_dir, validation
 
     suite_dir.mkdir(parents=True, exist_ok=True)
     for relative_path, content in extracted.items():
@@ -59,28 +64,30 @@ def write_suite(
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text(content, encoding="utf-8")
 
-    metadata = build_metadata(target, suite_id, extracted, enforcement)
+    metadata = build_metadata(target, suite_id, extracted, validation, adapter)
     (suite_dir / "metadata.json").write_text(
         json.dumps(metadata, indent=2) + "\n",
         encoding="utf-8",
     )
-    return suite_dir, enforcement
+    return suite_dir, validation
 
 
 def build_metadata(
     target: ResponseTarget,
     suite_id: str,
     extracted: dict[str, str],
-    enforcement: EnforcementOutcome,
+    validation: ArtifactValidation,
+    adapter: LanguageAdapter,
 ) -> dict[str, object]:
-    prompt_path = default_prompts_root() / target.llm / f"{target.task}.txt"
+    config = language_config(adapter.language_id)
+    prompt_path = default_prompts_root(config) / target.llm / f"{target.task}.txt"
     workflow_path = (
-        n8n_workflows_root(ETL_CONFIG)
+        n8n_workflows_root(config)
         / "test_generation"
-        / f"Prompting_tests_{ETL_CONFIG.language}_{target.llm}_{target.strategy}.json"
+        / f"Prompting_tests_{config.language}_{target.llm}_{target.strategy}.json"
     )
     return {
-        "language": LANGUAGE,
+        "language": adapter.language_id,
         "task": target.task,
         "llm": target.llm,
         "strategy": target.strategy,
@@ -89,15 +96,9 @@ def build_metadata(
         "prompt_file": relative_or_absolute(prompt_path) if prompt_path.exists() else None,
         "workflow_file": relative_or_absolute(workflow_path) if workflow_path.exists() else None,
         "raw_output_file": relative_or_absolute(target.response_path),
-        "status": "candidate" if enforcement.valid else "invalid",
-        "contract_enforcement": {
-            "applied": enforcement.applied,
-            "valid": enforcement.valid,
-            "violations": enforcement.violations,
-        },
+        "status": "candidate" if validation.valid else "invalid",
+        "artifact_validation": validation.as_metadata(),
         "extraction": {
-            "complete": bool(java_files(extracted)),
-            "missing_files": [] if java_files(extracted) else ["*.java"],
             "extracted_files": sorted(extracted),
             "java_files": java_files(extracted),
             "semantic_case_files": semantic_case_files(extracted),

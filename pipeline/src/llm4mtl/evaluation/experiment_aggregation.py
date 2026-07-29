@@ -1,8 +1,8 @@
 """Aggregate stage outcomes across the runs of an experiment.
 
-Reads each run from the run store (manifest + a stage's ``latest.json``) and groups
-outcome codes by ``pipeline_variant`` / transformation model / strategy. This is the
-experiment layer: run-level results stay per run; aggregation happens over many runs.
+Reads each run from the run store (manifest + a stage's latest attempt) and groups
+outcome codes by every model/strategy identity axis. This is the experiment
+layer: run-level results stay per run; aggregation happens over many runs.
 """
 
 from __future__ import annotations
@@ -19,7 +19,9 @@ def _group_key(manifest: dict[str, Any]) -> str:
         [
             str(manifest.get("pipeline_variant", "full")),
             str(manifest.get("transformation_model", "")),
-            str(manifest.get("strategy", "")),
+            str(manifest.get("transformation_strategy", "")),
+            str(manifest.get("test_generation_model", "")),
+            str(manifest.get("test_generation_strategy", "")),
         ]
     )
 

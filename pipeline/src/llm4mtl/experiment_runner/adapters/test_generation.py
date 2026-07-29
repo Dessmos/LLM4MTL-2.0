@@ -2,36 +2,53 @@
 
 from __future__ import annotations
 
-import re
+import argparse
 from pathlib import Path
 
-from llm4mtl.experiment_runner.adapters.base import hash_paths, python_command, run_command
-from llm4mtl.experiment_runner.config import ALLOWED_MODELS, ALLOWED_STRATEGIES, ConfigError
+from llm4mtl.conventions import (
+    default_generated_tests_root,
+    default_responses_root,
+    language_config,
+)
+from llm4mtl.experiment_runner.adapters.base import fixed_selection, hash_paths
+from llm4mtl.experiment_runner.config import ConfigError
 from llm4mtl.experiment_runner.models import PipelineConfig, StageResult
+from llm4mtl.languages import language_adapter
+from llm4mtl.semantic_tests.extraction.cli import extract_one
+from llm4mtl.semantic_tests.extraction.discovery import response_target_from_path
+from llm4mtl.semantic_tests.reference_validation.runner import validate_suite
+from llm4mtl.semantic_tests.suites.discovery import suite_from_path
+from llm4mtl.semantic_tests.technical_validation.suite import check_suite
+from llm4mtl.semantic_tests.validation import (
+    ValidationContext,
+    reference_counts,
+    technical_counts,
+    workspace_for,
+)
+
+# Maven timeout for one suite execution. Matches the CLI default; the stage
+# service has no per-request timeout of its own.
+DEFAULT_SUITE_TIMEOUT_SECONDS = 240
 
 
 class TestGenerationAdapter:
+    """Stage entry points for generated-test extraction and validation.
+
+    Nothing here names a language: every path is resolved from the run's own
+    language, so adding one means adding its conventions and adapter, not
+    editing this class.
+    """
+
     def __init__(self, repo_root: Path) -> None:
         self.repo_root = repo_root.resolve()
-        # Generated prompts, raw responses, extracted suites, and validation results
-        # all live below artifacts/work/test_generation.
-        from llm4mtl.paths import TARGET
 
-        self.test_generation_root = TARGET.artifacts_work / "test_generation"
-        self.responses_root = self.test_generation_root / "etl" / "responses"
-        self.generated_tests_root = self.test_generation_root / "generated_tests" / "etl"
-        self.results_root = self.test_generation_root / "results" / "etl"
-        # Driver scripts are package-owned; runtime output is artifact-owned.
-        from llm4mtl.paths import TARGET
+    @staticmethod
+    def responses_root(config: PipelineConfig) -> Path:
+        return default_responses_root(language_config(config.language))
 
-        semantic_tests = TARGET.package / "semantic_tests"
-        self.extract_script = semantic_tests / "extraction" / "extract_generated_suite.py"
-        self.technical_script = (
-            semantic_tests / "technical_validation" / "check_generated_suite_technical_validity.py"
-        )
-        self.reference_script = (
-            semantic_tests / "reference_validation" / "validate_generated_suite_against_reference.py"
-        )
+    @staticmethod
+    def generated_tests_root(config: PipelineConfig) -> Path:
+        return default_generated_tests_root(language_config(config.language))
 
     def extract(self, config: PipelineConfig, dry_run: bool) -> StageResult:
         responses = self.select_responses(config)
@@ -44,126 +61,140 @@ class TestGenerationAdapter:
         if dry_run:
             return StageResult("extraction", "dry_run", {"selected": len(responses)}, details, input_hash)
 
-        command = python_command(self.extract_script)
+        extraction_args = argparse.Namespace(
+            generated_tests_root=self.generated_tests_root(config),
+            suite_id=config.suite_id,
+            overwrite=config.overwrite,
+            dry_run=False,
+        )
+        adapter = language_adapter(config.language)
+        outcomes = []
         for response in responses:
-            command.extend(("--response", str(response)))
-        if config.suite_id:
-            command.extend(("--suite-id", config.suite_id))
-        if config.overwrite:
-            command.append("--overwrite")
-        execution = run_command(command, self.repo_root, config.verbose)
-        match = re.search(r"Extracted:\s*(\d+);\s*failed:\s*(\d+)", execution.stdout)
-        created = int(match.group(1)) if match else 0
-        failed = int(match.group(2)) if match else (1 if execution.exit_code else 0)
-        details.update(command=command, stdout=execution.stdout, stderr=execution.stderr)
+            target = response_target_from_path(
+                response_path=response,
+                responses_root=self.responses_root(config),
+                llm_override=None,
+                strategy_override=None,
+                task_override=None,
+            )
+            extracted, message = extract_one(target, extraction_args, adapter)
+            outcomes.append({"response": str(response), "extracted": extracted, "detail": message})
+
+        created = sum(1 for outcome in outcomes if outcome["extracted"])
+        details["outcomes"] = outcomes
         return StageResult(
             "extraction",
-            "completed" if match else "infrastructure_error",
-            {"selected": len(responses), "created": created, "failed": failed},
+            "completed",
+            {"selected": len(responses), "created": created, "failed": len(responses) - created},
             details,
             input_hash,
-            exit_code=execution.exit_code,
         )
 
     def technical_validation(self, config: PipelineConfig, dry_run: bool) -> StageResult:
-        suites = self.select_candidate_suites(config)
         return self._validate_suites(
             name="technical_validation",
-            script=self.technical_script,
-            suites=suites,
             config=config,
             dry_run=dry_run,
-            marker="technically_valid",
-            passed_key="passed",
+            judge_as_oracle=False,
         )
 
     def reference_validation(self, config: PipelineConfig, dry_run: bool) -> StageResult:
-        suites = self.select_candidate_suites(config)
         return self._validate_suites(
             name="reference_validation",
-            script=self.reference_script,
-            suites=suites,
             config=config,
             dry_run=dry_run,
-            marker="valid",
-            passed_key="validated",
+            judge_as_oracle=True,
         )
 
     def _validate_suites(
         self,
         name: str,
-        script: Path,
-        suites: list[Path],
         config: PipelineConfig,
         dry_run: bool,
-        marker: str,
-        passed_key: str,
+        judge_as_oracle: bool,
     ) -> StageResult:
-        input_hash = hash_paths(suites)
-        details = {"suites": [str(path) for path in suites]}
-        if not suites:
+        """Run a validation gate in-process and count its typed verdicts.
+
+        The verdicts come from the same functions the CLI uses, so the stage's
+        counts are the gate's own decisions rather than a second interpretation
+        of its printed output.
+        """
+        suite_paths = self.select_candidate_suites(config)
+        input_hash = hash_paths(suite_paths)
+        details: dict[str, object] = {"suites": [str(path) for path in suite_paths]}
+        if not suite_paths:
             return StageResult(name, "error", {"selected": 0, "failed": 1}, details, input_hash)
         if dry_run:
-            return StageResult(name, "dry_run", {"selected": len(suites)}, details, input_hash)
+            return StageResult(name, "dry_run", {"selected": len(suite_paths)}, details, input_hash)
 
-        command = python_command(script)
-        for suite in suites:
-            command.extend(("--suite", str(suite)))
-        if config.etl_test_dir:
-            command.extend(("--etl-test-dir", config.etl_test_dir))
-        execution = run_command(command, self.repo_root, config.verbose)
-        values = re.findall(rf"\b{re.escape(marker)}=(True|False)\b", execution.stdout)
-        reference_statuses = (
-            re.findall(r"\bstatus=(VALIDATED|REFERENCE_INVALID|INFRASTRUCTURE_ERROR)\b", execution.stdout)
-            if name == "reference_validation"
-            else []
+        context = self.validation_context(config)
+        verdicts = []
+        for path in suite_paths:
+            suite = suite_from_path(
+                path,
+                self.generated_tests_root(config),
+                config.language,
+            )
+            verdict = (
+                # The immutable candidate plus this run's observation is the
+                # source of truth. Older copied validation exports are ignored
+                # and cannot gate the next stage.
+                validate_suite(suite, context)
+                if judge_as_oracle
+                else check_suite(suite, context)
+            )
+            verdicts.append(verdict)
+
+        counts = (
+            reference_counts(verdicts, len(suite_paths))
+            if judge_as_oracle
+            else technical_counts(verdicts, len(suite_paths))
         )
-        passed = (
-            sum(value == "VALIDATED" for value in reference_statuses)
-            if reference_statuses
-            else sum(value == "True" for value in values)
+        details["verdicts"] = [
+            {"suite": str(verdict.suite.path), "status": verdict.status} for verdict in verdicts
+        ]
+        if counts.get("skipped"):
+            details["skip_reason"] = (
+                "SKIPPED_NOT_EXECUTABLE" if judge_as_oracle else "SKIPPED_ARTIFACT_INVALID"
+            )
+        return StageResult(name, "completed", counts, details, input_hash)
+
+    def validation_context(self, config: PipelineConfig) -> ValidationContext:
+        if not config.engine_dir:
+            raise ConfigError(
+                "suite validation requires a run-local engine workspace"
+            )
+        engine_dir = Path(config.engine_dir)
+        return ValidationContext(
+            adapter=language_adapter(config.language),
+            workspace=workspace_for(engine_dir, self.observations_root(config)),
+            timeout=DEFAULT_SUITE_TIMEOUT_SECONDS,
         )
-        failed = (
-            sum(value == "REFERENCE_INVALID" for value in reference_statuses)
-            if reference_statuses
-            else sum(value == "False" for value in values)
-        )
-        infrastructure_errors = sum(
-            value == "INFRASTRUCTURE_ERROR" for value in reference_statuses
-        )
-        executed_count = len(reference_statuses) if reference_statuses else len(values)
-        skipped = max(0, len(suites) - executed_count)
-        details.update(command=command, stdout=execution.stdout, stderr=execution.stderr)
-        counts = {
-            "selected": len(suites),
-            passed_key: passed,
-            "failed" if name == "technical_validation" else "invalid": failed,
-            "skipped": skipped,
-        }
-        if name == "reference_validation":
-            counts["infrastructure_errors"] = infrastructure_errors
-        missing_technical = (
-            name == "reference_validation"
-            and "No technically valid candidate suites" in execution.stderr
-        )
-        status = (
-            "completed"
-            if values or execution.exit_code == 0 or missing_technical
-            else "infrastructure_error"
-        )
-        if name == "reference_validation" and skipped:
-            details["skip_reason"] = "SKIPPED_MISSING_TECHNICAL_VALIDATION"
-        return StageResult(name, status, counts, details, input_hash, exit_code=execution.exit_code)
+
+    def observations_root(self, config: PipelineConfig) -> Path:
+        """Where this run records suite-execution observations.
+
+        Scoping them to the run is what lets reference validation reuse the
+        technical stage's execution without a result from an earlier run
+        deciding anything about this one. The orchestrator resolves this path
+        through the run store before invoking an adapter.
+        """
+        if not config.run_dir:
+            raise ConfigError(
+                "a resolved run directory is required: suite-execution observations "
+                "must belong to the current run"
+            )
+        return Path(config.run_dir).resolve() / "observations"
 
     def select_responses(self, config: PipelineConfig) -> list[Path]:
         if config.responses:
             return sorted(Path(path).resolve() for path in config.responses if Path(path).is_file())
         tasks = set(config.tasks)
-        models = set(config.test_models) or ALLOWED_MODELS
-        strategies = set(config.test_strategies) or ALLOWED_STRATEGIES
+        models = fixed_selection("test-generation model", config.test_models)
+        strategies = fixed_selection("strategy", config.test_strategies)
         return sorted(
             path.resolve()
-            for path in self.responses_root.glob("*/*/*.md")
+            for path in self.responses_root(config).glob("*/*/*.md")
             if path.parent.parent.name in models
             and path.parent.name in strategies
             and (config.all_tasks or path.stem in tasks)
@@ -177,11 +208,11 @@ class TestGenerationAdapter:
                 if Path(path).is_dir() and "candidates" in Path(path).parts
             )
         tasks = set(config.tasks)
-        models = set(config.test_models) or ALLOWED_MODELS
-        strategies = set(config.test_strategies) or ALLOWED_STRATEGIES
+        models = fixed_selection("test-generation model", config.test_models)
+        strategies = fixed_selection("strategy", config.test_strategies)
         suites = sorted(
             path.resolve()
-            for path in self.generated_tests_root.glob("*/candidates/*/*/suite_*")
+            for path in self.generated_tests_root(config).glob("*/candidates/*/*/suite_*")
             if path.is_dir()
             and path.parts[-3] in models
             and path.parts[-2] in strategies

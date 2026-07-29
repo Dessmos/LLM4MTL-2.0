@@ -4,9 +4,16 @@ One run lives under ``artifacts/work/runs/<run-id>/`` and is described by:
 
 * ``manifest.json`` — immutable resolved config + provenance (written once).
 * ``events.jsonl`` — append-only timeline.
-* ``stages/<stage>/latest.json`` — mutable projection of the newest attempt.
-* ``stages/<stage>/attempts/attempt-NNN/result.json`` — immutable per-attempt evidence.
+* ``stages/<stage>/attempts/attempt-NNN/result.json`` — immutable canonical stage
+  result (``schemas/stage-result.schema.json``). The "latest" result is derived
+  from these on read; there is no mutable projection that could go stale.
+* ``stages/<stage>/attempts/attempt-NNN/evidence.json`` — immutable internal
+  detail behind that result (commands, stdout, selections). Never a contract.
 * ``responses/<operation>/attempt-NNN/`` — immutable normalized LLM responses.
+
+``<stage>`` is always a contract stage id (see ``llm4mtl.stage_contract``), so a
+run directory reads the same whether the local runner or the stage service wrote
+it.
 """
 
 from __future__ import annotations
@@ -14,7 +21,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-SCHEMA_VERSION = "1.0"
+SCHEMA_VERSION = "2.0"
 
 
 @dataclass(frozen=True)
@@ -50,9 +57,6 @@ class RunPaths:
     def stage_dir(self, stage: str) -> Path:
         return self.stages_dir / stage
 
-    def stage_latest(self, stage: str) -> Path:
-        return self.stage_dir(stage) / "latest.json"
-
     def stage_attempts_dir(self, stage: str) -> Path:
         return self.stage_dir(stage) / "attempts"
 
@@ -61,6 +65,9 @@ class RunPaths:
 
     def stage_attempt_result(self, stage: str, attempt: int) -> Path:
         return self.stage_attempt_dir(stage, attempt) / "result.json"
+
+    def stage_attempt_evidence(self, stage: str, attempt: int) -> Path:
+        return self.stage_attempt_dir(stage, attempt) / "evidence.json"
 
     def response_operation_dir(self, operation: str) -> Path:
         return self.responses_dir / operation

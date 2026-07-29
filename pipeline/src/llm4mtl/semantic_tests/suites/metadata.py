@@ -17,11 +17,22 @@ def read_suite_metadata(suite_path: Path) -> dict[str, Any]:
         return {}
 
 
-def contract_invalid_reason(suite_path: Path) -> str:
-    """Return a violation summary when the suite failed contract enforcement."""
+def artifact_invalid_reason(suite_path: Path) -> str:
+    """Why this suite must not be executed, or ``""`` when it may be.
+
+    Fails closed: a suite whose extraction did not record an artifact-validation
+    verdict predates the current policy and may still contain LLM-authored Java,
+    so it is refused rather than trusted.
+    """
     metadata = read_suite_metadata(suite_path)
-    enforcement = metadata.get("contract_enforcement") or {}
-    if metadata.get("status") == "invalid" or enforcement.get("valid") is False:
-        violations = enforcement.get("violations") or ["contract enforcement failed"]
-        return "contract violation: " + "; ".join(str(item) for item in violations)
-    return ""
+    validation = metadata.get("artifact_validation")
+    if not isinstance(validation, dict):
+        return (
+            "no artifact_validation verdict recorded for this suite; "
+            "re-extract it before validation"
+        )
+    if validation.get("valid") is True:
+        return ""
+    violations = validation.get("violations") or ["artifact validation failed"]
+    reason_code = validation.get("reason_code") or "ARTIFACT_INVALID"
+    return f"{reason_code}: " + "; ".join(str(item) for item in violations)

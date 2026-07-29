@@ -4,55 +4,77 @@ Public facade for the extraction pipeline. The god-module this replaced is now
 split into focused submodules: `parsing` (parse/validate), `normalization`
 (schema-variant coercion), `legacy_adapter` (Tree2Graph), `spec` (shared
 accessors), and the sibling `etl.codegen` package (Java harness emitter).
+
+The LLM authors semantic cases and input models; it never authors executable
+test infrastructure. Java that arrives in a response is discarded unconditionally
+— the harness is rendered here from the validated specification, so an
+unrenderable response yields an artifact-invalid suite rather than arbitrary code
+that a later stage would compile and run.
 """
 
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field
-
+from llm4mtl.domain import (
+    CONTRACT_VIOLATION,
+    INVALID_SEMANTIC_CASES,
+    MISSING_SEMANTIC_CASES,
+    ArtifactValidation,
+)
 from llm4mtl.semantic_tests.codegen.java_rendering import sanitize_class_name
 from llm4mtl.semantic_tests.codegen.java import render_semantic_test
 from llm4mtl.task_contracts import enforce_contract, load_task_contract
 
+from llm4mtl.semantic_tests.scenario_mapping import ScenarioMappingError, suite_from_spec
 from llm4mtl.semantic_tests.semantic_spec import CONTRACT_VIOLATIONS_FILE, SEMANTIC_CASES_FILE
 
+from .errors import SemanticCasesError
 from .parsing import parse_semantic_cases
 
 __all__ = [
-    "EnforcementOutcome",
-    "augment_with_generated_java",
-    "can_generate_java_from_semantic_cases",
+    "ArtifactValidation",
+    "MISSING_SEMANTIC_CASES",
+    "CONTRACT_VIOLATION",
+    "render_generated_suite",
     "parse_semantic_cases",
     "render_semantic_test",
     "SEMANTIC_CASES_FILE",
     "CONTRACT_VIOLATIONS_FILE",
 ]
 
-
-@dataclass(frozen=True)
-class EnforcementOutcome:
-    """Result of applying the task contract to a generated suite."""
-
-    applied: bool
-    valid: bool
-    violations: list[str] = field(default_factory=list)
-
-
-def can_generate_java_from_semantic_cases(target_task: str) -> bool:
-    return True
-
-
-def augment_with_generated_java(
+def render_generated_suite(
     target_task: str,
     extracted: dict[str, str],
-) -> tuple[dict[str, str], EnforcementOutcome]:
+    *,
+    language: str,
+) -> tuple[dict[str, str], ArtifactValidation]:
+    """Replace LLM-authored files with a deterministically rendered suite.
+
+    Returns the files to write and why the suite is (in)valid. Any ``.java`` the
+    model produced is dropped in every path; the only Java that can survive is
+    the harness rendered here from the validated specification.
+    """
+    generated = {path: content for path, content in extracted.items() if not path.endswith(".java")}
+
     cases_json = extracted.get(SEMANTIC_CASES_FILE)
     if not cases_json:
-        return extracted, EnforcementOutcome(applied=False, valid=True)
+        return generated, ArtifactValidation(
+            valid=False,
+            reason_code=MISSING_SEMANTIC_CASES,
+            violations=(
+                f"no {SEMANTIC_CASES_FILE} in the response: there is no specification "
+                "to render an executable test from"
+            ),
+        )
 
-    spec = parse_semantic_cases(cases_json, target_task)
-    generated = dict(extracted)
+    try:
+        spec = parse_semantic_cases(cases_json, target_task)
+    except SemanticCasesError as exc:
+        return generated, ArtifactValidation(
+            valid=False,
+            reason_code=INVALID_SEMANTIC_CASES,
+            violations=(str(exc),),
+        )
 
     # Infrastructure bindings (metamodel URIs, runtime model names, ecore files,
     # XML namespaces) are owned by the task contract, not the LLM. Rewrite them
@@ -61,32 +83,40 @@ def augment_with_generated_java(
     violations: list[str] = []
     if contract is not None:
         violations = enforce_contract(contract, spec, generated)
-    outcome = EnforcementOutcome(
-        applied=contract is not None,
-        valid=not violations,
-        violations=violations,
-    )
 
     # Persist the normalized, contract-enforced spec for inspection.
     generated[SEMANTIC_CASES_FILE] = json.dumps(spec, indent=2) + "\n"
 
-    # Plan B: semantic cases are the source of truth. Ignore any Java emitted by
-    # the LLM and replace it with the deterministic harness.
-    for path in list(generated):
-        if path.endswith(".java"):
-            del generated[path]
-
-    if outcome.valid:
-        class_name = sanitize_class_name(
-            str(spec.get("testClass") or f"Generated{target_task}SemanticTest"),
-            target_task,
+    # The suite must be expressible in the shared scenario contract before it may
+    # execute. A suite the ETL path accepts but the contract cannot describe is a
+    # defect in the contract, and it has to surface here rather than leave the
+    # shared representation quietly ETL-shaped.
+    try:
+        suite_from_spec(
+            spec,
+            suite_id="candidate",
+            language=language,
+            task=target_task,
         )
-        generated[f"{class_name}.java"] = render_semantic_test(class_name, spec, target_task)
-    else:
+    except ScenarioMappingError as exc:
+        violations = [*violations, str(exc)]
+
+    if violations:
         # A contract-invalid suite must not reach Maven; record why instead of
         # emitting a harness that would fail with a cryptic EMF error.
         generated[CONTRACT_VIOLATIONS_FILE] = (
-            json.dumps({"task": target_task, "violations": outcome.violations}, indent=2) + "\n"
+            json.dumps({"task": target_task, "violations": violations}, indent=2) + "\n"
+        )
+        return generated, ArtifactValidation(
+            valid=False,
+            reason_code=CONTRACT_VIOLATION,
+            violations=tuple(violations),
+            contract_applied=True,
         )
 
-    return generated, outcome
+    class_name = sanitize_class_name(
+        str(spec.get("testClass") or f"Generated{target_task}SemanticTest"),
+        target_task,
+    )
+    generated[f"{class_name}.java"] = render_semantic_test(class_name, spec, target_task)
+    return generated, ArtifactValidation(valid=True, contract_applied=contract is not None)
