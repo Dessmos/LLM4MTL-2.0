@@ -159,7 +159,7 @@
     },
     {
       "parameters": {
-        "fileSelector": "=/data/artifacts/transformation_generation/atl/prompts/*",
+        "fileSelector": "=/data/artifacts/transformation_generation/atl/prompts/gpt-5-chat-latest/*",
         "options": {
           "dataPropertyName": "data"
         }

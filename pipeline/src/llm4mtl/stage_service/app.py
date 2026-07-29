@@ -13,6 +13,7 @@ from llm4mtl.experiment_runner.orchestrator import ExperimentOrchestrator, gener
 from llm4mtl.paths import TARGET
 from llm4mtl.stage_contract import STAGE_DISPATCH, to_stage_payload
 from llm4mtl.stage_service.api_models import (
+    DiagnosisRecordRequest,
     RunCreateRequest,
     RunCreateResponse,
     StageRunRequest,
@@ -121,3 +122,22 @@ def get_run(run_id: str) -> dict[str, Any]:
     if manifest is None:
         raise HTTPException(status_code=404, detail=f"unknown run: {run_id}")
     return {"run_id": run_id, "manifest": manifest, "stages": run_store.list_stages(paths)}
+
+
+@app.post("/runs/{run_id}/diagnoses")
+def record_diagnosis(run_id: str, request: DiagnosisRecordRequest) -> dict[str, Any]:
+    """Persist the normalized n8n diagnosis through Python's artifact layer."""
+    paths = run_store.open_run(_runs_root(), run_id)
+    if not paths.manifest.exists():
+        raise HTTPException(status_code=404, detail=f"unknown run: {run_id}")
+
+    diagnosis = request.model_dump(mode="json", exclude_none=True)
+    attempt, artifact = run_store.record_diagnosis(paths, diagnosis)
+    run_store.append_event(
+        paths,
+        "diagnosis_recorded",
+        stage="diagnosis",
+        outcome_code=request.classification,
+        attempt=attempt,
+    )
+    return {**diagnosis, "attempt": attempt, "artifact": artifact}

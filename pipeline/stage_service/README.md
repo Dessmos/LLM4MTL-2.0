@@ -12,6 +12,7 @@ GET  /health                              -> {"status": "ok"}
 POST /runs                                -> {"run_id", "status": "initialized"}
 POST /runs/{run_id}/stages/{stage}        -> <stage-result payload>
 GET  /runs/{run_id}/stages/{stage}        -> latest stage result (n8n's projection)
+POST /runs/{run_id}/diagnoses             -> persisted diagnosis + artifact path
 GET  /runs/{run_id}                       -> {"run_id", "manifest", "stages": [...]}
 ```
 
@@ -20,6 +21,10 @@ GET  /runs/{run_id}                       -> {"run_id", "manifest", "stages": [.
 payload is `{schema_version, stage, status, outcome_code, counts, artifacts,
 attempt}` — Python reports facts; routing lives in n8n (see
 `docs/n8n-python-contract.md`).
+
+`POST /runs/{run_id}/diagnoses` accepts the normalized
+`schemas/diagnosis.schema.json` payload returned by n8n and stores an immutable
+`responses/failure-diagnosis/attempt-NNN/diagnosis.json`.
 
 ## Run locally (dev)
 

@@ -105,7 +105,7 @@
     },
     {
       "parameters": {
-        "fileSelector": "=/data/artifacts/transformation_generation/reactions/prompts/*",
+        "fileSelector": "=/data/artifacts/transformation_generation/reactions/prompts/gpt-5-chat-latest/*",
         "options": {
           "dataPropertyName": "data"
         }

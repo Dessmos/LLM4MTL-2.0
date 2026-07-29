@@ -14,6 +14,7 @@ from typing import Any
 from llm4mtl.run_store.events import append_event, read_events
 from llm4mtl.run_store.manifest import ManifestExistsError, read_manifest, write_manifest
 from llm4mtl.run_store.models import SCHEMA_VERSION, RunPaths
+from llm4mtl.run_store.responses import next_response_attempt, record_diagnosis
 from llm4mtl.run_store.stages import list_stages, next_attempt, read_latest, record_attempt
 
 
@@ -51,4 +52,6 @@ __all__ = [
     "record_attempt",
     "read_latest",
     "list_stages",
+    "next_response_attempt",
+    "record_diagnosis",
 ]

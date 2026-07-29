@@ -68,7 +68,7 @@
     {
       "parameters": {
         "operation": "write",
-        "fileName": "=/data/artifacts/transformation_generation/atl/prompts/{{ $node[\"Save reaction name\"].json.baseName }}.txt",
+        "fileName": "=/data/artifacts/transformation_generation/atl/prompts/gpt-5-chat-latest/{{ $node[\"Save reaction name\"].json.baseName }}.txt",
         "dataPropertyName": "={{ $('Generate Prompt from Input').item.json.text }}",
         "options": {
           "append": false

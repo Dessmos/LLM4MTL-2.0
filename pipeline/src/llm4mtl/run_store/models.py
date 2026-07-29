@@ -6,6 +6,7 @@ One run lives under ``artifacts/work/runs/<run-id>/`` and is described by:
 * ``events.jsonl`` — append-only timeline.
 * ``stages/<stage>/latest.json`` — mutable projection of the newest attempt.
 * ``stages/<stage>/attempts/attempt-NNN/result.json`` — immutable per-attempt evidence.
+* ``responses/<operation>/attempt-NNN/`` — immutable normalized LLM responses.
 """
 
 from __future__ import annotations
@@ -42,6 +43,10 @@ class RunPaths:
     def metrics_dir(self) -> Path:
         return self.root / "metrics"
 
+    @property
+    def responses_dir(self) -> Path:
+        return self.root / "responses"
+
     def stage_dir(self, stage: str) -> Path:
         return self.stages_dir / stage
 
@@ -56,3 +61,12 @@ class RunPaths:
 
     def stage_attempt_result(self, stage: str, attempt: int) -> Path:
         return self.stage_attempt_dir(stage, attempt) / "result.json"
+
+    def response_operation_dir(self, operation: str) -> Path:
+        return self.responses_dir / operation
+
+    def response_attempt_dir(self, operation: str, attempt: int) -> Path:
+        return self.response_operation_dir(operation) / f"attempt-{attempt:03d}"
+
+    def diagnosis_response(self, attempt: int) -> Path:
+        return self.response_attempt_dir("failure-diagnosis", attempt) / "diagnosis.json"

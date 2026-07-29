@@ -68,7 +68,7 @@
     {
       "parameters": {
         "operation": "write",
-        "fileName": "=/data/artifacts/transformation_generation/qvto/prompts/{{ $node[\"Save file name\"].json.baseName }}.txt",
+        "fileName": "=/data/artifacts/transformation_generation/qvto/prompts/gpt-5-chat-latest/{{ $node[\"Save file name\"].json.baseName }}.txt",
         "dataPropertyName": "={{ $('Generate Prompt from Input').item.json.text }}",
         "options": {
           "append": false

@@ -331,6 +331,37 @@
         440,
         0
       ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const diagnosis = $input.first().json;\nconst context = $('Validate and Build Evidence').item.json;\nconst modelByProvider = {\n  openai: 'gpt-5',\n  anthropic: 'claude-sonnet-4-20250514',\n  google: 'models/gemini-2.5-pro'\n};\nconst model = modelByProvider[context.provider];\nif (!model) {\n  throw new Error(`No diagnosis model configured for provider: ${context.provider}`);\n}\nreturn [{\n  json: {\n    ...diagnosis,\n    run_id: context.run_id,\n    provider: context.provider,\n    model\n  }\n}];"
+      },
+      "id": "a1000000-0000-4000-8000-000000000015",
+      "name": "Attach Diagnosis Provenance",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        680,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=http://stage-service:8129/runs/{{ $json.run_id }}/diagnoses",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { schema_version: $json.schema_version, classification: $json.classification, evidence_ref: $json.evidence_ref, rationale: $json.rationale, provider: $json.provider, model: $json.model, created_at: $json.created_at } }}",
+        "options": {}
+      },
+      "id": "a1000000-0000-4000-8000-000000000016",
+      "name": "Persist Diagnosis Artifact",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        920,
+        0
+      ]
     }
   ],
   "connections": {
@@ -486,6 +517,28 @@
         [
           {
             "node": "Validate and Build Evidence",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse and Validate Diagnosis": {
+      "main": [
+        [
+          {
+            "node": "Attach Diagnosis Provenance",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Attach Diagnosis Provenance": {
+      "main": [
+        [
+          {
+            "node": "Persist Diagnosis Artifact",
             "type": "main",
             "index": 0
           }

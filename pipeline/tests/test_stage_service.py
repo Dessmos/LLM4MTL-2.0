@@ -7,6 +7,7 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
+from llm4mtl.serialization.json_io import read_json
 from llm4mtl.stage_service.app import app
 
 
@@ -76,6 +77,66 @@ class StageServiceTests(unittest.TestCase):
         self.assertEqual("infrastructure_error", response.json()["status"])
         self.assertEqual("INFRASTRUCTURE_ERROR", response.json()["outcome_code"])
         self.assertEqual(1, response.json()["attempt"])
+
+    def test_diagnosis_is_persisted_with_model_provenance(self) -> None:
+        self.client.post("/runs", json={"run_id": "svc-diagnosis"})
+        payload = {
+            "schema_version": "1.0",
+            "classification": "TRANSFORMATION_DEFECT",
+            "evidence_ref": "stages/execution/attempts/attempt-001/result.json",
+            "rationale": "The generated transformation omitted the target node.",
+            "provider": "openai",
+            "model": "gpt-5",
+            "created_at": "2026-07-29T12:00:00Z",
+        }
+
+        first = self.client.post("/runs/svc-diagnosis/diagnoses", json=payload)
+        second = self.client.post(
+            "/runs/svc-diagnosis/diagnoses",
+            json={**payload, "classification": "AMBIGUOUS"},
+        )
+
+        self.assertEqual(200, first.status_code)
+        self.assertEqual(1, first.json()["attempt"])
+        self.assertEqual(
+            "responses/failure-diagnosis/attempt-001/diagnosis.json",
+            first.json()["artifact"],
+        )
+        self.assertEqual("gpt-5", first.json()["model"])
+        self.assertEqual(2, second.json()["attempt"])
+
+        artifact = (
+            Path(self._tmp.name)
+            / "svc-diagnosis"
+            / "responses"
+            / "failure-diagnosis"
+            / "attempt-001"
+            / "diagnosis.json"
+        )
+        self.assertTrue(artifact.is_file())
+        self.assertEqual("openai", read_json(artifact)["provider"])
+
+    def test_diagnosis_rejects_unknown_run_and_invalid_classification(self) -> None:
+        valid_payload = {
+            "schema_version": "1.0",
+            "classification": "AMBIGUOUS",
+            "rationale": "Invalid.",
+            "provider": "openai",
+            "model": "gpt-5",
+            "created_at": "2026-07-29T12:00:00Z",
+        }
+        self.assertEqual(
+            404,
+            self.client.post("/runs/nope/diagnoses", json=valid_payload).status_code,
+        )
+        self.client.post("/runs", json={"run_id": "svc-invalid-diagnosis"})
+        self.assertEqual(
+            422,
+            self.client.post(
+                "/runs/svc-invalid-diagnosis/diagnoses",
+                json={**valid_payload, "classification": "NOT_A_CLASSIFICATION"},
+            ).status_code,
+        )
 
 
 if __name__ == "__main__":

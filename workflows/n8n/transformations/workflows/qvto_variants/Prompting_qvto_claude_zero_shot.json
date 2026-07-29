@@ -159,7 +159,7 @@
     },
     {
       "parameters": {
-        "fileSelector": "=/data/artifacts/transformation_generation/qvto/prompts/*",
+        "fileSelector": "=/data/artifacts/transformation_generation/qvto/prompts/gpt-5-chat-latest/*",
         "options": {
           "dataPropertyName": "data"
         }

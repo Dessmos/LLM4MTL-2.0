@@ -7,8 +7,9 @@
 3. the test suite passed against the reference transformation;
 4. the same suite failed against the generated transformation.
 
-It sends a normalized evidence bundle to a selected LLM and returns a
-`schemas/diagnosis.schema.json` object with one classification:
+It sends a normalized evidence bundle to a selected LLM, validates a
+`schemas/diagnosis.schema.json` object, persists it through the stage service,
+and returns the diagnosis fields plus its attempt and artifact path:
 
 - `TRANSFORMATION_DEFECT`
 - `TEST_DEFECT`
@@ -112,17 +113,19 @@ The last node returns exactly:
   "classification": "TRANSFORMATION_DEFECT",
   "evidence_ref": "runs/run-123/stages/execution/attempts/attempt-001/result.json",
   "rationale": "The validated assertion expected one target node but the generated transformation produced none.",
-  "created_at": "2026-07-23T12:00:00.000Z"
+  "provider": "openai",
+  "model": "gpt-5",
+  "created_at": "2026-07-23T12:00:00.000Z",
+  "attempt": 1,
+  "artifact": "responses/failure-diagnosis/attempt-001/diagnosis.json"
 }
 ```
 
-The parent workflow should Switch on `classification`. Persist the returned
-object as:
+The final HTTP node persists the normalized object through the Python stage
+service and returns it with `attempt` and `artifact`. The parent workflow should
+Switch on `classification`. Each attempt is stored as:
 
 ```text
 artifacts/work/runs/<run-id>/
   responses/failure-diagnosis/attempt-NNN/diagnosis.json
 ```
-
-The prompt and raw provider response should be stored alongside it by the
-run-artifact writer once that endpoint/subworkflow is available.

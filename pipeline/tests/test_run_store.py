@@ -47,6 +47,39 @@ class StageAttemptTests(unittest.TestCase):
             self.assertEqual(2, latest["attempt"])
 
 
+class ResponseAttemptTests(unittest.TestCase):
+    def test_diagnoses_are_stored_as_immutable_attempts(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            paths = run_store.create_run(Path(temp_dir), "run_001", {})
+            diagnosis = {
+                "schema_version": "1.0",
+                "classification": "AMBIGUOUS",
+                "rationale": "Evidence is inconclusive.",
+                "provider": "openai",
+                "model": "gpt-5",
+                "created_at": "2026-07-29T12:00:00Z",
+            }
+
+            first, first_artifact = run_store.record_diagnosis(paths, diagnosis)
+            second, second_artifact = run_store.record_diagnosis(
+                paths, {**diagnosis, "classification": "TEST_DEFECT"}
+            )
+
+            self.assertEqual((1, 2), (first, second))
+            self.assertEqual(
+                "responses/failure-diagnosis/attempt-001/diagnosis.json",
+                first_artifact,
+            )
+            self.assertEqual(
+                "responses/failure-diagnosis/attempt-002/diagnosis.json",
+                second_artifact,
+            )
+            self.assertEqual(
+                "AMBIGUOUS",
+                read_json(paths.diagnosis_response(1))["classification"],
+            )
+
+
 class EventLogTests(unittest.TestCase):
     def test_events_are_append_only(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

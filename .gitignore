@@ -157,3 +157,4 @@ engines/*/*/results/
 .DS_Store
 *.swp
 *.kate-swp
+AGENTS.md

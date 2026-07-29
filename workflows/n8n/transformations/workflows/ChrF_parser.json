@@ -47,7 +47,7 @@
     {
       "parameters": {
         "executeOnce": false,
-        "command": "=cd ../../data\njava -jar parser/*-all.jar  snippets/responses/{{ $json.fileName }} snippets/out/{{ $json.fileName.split('.').slice(0,-1).join('.') }}.xmi models \n\n"
+        "command": "=mkdir -p /data/artifacts/transformation_generation/reactions/parser_output/claude-sonnet-4/few_shots_AND_grammar_AND_helper\njava -jar /data/parser/*-all.jar /data/artifacts/transformation_generation/reactions/responses/claude-sonnet-4/few_shots_AND_grammar_AND_helper/{{ $json.fileName }} /data/artifacts/transformation_generation/reactions/parser_output/claude-sonnet-4/few_shots_AND_grammar_AND_helper/{{ $json.fileName.split('.').slice(0,-1).join('.') }}.xmi /data/models\n"
       },
       "type": "n8n-nodes-base.executeCommand",
       "typeVersion": 1,

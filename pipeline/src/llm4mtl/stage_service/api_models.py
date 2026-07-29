@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 
@@ -34,3 +37,15 @@ class StageRunRequest(BaseModel):
     transformation_strategies: list[str] = Field(default_factory=list)
     suite_id: str | None = None
     verbose: bool = False
+
+
+class DiagnosisRecordRequest(BaseModel):
+    """Normalized failure diagnosis returned by an n8n LLM node."""
+
+    schema_version: Literal["1.0"]
+    classification: Literal["TRANSFORMATION_DEFECT", "TEST_DEFECT", "AMBIGUOUS"]
+    evidence_ref: str | None = None
+    rationale: str = Field(min_length=1)
+    provider: Literal["openai", "anthropic", "google"]
+    model: str = Field(min_length=1)
+    created_at: datetime
