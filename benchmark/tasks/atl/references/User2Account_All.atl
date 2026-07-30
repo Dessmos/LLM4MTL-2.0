@@ -1,0 +1,23 @@
+-- ATL transformation module to convert User models to Account models.
+-- Simple transformation: maps users to accounts with status.
+module User2Account_All;
+
+create OUT : Account from IN : User;
+
+-- Helper to determine if user is active.
+helper context User!User def: isActive() : Boolean =
+  self.status = 'Active' or self.status = 'Enabled';
+
+-- Rule to transform a User into an Account.
+rule User2Account {
+  from
+    u : User!User
+  to
+    a : Account!Account (
+      username <- u.username,
+      email <- u.email,
+      active <- u.isActive(),
+      createdDate <- u.registrationDate
+    )
+}
+

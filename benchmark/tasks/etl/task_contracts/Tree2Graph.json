@@ -1,7 +1,7 @@
 {
   "task": "Tree2Graph",
   "transformation": "Tree2Graph.etl",
-  "reference": "Test_Generation/Workflows/n8n-docker/mtl_snippets/ETL_test_generation/references/Tree2Graph.etl",
+  "reference": "benchmark/tasks/etl/references/Tree2Graph.etl",
   "models": [
     {
       "runtimeName": "Graph",
@@ -15,7 +15,7 @@
       "kind": "emf",
       "metamodelUri": "Graph",
       "metamodelNsPrefix": "Graph",
-      "metamodelFile": "ETL_Test/src/test/resources/metamodels/Graph.ecore",
+      "metamodelFile": "benchmark/metamodels/etl/Graph.ecore",
       "availableTypes": [
         "Graph",
         "Node",
@@ -33,7 +33,7 @@
       "kind": "emf",
       "metamodelUri": "Tree",
       "metamodelNsPrefix": "Tree",
-      "metamodelFile": "ETL_Test/src/test/resources/metamodels/Tree.ecore",
+      "metamodelFile": "benchmark/metamodels/etl/Tree.ecore",
       "availableTypes": [
         "Tree"
       ]

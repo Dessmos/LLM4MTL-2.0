@@ -1,0 +1,56 @@
+{
+  "schemaVersion": "1.0",
+  "task": "Document2Report_All",
+  "language": "atl",
+  "transformation": "Document2Report_All.atl",
+  "reference": "benchmark/tasks/atl/references/Document2Report_All.atl",
+  "sourceHash": "1f9f8bd708aacd3eef519bc5a737c83569d4d21de608e01b3ceed707ac07a0d8",
+  "models": [
+    {
+      "runtimeName": "IN",
+      "roles": [
+        "source"
+      ],
+      "kind": "emf",
+      "metamodelUri": "http://vitruv.tools/methodologisttemplate/document",
+      "metamodelNsPrefix": "document",
+      "metamodelAlias": "Document",
+      "metamodelFile": "benchmark/metamodels/additional_models/ATL_model/Document.ecore",
+      "typesUsedInTransformation": [
+        "Document",
+        "Section"
+      ],
+      "availableTypes": [
+        "DocumentModel",
+        "Document",
+        "Section"
+      ]
+    },
+    {
+      "runtimeName": "OUT",
+      "roles": [
+        "target"
+      ],
+      "kind": "emf",
+      "metamodelUri": "http://vitruv.tools/methodologisttemplate/report",
+      "metamodelNsPrefix": "report",
+      "metamodelAlias": "Report",
+      "metamodelFile": "benchmark/metamodels/additional_models/ATL_model/Report.ecore",
+      "typesUsedInTransformation": [
+        "Report",
+        "Section"
+      ],
+      "availableTypes": [
+        "ReportModel",
+        "Report",
+        "Section"
+      ]
+    }
+  ],
+  "rules": [
+    "semantic_cases model slots must map to runtimeName exactly.",
+    "EMF namespace URIs and prefixes come only from this contract.",
+    "Assertions and declarative changes may use only availableTypes.",
+    "The reference transformation remains the behavioural oracle."
+  ]
+}

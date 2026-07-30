@@ -13,7 +13,11 @@ from .normalization import normalize_schema_variants
 from llm4mtl.semantic_tests.semantic_spec import SEMANTIC_CASES_FILE, effective_models
 
 
-def parse_semantic_cases(raw_json: str, target_task: str) -> dict[str, Any]:
+def parse_semantic_cases(
+    raw_json: str,
+    target_task: str,
+    transformation_extension: str = ".etl",
+) -> dict[str, Any]:
     try:
         spec = json.loads(raw_json)
     except json.JSONDecodeError as exc:
@@ -23,7 +27,11 @@ def parse_semantic_cases(raw_json: str, target_task: str) -> dict[str, Any]:
         raise SemanticCasesError(f"{SEMANTIC_CASES_FILE} must contain a JSON object")
     if is_legacy_tree2graph_spec(spec):
         spec = normalize_legacy_tree2graph_spec(spec)
-    spec = normalize_schema_variants(spec, target_task)
+    spec = normalize_schema_variants(
+        spec,
+        target_task,
+        transformation_extension=transformation_extension,
+    )
     validate_semantic_cases(spec, target_task)
     try:
         validate_artifact("semantic-cases", spec)
@@ -73,13 +81,13 @@ def validate_models(models: list[dict[str, Any]], test_index: int) -> None:
                 f"test #{test_index} model #{model_index} has unsupported kind: {kind}"
             )
         role = model.get("role", "source" if model.get("path") else "target")
-        if role not in {"source", "target"}:
+        if role not in {"source", "target", "inout"}:
             raise SemanticCasesError(
                 f"test #{test_index} model #{model_index} has unsupported role: {role}"
             )
-        if role == "source" and not model.get("path"):
+        if role in {"source", "inout"} and not model.get("path"):
             raise SemanticCasesError(
-                f"test #{test_index} source model {model['name']} is missing path"
+                f"test #{test_index} readable model {model['name']} is missing path"
             )
         if kind == "emf" and not model.get("metamodelUri"):
             raise SemanticCasesError(

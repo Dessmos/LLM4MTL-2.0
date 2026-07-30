@@ -1,0 +1,20 @@
+import "http://vitruv.tools/methodologisttemplate/network" as network
+import "http://vitruv.tools/methodologisttemplate/graph" as graph
+
+reactions: networkToGraph_ComponentRenamed
+in reaction to changes in network
+execute actions in graph
+
+reaction ComponentRenamed {
+	after attribute replaced at network::Component[name]
+	call renameEntity(affectedEObject)
+}
+
+routine renameEntity(network::Component component) {
+	match {
+    	val entity = retrieve graph::Entity corresponding to component
+	}
+	update {
+    	entity.name = component.name
+	}
+}

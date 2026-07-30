@@ -5,21 +5,26 @@ third-party extension point, so discovery by import scanning or entry points
 would add indirection without a caller that needs it. Adding a language means
 adding one line here and one adapter module.
 
-A language the pipeline cannot yet run fails loudly at this seam. That is the
+A language the pipeline does not recognize fails loudly at this seam. That is the
 point: silently falling back to ETL conventions would produce results attributed
 to a language that never ran.
 """
 
 from __future__ import annotations
 
+from llm4mtl.languages.atl.adapter import AtlAdapter
 from llm4mtl.languages.base import LanguageAdapter
 from llm4mtl.languages.etl.adapter import EtlAdapter
+from llm4mtl.languages.qvto.adapter import QvtoAdapter
+from llm4mtl.languages.reactions.adapter import ReactionsAdapter
 
-# Every language the thesis must cover, and whether an adapter exists yet.
 REQUIRED_LANGUAGES: tuple[str, ...] = ("etl", "atl", "qvto", "reactions")
 
 _ADAPTERS: dict[str, LanguageAdapter] = {
     "etl": EtlAdapter(),
+    "atl": AtlAdapter(),
+    "qvto": QvtoAdapter(),
+    "reactions": ReactionsAdapter(),
 }
 
 
@@ -32,11 +37,6 @@ def language_adapter(language: str) -> LanguageAdapter:
     key = language.lower()
     if key in _ADAPTERS:
         return _ADAPTERS[key]
-    if key in REQUIRED_LANGUAGES:
-        raise UnsupportedLanguageError(
-            f"no language adapter for '{key}' yet; it is required for the thesis "
-            f"but not implemented (implemented: {', '.join(sorted(_ADAPTERS))})"
-        )
     raise UnsupportedLanguageError(
         f"unknown language '{language}' (known: {', '.join(REQUIRED_LANGUAGES)})"
     )

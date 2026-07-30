@@ -1,0 +1,27 @@
+schema_version: 1
+experiment_id: thesis-atl
+language: atl
+
+tasks:
+  - AmaltheaToAscet_All
+  - BibTeX2DocBook_All
+  - CPL2SPL_All
+  - Class2Interface_All
+  - DSL2KM3_All
+  - Document2Report_All
+  - FamiliesToPersons_All
+  - Grafcet2PetriNet_All
+  - IEEE1471_2_MoDAF_All
+  - Item2Product_All
+  - Make2Ant_All
+  - NetworkToGraph_All
+  - PetriNet2Grafcet_All
+  - User2Account_All
+  - XML2DSL_All
+
+transformation_models: [claude-sonnet-4, gpt-5, gemini-2-5-pro]
+transformation_strategies: [only_prompt, grammar, few_shot, few_shots_AND_grammar]
+test_models: [gpt-5]
+test_strategies: [few_shot]
+variants: [full]
+seeds: [1]

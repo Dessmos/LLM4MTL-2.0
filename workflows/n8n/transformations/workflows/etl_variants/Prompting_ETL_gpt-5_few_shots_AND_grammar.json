@@ -15,7 +15,7 @@
     {
       "parameters": {
         "promptType": "define",
-        "text": "={{ $json.prompt }}\n\n-- End of request.\nHere are the models:\n{{ $json.concatenated_model }}\n\nThe models are located here:\n\"http://vitruv.tools/methodologisttemplate/[modelname]\"\n\n{{ $('Set Parameters').item.json.Few_shot ? \"Here are some examples as guideline:\\n\" + $('Extract text from examples file').item.json.examples : \"\" }}\n\n\n{{ $('Set Parameters').item.json.Grammar ? \"Here is the grammar of the Language:\\n\" + $('Extract text from grammar').item.json.grammar : \"\"}}\n\n{{ $('Set Parameters').item.json.Helper_methods ? \"Here are helper methods you can use:\\n\" + $('Extract text from helper methods').item.json.helper_methods : \"\"}}",
+        "text": "={{ $json.prompt }}\n\n-- End of request.\nHere are the models:\n{{ $json.metamodel_text }}\n\nThe models are located here:\n\"http://vitruv.tools/methodologisttemplate/[modelname]\"\n\n{{ $('Set Parameters').item.json.Few_shot ? \"Here are some examples as guideline:\\n\" + $('Extract text from examples file').item.json.examples : \"\" }}\n\n\n{{ $('Set Parameters').item.json.Grammar ? \"Here is the grammar of the Language:\\n\" + $('Extract text from grammar').item.json.grammar : \"\"}}\n\n{{ $('Set Parameters').item.json.Helper_methods ? \"Here are helper methods you can use:\\n\" + $('Extract text from helper methods').item.json.helper_methods : \"\"}}",
         "messages": {
           "messageValues": [
             {
@@ -159,7 +159,7 @@
     },
     {
       "parameters": {
-        "fileSelector": "=/data/artifacts/transformation_generation/etl/prompts/gpt-5-chat-latest/*",
+        "fileSelector": "=/data/task_prompts/etl/*.txt",
         "options": {
           "dataPropertyName": "data"
         }
@@ -188,36 +188,6 @@
       ],
       "id": "b2c3d4e5-2002-4e02-b002-00000000000c",
       "name": "Extract text from prompt file"
-    },
-    {
-      "parameters": {
-        "fileSelector": "=/data/models/additional_models/ETL_model/*.ecore",
-        "options": {}
-      },
-      "type": "n8n-nodes-base.readWriteFile",
-      "typeVersion": 1,
-      "position": [
-        576,
-        -208
-      ],
-      "id": "b2c3d4e5-2002-4e02-b002-00000000000d",
-      "name": "Read model files",
-      "alwaysOutputData": false
-    },
-    {
-      "parameters": {
-        "operation": "text",
-        "destinationKey": "model",
-        "options": {}
-      },
-      "type": "n8n-nodes-base.extractFromFile",
-      "typeVersion": 1,
-      "position": [
-        736,
-        -208
-      ],
-      "id": "b2c3d4e5-2002-4e02-b002-00000000000e",
-      "name": "Extract text from model files"
     },
     {
       "parameters": {
@@ -382,34 +352,6 @@
     },
     {
       "parameters": {
-        "fieldsToSummarize": {
-          "values": [
-            {
-              "aggregation": "concatenate",
-              "field": "model",
-              "separateBy": "\n"
-            },
-            {
-              "aggregation": "concatenate",
-              "field": "model",
-              "includeEmpty": "=",
-              "separateBy": "\n"
-            }
-          ]
-        },
-        "options": {}
-      },
-      "type": "n8n-nodes-base.summarize",
-      "typeVersion": 1.1,
-      "position": [
-        912,
-        -208
-      ],
-      "id": "b2c3d4e5-2002-4e02-b002-000000000015",
-      "name": "Summarize"
-    },
-    {
-      "parameters": {
         "operation": "text",
         "destinationKey": "helper_methods",
         "options": {}
@@ -507,6 +449,24 @@
       ],
       "id": "b2c3d4e5-2002-4e02-b002-000000000019",
       "name": "Save file name"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://stage-service:8129/prompt-inputs/resolve",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { language: 'etl', task: $json.baseName } }}",
+        "options": {}
+      },
+      "id": "resolve-exact-task-inputs-etl",
+      "name": "Resolve exact task inputs",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        736,
+        -368
+      ]
     }
   ],
   "pinData": {},
@@ -593,11 +553,6 @@
         [],
         [
           {
-            "node": "Read model files",
-            "type": "main",
-            "index": 0
-          },
-          {
             "node": "Extract text from prompt file",
             "type": "main",
             "index": 0
@@ -653,28 +608,6 @@
         [
           {
             "node": "Merge",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Read model files": {
-      "main": [
-        [
-          {
-            "node": "Extract text from model files",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Extract text from model files": {
-      "main": [
-        [
-          {
-            "node": "Summarize",
             "type": "main",
             "index": 0
           }
@@ -756,17 +689,6 @@
         []
       ]
     },
-    "Summarize": {
-      "main": [
-        [
-          {
-            "node": "Merge",
-            "type": "main",
-            "index": 1
-          }
-        ]
-      ]
-    },
     "Extract text from helper methods": {
       "main": [
         [
@@ -817,6 +739,22 @@
             "node": "Extract text from prompt file",
             "type": "main",
             "index": 0
+          },
+          {
+            "node": "Resolve exact task inputs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resolve exact task inputs": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
           }
         ]
       ]

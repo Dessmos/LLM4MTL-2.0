@@ -1,0 +1,61 @@
+{
+  "schemaVersion": "1.0",
+  "task": "NetworkToGraph_All",
+  "language": "atl",
+  "transformation": "NetworkToGraph_All.atl",
+  "reference": "benchmark/tasks/atl/references/NetworkToGraph_All.atl",
+  "sourceHash": "5f8b946e05882b33b71e13f4762c167a437ecc77b3e12b48f757e364cd1996d4",
+  "models": [
+    {
+      "runtimeName": "IN",
+      "roles": [
+        "source"
+      ],
+      "kind": "emf",
+      "metamodelUri": "http://vitruv.tools/methodologisttemplate/network",
+      "metamodelNsPrefix": "network",
+      "metamodelAlias": "Network",
+      "metamodelFile": "benchmark/metamodels/additional_models/ATL_model/network.ecore",
+      "typesUsedInTransformation": [
+        "Component",
+        "Link",
+        "System"
+      ],
+      "availableTypes": [
+        "Component",
+        "Link",
+        "Protocol",
+        "Device",
+        "Server",
+        "System"
+      ]
+    },
+    {
+      "runtimeName": "OUT",
+      "roles": [
+        "target"
+      ],
+      "kind": "emf",
+      "metamodelUri": "http://vitruv.tools/methodologisttemplate/graph",
+      "metamodelNsPrefix": "graph",
+      "metamodelAlias": "Graph",
+      "metamodelFile": "benchmark/metamodels/additional_models/ATL_model/graph.ecore",
+      "typesUsedInTransformation": [
+        "Entity",
+        "Link",
+        "Root"
+      ],
+      "availableTypes": [
+        "Root",
+        "Entity",
+        "Link"
+      ]
+    }
+  ],
+  "rules": [
+    "semantic_cases model slots must map to runtimeName exactly.",
+    "EMF namespace URIs and prefixes come only from this contract.",
+    "Assertions and declarative changes may use only availableTypes.",
+    "The reference transformation remains the behavioural oracle."
+  ]
+}

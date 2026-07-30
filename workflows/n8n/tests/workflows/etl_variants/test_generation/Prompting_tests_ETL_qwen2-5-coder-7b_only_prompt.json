@@ -1,5 +1,5 @@
 {
-  "name": "Tests_ETL_qwen2.5-coder-7b_only_prompt_smoke",
+  "name": "Tests_ETL_qwen2.5-coder-7b_only_prompt",
   "nodes": [
     {
       "parameters": {},
@@ -14,7 +14,7 @@
     },
     {
       "parameters": {
-        "fileSelector": "=/data/artifacts/test_generation/etl/prompts_smoke/qwen2-5-coder-7b/*.qwen-smoke.txt",
+        "fileSelector": "=/data/task_prompts/etl/*.txt",
         "options": {
           "dataPropertyName": "data"
         }
@@ -49,7 +49,7 @@
             {
               "id": "c3d4e5f6-2003-4f03-c003-100000000001",
               "name": "baseName",
-              "value": "={{$binary.data.fileName.replace(/\\.qwen-smoke\\.txt$/, '').replace(/\\.txt$/, '')}}",
+              "value": "={{$binary.data.fileName.replace(/\\.txt$/, '')}}",
               "type": "string"
             }
           ]
@@ -82,64 +82,6 @@
     },
     {
       "parameters": {
-        "fileSelector": "=/data/models/etl/*.ecore",
-        "options": {}
-      },
-      "type": "n8n-nodes-base.readWriteFile",
-      "typeVersion": 1,
-      "position": [
-        -512,
-        48
-      ],
-      "id": "c3d4e5f6-2003-4f03-c003-000000000006",
-      "name": "Read model files",
-      "alwaysOutputData": true
-    },
-    {
-      "parameters": {
-        "operation": "text",
-        "destinationKey": "model",
-        "options": {}
-      },
-      "type": "n8n-nodes-base.extractFromFile",
-      "typeVersion": 1,
-      "position": [
-        -320,
-        48
-      ],
-      "id": "c3d4e5f6-2003-4f03-c003-000000000007",
-      "name": "Extract text from model files"
-    },
-    {
-      "parameters": {
-        "fieldsToSummarize": {
-          "values": [
-            {
-              "aggregation": "concatenate",
-              "field": "model",
-              "separateBy": "\n"
-            },
-            {
-              "aggregation": "concatenate",
-              "field": "model",
-              "includeEmpty": "=",
-              "separateBy": "\n"
-            }
-          ]
-        },
-        "options": {}
-      },
-      "type": "n8n-nodes-base.summarize",
-      "typeVersion": 1.1,
-      "position": [
-        -128,
-        48
-      ],
-      "id": "c3d4e5f6-2003-4f03-c003-000000000008",
-      "name": "Summarize models"
-    },
-    {
-      "parameters": {
         "mode": "combine",
         "combineBy": "combineByPosition",
         "numberInputs": 3,
@@ -163,7 +105,7 @@
         "url": "http://host.docker.internal:11434/api/chat",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ model: 'qwen2.5-coder:7b', stream: false, messages: [ { role: 'system', content: 'You are an expert Java/JUnit test engineer for Epsilon Transformation Language (ETL) model transformations. Generate the actual semantic test suite artifacts, not another prompt. The generated suite is a primary semantic oracle candidate only after technical validation and reference validation. Do not call, extend, or depend on manually written semantic tests. Return only file-oriented Markdown blocks with filenames and complete file contents. Include Java/JUnit test code and all input model files required by the test suite. Do not generate ETL transformation code.' }, { role: 'user', content: 'Task: ' + ($json.baseName || 'ETL') + '\\n\\nGenerated-test request prompt:\\n\\n' + ($json.prompt || '') + '\\n\\nSource and target metamodels for context:\\n\\n' + ($json.concatenated_model || '') + '\\n\\nNow generate the complete Java/JUnit semantic test suite and generated input model files.' } ], options: { temperature: 0.1, top_p: 1 } }) }}",
+        "jsonBody": "={{ JSON.stringify({ model: 'qwen2.5-coder:7b', stream: false, messages: [{ role: 'system', content: \"Generate semantic test artifacts for Epsilon Transformation Language (ETL) from the reviewed shared task prompt. Follow that prompt and the exact task-specific metamodel files. Return only fenced file blocks: exactly one ```json file=semantic_cases.json block and the ```xml file=models/<name>.model blocks it references. Never generate Java, JUnit, transformation code, Maven files, helper classes, or prose outside file blocks. semantic_cases.json must contain schemaVersion, testClass, transformation, metamodels, and tests. Each test contains name, models, and assertions; each model contains name, kind, role, path, generated, and metamodelUri only for EMF. Use only the canonical generic assertion kinds count, featureValues, objects, pathValues, and referencePairs. Every assertion uses expected; never use value, values, equals, ids, pairs, sourceType, targetType, where, or match. Assertions must describe observable target-model counts, feature values, links, and absence of unjustified elements.\" }, { role: 'user', content: ($json.prompt || '') + '\\n\\n## Authoritative metamodel files\\n' + ($json.metamodel_text || '') }], options: { temperature: 0.1, top_p: 1 } }) }}",
         "options": {}
       },
       "type": "n8n-nodes-base.httpRequest",
@@ -231,6 +173,24 @@
       ],
       "id": "c3d4e5f6-2003-4f03-c003-00000000000d",
       "name": "Write response to disk"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://stage-service:8129/prompt-inputs/resolve",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { language: 'etl', task: $json.baseName } }}",
+        "options": {}
+      },
+      "id": "resolve-exact-task-inputs-etl",
+      "name": "Resolve exact task inputs",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        736,
+        -368
+      ]
     }
   ],
   "pinData": {},
@@ -270,11 +230,6 @@
             "node": "Save task name",
             "type": "main",
             "index": 0
-          },
-          {
-            "node": "Read model files",
-            "type": "main",
-            "index": 0
           }
         ]
       ]
@@ -286,6 +241,11 @@
             "node": "Merge prompt, task and models",
             "type": "main",
             "index": 1
+          },
+          {
+            "node": "Resolve exact task inputs",
+            "type": "main",
+            "index": 0
           }
         ]
       ]
@@ -297,39 +257,6 @@
             "node": "Merge prompt, task and models",
             "type": "main",
             "index": 0
-          }
-        ]
-      ]
-    },
-    "Read model files": {
-      "main": [
-        [
-          {
-            "node": "Extract text from model files",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Extract text from model files": {
-      "main": [
-        [
-          {
-            "node": "Summarize models",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Summarize models": {
-      "main": [
-        [
-          {
-            "node": "Merge prompt, task and models",
-            "type": "main",
-            "index": 2
           }
         ]
       ]
@@ -385,6 +312,17 @@
             "node": "Loop Over Items",
             "type": "main",
             "index": 0
+          }
+        ]
+      ]
+    },
+    "Resolve exact task inputs": {
+      "main": [
+        [
+          {
+            "node": "Merge prompt, task and models",
+            "type": "main",
+            "index": 2
           }
         ]
       ]

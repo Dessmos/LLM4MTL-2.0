@@ -49,6 +49,35 @@ class StageServiceTests(unittest.TestCase):
         self.assertEqual("etl", fetched.json()["manifest"]["language"])
         self.assertEqual("svc-1", fetched.json()["manifest"]["run_id"])
 
+    def test_prompt_inputs_are_resolved_through_the_task_contract(self) -> None:
+        response = self.client.post(
+            "/prompt-inputs/resolve",
+            json={"language": "etl", "task": "Tree2Graph"},
+        )
+        self.assertEqual(200, response.status_code)
+        body = response.json()
+        self.assertEqual("Tree2Graph", body["task"])
+        self.assertEqual(
+            "benchmark/tasks/etl/references/Tree2Graph.etl",
+            body["reference"]["path"],
+        )
+        self.assertEqual(
+            [
+                "benchmark/metamodels/etl/Graph.ecore",
+                "benchmark/metamodels/etl/Tree.ecore",
+            ],
+            [metamodel["path"] for metamodel in body["metamodels"]],
+        )
+        self.assertNotIn("models", body["reference"])
+        self.assertNotIn("contract", body)
+
+    def test_prompt_input_resolution_does_not_fall_back_for_unknown_task(self) -> None:
+        response = self.client.post(
+            "/prompt-inputs/resolve",
+            json={"language": "etl", "task": "does-not-exist"},
+        )
+        self.assertEqual(422, response.status_code)
+
     def test_create_run_refuses_to_replace_existing_manifest(self) -> None:
         first = self.client.post("/runs", json=run_payload(run_id="svc-immutable"))
         duplicate = self.client.post(

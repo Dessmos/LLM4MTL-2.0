@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "testClass": "GeneratedReactionsWalkingSkeletonTest",
+  "tests": [
+    {
+      "name": "registering_family_root_creates_person_register",
+      "scenarioKind": "change_propagation",
+      "models": [
+        {
+          "name": "families",
+          "kind": "emf",
+          "role": "inout",
+          "path": "models/families.xmi",
+          "generated": true,
+          "metamodelUri": "http://vitruv.tools/methodologisttemplate/families"
+        },
+        {
+          "name": "persons",
+          "kind": "emf",
+          "role": "inout",
+          "path": "models/persons.xmi",
+          "generated": true,
+          "metamodelUri": "http://vitruv.tools/methodologisttemplate/persons"
+        }
+      ],
+      "changes": [
+        {
+          "kind": "create",
+          "target": {
+            "slot": "families",
+            "type": "FamilyRegister"
+          },
+          "value": {
+            "type": "FamilyRegister",
+            "features": {"id": "families"}
+          }
+        }
+      ],
+      "assertions": [
+        {
+          "kind": "count",
+          "model": "persons",
+          "type": "PersonRegister",
+          "expected": 1
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+-- ATL transformation module to convert Item models to Product models.
+-- Simple transformation: maps items to products with basic attributes.
+module Item2Product_All;
+
+create OUT : Product from IN : Item;
+
+-- Helper to compute product category based on item type.
+helper context Item!Item def: getCategory() : String =
+  if self.type = 'Electronics' then 'Tech'
+  else if self.type = 'Clothing' then 'Apparel'
+  else 'General'
+  endif
+  endif;
+
+-- Rule to transform an Item into a Product.
+rule Item2Product {
+  from
+    i : Item!Item
+  to
+    p : Product!Product (
+      name <- i.name,
+      price <- i.price,
+      description <- i.description,
+      category <- i.getCategory(),
+      inStock <- i.quantity > 0
+    )
+}
+

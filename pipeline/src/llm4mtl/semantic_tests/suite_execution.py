@@ -24,7 +24,7 @@ import fcntl
 import re
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Iterator
+from typing import Iterator, Literal
 
 from llm4mtl.artifact_schemas import validate_artifact
 from llm4mtl.domain import ArtifactRef, GeneratedSuite, SuiteExecutionObservation
@@ -44,6 +44,12 @@ from llm4mtl.workspace.injection import Injection
 
 SCHEMA_VERSION = "2.0"
 OBSERVATION_FILENAME = "suite_execution.json"
+REFERENCE_TRANSFORMATION_ROLE = "reference_transformation"
+GENERATED_TRANSFORMATION_ROLE = "generated_transformation"
+TransformationRole = Literal[
+    "reference_transformation",
+    "generated_transformation",
+]
 
 
 def classify_maven_run(
@@ -280,6 +286,8 @@ def record_observation(
     suite: GeneratedSuite,
     transformation: Path,
     observation: SuiteExecutionObservation,
+    *,
+    transformation_role: TransformationRole = REFERENCE_TRANSFORMATION_ROLE,
 ) -> Path:
     """Persist an observation together with the inputs it was derived from.
 
@@ -290,7 +298,11 @@ def record_observation(
     payload = {
         "schema_version": SCHEMA_VERSION,
         **_suite_identity(suite),
-        "inputs": _input_identity(suite, transformation),
+        "inputs": _input_identity(
+            suite,
+            transformation,
+            transformation_role=transformation_role,
+        ),
         "observation": observation.to_dict(),
     }
     validate_artifact("suite-execution", payload)
@@ -302,6 +314,8 @@ def read_observation(
     observations_root: Path,
     suite: GeneratedSuite,
     transformation: Path,
+    *,
+    transformation_role: TransformationRole = REFERENCE_TRANSFORMATION_ROLE,
 ) -> SuiteExecutionObservation | None:
     """The recorded observation for exactly these inputs, or ``None``.
 
@@ -316,7 +330,11 @@ def read_observation(
     validate_artifact("suite-execution", payload)
     if any(payload.get(name) != value for name, value in _suite_identity(suite).items()):
         return None
-    if payload.get("inputs") != _input_identity(suite, transformation):
+    if payload.get("inputs") != _input_identity(
+        suite,
+        transformation,
+        transformation_role=transformation_role,
+    ):
         return None
     recorded = dict(payload.get("observation", {}))
     names = SuiteExecutionObservation.field_names()
@@ -330,7 +348,12 @@ def read_observation(
     return observation
 
 
-def _input_identity(suite: GeneratedSuite, transformation: Path) -> dict[str, dict[str, str]]:
+def _input_identity(
+    suite: GeneratedSuite,
+    transformation: Path,
+    *,
+    transformation_role: TransformationRole,
+) -> dict[str, dict[str, str]]:
     return {
         "suite": ArtifactRef(
             path=_stable_artifact_path(suite.path),
@@ -340,7 +363,7 @@ def _input_identity(suite: GeneratedSuite, transformation: Path) -> dict[str, di
         "transformation": ArtifactRef(
             path=_stable_artifact_path(transformation),
             sha256=file_sha256(transformation),
-            role="reference_transformation",
+            role=transformation_role,
         ).to_dict(),
     }
 

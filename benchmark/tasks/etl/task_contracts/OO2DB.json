@@ -1,7 +1,7 @@
 {
   "task": "OO2DB",
   "transformation": "OO2DB.etl",
-  "reference": "Test_Generation/Workflows/n8n-docker/mtl_snippets/ETL_test_generation/references/OO2DB.etl",
+  "reference": "benchmark/tasks/etl/references/OO2DB.etl",
   "models": [
     {
       "runtimeName": "DB",
@@ -17,7 +17,7 @@
       "kind": "emf",
       "metamodelUri": "DB",
       "metamodelNsPrefix": "DB",
-      "metamodelFile": "ETL_Test/src/test/resources/metamodels/DB.ecore",
+      "metamodelFile": "benchmark/metamodels/additional_models/ETL_model/DB.ecore",
       "availableTypes": [
         "DatabaseElement",
         "Database",
@@ -40,7 +40,7 @@
       "kind": "emf",
       "metamodelUri": "OO",
       "metamodelNsPrefix": "OO",
-      "metamodelFile": "ETL_Test/src/test/resources/metamodels/OO.ecore",
+      "metamodelFile": "benchmark/metamodels/additional_models/ETL_model/OO.ecore",
       "availableTypes": [
         "Package",
         "PackageableElement",
@@ -64,7 +64,7 @@
       "kind": "emf",
       "metamodelUri": "TM",
       "metamodelNsPrefix": "TM",
-      "metamodelFile": "ETL_Test/src/test/resources/metamodels/TM.ecore",
+      "metamodelFile": "benchmark/metamodels/additional_models/ETL_model/TM.ecore",
       "availableTypes": [
         "TypeMap",
         "TypeMapping"
@@ -82,7 +82,7 @@
       "kind": "emf",
       "metamodelUri": "SimpleTrace",
       "metamodelNsPrefix": "SimpleTrace",
-      "metamodelFile": "ETL_Test/src/test/resources/metamodels/SimpleTrace.ecore",
+      "metamodelFile": "benchmark/metamodels/additional_models/ETL_model/SimpleTrace.ecore",
       "availableTypes": [
         "Trace",
         "TraceLink"

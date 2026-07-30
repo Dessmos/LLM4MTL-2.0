@@ -1,0 +1,24 @@
+import "http://vitruv.tools/methodologisttemplate/families" as families
+import "http://vitruv.tools/methodologisttemplate/persons" as persons
+
+reactions: familiesToPersons_InsertedFamilyRegister
+in reaction to changes in families
+execute actions in persons
+
+reaction InsertedFamilyRegister {
+	after element families::FamilyRegister inserted as root
+	call createPersonRegister(newValue)
+}
+
+routine createPersonRegister(families::FamilyRegister familyRegister) {
+	match {
+		require absence of persons::PersonRegister corresponding to familyRegister
+	}
+	create {
+		val personRegister = new persons::PersonRegister
+	}
+	update {
+		persistProjectRelative(familyRegister, personRegister, "model/persons.persons")
+		addCorrespondenceBetween(personRegister, familyRegister)
+	}
+}

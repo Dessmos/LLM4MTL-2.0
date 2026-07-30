@@ -1,0 +1,80 @@
+Reactions semantic test generation few-shot example.
+
+This is format guidance only. Every identifier below is synthetic. Replace it
+with runtime slots, metamodel URIs, types, and features from the deterministic
+task contract. Emit no Java, Xtend, Maven files, or prose in the response.
+
+```json file=semantic_cases.json
+{
+  "schemaVersion": "1.0",
+  "testClass": "GeneratedSyntheticPropagationExample",
+  "transformation": "transformations/SyntheticPropagation.reactions",
+  "metamodels": [
+    {"name": "sourceSlot", "uri": "SyntheticSource"},
+    {"name": "targetSlot", "uri": "SyntheticTarget"}
+  ],
+  "tests": [
+    {
+      "name": "renaming_source_updates_corresponding_target",
+      "scenarioKind": "change_propagation",
+      "models": [
+        {
+          "name": "sourceSlot",
+          "kind": "emf",
+          "role": "inout",
+          "path": "models/source.xmi",
+          "generated": true,
+          "metamodelUri": "SyntheticSource"
+        },
+        {
+          "name": "targetSlot",
+          "kind": "emf",
+          "role": "inout",
+          "path": "models/target.xmi",
+          "generated": true,
+          "metamodelUri": "SyntheticTarget"
+        }
+      ],
+      "changes": [
+        {
+          "kind": "set_feature",
+          "target": {
+            "slot": "sourceSlot",
+            "type": "SourceElement",
+            "where": {"name": "before"}
+          },
+          "feature": "name",
+          "value": "after"
+        }
+      ],
+      "assertions": [
+        {
+          "kind": "objects",
+          "model": "targetSlot",
+          "type": "TargetElement",
+          "features": ["label"],
+          "expected": [{"label": "after"}]
+        }
+      ]
+    }
+  ]
+}
+```
+
+```xml file=models/source.xmi
+<?xml version="1.0" encoding="UTF-8"?>
+<src:SourceRoot xmi:version="2.0"
+    xmlns:xmi="http://www.omg.org/XMI"
+    xmlns:src="SyntheticSource">
+  <elements name="before"/>
+</src:SourceRoot>
+```
+
+```xml file=models/target.xmi
+<?xml version="1.0" encoding="UTF-8"?>
+<tgt:TargetRoot xmi:version="2.0"
+    xmlns:xmi="http://www.omg.org/XMI"
+    xmlns:tgt="SyntheticTarget">
+  <elements label="before"/>
+</tgt:TargetRoot>
+```

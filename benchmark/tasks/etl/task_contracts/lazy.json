@@ -1,7 +1,7 @@
 {
   "task": "lazy",
   "transformation": "lazy.etl",
-  "reference": "Test_Generation/Workflows/n8n-docker/mtl_snippets/ETL_test_generation/references/lazy.etl",
+  "reference": "benchmark/tasks/etl/references/lazy.etl",
   "models": [
     {
       "runtimeName": "Flowchart",
@@ -17,7 +17,7 @@
       "kind": "emf",
       "metamodelUri": "flowchart",
       "metamodelNsPrefix": "flowchart",
-      "metamodelFile": "ETL_Test/src/test/resources/metamodels/Flowchart.ecore",
+      "metamodelFile": "benchmark/metamodels/additional_models/ETL_model/Flowchart.ecore",
       "availableTypes": [
         "NamedElement",
         "Flowchart",
@@ -40,7 +40,7 @@
       "kind": "emf",
       "metamodelUri": "HTML",
       "metamodelNsPrefix": "HTML",
-      "metamodelFile": "ETL_Test/src/test/resources/metamodels/HTML.ecore",
+      "metamodelFile": "benchmark/metamodels/additional_models/ETL_model/HTML.ecore",
       "availableTypes": [
         "HTMLElement",
         "DIV",

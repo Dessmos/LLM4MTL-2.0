@@ -2,30 +2,116 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://llm4mtl/schemas/contract.schema.json",
   "title": "Task model contract",
-  "description": "Deterministic ground truth for one task, generated from the .ecore metamodels. Maps runtime model names to metamodel URIs, prefixes, .ecore files and the set of types that exist. GENERATED — must not be hand-edited and must never be overridden by whatever the LLM guessed in semantic_cases.json. Defines structural admissibility only; the reference transformation remains the behavioural oracle.",
-  "type": "object",
-  "required": ["schema_version", "task", "source_hash", "models"],
-  "additionalProperties": false,
-  "properties": {
-    "schema_version": {"type": "string"},
-    "task": {"type": "string"},
-    "transformation": {"type": "string"},
-    "source_hash": {"type": "string", "description": "Hash of the source .ecore metamodels this snapshot was derived from; verified in CI."},
-    "models": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": ["runtime_name", "roles", "kind"],
-        "additionalProperties": false,
-        "properties": {
-          "runtime_name": {"type": "string"},
-          "roles": {"type": "array", "items": {"type": "string", "enum": ["source", "target"]}},
-          "kind": {"type": "string", "enum": ["emf", "plainXml"]},
-          "metamodel_uri": {"type": ["string", "null"]},
-          "metamodel_ns_prefix": {"type": ["string", "null"]},
-          "metamodel_file": {"type": ["string", "null"]},
-          "types_used_in_etl": {"type": "array", "items": {"type": "string"}},
-          "available_types": {"type": "array", "items": {"type": "string"}}
+  "description": "Deterministic structural ground truth for one transformation task. The camelCase representation is the currently persisted benchmark format. The snake_case representation remains accepted for compatibility with the originally published schema.",
+  "oneOf": [
+    {"$ref": "#/$defs/currentContract"},
+    {"$ref": "#/$defs/schemaCompatibilityContract"}
+  ],
+  "$defs": {
+    "role": {
+      "type": "string",
+      "enum": ["source", "target", "inout"]
+    },
+    "currentModel": {
+      "type": "object",
+      "required": ["runtimeName", "roles", "kind"],
+      "additionalProperties": false,
+      "properties": {
+        "runtimeName": {"type": "string", "minLength": 1},
+        "roles": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/role"}
+        },
+        "kind": {"type": "string", "enum": ["emf", "plainXml"]},
+        "metamodelUri": {"type": ["string", "null"]},
+        "metamodelNsPrefix": {"type": ["string", "null"]},
+        "metamodelAlias": {"type": ["string", "null"]},
+        "metamodelFile": {"type": ["string", "null"]},
+        "typesUsedInEtL": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "typesUsedInTransformation": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "availableTypes": {
+          "type": "array",
+          "items": {"type": "string"}
+        }
+      }
+    },
+    "currentContract": {
+      "type": "object",
+      "required": ["task", "transformation", "models"],
+      "additionalProperties": false,
+      "properties": {
+        "schemaVersion": {"type": "string"},
+        "task": {"type": "string", "minLength": 1},
+        "language": {
+          "type": "string",
+          "enum": ["etl", "atl", "qvto", "reactions"]
+        },
+        "transformation": {"type": "string", "minLength": 1},
+        "reference": {"type": "string"},
+        "sourceHash": {"type": "string"},
+        "models": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/currentModel"}
+        },
+        "rules": {
+          "type": "array",
+          "items": {"type": "string"}
+        }
+      }
+    },
+    "schemaCompatibilityModel": {
+      "type": "object",
+      "required": ["runtime_name", "roles", "kind"],
+      "additionalProperties": false,
+      "properties": {
+        "runtime_name": {"type": "string", "minLength": 1},
+        "roles": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/role"}
+        },
+        "kind": {"type": "string", "enum": ["emf", "plainXml"]},
+        "metamodel_uri": {"type": ["string", "null"]},
+        "metamodel_ns_prefix": {"type": ["string", "null"]},
+        "metamodel_alias": {"type": ["string", "null"]},
+        "metamodel_file": {"type": ["string", "null"]},
+        "types_used_in_etl": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "types_used_in_transformation": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "available_types": {
+          "type": "array",
+          "items": {"type": "string"}
+        }
+      }
+    },
+    "schemaCompatibilityContract": {
+      "type": "object",
+      "required": ["schema_version", "task", "source_hash", "models"],
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {"type": "string"},
+        "task": {"type": "string", "minLength": 1},
+        "transformation": {"type": "string"},
+        "source_hash": {"type": "string"},
+        "models": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/schemaCompatibilityModel"}
         }
       }
     }

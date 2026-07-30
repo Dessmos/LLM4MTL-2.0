@@ -1,0 +1,78 @@
+{
+  "schemaVersion": "1.0",
+  "task": "PetriNet2Grafcet_All",
+  "language": "atl",
+  "transformation": "PetriNet2Grafcet_All.atl",
+  "reference": "benchmark/tasks/atl/references/PetriNet2Grafcet_All.atl",
+  "sourceHash": "e7909b15228ac5fe920b51201504adc75c41245dca467827856bf1b9c0684aac",
+  "models": [
+    {
+      "runtimeName": "IN",
+      "roles": [
+        "source"
+      ],
+      "kind": "emf",
+      "metamodelUri": "",
+      "metamodelNsPrefix": "",
+      "metamodelAlias": "PetriNet",
+      "metamodelFile": "benchmark/metamodels/additional_models/ATL_model/PetriNet.ecore",
+      "typesUsedInTransformation": [
+        "PetriNet",
+        "Place",
+        "PlaceToTransition",
+        "Transition",
+        "TransitionToPlace"
+      ],
+      "availableTypes": [
+        "String",
+        "Integer",
+        "LocatedElement",
+        "NamedElement",
+        "PetriNet",
+        "Element",
+        "Place",
+        "Transition",
+        "Arc",
+        "PlaceToTransition",
+        "TransitionToPlace"
+      ]
+    },
+    {
+      "runtimeName": "OUT",
+      "roles": [
+        "target"
+      ],
+      "kind": "emf",
+      "metamodelUri": "",
+      "metamodelNsPrefix": "",
+      "metamodelAlias": "Grafcet",
+      "metamodelFile": "benchmark/metamodels/additional_models/ATL_model/Grafcet.ecore",
+      "typesUsedInTransformation": [
+        "Grafcet",
+        "Step",
+        "StepToTransition",
+        "Transition",
+        "TransitionToStep"
+      ],
+      "availableTypes": [
+        "LocatedElement",
+        "NamedElement",
+        "Grafcet",
+        "Element",
+        "Step",
+        "Transition",
+        "Connection",
+        "StepToTransition",
+        "TransitionToStep",
+        "String",
+        "Boolean"
+      ]
+    }
+  ],
+  "rules": [
+    "semantic_cases model slots must map to runtimeName exactly.",
+    "EMF namespace URIs and prefixes come only from this contract.",
+    "Assertions and declarative changes may use only availableTypes.",
+    "The reference transformation remains the behavioural oracle."
+  ]
+}

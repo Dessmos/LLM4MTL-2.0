@@ -15,11 +15,11 @@
     {
       "parameters": {
         "promptType": "define",
-        "text": "=Here is the code:\n\n{{ $json.data }}\n—\nGenerate the original developer request that would have produced\nthat code, following the rules in the system message.\n\nHere are the models:\n{{ $json.concatenated_model }}\n\nHere is the grammar:\n{{ $json.grammar }}\n\n",
+        "text": "=Task name: {{ $json.task }}\n\nReference transformation (authoritative):\nFile: {{ $json.reference.path }}\n{{ $json.reference.content }}\n\nExact task-specific metamodel files selected by the task contract:\n{{ $json.metamodel_text || '(no external metamodel file is required by the task contract)' }}\n\nATLAS Transformation Language (ATL) grammar:\n{{ $json.grammar.content }}\n\nReconstruct the concise natural-language developer request that could have produced this reference transformation. Preserve the task's observable intent and explicitly name its transformation rules, mappings, or reactions. Do not generate code or tests. Do not add facts that are absent from these inputs. Keep the request under 100 words.\n\nDescribe the source-to-target transformation intent at a high level without metamodel-qualified type prefixes.\n\nReturn only the task prompt text.",
         "messages": {
           "messageValues": [
             {
-              "message": "=You are acting as a senior developer who knows the Model Transformation Language: **ATLAS Transformation Language (ATL)** inside out.\n\nYour task is to reconstruct the NATURAL-LANGUAGE request that could have produced the code shown in the next message, as if a developer were asking an AI assistant to generate that code.\n\nRules\n\n1. You MUST explicitly state the module, transformation, and rule names.\n2. You MUST describe the intent at a high abstraction level.\n3. DO NOT use metamodel prefixes like 'source::Class'; just say 'Class' in context.\n4. DO NOT mention technical terms like 'lazy rule' or 'matched rule'; instead, describe what the rule achieves conceptually.\n5. When helper functions are involved, explicitly name them.\n6. Write in the developer-to-AI voice, e.g., 'Create a transformation module that maps…'\n7. Keep the request under **100 words**."
+              "message": "You reconstruct one reusable natural-language task prompt for ATLAS Transformation Language (ATL). The same reviewed prompt will be used for transformation generation and semantic-test generation. Use only the current reference, its task-contract-selected metamodels, the grammar, and the task name. Do not generate either artifact here."
             }
           ]
         },
@@ -36,7 +36,7 @@
     },
     {
       "parameters": {
-        "fileSelector": "=/data/snippets/ATLAS_transformation_language/references/*",
+        "fileSelector": "=/data/benchmark/tasks/atl/references/*.atl",
         "options": {}
       },
       "type": "n8n-nodes-base.readWriteFile",
@@ -68,7 +68,7 @@
     {
       "parameters": {
         "operation": "write",
-        "fileName": "=/data/artifacts/transformation_generation/atl/prompts/gpt-5-chat-latest/{{ $node[\"Save reaction name\"].json.baseName }}.txt",
+        "fileName": "=/data/artifacts/task_prompt_candidates/atl/gpt-5-chat-latest/{{ $node[\"Save reaction name\"].json.baseName }}.txt",
         "dataPropertyName": "={{ $('Generate Prompt from Input').item.json.text }}",
         "options": {
           "append": false
@@ -82,21 +82,6 @@
       ],
       "id": "0d43ae25-e127-4eb9-9e70-f8719c730c38",
       "name": "Write prompt to disk"
-    },
-    {
-      "parameters": {
-        "operation": "text",
-        "options": {}
-      },
-      "type": "n8n-nodes-base.extractFromFile",
-      "typeVersion": 1,
-      "position": [
-        -1664,
-        368
-      ],
-      "id": "dd8b465c-ec7a-45b5-8d14-bb597747c202",
-      "name": "Extract text from reference file",
-      "alwaysOutputData": false
     },
     {
       "parameters": {
@@ -136,65 +121,6 @@
     },
     {
       "parameters": {
-        "fileSelector": "/data/grammar/atl/EBNF.txt",
-        "options": {}
-      },
-      "type": "n8n-nodes-base.readWriteFile",
-      "typeVersion": 1,
-      "position": [
-        -1824,
-        496
-      ],
-      "id": "cb1ff25c-9bc6-48d5-b9bd-b15856aac276",
-      "name": "Read Grammar"
-    },
-    {
-      "parameters": {
-        "operation": "text",
-        "destinationKey": "grammar",
-        "options": {}
-      },
-      "type": "n8n-nodes-base.extractFromFile",
-      "typeVersion": 1,
-      "position": [
-        -1504,
-        496
-      ],
-      "id": "766fd643-8fc0-4f3a-bb6a-bd65028f519d",
-      "name": "Extract text from grammar"
-    },
-    {
-      "parameters": {
-        "fileSelector": "=/data/models/*.ecore",
-        "options": {}
-      },
-      "type": "n8n-nodes-base.readWriteFile",
-      "typeVersion": 1,
-      "position": [
-        -1824,
-        128
-      ],
-      "id": "d66ddc77-a910-4d73-a472-ef213e8c582b",
-      "name": "Read model files",
-      "alwaysOutputData": true
-    },
-    {
-      "parameters": {
-        "operation": "text",
-        "destinationKey": "model",
-        "options": {}
-      },
-      "type": "n8n-nodes-base.extractFromFile",
-      "typeVersion": 1,
-      "position": [
-        -1648,
-        128
-      ],
-      "id": "73c09d92-6976-4ae1-b7fa-1c364cfdb418",
-      "name": "Extract text from model files"
-    },
-    {
-      "parameters": {
         "model": {
           "__rl": true,
           "value": "gpt-5-chat-latest",
@@ -222,48 +148,21 @@
     },
     {
       "parameters": {
-        "fieldsToSummarize": {
-          "values": [
-            {
-              "aggregation": "concatenate",
-              "field": "model",
-              "separateBy": "\n"
-            },
-            {
-              "aggregation": "concatenate",
-              "field": "model",
-              "includeEmpty": "=",
-              "separateBy": "\n"
-            }
-          ]
-        },
+        "method": "POST",
+        "url": "http://stage-service:8129/prompt-inputs/resolve",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { language: 'atl', task: $json.baseName } }}",
         "options": {}
       },
-      "type": "n8n-nodes-base.summarize",
-      "typeVersion": 1.1,
+      "id": "resolve-exact-task-inputs-atl",
+      "name": "Resolve exact task inputs",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
       "position": [
-        -1472,
-        128
-      ],
-      "id": "22008db2-f0b4-4e1d-9467-9eda0ddedda7",
-      "name": "Summarize"
-    },
-    {
-      "parameters": {
-        "mode": "combine",
-        "combineBy": "combineByPosition",
-        "numberInputs": 3,
-        "options": {}
-      },
-      "type": "n8n-nodes-base.merge",
-      "typeVersion": 3.2,
-      "position": [
-        -1344,
-        304
-      ],
-      "id": "25cb1b71-9cae-40d3-be33-d63e7a73c589",
-      "name": "Merge models, reference and grammar",
-      "alwaysOutputData": true
+        -1376,
+        272
+      ]
     }
   ],
   "pinData": {},
@@ -273,17 +172,6 @@
         [
           {
             "node": "Read reference file",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Generate Prompt from Input": {
-      "main": [
-        [
-          {
-            "node": "Convert prompt to file",
             "type": "main",
             "index": 0
           }
@@ -301,39 +189,6 @@
         ]
       ]
     },
-    "Convert prompt to file": {
-      "main": [
-        [
-          {
-            "node": "Write prompt to disk",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Extract text from reference file": {
-      "main": [
-        [
-          {
-            "node": "Merge models, reference and grammar",
-            "type": "main",
-            "index": 1
-          }
-        ]
-      ]
-    },
-    "Save reaction name": {
-      "main": [
-        [
-          {
-            "node": "Extract text from reference file",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "Loop Over Items": {
       "main": [
         [],
@@ -342,74 +197,37 @@
             "node": "Save reaction name",
             "type": "main",
             "index": 0
-          },
+          }
+        ]
+      ]
+    },
+    "Save reaction name": {
+      "main": [
+        [
           {
-            "node": "Extract text from reference file",
-            "type": "main",
-            "index": 0
-          },
-          {
-            "node": "Read model files",
-            "type": "main",
-            "index": 0
-          },
-          {
-            "node": "Read Grammar",
+            "node": "Resolve exact task inputs",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Read Grammar": {
+    "Resolve exact task inputs": {
       "main": [
         [
           {
-            "node": "Extract text from grammar",
+            "node": "Generate Prompt from Input",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Extract text from grammar": {
+    "Generate Prompt from Input": {
       "main": [
         [
           {
-            "node": "Merge models, reference and grammar",
-            "type": "main",
-            "index": 2
-          }
-        ]
-      ]
-    },
-    "Write prompt to disk": {
-      "main": [
-        [
-          {
-            "node": "Loop Over Items",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Read model files": {
-      "main": [
-        [
-          {
-            "node": "Extract text from model files",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Extract text from model files": {
-      "main": [
-        [
-          {
-            "node": "Summarize",
+            "node": "Convert prompt to file",
             "type": "main",
             "index": 0
           }
@@ -427,22 +245,22 @@
         ]
       ]
     },
-    "Summarize": {
+    "Convert prompt to file": {
       "main": [
         [
           {
-            "node": "Merge models, reference and grammar",
+            "node": "Write prompt to disk",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Merge models, reference and grammar": {
+    "Write prompt to disk": {
       "main": [
         [
           {
-            "node": "Generate Prompt from Input",
+            "node": "Loop Over Items",
             "type": "main",
             "index": 0
           }

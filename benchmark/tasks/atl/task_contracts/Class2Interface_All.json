@@ -1,0 +1,60 @@
+{
+  "schemaVersion": "1.0",
+  "task": "Class2Interface_All",
+  "language": "atl",
+  "transformation": "Class2Interface_All.atl",
+  "reference": "benchmark/tasks/atl/references/Class2Interface_All.atl",
+  "sourceHash": "67b227680de780e921570a96f880506a765e1e2d4b2a47f7d67658c6763373f6",
+  "models": [
+    {
+      "runtimeName": "IN",
+      "roles": [
+        "source"
+      ],
+      "kind": "emf",
+      "metamodelUri": "http://vitruv.tools/methodologisttemplate/class",
+      "metamodelNsPrefix": "class",
+      "metamodelAlias": "Class",
+      "metamodelFile": "benchmark/metamodels/additional_models/ATL_model/Class.ecore",
+      "typesUsedInTransformation": [
+        "Class",
+        "Method",
+        "Parameter"
+      ],
+      "availableTypes": [
+        "ClassModel",
+        "Class",
+        "Method",
+        "Parameter"
+      ]
+    },
+    {
+      "runtimeName": "OUT",
+      "roles": [
+        "target"
+      ],
+      "kind": "emf",
+      "metamodelUri": "http://vitruv.tools/methodologisttemplate/interface",
+      "metamodelNsPrefix": "interface",
+      "metamodelAlias": "Interface",
+      "metamodelFile": "benchmark/metamodels/additional_models/ATL_model/Interface.ecore",
+      "typesUsedInTransformation": [
+        "Interface",
+        "Method",
+        "Parameter"
+      ],
+      "availableTypes": [
+        "InterfaceModel",
+        "Interface",
+        "Method",
+        "Parameter"
+      ]
+    }
+  ],
+  "rules": [
+    "semantic_cases model slots must map to runtimeName exactly.",
+    "EMF namespace URIs and prefixes come only from this contract.",
+    "Assertions and declarative changes may use only availableTypes.",
+    "The reference transformation remains the behavioural oracle."
+  ]
+}

@@ -1,0 +1,75 @@
+{
+  "schemaVersion": "1.0",
+  "task": "AmaltheaToAscet_TaskCreated",
+  "language": "reactions",
+  "transformation": "AmaltheaToAscet_TaskCreated.reactions",
+  "reference": "benchmark/tasks/reactions/references/AmaltheaToAscet_TaskCreated.reactions",
+  "sourceHash": "bb13853c2df2bce2911ebc81b3c9c9ca72de8dfc451dc875f878847e4d0688f9",
+  "models": [
+    {
+      "runtimeName": "ascet",
+      "roles": [
+        "inout"
+      ],
+      "kind": "emf",
+      "metamodelUri": "http://vitruv.tools/methodologisttemplate/ascet",
+      "metamodelNsPrefix": "ascet",
+      "metamodelAlias": "ascet",
+      "metamodelFile": "benchmark/metamodels/additional_models/Reaction_model/ascet.ecore",
+      "typesUsedInTransformation": [
+        "AscetModule",
+        "InterruptTask",
+        "PeriodicTask",
+        "SoftwareTask",
+        "TimeTableTask"
+      ],
+      "availableTypes": [
+        "AscetModule",
+        "Named",
+        "Task",
+        "Method",
+        "InterruptTask",
+        "InitTask",
+        "PeriodicTask",
+        "SoftwareTask",
+        "TimeTableTask"
+      ]
+    },
+    {
+      "runtimeName": "amalthea",
+      "roles": [
+        "inout"
+      ],
+      "kind": "emf",
+      "metamodelUri": "http://vitruv.tools/methodologisttemplate/amalthea",
+      "metamodelNsPrefix": "amalthea",
+      "metamodelAlias": "amalthea",
+      "metamodelFile": "benchmark/metamodels/additional_models/Reaction_model/amalthea.ecore",
+      "typesUsedInTransformation": [
+        "ComponentContainer",
+        "Task"
+      ],
+      "availableTypes": [
+        "ComponentContainer",
+        "Process",
+        "ISR",
+        "Task",
+        "Runnable",
+        "TaskRunnableCall",
+        "LabelSwitch",
+        "Label",
+        "ProbabilitySwitchEntry",
+        "CallGraphEntry",
+        "GraphEntryEntry",
+        "CallSequence",
+        "CallSequenceEntry"
+      ]
+    }
+  ],
+  "rules": [
+    "semantic_cases model slots must map to runtimeName exactly.",
+    "EMF namespace URIs and prefixes come only from this contract.",
+    "Assertions and declarative changes may use only availableTypes.",
+    "The reference transformation remains the behavioural oracle."
+  ]
+}

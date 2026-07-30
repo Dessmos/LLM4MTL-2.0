@@ -1,0 +1,30 @@
+-- ATL transformation module to convert Document models to Report models.
+-- Simple transformation: maps documents to reports with sections.
+module Document2Report_All;
+
+create OUT : Report from IN : Document;
+
+-- Rule to transform a Document into a Report.
+rule Document2Report {
+  from
+    d : Document!Document
+  to
+    r : Report!Report (
+      title <- d.title,
+      author <- d.author,
+      sections <- d.sections
+    )
+}
+
+-- Rule to transform a Section from Document to Report.
+rule Section2Section {
+  from
+    s : Document!Section
+  to
+    rs : Report!Section (
+      title <- s.title,
+      content <- s.content,
+      order <- s.order
+    )
+}
+

@@ -1,0 +1,95 @@
+{
+  "schemaVersion": "1.0",
+  "task": "DSL2KM3_All",
+  "language": "atl",
+  "transformation": "DSL2KM3_All.atl",
+  "reference": "benchmark/tasks/atl/references/DSL2KM3_All.atl",
+  "sourceHash": "6b2003eab7df7ddfe7b7528951a6e1c365f6dcb34e8da4302628917050967c71",
+  "models": [
+    {
+      "runtimeName": "IN",
+      "roles": [
+        "source"
+      ],
+      "kind": "emf",
+      "metamodelUri": "DSL",
+      "metamodelNsPrefix": "DSL",
+      "metamodelAlias": "DSL",
+      "metamodelFile": "benchmark/metamodels/additional_models/ATL_model/DSL.ecore",
+      "typesUsedInTransformation": [
+        "Class",
+        "DomainModel",
+        "Enumeration",
+        "EnumerationLiteral",
+        "Relationship",
+        "Role",
+        "SimpleType",
+        "ValueProperty"
+      ],
+      "availableTypes": [
+        "NamedElement",
+        "LoadedElement",
+        "Namespace",
+        "DomainModel",
+        "Classifier",
+        "Class",
+        "Relationship",
+        "Role",
+        "ValueProperty",
+        "Type",
+        "SimpleType",
+        "EnumerationLiteral",
+        "Enumeration",
+        "Boolean",
+        "Integer",
+        "String"
+      ]
+    },
+    {
+      "runtimeName": "OUT",
+      "roles": [
+        "target"
+      ],
+      "kind": "emf",
+      "metamodelUri": "KM3",
+      "metamodelNsPrefix": "KM3",
+      "metamodelAlias": "KM3",
+      "metamodelFile": "benchmark/metamodels/additional_models/ATL_model/KM3.ecore",
+      "typesUsedInTransformation": [
+        "Attribut",
+        "Attribute",
+        "Class",
+        "DataType",
+        "Datatype",
+        "EnumLiteral",
+        "Enumeration",
+        "Metamodel",
+        "Package",
+        "Reference"
+      ],
+      "availableTypes": [
+        "LocatedElement",
+        "ModelElement",
+        "Classifier",
+        "DataType",
+        "Enumeration",
+        "EnumLiteral",
+        "Class",
+        "StructuralFeature",
+        "Attribute",
+        "Reference",
+        "Package",
+        "Metamodel",
+        "Boolean",
+        "Integer",
+        "String"
+      ]
+    }
+  ],
+  "rules": [
+    "semantic_cases model slots must map to runtimeName exactly.",
+    "EMF namespace URIs and prefixes come only from this contract.",
+    "Assertions and declarative changes may use only availableTypes.",
+    "The reference transformation remains the behavioural oracle."
+  ]
+}

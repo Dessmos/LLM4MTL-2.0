@@ -1,0 +1,95 @@
+{
+  "schemaVersion": "1.0",
+  "task": "BibTeX2DocBook_All",
+  "language": "atl",
+  "transformation": "BibTeX2DocBook_All.atl",
+  "reference": "benchmark/tasks/atl/references/BibTeX2DocBook_All.atl",
+  "sourceHash": "cb2eaea144eaadb33f4c446c818ab9a2d931b915ee9dc2d2bc38833967f0318d",
+  "models": [
+    {
+      "runtimeName": "IN",
+      "roles": [
+        "source"
+      ],
+      "kind": "emf",
+      "metamodelUri": "",
+      "metamodelNsPrefix": "",
+      "metamodelAlias": "BibTeX",
+      "metamodelFile": "benchmark/metamodels/additional_models/ATL_model/BibTeX.ecore",
+      "typesUsedInTransformation": [
+        "Article",
+        "Author",
+        "AuthoredEntry",
+        "BibTeXEntry",
+        "BibTeXFile",
+        "Book",
+        "BookTitledEntry",
+        "DatedEntry",
+        "InBook",
+        "ThesisEntry",
+        "TitledEntry",
+        "Unpublished"
+      ],
+      "availableTypes": [
+        "String",
+        "Integer",
+        "BibTeXFile",
+        "Author",
+        "BibTeXEntry",
+        "AuthoredEntry",
+        "DatedEntry",
+        "TitledEntry",
+        "BookTitledEntry",
+        "Article",
+        "TechReport",
+        "Unpublished",
+        "Manual",
+        "Proceedings",
+        "InProceedings",
+        "Booklet",
+        "Book",
+        "InCollection",
+        "InBook",
+        "Misc",
+        "ThesisEntry",
+        "PhDThesis",
+        "MasterThesis"
+      ]
+    },
+    {
+      "runtimeName": "OUT",
+      "roles": [
+        "target"
+      ],
+      "kind": "emf",
+      "metamodelUri": "",
+      "metamodelNsPrefix": "",
+      "metamodelAlias": "DocBook",
+      "metamodelFile": "benchmark/metamodels/additional_models/ATL_model/DocBook.ecore",
+      "typesUsedInTransformation": [
+        "Article",
+        "Book",
+        "DocBook",
+        "Para",
+        "Sect1"
+      ],
+      "availableTypes": [
+        "DocBook",
+        "Book",
+        "TitledElement",
+        "Article",
+        "Section",
+        "Sect1",
+        "Sect2",
+        "Para",
+        "String"
+      ]
+    }
+  ],
+  "rules": [
+    "semantic_cases model slots must map to runtimeName exactly.",
+    "EMF namespace URIs and prefixes come only from this contract.",
+    "Assertions and declarative changes may use only availableTypes.",
+    "The reference transformation remains the behavioural oracle."
+  ]
+}

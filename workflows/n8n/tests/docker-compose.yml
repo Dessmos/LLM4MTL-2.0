@@ -9,31 +9,30 @@ services:
       - TZ=Europe/Berlin
       - N8N_SECURE_COOKIE=false
       - N8N_RESTRICT_FILE_ACCESS_TO=/data
+    depends_on:
+      - stage-service
     volumes:
       # Keep this test-generation n8n instance separate from the baseline n8n.
       - n8n_test_generation_data:/home/node/.n8n
 
-      # Test-generation workflow workspace. v5 migration (Stage 3): prompt material
-      # moved to prompt_assets/ and metamodels to benchmark/; container paths unchanged.
+      # Importable workflows and generated LLM prompts/responses.
       - "./workflows:/data/workflows:ro"
-      - "./mtl_snippets:/data/snippets:ro"
-      # Generated prompt drafts, prompts, and model responses.
       - "../../../artifacts/work:/data/artifacts"
-      # v5 migration (Stage 3): references + task_contracts moved to benchmark/tasks/etl;
-      # nested-mounted back to their container paths so n8n draft workflows keep working.
-      - "../../../benchmark/tasks/etl/references:/data/snippets/ETL_test_generation/references:ro"
-      - "../../../benchmark/tasks/etl/task_contracts:/data/snippets/ETL_test_generation/task_contracts:ro"
+      - "../../../prompt_assets/task_prompts:/data/task_prompts:ro"
+
+      # Reference names enumerate tasks; the stage service resolves the matching
+      # contract and exact metamodel files from its read-only repository view.
+      - "../../../benchmark/tasks:/data/benchmark/tasks:ro"
       - "../../../prompt_assets/tests/few_shot:/data/examples:ro"
       - "../../../prompt_assets/tests/grammar:/data/grammar:ro"
       - "../../../prompt_assets/diagnosis:/data/diagnosis_prompts:ro"
-      # Workflows select /data/models/etl/*.ecore, so preserve the language level.
-      - "../../../benchmark/metamodels:/data/models:ro"
 
-      # Baseline ETL artifacts used as read-only prompt context.
-      # v5 migration: engines moved to engines/<lang>/{parser,harness}; container
-      # paths (/data/baseline/...) are kept so n8n File nodes are unchanged.
-      - "../../../engines/etl/harness/src/test/resources:/data/baseline/ETL_Test/resources:ro"
-      - "../../../engines/etl/parser/src/main/resources:/data/baseline/ETL_Parser/resources:ro"
+  stage-service:
+    build:
+      context: ../../..
+      dockerfile: pipeline/stage_service/Dockerfile
+    volumes:
+      - ../../..:/app
 
 volumes:
   n8n_test_generation_data:

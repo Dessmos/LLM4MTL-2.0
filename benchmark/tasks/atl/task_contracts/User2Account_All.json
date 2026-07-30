@@ -1,0 +1,52 @@
+{
+  "schemaVersion": "1.0",
+  "task": "User2Account_All",
+  "language": "atl",
+  "transformation": "User2Account_All.atl",
+  "reference": "benchmark/tasks/atl/references/User2Account_All.atl",
+  "sourceHash": "32eee3ac05ebe64dd3655ec1611d4b58ee4edf08b520c9267a2d56cbef02c04c",
+  "models": [
+    {
+      "runtimeName": "IN",
+      "roles": [
+        "source"
+      ],
+      "kind": "emf",
+      "metamodelUri": "http://vitruv.tools/methodologisttemplate/user",
+      "metamodelNsPrefix": "user",
+      "metamodelAlias": "User",
+      "metamodelFile": "benchmark/metamodels/additional_models/ATL_model/User.ecore",
+      "typesUsedInTransformation": [
+        "User"
+      ],
+      "availableTypes": [
+        "UserModel",
+        "User"
+      ]
+    },
+    {
+      "runtimeName": "OUT",
+      "roles": [
+        "target"
+      ],
+      "kind": "emf",
+      "metamodelUri": "http://vitruv.tools/methodologisttemplate/account",
+      "metamodelNsPrefix": "account",
+      "metamodelAlias": "Account",
+      "metamodelFile": "benchmark/metamodels/additional_models/ATL_model/Account.ecore",
+      "typesUsedInTransformation": [
+        "Account"
+      ],
+      "availableTypes": [
+        "AccountModel",
+        "Account"
+      ]
+    }
+  ],
+  "rules": [
+    "semantic_cases model slots must map to runtimeName exactly.",
+    "EMF namespace URIs and prefixes come only from this contract.",
+    "Assertions and declarative changes may use only availableTypes.",
+    "The reference transformation remains the behavioural oracle."
+  ]
+}

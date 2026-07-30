@@ -1,0 +1,58 @@
+{
+  "schemaVersion": "1.0",
+  "task": "FamiliesToPersons_CreatedFather",
+  "language": "reactions",
+  "transformation": "FamiliesToPersons_CreatedFather.reactions",
+  "reference": "benchmark/tasks/reactions/references/FamiliesToPersons_CreatedFather.reactions",
+  "sourceHash": "43b9e413653b2b1c86dbaaf9939fc7acc6173148a878f5b0c722299a5daeba83",
+  "models": [
+    {
+      "runtimeName": "families",
+      "roles": [
+        "inout"
+      ],
+      "kind": "emf",
+      "metamodelUri": "http://vitruv.tools/methodologisttemplate/families",
+      "metamodelNsPrefix": "families",
+      "metamodelAlias": "families",
+      "metamodelFile": "benchmark/metamodels/additional_models/Reaction_model/families.ecore",
+      "typesUsedInTransformation": [
+        "Family",
+        "Member"
+      ],
+      "availableTypes": [
+        "FamilyRegister",
+        "Family",
+        "Member"
+      ]
+    },
+    {
+      "runtimeName": "persons",
+      "roles": [
+        "inout"
+      ],
+      "kind": "emf",
+      "metamodelUri": "http://vitruv.tools/methodologisttemplate/persons",
+      "metamodelNsPrefix": "persons",
+      "metamodelAlias": "persons",
+      "metamodelFile": "benchmark/metamodels/additional_models/Reaction_model/persons.ecore",
+      "typesUsedInTransformation": [
+        "Male",
+        "Person",
+        "PersonRegister"
+      ],
+      "availableTypes": [
+        "PersonRegister",
+        "Person",
+        "Male",
+        "Female"
+      ]
+    }
+  ],
+  "rules": [
+    "semantic_cases model slots must map to runtimeName exactly.",
+    "EMF namespace URIs and prefixes come only from this contract.",
+    "Assertions and declarative changes may use only availableTypes.",
+    "The reference transformation remains the behavioural oracle."
+  ]
+}

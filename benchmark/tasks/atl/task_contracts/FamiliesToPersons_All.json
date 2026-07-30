@@ -1,0 +1,56 @@
+{
+  "schemaVersion": "1.0",
+  "task": "FamiliesToPersons_All",
+  "language": "atl",
+  "transformation": "FamiliesToPersons_All.atl",
+  "reference": "benchmark/tasks/atl/references/FamiliesToPersons_All.atl",
+  "sourceHash": "01aa0a7e7f882ffbfcb08dd255825d4a1bbd85fe0292d554099a8e6dc43c9369",
+  "models": [
+    {
+      "runtimeName": "IN",
+      "roles": [
+        "source"
+      ],
+      "kind": "emf",
+      "metamodelUri": "http://vitruv.tools/reactionsparser/families",
+      "metamodelNsPrefix": "families",
+      "metamodelAlias": "Families",
+      "metamodelFile": "benchmark/metamodels/additional_models/ATL_model/families.ecore",
+      "typesUsedInTransformation": [
+        "Member"
+      ],
+      "availableTypes": [
+        "FamilyRegister",
+        "Family",
+        "Member"
+      ]
+    },
+    {
+      "runtimeName": "OUT",
+      "roles": [
+        "target"
+      ],
+      "kind": "emf",
+      "metamodelUri": "http://vitruv.tools/reactionsparser/persons",
+      "metamodelNsPrefix": "persons",
+      "metamodelAlias": "Persons",
+      "metamodelFile": "benchmark/metamodels/additional_models/ATL_model/persons.ecore",
+      "typesUsedInTransformation": [
+        "Female",
+        "Male"
+      ],
+      "availableTypes": [
+        "PersonRegister",
+        "Person",
+        "Male",
+        "Female"
+      ]
+    }
+  ],
+  "rules": [
+    "semantic_cases model slots must map to runtimeName exactly.",
+    "EMF namespace URIs and prefixes come only from this contract.",
+    "Assertions and declarative changes may use only availableTypes.",
+    "The reference transformation remains the behavioural oracle."
+  ]
+}

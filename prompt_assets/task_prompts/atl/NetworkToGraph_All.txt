@@ -1,0 +1,9 @@
+Create an ATL transformation module named `NetworkToGraph_All` that transforms a `Network` model into a `Graph` model.
+
+Define a transformation header `create OUT : Graph from IN : Network;`.
+
+Add a rule `Component2Entity` that, for each `Component`, produces a single `Entity` whose `name` copies the component’s `name`. This rule should be reusable so that the same `Component` always maps to the same `Entity`.
+
+Add a rule `System2Root` that maps each `System` to a `Root`, whose `entities` collection is built from all its `components` via `Component2Entity`.
+
+Add a rule `Link2Link` that maps each `Link` to a `Link`, whose `Entitys` references are the mapped `Entity` instances corresponding to its `components`, again via `Component2Entity`.+

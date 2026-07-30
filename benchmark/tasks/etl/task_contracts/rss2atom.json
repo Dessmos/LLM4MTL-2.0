@@ -1,7 +1,7 @@
 {
   "task": "rss2atom",
   "transformation": "rss2atom.etl",
-  "reference": "Test_Generation/Workflows/n8n-docker/mtl_snippets/ETL_test_generation/references/rss2atom.etl",
+  "reference": "benchmark/tasks/etl/references/rss2atom.etl",
   "models": [
     {
       "runtimeName": "Atom",

@@ -1,0 +1,81 @@
+{
+  "schemaVersion": "1.0",
+  "task": "XML2DSL_All",
+  "language": "atl",
+  "transformation": "XML2DSL_All.atl",
+  "reference": "benchmark/tasks/atl/references/XML2DSL_All.atl",
+  "sourceHash": "d8e5a2e3a2b09b6b57c415ad00e2c74e27a42febaac2499618192729b98a6308",
+  "models": [
+    {
+      "runtimeName": "IN",
+      "roles": [
+        "source"
+      ],
+      "kind": "emf",
+      "metamodelUri": "",
+      "metamodelNsPrefix": "",
+      "metamodelAlias": "XML",
+      "metamodelFile": "benchmark/metamodels/additional_models/ATL_model/XML.ecore",
+      "typesUsedInTransformation": [
+        "Attribute",
+        "Element",
+        "Text"
+      ],
+      "availableTypes": [
+        "Boolean",
+        "Integer",
+        "String",
+        "Node",
+        "Attribute",
+        "Text",
+        "Element",
+        "Root"
+      ]
+    },
+    {
+      "runtimeName": "OUT",
+      "roles": [
+        "target"
+      ],
+      "kind": "emf",
+      "metamodelUri": "DSL",
+      "metamodelNsPrefix": "DSL",
+      "metamodelAlias": "DSL",
+      "metamodelFile": "benchmark/metamodels/additional_models/ATL_model/DSL.ecore",
+      "typesUsedInTransformation": [
+        "Class",
+        "DomainModel",
+        "Enumeration",
+        "EnumerationLiteral",
+        "Relationship",
+        "Role",
+        "SimpleType",
+        "ValueProperty"
+      ],
+      "availableTypes": [
+        "NamedElement",
+        "LoadedElement",
+        "Namespace",
+        "DomainModel",
+        "Classifier",
+        "Class",
+        "Relationship",
+        "Role",
+        "ValueProperty",
+        "Type",
+        "SimpleType",
+        "EnumerationLiteral",
+        "Enumeration",
+        "Boolean",
+        "Integer",
+        "String"
+      ]
+    }
+  ],
+  "rules": [
+    "semantic_cases model slots must map to runtimeName exactly.",
+    "EMF namespace URIs and prefixes come only from this contract.",
+    "Assertions and declarative changes may use only availableTypes.",
+    "The reference transformation remains the behavioural oracle."
+  ]
+}

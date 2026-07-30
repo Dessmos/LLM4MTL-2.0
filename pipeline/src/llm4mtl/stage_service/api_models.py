@@ -53,6 +53,15 @@ class StageRunRequest(BaseModel):
     verbose: bool = False
 
 
+class PromptInputsRequest(BaseModel):
+    """Identity of the task whose exact prompt inputs must be resolved."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    language: Language
+    task: str = Field(min_length=1, pattern=r"^[A-Za-z0-9._-]+$")
+
+
 class DiagnosisRecordRequest(BaseModel):
     """Normalized failure diagnosis returned by an n8n LLM node."""
 

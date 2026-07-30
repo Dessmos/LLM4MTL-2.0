@@ -84,7 +84,10 @@ def build_metadata(
     workflow_path = (
         n8n_workflows_root(config)
         / "test_generation"
-        / f"Prompting_tests_{config.language}_{target.llm}_{target.strategy}.json"
+        / (
+            f"Prompting_tests_{config.workflow_language}_"
+            f"{target.llm}_{target.strategy}.json"
+        )
     )
     return {
         "language": adapter.language_id,

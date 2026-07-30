@@ -1,0 +1,117 @@
+{
+  "schemaVersion": "1.0",
+  "task": "Make2Ant_All",
+  "language": "atl",
+  "transformation": "Make2Ant_All.atl",
+  "reference": "benchmark/tasks/atl/references/Make2Ant_All.atl",
+  "sourceHash": "d0d7efbd134d414305161fb2b3bcef710c1771a28c28df956395a2bfeee0281d",
+  "models": [
+    {
+      "runtimeName": "IN",
+      "roles": [
+        "source"
+      ],
+      "kind": "emf",
+      "metamodelUri": "",
+      "metamodelNsPrefix": "",
+      "metamodelAlias": "Make",
+      "metamodelFile": "benchmark/metamodels/additional_models/ATL_model/Make.ecore",
+      "typesUsedInTransformation": [
+        "Macro",
+        "Makefile",
+        "Rule",
+        "RuleDep",
+        "ShellLine"
+      ],
+      "availableTypes": [
+        "String",
+        "Date",
+        "Boolean",
+        "Makefile",
+        "Element",
+        "Rule",
+        "Macro",
+        "ShellLine",
+        "Comment",
+        "Dependency",
+        "RuleDep",
+        "FileDep"
+      ]
+    },
+    {
+      "runtimeName": "OUT",
+      "roles": [
+        "target"
+      ],
+      "kind": "emf",
+      "metamodelUri": "",
+      "metamodelNsPrefix": "",
+      "metamodelAlias": "Ant",
+      "metamodelFile": "benchmark/metamodels/additional_models/ATL_model/Ant.ecore",
+      "typesUsedInTransformation": [
+        "Echo",
+        "Exec",
+        "Project",
+        "PropertyValue",
+        "Target"
+      ],
+      "availableTypes": [
+        "Project",
+        "Property",
+        "PropertyName",
+        "PropertyValue",
+        "PropertyLocation",
+        "PropertyFile",
+        "PropertyEnv",
+        "Target",
+        "Pattern",
+        "Basic",
+        "Mapper",
+        "InExcludes",
+        "Includes",
+        "Excludes",
+        "IncludesFile",
+        "ExcludesFile",
+        "FileList",
+        "Filter",
+        "FiltersFile",
+        "PathElement",
+        "Set",
+        "PatternSet",
+        "FileSet",
+        "FilterSet",
+        "Path",
+        "ClassPath",
+        "Task",
+        "TaskDef",
+        "NewTask",
+        "Attribut",
+        "PreDefinedTask",
+        "ExecutionTask",
+        "Exec",
+        "Java",
+        "MiscellaneousTask",
+        "Echo",
+        "Tstamp",
+        "FormatTstamp",
+        "CompileTask",
+        "Javac",
+        "DocumentationTask",
+        "Javadoc",
+        "ArchiveTask",
+        "Jar",
+        "FileTask",
+        "Mkdir",
+        "Copy",
+        "Delete",
+        "String"
+      ]
+    }
+  ],
+  "rules": [
+    "semantic_cases model slots must map to runtimeName exactly.",
+    "EMF namespace URIs and prefixes come only from this contract.",
+    "Assertions and declarative changes may use only availableTypes.",
+    "The reference transformation remains the behavioural oracle."
+  ]
+}

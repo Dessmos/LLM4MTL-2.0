@@ -2,15 +2,32 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 from llm4mtl.semantic_tests.semantic_spec import default_transformation, effective_models
 
 
-def normalize_schema_variants(spec: dict[str, Any], target_task: str) -> dict[str, Any]:
+def normalize_schema_variants(
+    spec: dict[str, Any],
+    target_task: str,
+    *,
+    transformation_extension: str = ".etl",
+) -> dict[str, Any]:
     normalized = dict(spec)
+    schema_version = normalized.pop(
+        "schema_version",
+        normalized.get("schemaVersion", 1),
+    )
+    if isinstance(schema_version, str) and schema_version in {"1", "1.0"}:
+        schema_version = 1
+    normalized["schemaVersion"] = schema_version
     raw_metamodels = normalized.get("metamodels", [])
-    normalized["transformation"] = normalize_transformation(normalized.get("transformation"), target_task)
+    normalized["transformation"] = normalize_transformation(
+        normalized.get("transformation"),
+        target_task,
+        transformation_extension,
+    )
     normalized["metamodels"] = normalize_metamodels(raw_metamodels)
 
     if "models" in normalized:
@@ -33,22 +50,31 @@ def normalize_schema_variants(spec: dict[str, Any], target_task: str) -> dict[st
     return normalized
 
 
-def normalize_transformation(raw: Any, target_task: str) -> str:
+def normalize_transformation(raw: Any, target_task: str, extension: str = ".etl") -> str:
     if isinstance(raw, str) and raw:
-        return normalize_transformation_path(raw, target_task)
+        return normalize_transformation_path(raw, target_task, extension)
     if isinstance(raw, dict):
         for key in ("path", "module", "file"):
             if raw.get(key):
-                return normalize_transformation_path(str(raw[key]), target_task)
+                return normalize_transformation_path(str(raw[key]), target_task, extension)
         if raw.get("name"):
-            return normalize_transformation_path(f"{raw['name']}.etl", target_task)
-    return default_transformation(target_task)
+            return normalize_transformation_path(str(raw["name"]), target_task, extension)
+    return normalize_transformation_path(default_transformation(target_task), target_task, extension)
 
 
-def normalize_transformation_path(path: str, target_task: str) -> str:
+def normalize_transformation_path(
+    path: str,
+    target_task: str,
+    extension: str = ".etl",
+) -> str:
+    if not extension.startswith("."):
+        extension = f".{extension}"
     normalized = path.replace("\\", "/").lstrip("/")
-    if not normalized.endswith(".etl"):
-        normalized = f"{normalized}.etl"
+    suffix = Path(normalized).suffix
+    if not suffix:
+        normalized = f"{normalized}{extension}"
+    elif suffix != extension:
+        normalized = f"{Path(normalized).with_suffix('')}{extension}"
     if "/" not in normalized:
         normalized = f"transformations/{normalized}"
     return normalized

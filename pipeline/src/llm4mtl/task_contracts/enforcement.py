@@ -107,8 +107,6 @@ def _declared_metamodels(spec: dict[str, Any]) -> list[str]:
 
 def _transformation_path(contract: TaskContract) -> str:
     name = Path(contract.transformation).name
-    if not name.endswith(".etl"):
-        name = f"{name}.etl"
     return f"transformations/{name}"
 
 
@@ -143,15 +141,19 @@ def _match_model(
         return candidates[0]
 
     # Multiple models share this role (e.g. OO2DB). Disambiguate deterministically.
-    llm_uri = str(model.get("metamodelUri") or "").lower()
-    for candidate in candidates:
-        if llm_uri and (candidate.metamodel_uri or "").lower() == llm_uri:
-            return candidate
-
     name_key = str(model.get("name") or "").lower()
     for candidate in candidates:
         if name_key and candidate.runtime_name.lower() == name_key:
             return candidate
+
+    llm_uri = str(model.get("metamodelUri") or "").lower()
+    uri_matches = [
+        candidate
+        for candidate in candidates
+        if llm_uri and (candidate.metamodel_uri or "").lower() == llm_uri
+    ]
+    if len(uri_matches) == 1:
+        return uri_matches[0]
 
     wanted = asserted_types.get(str(model.get("name")), set())
     if wanted:
@@ -179,6 +181,9 @@ def _apply_binding(
 
     if contract_model.kind == "emf" and contract_model.metamodel_uri:
         model["metamodelUri"] = contract_model.metamodel_uri
+        model["metamodelFile"] = contract_model.metamodel_file
+        model["metamodelNsPrefix"] = contract_model.metamodel_ns_prefix
+        model["metamodelAlias"] = contract_model.metamodel_alias
         if model.get("path"):
             _rewrite_model_namespace(model, old_uri, contract_model.metamodel_uri, files)
     else:

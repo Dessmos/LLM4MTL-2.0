@@ -23,9 +23,16 @@ from llm4mtl.experiment_runner.adapters.base import fixed_selection, hash_paths
 from llm4mtl.experiment_runner.config import ConfigError
 from llm4mtl.experiment_runner.models import PipelineConfig, StageResult
 from llm4mtl.languages import language_adapter
-from llm4mtl.semantic_tests.suite_execution import read_observation
+from llm4mtl.semantic_tests.suite_execution import (
+    GENERATED_TRANSFORMATION_ROLE,
+    observation_lock,
+    observation_path,
+    read_observation,
+    record_observation,
+)
 from llm4mtl.semantic_tests.suites.discovery import suite_from_path
 from llm4mtl.semantic_tests.validation import workspace_for
+from llm4mtl.transformation_execution.hashing import file_sha256
 
 DEFAULT_PAIR_TIMEOUT_SECONDS = 240
 
@@ -94,10 +101,16 @@ class TransformationValidationAdapter:
                 "transformation execution requires a run-local engine workspace"
             )
         engine_dir = Path(config.engine_dir)
-        workspace = workspace_for(engine_dir, engine_dir)
+        observations_root = self._observations_root(config)
 
         observed: list[
-            tuple[Path, Path, SuiteExecutionObservation, TransformationOutcome | None]
+            tuple[
+                Path,
+                Path,
+                SuiteExecutionObservation,
+                TransformationOutcome | None,
+                Path,
+            ]
         ] = []
         for suite_path, transformation in pairs:
             suite = suite_from_path(
@@ -105,16 +118,50 @@ class TransformationValidationAdapter:
                 self.validated_tests_root(config),
                 config.language,
             )
-            observation = adapter.execute_suite(
-                suite, transformation, workspace, DEFAULT_PAIR_TIMEOUT_SECONDS
+            pair_root = (
+                observations_root
+                / "generated_transformations"
+                / file_sha256(transformation)
             )
+            with observation_lock(pair_root, suite):
+                observation = read_observation(
+                    pair_root,
+                    suite,
+                    transformation,
+                    transformation_role=GENERATED_TRANSFORMATION_ROLE,
+                )
+                if observation is None:
+                    workspace = workspace_for(engine_dir, pair_root)
+                    observation = adapter.execute_suite(
+                        suite,
+                        transformation,
+                        workspace,
+                        DEFAULT_PAIR_TIMEOUT_SECONDS,
+                    )
+                    evidence_path = record_observation(
+                        pair_root,
+                        suite,
+                        transformation,
+                        observation,
+                        transformation_role=GENERATED_TRANSFORMATION_ROLE,
+                    )
+                else:
+                    evidence_path = observation_path(pair_root, suite)
             failure_outcome = adapter.normalize_transformation_failure(observation)
-            observed.append((suite_path, transformation, observation, failure_outcome))
+            observed.append(
+                (
+                    suite_path,
+                    transformation,
+                    observation,
+                    failure_outcome,
+                    evidence_path,
+                )
+            )
 
         counts.update(
             execution_counts(
                 (observation, failure_outcome)
-                for _, _, observation, failure_outcome in observed
+                for _, _, observation, failure_outcome, _ in observed
             )
         )
         details["pairs"] = [
@@ -126,8 +173,15 @@ class TransformationValidationAdapter:
                 "outcome_status": (
                     failure_outcome.status.value if failure_outcome is not None else None
                 ),
+                "evidence": str(evidence_path),
             }
-            for suite_path, transformation, observation, failure_outcome in observed
+            for (
+                suite_path,
+                transformation,
+                observation,
+                failure_outcome,
+                evidence_path,
+            ) in observed
         ]
         return StageResult("transformation_validation", "completed", counts, details, input_hash)
 

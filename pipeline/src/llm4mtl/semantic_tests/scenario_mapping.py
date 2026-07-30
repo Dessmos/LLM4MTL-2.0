@@ -17,6 +17,10 @@ from __future__ import annotations
 from typing import Any
 
 from llm4mtl.domain import (
+    ChangeKind,
+    ChangeOperation,
+    ElementRef,
+    ElementSpec,
     Expectation,
     ModelRole,
     ModelSlot,
@@ -57,13 +61,13 @@ def suite_from_spec(spec: dict[str, Any], *, suite_id: str, language: str, task:
 
 def _scenario(spec: dict[str, Any], test: dict[str, Any]) -> SemanticScenario:
     models = effective_models(spec, test)
+    raw_kind = str(test.get("scenarioKind") or ScenarioKind.BATCH_TRANSFORMATION.value)
     return SemanticScenario(
         name=str(test["name"]),
-        # ETL is a batch model-to-model transformation; change propagation is the
-        # Reactions shape and is produced by that adapter, not this one.
-        kind=ScenarioKind.BATCH_TRANSFORMATION,
+        kind=ScenarioKind(raw_kind),
         slots=tuple(_slot(model) for model in models),
         expectations=tuple(_expectation(assertion) for assertion in test.get("assertions", [])),
+        changes=tuple(_change(change) for change in test.get("changes", [])),
     )
 
 
@@ -71,9 +75,50 @@ def _slot(model: dict[str, Any]) -> ModelSlot:
     role = str(model.get("role") or ("source" if model.get("path") else "target"))
     return ModelSlot(
         name=str(model["name"]),
-        role=ModelRole.INPUT if role == "source" else ModelRole.OUTPUT,
+        role={
+            "source": ModelRole.INPUT,
+            "target": ModelRole.OUTPUT,
+            "inout": ModelRole.INOUT,
+        }[role],
         metamodel=str(model.get("metamodelUri") or model["name"]),
         artifact=str(model["path"]) if model.get("path") else None,
+    )
+
+
+def _change(raw: dict[str, Any]) -> ChangeOperation:
+    target = raw.get("target")
+    if not isinstance(target, dict):
+        raise ValueError("a change target must be an object")
+    return ChangeOperation(
+        kind=ChangeKind(str(raw["kind"])),
+        target=_element_ref(target),
+        feature=str(raw["feature"]) if raw.get("feature") else None,
+        value=_change_value(raw.get("value")),
+    )
+
+
+def _change_value(raw: Any) -> ElementSpec | ElementRef | str | int | float | bool | None:
+    if not isinstance(raw, dict):
+        return raw
+    if raw.get("slot") or raw.get("model"):
+        return _element_ref(raw)
+    if raw.get("type"):
+        return ElementSpec(
+            type_name=str(raw["type"]),
+            features=raw.get("features") if isinstance(raw.get("features"), dict) else {},
+        )
+    raise ValueError("a structured change value must describe an element or reference")
+
+
+def _element_ref(raw: dict[str, Any]) -> ElementRef:
+    slot = raw.get("slot", raw.get("model"))
+    type_name = raw.get("type")
+    if not slot or not type_name:
+        raise ValueError("an element reference needs slot/model and type")
+    return ElementRef(
+        slot=str(slot),
+        type_name=str(type_name),
+        where=raw.get("where") if isinstance(raw.get("where"), dict) else {},
     )
 
 

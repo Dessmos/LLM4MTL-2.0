@@ -1,0 +1,29 @@
+import "http://vitruv.tools/methodologisttemplate/families" as families
+import "http://vitruv.tools/methodologisttemplate/persons" as persons
+
+
+reactions: familiesToPersons_DeletedFamily
+in reaction to changes in families
+execute actions in persons
+
+reaction DeletedFamily {
+	after element families::Family deleted
+	call {
+		affectedEObject.father.deletePerson()
+		affectedEObject.mother.deletePerson()
+		affectedEObject.daughters.forEach[deletePerson()]
+		affectedEObject.sons.forEach[deletePerson()]
+	}
+}
+
+routine deletePerson(families::Member member) {
+	match {
+		val person = retrieve persons::Person corresponding to member
+		val family = retrieve families::Family corresponding to person
+	}
+	update {
+		removeObject(person)
+		removeCorrespondenceBetween(person, member)
+		removeCorrespondenceBetween(person, family)
+	}
+}

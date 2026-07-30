@@ -15,7 +15,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from llm4mtl.conventions import ETL_CONFIG, UnsupportedLanguageError, language_config
+from llm4mtl.conventions import ETL_CONFIG, REACTIONS_CONFIG, UnsupportedLanguageError, language_config
 from llm4mtl.domain import (
     ArtifactValidation,
     OutcomeStatus,
@@ -24,7 +24,7 @@ from llm4mtl.domain import (
     TransformationOutcome,
 )
 from llm4mtl.external_tools.maven import CommandResult
-from llm4mtl.experiment_runner.config import ConfigError, validate_config
+from llm4mtl.experiment_runner.config import validate_config
 from llm4mtl.experiment_runner.models import PipelineConfig
 from llm4mtl.languages import (
     REQUIRED_LANGUAGES,
@@ -33,36 +33,35 @@ from llm4mtl.languages import (
     language_adapter,
 )
 from llm4mtl.languages.etl.adapter import EtlAdapter
+from llm4mtl.languages.reactions.adapter import (
+    _contains_only_unresolved_linkage_diagnostics,
+)
 
 
 class RegistryTests(unittest.TestCase):
     def test_all_four_thesis_languages_are_declared(self) -> None:
         self.assertEqual(("etl", "atl", "qvto", "reactions"), REQUIRED_LANGUAGES)
 
-    def test_a_required_language_without_an_adapter_fails_loudly(self) -> None:
-        for language in ("atl", "qvto", "reactions"):
+    def test_every_required_language_has_an_adapter(self) -> None:
+        for language in REQUIRED_LANGUAGES:
             with self.subTest(language=language):
-                with self.assertRaises(KeyError) as raised:
-                    language_adapter(language)
-                self.assertIn("not implemented", str(raised.exception))
+                self.assertIsInstance(language_adapter(language), LanguageAdapter)
 
     def test_an_unknown_language_is_rejected(self) -> None:
         with self.assertRaises(KeyError):
             language_adapter("cobol")
 
-    def test_the_etl_adapter_satisfies_the_shared_interface(self) -> None:
+    def test_all_adapters_satisfy_the_shared_interface(self) -> None:
         adapter = language_adapter("etl")
         self.assertIsInstance(adapter, LanguageAdapter)
         self.assertEqual("etl", adapter.language_id)
-        self.assertEqual(("etl",), implemented_languages())
+        self.assertEqual(tuple(sorted(REQUIRED_LANGUAGES)), implemented_languages())
 
 
 class PipelineLanguageResolutionTests(unittest.TestCase):
-    def test_the_runner_refuses_a_language_it_cannot_execute(self) -> None:
+    def test_the_runner_accepts_reactions(self) -> None:
         config = PipelineConfig(language="reactions", tasks=["FamiliesToPersons"])
-        with self.assertRaises(ConfigError) as raised:
-            validate_config(config)
-        self.assertIn("reactions", str(raised.exception))
+        validate_config(config)
 
     def test_the_runner_accepts_the_implemented_language(self) -> None:
         validate_config(PipelineConfig(language="etl", tasks=["Tree2Graph"]))
@@ -72,8 +71,9 @@ class ConventionsTests(unittest.TestCase):
     def test_conventions_require_an_explicit_language(self) -> None:
         # A default would silently hand ETL paths to another language.
         self.assertIs(ETL_CONFIG, language_config("etl"))
+        self.assertIs(REACTIONS_CONFIG, language_config("reactions"))
         with self.assertRaises(UnsupportedLanguageError):
-            language_config("reactions")
+            language_config("cobol")
 
 
 class EtlAdapterContractTests(unittest.TestCase):
@@ -241,6 +241,25 @@ class EtlAdapterContractTests(unittest.TestCase):
         outcome = self.adapter.normalize_transformation_failure(runtime)
         self.assertEqual(OutcomeStatus.RUNTIME_FAILED, outcome.status)
         self.assertIsNone(self.adapter.normalize_transformation_failure(test_error))
+
+
+class ReactionsParserNormalizationTests(unittest.TestCase):
+    def test_known_frozen_parser_linkage_false_positives_are_not_syntax_errors(self) -> None:
+        diagnostic = "\n".join(
+            [
+                "Syntax issues (2):",
+                "Duplicate reactions segment name 'example' (WARNING)",
+                "The method run(unknown) refers to the missing type unknown (ERROR)",
+            ]
+        )
+        self.assertTrue(_contains_only_unresolved_linkage_diagnostics(diagnostic))
+
+    def test_real_grammar_diagnostics_still_fail(self) -> None:
+        self.assertFalse(
+            _contains_only_unresolved_linkage_diagnostics(
+                "Syntax issues (1):\nno viable alternative at input ']' (ERROR)"
+            )
+        )
 
 
 def _suite(path: Path):

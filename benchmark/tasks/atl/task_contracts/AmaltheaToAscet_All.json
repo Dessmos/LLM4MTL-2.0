@@ -1,0 +1,72 @@
+{
+  "schemaVersion": "1.0",
+  "task": "AmaltheaToAscet_All",
+  "language": "atl",
+  "transformation": "AmaltheaToAscet_All.atl",
+  "reference": "benchmark/tasks/atl/references/AmaltheaToAscet_All.atl",
+  "sourceHash": "4239ee568619cf879138713dbb6881c3ab8b0b8febb27f439ce48738146224af",
+  "models": [
+    {
+      "runtimeName": "IN",
+      "roles": [
+        "source"
+      ],
+      "kind": "emf",
+      "metamodelUri": "http://vitruv.tools/methodologisttemplate/amalthea",
+      "metamodelNsPrefix": "amalthea",
+      "metamodelAlias": "Amalthea",
+      "metamodelFile": "benchmark/metamodels/additional_models/ATL_model/amalthea.ecore",
+      "typesUsedInTransformation": [
+        "ComponentContainer",
+        "Task"
+      ],
+      "availableTypes": [
+        "ComponentContainer",
+        "Process",
+        "ISR",
+        "Task",
+        "Runnable",
+        "TaskRunnableCall",
+        "LabelSwitch",
+        "Label",
+        "ProbabilitySwitchEntry",
+        "CallGraphEntry",
+        "GraphEntryEntry",
+        "CallSequence",
+        "CallSequenceEntry"
+      ]
+    },
+    {
+      "runtimeName": "OUT",
+      "roles": [
+        "target"
+      ],
+      "kind": "emf",
+      "metamodelUri": "http://vitruv.tools/methodologisttemplate/ascet",
+      "metamodelNsPrefix": "ascet",
+      "metamodelAlias": "Ascet",
+      "metamodelFile": "benchmark/metamodels/additional_models/ATL_model/ascet.ecore",
+      "typesUsedInTransformation": [
+        "AscetModule",
+        "SoftwareTask"
+      ],
+      "availableTypes": [
+        "AscetModule",
+        "Named",
+        "Task",
+        "Method",
+        "InterruptTask",
+        "InitTask",
+        "PeriodicTask",
+        "SoftwareTask",
+        "TimeTableTask"
+      ]
+    }
+  ],
+  "rules": [
+    "semantic_cases model slots must map to runtimeName exactly.",
+    "EMF namespace URIs and prefixes come only from this contract.",
+    "Assertions and declarative changes may use only availableTypes.",
+    "The reference transformation remains the behavioural oracle."
+  ]
+}

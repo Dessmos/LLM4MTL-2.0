@@ -1,9 +1,9 @@
-"""Assemble a fully deterministic test-generation prompt for one task.
+"""Assemble an offline deterministic ETL prompt preview for one task.
 
-This is the production prompt path. The older n8n ``prompt_generation`` stage is
-kept only for draft prompt experiments; production prompts must be assembled
-from deterministic task contracts and reference ETL so model names, metamodel
-URIs, namespaces, and type names cannot be overwritten by another LLM.
+This utility is retained for contract inspection and tests. The active
+production flow resolves exact task inputs for an n8n LLM, reviews and freezes
+its natural-language task prompt, and supplies that same prompt to both
+downstream generators.
 """
 
 from __future__ import annotations

@@ -1,0 +1,96 @@
+{
+  "schemaVersion": "1.0",
+  "task": "MappingBody",
+  "language": "qvto",
+  "transformation": "MappingBody.qvto",
+  "reference": "benchmark/tasks/qvto/references/MappingBody.qvto",
+  "sourceHash": "93c504e81c7c66c784c5867a4658d35844798f66a6deb6af44697a01ca93007c",
+  "models": [
+    {
+      "runtimeName": "inModel",
+      "roles": [
+        "source"
+      ],
+      "kind": "emf",
+      "metamodelUri": "http://www.eclipse.org/emf/2002/Ecore",
+      "metamodelNsPrefix": "ecore",
+      "metamodelAlias": "ECORE",
+      "metamodelFile": null,
+      "typesUsedInTransformation": [
+        "EClass",
+        "EClassifier",
+        "EDataType",
+        "EOperation",
+        "EPackage"
+      ],
+      "availableTypes": [
+        "EAnnotation",
+        "EAttribute",
+        "EClass",
+        "EClassifier",
+        "EDataType",
+        "EEnum",
+        "EEnumLiteral",
+        "EFactory",
+        "EGenericType",
+        "EModelElement",
+        "ENamedElement",
+        "EObject",
+        "EOperation",
+        "EPackage",
+        "EParameter",
+        "EReference",
+        "EStringToStringMapEntry",
+        "EStructuralFeature",
+        "ETypedElement",
+        "ETypeParameter"
+      ]
+    },
+    {
+      "runtimeName": "outModel",
+      "roles": [
+        "target"
+      ],
+      "kind": "emf",
+      "metamodelUri": "http://www.eclipse.org/emf/2002/Ecore",
+      "metamodelNsPrefix": "ecore",
+      "metamodelAlias": "ECORE",
+      "metamodelFile": null,
+      "typesUsedInTransformation": [
+        "EClass",
+        "EClassifier",
+        "EDataType",
+        "EOperation",
+        "EPackage"
+      ],
+      "availableTypes": [
+        "EAnnotation",
+        "EAttribute",
+        "EClass",
+        "EClassifier",
+        "EDataType",
+        "EEnum",
+        "EEnumLiteral",
+        "EFactory",
+        "EGenericType",
+        "EModelElement",
+        "ENamedElement",
+        "EObject",
+        "EOperation",
+        "EPackage",
+        "EParameter",
+        "EReference",
+        "EStringToStringMapEntry",
+        "EStructuralFeature",
+        "ETypedElement",
+        "ETypeParameter"
+      ]
+    }
+  ],
+  "rules": [
+    "semantic_cases model slots must map to runtimeName exactly.",
+    "EMF namespace URIs and prefixes come only from this contract.",
+    "Assertions and declarative changes may use only availableTypes.",
+    "The reference transformation remains the behavioural oracle."
+  ]
+}

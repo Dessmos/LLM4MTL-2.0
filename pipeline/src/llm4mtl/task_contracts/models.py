@@ -1,10 +1,8 @@
 """Typed view over a deterministic task model contract.
 
-A contract is the ground truth for one ETL task: it maps ETL runtime model
-names to their EMF metamodel URIs, namespace prefixes, ``.ecore`` files, and the
-set of types that actually exist in each metamodel. It is derived from the
-``.ecore`` metamodels (see ``build_task_model_contracts.py``) and must never be
-overridden by whatever an LLM guessed in ``semantic_cases.json``.
+A contract maps one language's runtime model names to their EMF metamodel URIs,
+namespace prefixes, ``.ecore`` inputs, and available types. It is deterministic
+benchmark input and must never be overridden by an LLM guess.
 """
 
 from __future__ import annotations
@@ -22,12 +20,15 @@ class ModelContract:
     kind: str
     metamodel_uri: str | None
     metamodel_ns_prefix: str | None
+    metamodel_alias: str | None
     metamodel_file: str | None
-    types_used_in_etl: tuple[str, ...]
+    types_used_in_transformation: tuple[str, ...]
     available_types: tuple[str, ...]
 
     def has_role(self, role: str) -> bool:
-        return role in self.roles
+        if role == "inout":
+            return "inout" in self.roles
+        return role in self.roles or "inout" in self.roles
 
     @property
     def metamodel_resource(self) -> str | None:
@@ -39,7 +40,7 @@ class ModelContract:
 
 @dataclass(frozen=True)
 class TaskContract:
-    """Deterministic model contract for one ETL task."""
+    """Deterministic model contract for one transformation task."""
 
     task: str
     transformation: str
@@ -58,7 +59,12 @@ class TaskContract:
         """
         names: set[str] = set()
         for model in self.models:
-            for value in (model.metamodel_uri, model.runtime_name, model.metamodel_ns_prefix):
+            for value in (
+                model.metamodel_uri,
+                model.runtime_name,
+                model.metamodel_ns_prefix,
+                model.metamodel_alias,
+            ):
                 if value:
                     names.add(value.lower())
             if model.metamodel_file:

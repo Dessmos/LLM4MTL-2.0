@@ -14,7 +14,6 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
-import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Sequence
 
@@ -28,6 +27,7 @@ from llm4mtl.domain import (
     TransformationOutcome,
 )
 from llm4mtl.languages.base import Workspace
+from llm4mtl.languages.common import materialize_parser, pom_properties
 from llm4mtl.paths import TARGET
 from llm4mtl.semantic_tests.suite_execution import execute_suite_against
 from llm4mtl.semantic_tests.extraction.semantic_cases import render_generated_suite
@@ -53,24 +53,13 @@ class EtlAdapter:
     def runtime_tool_versions(self) -> dict[str, str]:
         """Versions fixed by the ETL harness template's Maven contract."""
         pom = TARGET.engine_harness(self.language_id) / "pom.xml"
-        try:
-            root = ET.parse(pom).getroot()
-        except (OSError, ET.ParseError) as exc:
-            raise RuntimeError(f"cannot read ETL harness versions from {pom}") from exc
-        namespace = {"m": "http://maven.apache.org/POM/4.0.0"}
-        properties = root.find("m:properties", namespace)
-        if properties is None:
-            raise RuntimeError(f"ETL harness has no Maven properties: {pom}")
-        versions = {
-            "epsilon": properties.findtext("m:epsilon.version", namespaces=namespace),
-            "junit": properties.findtext("m:junit.version", namespaces=namespace),
-        }
-        missing = [name for name, value in versions.items() if not value]
-        if missing:
-            raise RuntimeError(
-                f"ETL harness omits version properties: {', '.join(missing)}"
-            )
-        return {name: str(value) for name, value in versions.items()}
+        return pom_properties(
+            pom,
+            {
+                "epsilon": "epsilon.version",
+                "junit": "junit.version",
+            },
+        )
 
     def render_suite_artifacts(
         self,
@@ -155,7 +144,25 @@ class EtlAdapter:
         if not transformations:
             return {}
 
-        command = [sys.executable, str(self._parser_driver())]
+        parser_dir = materialize_parser(
+            TARGET.engine_parser(self.language_id),
+            workspace,
+            self.language_id,
+        )
+        build = subprocess.run(
+            ["mvn", "-q", "compile"],
+            cwd=parser_dir,
+            capture_output=True,
+            text=True,
+            timeout=PARSER_TIMEOUT_SECONDS,
+        )
+        if build.returncode != 0:
+            diagnostic = f"{build.stdout}\n{build.stderr}".strip()[-500:]
+            return {
+                path: ParseObservation(parsed=False, diagnostic=diagnostic)
+                for path in transformations
+            }
+        command = [sys.executable, str(parser_dir / "validate_etl_syntax.py")]
         for transformation in transformations:
             command.extend(("--transformation", str(transformation)))
         workspace.observations_dir.mkdir(parents=True, exist_ok=True)
@@ -171,7 +178,7 @@ class EtlAdapter:
 
         completed = subprocess.run(
             command,
-            cwd=TARGET.root,
+            cwd=parser_dir,
             capture_output=True,
             text=True,
             timeout=PARSER_TIMEOUT_SECONDS,
@@ -184,16 +191,25 @@ class EtlAdapter:
                 for path in transformations
             }
 
-        parsed_paths = {Path(item).resolve() for item in payload.get("passed_transformations", [])}
+        parsed_paths = {
+            Path(str(item)).resolve()
+            for item in payload.get("passed_transformations", [])
+        }
+        all_selected_passed = (
+            len(transformations) == int(payload.get("selected") or 0)
+            and len(transformations) == int(payload.get("passed") or 0)
+        )
         return {
-            path: ParseObservation(parsed=path.resolve() in parsed_paths)
+            path: ParseObservation(
+                parsed=all_selected_passed or path.resolve() in parsed_paths,
+                diagnostic=(
+                    ""
+                    if all_selected_passed or path.resolve() in parsed_paths
+                    else json.dumps(payload, ensure_ascii=False)
+                ),
+            )
             for path in transformations
         }
-
-    @staticmethod
-    def _parser_driver() -> Path:
-        return TARGET.engine_parser("etl") / "validate_etl_syntax.py"
-
 
 def _last_json_object(stdout: str) -> dict[str, object]:
     """The driver prints its JSON report last; anything before it is noise."""

@@ -1,0 +1,52 @@
+{
+  "schemaVersion": "1.0",
+  "task": "Item2Product_All",
+  "language": "atl",
+  "transformation": "Item2Product_All.atl",
+  "reference": "benchmark/tasks/atl/references/Item2Product_All.atl",
+  "sourceHash": "afbaa2e6b4787d03cb8cd52f367daa984e4de5c1987d62a6a62f87f9a03a4404",
+  "models": [
+    {
+      "runtimeName": "IN",
+      "roles": [
+        "source"
+      ],
+      "kind": "emf",
+      "metamodelUri": "http://vitruv.tools/methodologisttemplate/item",
+      "metamodelNsPrefix": "item",
+      "metamodelAlias": "Item",
+      "metamodelFile": "benchmark/metamodels/additional_models/ATL_model/Item.ecore",
+      "typesUsedInTransformation": [
+        "Item"
+      ],
+      "availableTypes": [
+        "ItemModel",
+        "Item"
+      ]
+    },
+    {
+      "runtimeName": "OUT",
+      "roles": [
+        "target"
+      ],
+      "kind": "emf",
+      "metamodelUri": "http://vitruv.tools/methodologisttemplate/product",
+      "metamodelNsPrefix": "product",
+      "metamodelAlias": "Product",
+      "metamodelFile": "benchmark/metamodels/additional_models/ATL_model/Product.ecore",
+      "typesUsedInTransformation": [
+        "Product"
+      ],
+      "availableTypes": [
+        "ProductModel",
+        "Product"
+      ]
+    }
+  ],
+  "rules": [
+    "semantic_cases model slots must map to runtimeName exactly.",
+    "EMF namespace URIs and prefixes come only from this contract.",
+    "Assertions and declarative changes may use only availableTypes.",
+    "The reference transformation remains the behavioural oracle."
+  ]
+}

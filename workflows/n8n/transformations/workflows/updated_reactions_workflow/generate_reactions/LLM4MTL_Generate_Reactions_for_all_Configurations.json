@@ -105,7 +105,7 @@
     },
     {
       "parameters": {
-        "fileSelector": "=/data/artifacts/transformation_generation/reactions/prompts/gpt-5-chat-latest/*",
+        "fileSelector": "=/data/task_prompts/reactions/*.txt",
         "options": {
           "dataPropertyName": "data"
         }
@@ -161,37 +161,6 @@
       ],
       "id": "f422b242-6423-422e-8b74-93d593cb2c1f",
       "name": "Save reaction name"
-    },
-    {
-      "parameters": {
-        "fileSelector": "=/home/node/.n8n-files/models/*.ecore",
-        "options": {}
-      },
-      "type": "n8n-nodes-base.readWriteFile",
-      "typeVersion": 1,
-      "position": [
-        -2192,
-        272
-      ],
-      "id": "a510baf8-5e5c-4be6-b0ad-56d2d659c0c9",
-      "name": "Read model files",
-      "alwaysOutputData": true,
-      "executeOnce": true
-    },
-    {
-      "parameters": {
-        "operation": "text",
-        "destinationKey": "model",
-        "options": {}
-      },
-      "type": "n8n-nodes-base.extractFromFile",
-      "typeVersion": 1,
-      "position": [
-        -2000,
-        272
-      ],
-      "id": "c236bbae-a9e1-4136-86ae-0eeaa80124df",
-      "name": "Extract text from model files"
     },
     {
       "parameters": {
@@ -255,34 +224,6 @@
           "name": "Anthropic account"
         }
       }
-    },
-    {
-      "parameters": {
-        "fieldsToSummarize": {
-          "values": [
-            {
-              "aggregation": "concatenate",
-              "field": "model",
-              "separateBy": "\n"
-            },
-            {
-              "aggregation": "concatenate",
-              "field": "model",
-              "includeEmpty": "=",
-              "separateBy": "\n"
-            }
-          ]
-        },
-        "options": {}
-      },
-      "type": "n8n-nodes-base.summarize",
-      "typeVersion": 1.1,
-      "position": [
-        -1840,
-        272
-      ],
-      "id": "f3794f1d-93f8-4fa4-9534-a29973741859",
-      "name": "Summarize"
     },
     {
       "parameters": {
@@ -488,7 +429,7 @@
     {
       "parameters": {
         "promptType": "define",
-        "text": "={{ $json.prompt }}\n\n-- End of request.\nHere are the models:\n{{ $json.concatenated_model }}\n\nThe models are located here:\n\"http://vitruv.tools/methodologisttemplate/[modelname]\"\n\n{{ $json.Few_shot ? \"Here are some examples as guideline:\\n\" + $('Extract text from examples file').item.json.examples : \"\" }}\n\n\n{{ $json.Grammar ? \"Here is the grammar of the Language:\\n\" + $('Extract text from grammar').item.json.grammar : \"\"}}\n\n{{ $json.Helper_methods ? \"Here are helper methods you can use:\\n\" + $('Extract text from helper methods').item.json.helper_methods : \"\"}}",
+        "text": "={{ $json.prompt }}\n\n-- End of request.\nHere are the models:\n{{ $json.metamodel_text }}\n\nThe models are located here:\n\"http://vitruv.tools/methodologisttemplate/[modelname]\"\n\n{{ $json.Few_shot ? \"Here are some examples as guideline:\\n\" + $('Extract text from examples file').item.json.examples : \"\" }}\n\n\n{{ $json.Grammar ? \"Here is the grammar of the Language:\\n\" + $('Extract text from grammar').item.json.grammar : \"\"}}\n\n{{ $json.Helper_methods ? \"Here are helper methods you can use:\\n\" + $('Extract text from helper methods').item.json.helper_methods : \"\"}}",
         "messages": {
           "messageValues": [
             {
@@ -511,7 +452,7 @@
     {
       "parameters": {
         "promptType": "define",
-        "text": "={{ $json.prompt }}\n\n-- End of request.\nHere are the models:\n{{ $json.concatenated_model }}\n\nThe models are located here:\n\"http://vitruv.tools/methodologisttemplate/[modelname]\"\n\n{{ $json.Few_shot ? \"Here are some examples as guideline:\\n\" + $('Extract text from examples file').item.json.examples : \"\" }}\n\n\n{{ $json.Grammar ? \"Here is the grammar of the Language:\\n\" + $('Extract text from grammar').item.json.grammar : \"\"}}\n\n{{ $json.Helper_methods ? \"Here are helper methods you can use:\\n\" + $('Extract text from helper methods').item.json.helper_methods : \"\"}}",
+        "text": "={{ $json.prompt }}\n\n-- End of request.\nHere are the models:\n{{ $json.metamodel_text }}\n\nThe models are located here:\n\"http://vitruv.tools/methodologisttemplate/[modelname]\"\n\n{{ $json.Few_shot ? \"Here are some examples as guideline:\\n\" + $('Extract text from examples file').item.json.examples : \"\" }}\n\n\n{{ $json.Grammar ? \"Here is the grammar of the Language:\\n\" + $('Extract text from grammar').item.json.grammar : \"\"}}\n\n{{ $json.Helper_methods ? \"Here are helper methods you can use:\\n\" + $('Extract text from helper methods').item.json.helper_methods : \"\"}}",
         "messages": {
           "messageValues": [
             {
@@ -547,7 +488,7 @@
       "parameters": {
         "mode": "combine",
         "combineBy": "combineByPosition",
-        "numberInputs": 4,
+        "numberInputs": 3,
         "options": {}
       },
       "type": "n8n-nodes-base.merge",
@@ -563,12 +504,6 @@
       "parameters": {
         "assignments": {
           "assignments": [
-            {
-              "id": "99078571-0532-46d4-bea9-336dc4b49a8c",
-              "name": "concatenated_model",
-              "value": "={{$items(\"Summarize\")[0].json.concatenated_model}}",
-              "type": "string"
-            },
             {
               "id": "24da7547-87f6-4a18-b474-893af7a11dc0",
               "name": "examples_all",
@@ -620,7 +555,7 @@
     {
       "parameters": {
         "promptType": "define",
-        "text": "={{ $json.prompt }}\n\n-- End of request.\nHere are the models:\n{{ $json.concatenated_model }}\n\nThe models are located here:\n\"http://vitruv.tools/methodologisttemplate/[modelname]\"\n\n{{ $json.Few_shot ? \"Here are some examples as guideline:\\n\" + $('Extract text from examples file').item.json.examples : \"\" }}\n\n\n{{ $json.Grammar ? \"Here is the grammar of the Language:\\n\" + $('Extract text from grammar').item.json.grammar : \"\"}}\n\n{{ $json.Helper_methods ? \"Here are helper methods you can use:\\n\" + $('Extract text from helper methods').item.json.helper_methods : \"\"}}",
+        "text": "={{ $json.prompt }}\n\n-- End of request.\nHere are the models:\n{{ $json.metamodel_text }}\n\nThe models are located here:\n\"http://vitruv.tools/methodologisttemplate/[modelname]\"\n\n{{ $json.Few_shot ? \"Here are some examples as guideline:\\n\" + $('Extract text from examples file').item.json.examples : \"\" }}\n\n\n{{ $json.Grammar ? \"Here is the grammar of the Language:\\n\" + $('Extract text from grammar').item.json.grammar : \"\"}}\n\n{{ $json.Helper_methods ? \"Here are helper methods you can use:\\n\" + $('Extract text from helper methods').item.json.helper_methods : \"\"}}",
         "messages": {
           "messageValues": [
             {
@@ -684,6 +619,40 @@
       ],
       "id": "9be9f5ee-a90b-4de6-b87b-52586ed8d8b1",
       "name": "MergeClaude"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://stage-service:8129/prompt-inputs/resolve",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { language: 'reactions', task: $json.baseName } }}",
+        "options": {}
+      },
+      "id": "resolve-exact-task-inputs-reactions",
+      "name": "Resolve exact task inputs",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -448,
+        656
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "numberInputs": 2,
+        "options": {}
+      },
+      "id": "merge-prompt-and-exact-inputs-reactions",
+      "name": "Merge prompt and exact inputs",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -176,
+        784
+      ]
     }
   ],
   "pinData": {},
@@ -703,11 +672,6 @@
           },
           {
             "node": "Define LLM models to use",
-            "type": "main",
-            "index": 0
-          },
-          {
-            "node": "Read model files",
             "type": "main",
             "index": 0
           },
@@ -757,7 +721,7 @@
           {
             "node": "Static-Files-Ready",
             "type": "main",
-            "index": 1
+            "index": 0
           }
         ]
       ]
@@ -784,7 +748,7 @@
           {
             "node": "Static-Files-Ready",
             "type": "main",
-            "index": 2
+            "index": 1
           }
         ]
       ]
@@ -804,39 +768,7 @@
       "main": [
         [
           {
-            "node": "If gpt-5",
-            "type": "main",
-            "index": 0
-          },
-          {
-            "node": "If gemini-2.5-pro",
-            "type": "main",
-            "index": 0
-          },
-          {
-            "node": "If claude-sonnet-4",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Read model files": {
-      "main": [
-        [
-          {
-            "node": "Extract text from model files",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Extract text from model files": {
-      "main": [
-        [
-          {
-            "node": "Summarize",
+            "node": "Merge prompt and exact inputs",
             "type": "main",
             "index": 0
           }
@@ -848,6 +780,11 @@
         [
           {
             "node": "Extract text from prompt file",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Resolve exact task inputs",
             "type": "main",
             "index": 0
           }
@@ -865,24 +802,13 @@
         ]
       ]
     },
-    "Summarize": {
-      "main": [
-        [
-          {
-            "node": "Static-Files-Ready",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "Extract text from helper methods": {
       "main": [
         [
           {
             "node": "Static-Files-Ready",
             "type": "main",
-            "index": 3
+            "index": 2
           }
         ]
       ]
@@ -1116,6 +1042,38 @@
         [
           {
             "node": "Write response to disk",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resolve exact task inputs": {
+      "main": [
+        [
+          {
+            "node": "Merge prompt and exact inputs",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge prompt and exact inputs": {
+      "main": [
+        [
+          {
+            "node": "If gpt-5",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "If gemini-2.5-pro",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "If claude-sonnet-4",
             "type": "main",
             "index": 0
           }

@@ -15,6 +15,9 @@ that a later stage would compile and run.
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
+
+from llm4mtl.conventions import ETL_CONFIG, LanguageConfig
 from llm4mtl.domain import (
     CONTRACT_VIOLATION,
     INVALID_SEMANTIC_CASES,
@@ -47,6 +50,9 @@ def render_generated_suite(
     extracted: dict[str, str],
     *,
     language: str,
+    config: LanguageConfig = ETL_CONFIG,
+    transformation_extension: str = ".etl",
+    render_test: Callable[[str, dict[str, object], str], str] = render_semantic_test,
 ) -> tuple[dict[str, str], ArtifactValidation]:
     """Replace LLM-authored files with a deterministically rendered suite.
 
@@ -68,7 +74,11 @@ def render_generated_suite(
         )
 
     try:
-        spec = parse_semantic_cases(cases_json, target_task)
+        spec = parse_semantic_cases(
+            cases_json,
+            target_task,
+            transformation_extension=transformation_extension,
+        )
     except SemanticCasesError as exc:
         return generated, ArtifactValidation(
             valid=False,
@@ -79,7 +89,7 @@ def render_generated_suite(
     # Infrastructure bindings (metamodel URIs, runtime model names, ecore files,
     # XML namespaces) are owned by the task contract, not the LLM. Rewrite them
     # deterministically and reject assertions over undefined types.
-    contract = load_task_contract(target_task)
+    contract = load_task_contract(target_task, config=config)
     violations: list[str] = []
     if contract is not None:
         violations = enforce_contract(contract, spec, generated)
@@ -118,5 +128,5 @@ def render_generated_suite(
         str(spec.get("testClass") or f"Generated{target_task}SemanticTest"),
         target_task,
     )
-    generated[f"{class_name}.java"] = render_semantic_test(class_name, spec, target_task)
+    generated[f"{class_name}.java"] = render_test(class_name, spec, target_task)
     return generated, ArtifactValidation(valid=True, contract_applied=contract is not None)

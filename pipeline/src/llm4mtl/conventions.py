@@ -14,6 +14,9 @@ from pathlib import Path
 
 
 LANGUAGE_ETL = "ETL"
+LANGUAGE_ATL = "ATL"
+LANGUAGE_QVTO = "QVTO"
+LANGUAGE_REACTIONS = "REACTIONS"
 
 
 @dataclass(frozen=True)
@@ -21,6 +24,7 @@ class LanguageConfig:
     """Filesystem conventions for one generated-test language workflow."""
 
     language: str
+    workflow_language: str
     generated_tests_dir: str
     snippets_dir: str
     test_project_dir: str
@@ -32,15 +36,40 @@ class LanguageConfig:
 
 ETL_CONFIG = LanguageConfig(
     language=LANGUAGE_ETL,
+    workflow_language="ETL",
     generated_tests_dir="etl",
     snippets_dir="ETL_test_generation",
     test_project_dir="ETL_Test",
 )
 
-# Only languages whose conventions are actually established belong here.
-# Inventing directory layouts for the others would hide missing work behind
-# plausible-looking paths.
-LANGUAGE_CONFIGS: dict[str, LanguageConfig] = {ETL_CONFIG.language_key: ETL_CONFIG}
+ATL_CONFIG = LanguageConfig(
+    language=LANGUAGE_ATL,
+    workflow_language="ATL",
+    generated_tests_dir="atl",
+    snippets_dir="ATL_test_generation",
+    test_project_dir="ATL_Tests",
+)
+
+QVTO_CONFIG = LanguageConfig(
+    language=LANGUAGE_QVTO,
+    workflow_language="QVTO",
+    generated_tests_dir="qvto",
+    snippets_dir="QVTO_test_generation",
+    test_project_dir="QVT-O_Test",
+)
+
+REACTIONS_CONFIG = LanguageConfig(
+    language=LANGUAGE_REACTIONS,
+    workflow_language="Reactions",
+    generated_tests_dir="reactions",
+    snippets_dir="Reactions_test_generation",
+    test_project_dir="Reactions_Language_Tests",
+)
+
+LANGUAGE_CONFIGS: dict[str, LanguageConfig] = {
+    config.language_key: config
+    for config in (ETL_CONFIG, ATL_CONFIG, QVTO_CONFIG, REACTIONS_CONFIG)
+}
 
 
 class UnsupportedLanguageError(KeyError):

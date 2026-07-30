@@ -108,29 +108,47 @@ def input_hashes(language: str, task: str) -> dict[str, Any]:
         path = _metamodel_path(config.language_key, model.metamodel_file)
         metamodels[path.relative_to(REPO_ROOT).as_posix()] = file_sha256(path)
 
+    task_prompt = (
+        TARGET.prompt_assets
+        / "task_prompts"
+        / config.language_key
+        / f"{task}.txt"
+    )
+    if not task_prompt.is_file():
+        raise ProvenanceError(
+            f"frozen task prompt not found for {config.language_key}/{task}"
+        )
+
     return {
         "reference_transformation": file_sha256(reference),
         "task_contract": file_sha256(contract_path),
         "metamodels": metamodels,
+        "task_prompt": file_sha256(task_prompt),
     }
 
 
 def _metamodel_path(language: str, recorded_path: str) -> Path:
-    """Resolve a legacy contract path to its protected benchmark input."""
-    filename = Path(recorded_path).name
-    language_directory = f"{language.upper()}_model"
-    candidates = (
-        TARGET.benchmark / "metamodels" / language / filename,
-        TARGET.benchmark / "metamodels" / "additional_models" / language_directory / filename,
-        TARGET.benchmark / "metamodels" / filename,
-    )
-    for candidate in candidates:
-        if candidate.is_file():
-            return candidate
-    raise ProvenanceError(
-        f"metamodel {filename!r} from the {language} task contract was not found "
-        "under benchmark/metamodels"
-    )
+    """Resolve the contract's exact repository-relative metamodel path."""
+    recorded = Path(recorded_path)
+    if recorded.is_absolute():
+        raise ProvenanceError(
+            f"absolute metamodel path in the {language} task contract: {recorded}"
+        )
+    candidate = (REPO_ROOT / recorded).resolve()
+    metamodel_root = (TARGET.benchmark / "metamodels").resolve()
+    try:
+        candidate.relative_to(metamodel_root)
+    except ValueError as exc:
+        raise ProvenanceError(
+            f"metamodel path in the {language} task contract escapes "
+            "benchmark/metamodels"
+        ) from exc
+    if not candidate.is_file():
+        raise ProvenanceError(
+            f"metamodel path from the {language} task contract does not exist: "
+            f"{recorded.as_posix()}"
+        )
+    return candidate
 
 
 @lru_cache(maxsize=1)

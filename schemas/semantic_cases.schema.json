@@ -18,6 +18,35 @@
         "type": "object",
         "required": ["name", "assertions"],
         "additionalProperties": true,
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "scenarioKind": {"const": "change_propagation"}
+              },
+              "required": ["scenarioKind"]
+            },
+            "then": {
+              "required": ["changes"],
+              "properties": {
+                "changes": {"minItems": 1}
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "scenarioKind": {"const": "batch_transformation"}
+              },
+              "required": ["scenarioKind"]
+            },
+            "then": {
+              "properties": {
+                "changes": {"maxItems": 0}
+              }
+            }
+          }
+        ],
         "properties": {
           "name": {"type": "string"},
           "models": {
@@ -29,11 +58,83 @@
               "properties": {
                 "name": {"type": "string"},
                 "kind": {"type": "string", "enum": ["emf", "plainXml"]},
-                "role": {"type": "string", "enum": ["source", "target"]},
+                "role": {"type": "string", "enum": ["source", "target", "inout"]},
                 "path": {"type": "string"},
                 "generated": {"type": "boolean"},
                 "metamodelUri": {"type": "string"}
               }
+            }
+          },
+          "scenarioKind": {
+            "type": "string",
+            "enum": ["batch_transformation", "change_propagation"]
+          },
+          "changes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["kind", "target"],
+              "additionalProperties": false,
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "create",
+                    "delete",
+                    "set_feature",
+                    "add_to_collection",
+                    "remove_from_collection",
+                    "move"
+                  ]
+                },
+                "target": {
+                  "$ref": "#/$defs/elementReference"
+                },
+                "feature": {"type": "string"},
+                "value": {"$ref": "#/$defs/changeValue"}
+              },
+              "allOf": [
+                {
+                  "if": {
+                    "properties": {"kind": {"const": "delete"}},
+                    "required": ["kind"]
+                  },
+                  "then": {"not": {"required": ["value"]}}
+                },
+                {
+                  "if": {
+                    "properties": {
+                      "kind": {
+                        "enum": [
+                          "create",
+                          "set_feature",
+                          "add_to_collection",
+                          "remove_from_collection",
+                          "move"
+                        ]
+                      }
+                    },
+                    "required": ["kind"]
+                  },
+                  "then": {"required": ["value"]}
+                },
+                {
+                  "if": {
+                    "properties": {
+                      "kind": {
+                        "enum": [
+                          "set_feature",
+                          "add_to_collection",
+                          "remove_from_collection",
+                          "move"
+                        ]
+                      }
+                    },
+                    "required": ["kind"]
+                  },
+                  "then": {"required": ["feature"]}
+                }
+              ]
             }
           },
           "assertions": {
@@ -61,6 +162,42 @@
           }
         }
       }
+    }
+  },
+  "$defs": {
+    "elementReference": {
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": false,
+      "anyOf": [
+        {"required": ["slot"]},
+        {"required": ["model"]}
+      ],
+      "properties": {
+        "slot": {"type": "string"},
+        "model": {"type": "string"},
+        "type": {"type": "string"},
+        "where": {"type": "object"}
+      }
+    },
+    "elementSpec": {
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {"type": "string"},
+        "features": {"type": "object"}
+      }
+    },
+    "changeValue": {
+      "oneOf": [
+        {"type": "null"},
+        {"type": "string"},
+        {"type": "number"},
+        {"type": "boolean"},
+        {"$ref": "#/$defs/elementReference"},
+        {"$ref": "#/$defs/elementSpec"}
+      ]
     }
   }
 }

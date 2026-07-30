@@ -87,6 +87,7 @@ class IdentityAxisTests(unittest.TestCase):
         hashes = provenance["input_hashes"]
         self.assertEqual(64, len(hashes["reference_transformation"]))
         self.assertEqual(64, len(hashes["task_contract"]))
+        self.assertEqual(64, len(hashes["task_prompt"]))
         self.assertEqual(
             {"benchmark/metamodels/etl/Graph.ecore", "benchmark/metamodels/etl/Tree.ecore"},
             set(hashes["metamodels"]),

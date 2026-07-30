@@ -10,11 +10,16 @@ from llm4mtl import run_store
 from llm4mtl.experiment_runner.models import PipelineConfig, StageResult
 from llm4mtl.experiment_runner.orchestrator import ExperimentOrchestrator, generate_run_id
 from llm4mtl.paths import TARGET
+from llm4mtl.prompt_assembly.task_inputs import (
+    TaskInputResolutionError,
+    resolve_task_inputs,
+)
 from llm4mtl.provenance import ProvenanceError, build_provenance
 from llm4mtl.run_store.identity import InvalidRunIdError
 from llm4mtl.stage_contract import STAGE_DISPATCH, to_stage_payload
 from llm4mtl.stage_service.api_models import (
     DiagnosisRecordRequest,
+    PromptInputsRequest,
     RunCreateRequest,
     RunCreateResponse,
     StageRunRequest,
@@ -47,6 +52,15 @@ def _require_manifest(run_id: str) -> tuple[run_store.RunPaths, dict[str, Any]]:
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.post("/prompt-inputs/resolve")
+def resolve_prompt_inputs(request: PromptInputsRequest) -> dict[str, Any]:
+    """Return only the exact LLM inputs selected by the task contract."""
+    try:
+        return resolve_task_inputs(request.language, request.task).to_dict()
+    except TaskInputResolutionError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @app.post("/runs", response_model=RunCreateResponse)

@@ -17,9 +17,9 @@ def load_task_contract(
 ) -> TaskContract | None:
     """Return the contract for ``task`` or ``None`` when no contract exists.
 
-    A missing contract is not an error: callers fall back to trusting the
-    generated ``semantic_cases.json`` as-is, which keeps non-contracted tasks
-    and other languages working unchanged.
+    A missing contract is not an error at this low-level loader. Production
+    adapters still fail artifact validation when a required benchmark contract
+    is absent.
     """
     root = contracts_root or default_task_contracts_root(config)
     path = Path(root) / f"{task}.json"
@@ -52,7 +52,17 @@ def _model_from_dict(raw: dict[str, Any]) -> ModelContract:
         kind=str(raw.get("kind") or "emf"),
         metamodel_uri=str(raw["metamodelUri"]) if raw.get("metamodelUri") else None,
         metamodel_ns_prefix=str(raw["metamodelNsPrefix"]) if raw.get("metamodelNsPrefix") else None,
+        metamodel_alias=str(raw["metamodelAlias"]) if raw.get("metamodelAlias") else None,
         metamodel_file=str(raw["metamodelFile"]) if raw.get("metamodelFile") else None,
-        types_used_in_etl=tuple(str(type_name) for type_name in raw.get("typesUsedInEtL", [])),
+        types_used_in_transformation=tuple(
+            str(type_name)
+            for type_name in (
+                raw.get("typesUsedInTransformation")
+                or raw.get("typesUsedInEtL")
+                or raw.get("types_used_in_transformation")
+                or raw.get("types_used_in_etl")
+                or []
+            )
+        ),
         available_types=tuple(str(type_name) for type_name in raw.get("availableTypes", [])),
     )
