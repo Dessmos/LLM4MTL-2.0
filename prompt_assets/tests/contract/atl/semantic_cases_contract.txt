@@ -1,0 +1,179 @@
+ATL semantic test output contract.
+
+This section is binding and complete. It is the input contract of the Python
+semantic-test extractor: a response that deviates from it is rejected before
+anything is executed and is recorded as an invalid artifact, not as a failing
+test. Every allowed field name and every allowed field value of
+semantic_cases.json is stated below. Use no field name and no field value that
+this section does not list.
+
+The generated response must contain semantic test artifacts only:
+- one semantic_cases.json file block,
+- one or more generated source model file blocks,
+- no Java, no JUnit, no Maven files, and no prose outside file blocks.
+
+Always use canonical assertion payloads with the expected field. Do not use
+legacy task-specific assertion fields or alternate primary assertion keys.
+
+REQUIRED OUTPUT CONTRACT
+
+Follow this structure exactly. It is the input contract of the Python
+semantic-test extractor, not optional guidance.
+
+All current ATL benchmark task contracts use these case-sensitive runtime model
+names:
+
+- `IN` for the source model;
+- `OUT` for the target model.
+
+Never invent per-test model names such as `input`, `in1`, `in_example`,
+`output`, or `out_example`.
+
+Allowed `models[].kind` values are exactly:
+
+- `"emf"`;
+- `"plainXml"`.
+
+`"input"`, `"output"`, `"source"`, `"target"`, and `"EMF"` are not model
+kinds. Direction belongs only in `models[].role`, whose allowed values are
+`"source"`, `"target"`, and `"inout"`.
+
+For an ATL batch transformation, every test must declare both runtime models.
+The generated source has a path. The target has no path because the harness
+creates it:
+
+```json
+"models": [
+  {
+    "name": "IN",
+    "kind": "emf",
+    "role": "source",
+    "path": "models/<fixture_name>.model",
+    "generated": true,
+    "metamodelUri": "<exact source metamodel URI>"
+  },
+  {
+    "name": "OUT",
+    "kind": "emf",
+    "role": "target",
+    "generated": false,
+    "metamodelUri": "<exact target metamodel URI>"
+  }
+]
+```
+
+For `plainXml`, use `"kind": "plainXml"` and omit `metamodelUri`.
+
+Every assertion must contain all four common fields:
+
+- `kind`;
+- `model`;
+- `type`;
+- `expected`.
+
+For ATL batch tests, assertions normally target `"model": "OUT"`. `type` is
+the unqualified target type name, for example `"SoftwareTask"`, not
+`"ascet::SoftwareTask"`. Never use `object` instead of `model` and `type`.
+
+The only allowed assertion shapes are:
+
+```json
+{"kind": "count", "model": "OUT", "type": "<TargetType>", "expected": 1}
+```
+
+```json
+{
+  "kind": "featureValues",
+  "model": "OUT",
+  "type": "<TargetType>",
+  "feature": "<feature>",
+  "expected": ["<value>"]
+}
+```
+
+```json
+{
+  "kind": "pathValues",
+  "model": "OUT",
+  "type": "<TargetType>",
+  "path": "<feature.path>",
+  "expected": ["<value>"]
+}
+```
+
+```json
+{
+  "kind": "objects",
+  "model": "OUT",
+  "type": "<TargetType>",
+  "features": ["<feature1>", "<feature2>"],
+  "expected": [
+    {"<feature1>": "<value1>", "<feature2>": "<value2>"}
+  ]
+}
+```
+
+```json
+{
+  "kind": "referencePairs",
+  "model": "OUT",
+  "type": "<TargetLinkType>",
+  "source": "<sourceReference>.<identityFeature>",
+  "target": "<targetReference>.<identityFeature>",
+  "expected": [
+    {"source": "<source identity>", "target": "<target identity>"}
+  ]
+}
+```
+
+`count.expected` must be an integer. All other `expected` values above must be
+arrays. Do not put type names, counts, feature definitions, or reference
+definitions inside `expected`.
+
+The complete response shape is:
+
+```json file=semantic_cases.json
+{
+  "schemaVersion": 1,
+  "testClass": "<JavaIdentifier>",
+  "transformation": "transformations/<task>.atl",
+  "metamodels": [
+    {"name": "IN", "uri": "<exact source metamodel URI>"},
+    {"name": "OUT", "uri": "<exact target metamodel URI>"}
+  ],
+  "tests": [
+    {
+      "name": "<test_name>",
+      "scenarioKind": "batch_transformation",
+      "models": [
+        {
+          "name": "IN",
+          "kind": "emf",
+          "role": "source",
+          "path": "models/<fixture_name>.model",
+          "generated": true,
+          "metamodelUri": "<exact source metamodel URI>"
+        },
+        {
+          "name": "OUT",
+          "kind": "emf",
+          "role": "target",
+          "generated": false,
+          "metamodelUri": "<exact target metamodel URI>"
+        }
+      ],
+      "assertions": [
+        {
+          "kind": "count",
+          "model": "OUT",
+          "type": "<unqualified target type>",
+          "expected": 1
+        }
+      ]
+    }
+  ]
+}
+```
+
+After this JSON block, emit exactly the XML file blocks referenced by source
+model paths. Emit no target model file and no prose outside file blocks.

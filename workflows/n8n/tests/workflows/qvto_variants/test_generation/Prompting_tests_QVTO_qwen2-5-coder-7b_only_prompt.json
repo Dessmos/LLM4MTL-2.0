@@ -84,7 +84,7 @@
       "parameters": {
         "mode": "combine",
         "combineBy": "combineByPosition",
-        "numberInputs": 3,
+        "numberInputs": 4,
         "options": {
           "includeUnpaired": true
         }
@@ -105,7 +105,7 @@
         "url": "http://host.docker.internal:11434/api/chat",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ model: 'qwen2.5-coder:7b', stream: false, messages: [{ role: 'system', content: \"Generate semantic test artifacts for QVT Operational (QVT-O) from the reviewed shared task prompt. Follow that prompt and the exact task-specific metamodel files. Return only fenced file blocks: exactly one ```json file=semantic_cases.json block and the ```xml file=models/<name>.model blocks it references. Never generate Java, JUnit, transformation code, Maven files, helper classes, or prose outside file blocks. semantic_cases.json must contain schemaVersion, testClass, transformation, metamodels, and tests. Each test contains name, models, and assertions; each model contains name, kind, role, path, generated, and metamodelUri only for EMF. Use only the canonical generic assertion kinds count, featureValues, objects, pathValues, and referencePairs. Every assertion uses expected; never use value, values, equals, ids, pairs, sourceType, targetType, where, or match. Assertions must describe observable target-model counts, feature values, links, and absence of unjustified elements.\" }, { role: 'user', content: ($json.prompt || '') + '\\n\\n## Authoritative metamodel files\\n' + ($json.metamodel_text || '') }], options: { temperature: 0.1, top_p: 1 } }) }}",
+        "jsonBody": "={{ JSON.stringify({ model: 'qwen2.5-coder:7b', stream: false, messages: [{ role: 'system', content: \"Generate semantic test artifacts for QVT Operational (QVT-O) from the reviewed shared task prompt. The task specification describes the transformation under test: write tests for it, do not implement it. Use the exact task-specific metamodel files.\\n\\nThe user message contains a section titled REQUIRED OUTPUT CONTRACT. That section is binding and complete: it lists every allowed field name and every allowed field value of semantic_cases.json. Follow it literally. Do not introduce a field name or a field value that it does not list, and do not substitute a synonym for one that it does list. Where any other section of the prompt appears to disagree with it, the contract wins.\\n\\nReturn only fenced file blocks: exactly one ```json file=semantic_cases.json block and the model file blocks that it references. Never generate Java, JUnit, transformation code, Maven files, helper classes, or prose outside file blocks.\" }, { role: 'user', content: ($json.assembled_prompt || '') }], options: { temperature: 0.1, top_p: 1 } }) }}",
         "options": {}
       },
       "type": "n8n-nodes-base.httpRequest",
@@ -191,6 +191,91 @@
         736,
         -368
       ]
+    },
+    {
+      "parameters": {
+        "fileSelector": "=/data/contract/qvto/semantic_cases_contract.txt",
+        "options": {}
+      },
+      "id": "read-output-contract-qvto",
+      "name": "Read output contract",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        -512,
+        96
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "text",
+        "destinationKey": "output_contract",
+        "options": {}
+      },
+      "id": "extract-text-from-contract-qvto",
+      "name": "Extract text from contract",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        -288,
+        96
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "assemble-prompt-assignments-1",
+              "name": "assembled_prompt",
+              "value": "={{ \"## Task specification (describes the transformation under test: write tests for it, do not implement it)\\n\" + ($json.prompt || \"\") + \"\\n\\n## Authoritative metamodel files\\n\" + ($json.metamodel_text || \"\") + \"\\n\\n## REQUIRED OUTPUT CONTRACT (binding, overrides every other section)\\n\" + ($json.output_contract || \"\") }}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "assemble-prompt",
+      "name": "Assemble prompt",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        208,
+        -288
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "toText",
+        "sourceProperty": "assembled_prompt",
+        "binaryPropertyName": "data",
+        "options": {}
+      },
+      "id": "convert-prompt-to-file",
+      "name": "Convert prompt to File",
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        432,
+        -448
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "write",
+        "fileName": "=/data/artifacts/test_generation/qvto/prompts/qwen2-5-coder-7b/only_prompt/{{ $node[\"Merge prompt, task and models\"].json.baseName }}.md",
+        "dataPropertyName": "data",
+        "options": {}
+      },
+      "id": "write-prompt-to-disk",
+      "name": "Write prompt to disk",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        656,
+        -448
+      ]
     }
   ],
   "pinData": {},
@@ -230,6 +315,11 @@
             "node": "Save task name",
             "type": "main",
             "index": 0
+          },
+          {
+            "node": "Read output contract",
+            "type": "main",
+            "index": 0
           }
         ]
       ]
@@ -265,7 +355,7 @@
       "main": [
         [
           {
-            "node": "Generate Test Suite with local Qwen",
+            "node": "Assemble prompt",
             "type": "main",
             "index": 0
           }
@@ -323,6 +413,55 @@
             "node": "Merge prompt, task and models",
             "type": "main",
             "index": 2
+          }
+        ]
+      ]
+    },
+    "Read output contract": {
+      "main": [
+        [
+          {
+            "node": "Extract text from contract",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract text from contract": {
+      "main": [
+        [
+          {
+            "node": "Merge prompt, task and models",
+            "type": "main",
+            "index": 3
+          }
+        ]
+      ]
+    },
+    "Assemble prompt": {
+      "main": [
+        [
+          {
+            "node": "Generate Test Suite with local Qwen",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Convert prompt to File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Convert prompt to File": {
+      "main": [
+        [
+          {
+            "node": "Write prompt to disk",
+            "type": "main",
+            "index": 0
           }
         ]
       ]

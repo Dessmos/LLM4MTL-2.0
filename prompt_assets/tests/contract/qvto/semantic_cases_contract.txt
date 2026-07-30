@@ -1,0 +1,168 @@
+QVT-O semantic test output contract.
+
+This section is binding and complete. It is the input contract of the Python
+semantic-test extractor: a response that deviates from it is rejected before
+anything is executed and is recorded as an invalid artifact, not as a failing
+test. Every allowed field name and every allowed field value of
+semantic_cases.json is stated below. Use no field name and no field value that
+this section does not list.
+
+The generated response must contain semantic test artifacts only:
+- one semantic_cases.json file block,
+- one or more generated source model file blocks,
+- no Java, no JUnit, no Maven files, and no prose outside file blocks.
+
+Always use canonical assertion payloads with the expected field. Do not use
+legacy task-specific assertion fields or alternate primary assertion keys.
+
+REQUIRED OUTPUT CONTRACT
+
+Follow this structure exactly. It is the input contract of the Python
+semantic-test extractor, not optional guidance.
+
+Use these case-sensitive QVT-O runtime model names:
+
+- `Constructors`, `MappingBody`, `MappingExtensionDisjuncts`,
+  `MappingExtensionInherits`, `MappingExtensionMerges`, `Mappings`,
+  `MappingsWhenClause`, `OverridingMappings`, and `ResolveExpressions`:
+  `inModel` is the source and `outModel` is the target.
+- `ModelExtents`: `m` is the source; `x` and `y` are separate targets.
+
+All current QVT-O runtime models are EMF models with this exact
+`metamodelUri`:
+
+`http://www.eclipse.org/emf/2002/Ecore`
+
+Never invent aliases such as `input`, `output`, `SourceRuntime`, or
+`TargetRuntime` in an actual task.
+
+Allowed `models[].kind` values are exactly `"emf"` and `"plainXml"`.
+Direction belongs only in `models[].role`, whose allowed values are `"source"`,
+`"target"`, and `"inout"`.
+
+Every source model has `path` and `"generated": true`. Every target model has
+no `path` and uses `"generated": false`. `ModelExtents` tests must declare `m`
+plus every target (`x` and/or `y`) that the assertions inspect.
+
+Every test must use `"scenarioKind": "batch_transformation"`. Every assertion
+must contain all four common fields:
+
+- `kind`;
+- `model`;
+- `type`;
+- `expected`.
+
+`model` must equal a `models[].name` from the same test. `type` must be an
+unqualified Ecore classifier name. Never use `object` instead of `model` plus
+`type`.
+
+The only allowed assertion shapes are:
+
+```json
+{"kind": "count", "model": "<target runtime name>", "type": "<TargetType>", "expected": 1}
+```
+
+```json
+{
+  "kind": "featureValues",
+  "model": "<target runtime name>",
+  "type": "<TargetType>",
+  "feature": "<feature>",
+  "expected": ["<value>"]
+}
+```
+
+```json
+{
+  "kind": "pathValues",
+  "model": "<target runtime name>",
+  "type": "<TargetType>",
+  "path": "<feature.path>",
+  "expected": ["<value>"]
+}
+```
+
+```json
+{
+  "kind": "objects",
+  "model": "<target runtime name>",
+  "type": "<TargetType>",
+  "features": ["<feature1>", "<feature2>"],
+  "expected": [
+    {"<feature1>": "<value1>", "<feature2>": "<value2>"}
+  ]
+}
+```
+
+```json
+{
+  "kind": "referencePairs",
+  "model": "<target runtime name>",
+  "type": "<TargetLinkType>",
+  "source": "<sourceReference>.<identityFeature>",
+  "target": "<targetReference>.<identityFeature>",
+  "expected": [
+    {"source": "<source identity>", "target": "<target identity>"}
+  ]
+}
+```
+
+`count.expected` must be an integer. All other `expected` values above must be
+arrays. Do not replace `expected` with `value`, `values`, `equals`, `ids`,
+`pairs`, `where`, or `match`.
+
+The complete response shape for the ordinary two-slot tasks is:
+
+```json file=semantic_cases.json
+{
+  "schemaVersion": 1,
+  "testClass": "<JavaIdentifier>",
+  "transformation": "transformations/<task>.qvto",
+  "metamodels": [
+    {
+      "name": "inModel",
+      "uri": "http://www.eclipse.org/emf/2002/Ecore"
+    },
+    {
+      "name": "outModel",
+      "uri": "http://www.eclipse.org/emf/2002/Ecore"
+    }
+  ],
+  "tests": [
+    {
+      "name": "<test_name>",
+      "scenarioKind": "batch_transformation",
+      "models": [
+        {
+          "name": "inModel",
+          "kind": "emf",
+          "role": "source",
+          "path": "models/<fixture_name>.model",
+          "generated": true,
+          "metamodelUri": "http://www.eclipse.org/emf/2002/Ecore"
+        },
+        {
+          "name": "outModel",
+          "kind": "emf",
+          "role": "target",
+          "generated": false,
+          "metamodelUri": "http://www.eclipse.org/emf/2002/Ecore"
+        }
+      ],
+      "assertions": [
+        {
+          "kind": "count",
+          "model": "outModel",
+          "type": "<unqualified target type>",
+          "expected": 1
+        }
+      ]
+    }
+  ]
+}
+```
+
+For `ModelExtents`, replace `inModel` with `m` and replace `outModel` with the
+separate target entries `x` and `y`. After the JSON block, emit exactly the XML
+file blocks referenced by source model paths. Emit no target model file and no
+prose outside file blocks.

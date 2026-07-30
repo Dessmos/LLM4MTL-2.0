@@ -15,11 +15,11 @@
     {
       "parameters": {
         "promptType": "define",
-        "text": "={{ $json.prompt + \"\\n\\n## Authoritative metamodel files\\n\" + ($json.metamodel_text || \"\") + $if($(\"Extract text from examples file\").isExecuted, \"\\n\\n## Few-shot examples (guidance only)\\n\" + $(\"Extract text from examples file\").item.json.examples, \"\") + $if($(\"Extract text from grammar\").isExecuted, \"\\n\\n## ATLAS Transformation Language (ATL) grammar (syntax guidance only)\\n\" + $(\"Extract text from grammar\").item.json.grammar, \"\") + $if($(\"Extract text from helper methods\").isExecuted, \"\\n\\n## Existing helper methods (background only)\\n\" + $(\"Extract text from helper methods\").item.json.helper_methods, \"\") }}",
+        "text": "={{ $json.assembled_prompt }}",
         "messages": {
           "messageValues": [
             {
-              "message": "Generate semantic test artifacts for ATLAS Transformation Language (ATL) from the reviewed shared task prompt. Follow that prompt and the exact task-specific metamodel files. Return only fenced file blocks: exactly one ```json file=semantic_cases.json block and the ```xml file=models/<name>.model blocks it references. Never generate Java, JUnit, transformation code, Maven files, helper classes, or prose outside file blocks. semantic_cases.json must contain schemaVersion, testClass, transformation, metamodels, and tests. Each test contains name, models, and assertions; each model contains name, kind, role, path, generated, and metamodelUri only for EMF. Use only the canonical generic assertion kinds count, featureValues, objects, pathValues, and referencePairs. Every assertion uses expected; never use value, values, equals, ids, pairs, sourceType, targetType, where, or match. Assertions must describe observable target-model counts, feature values, links, and absence of unjustified elements."
+              "message": "Generate semantic test artifacts for ATLAS Transformation Language (ATL) from the reviewed shared task prompt. The task specification describes the transformation under test: write tests for it, do not implement it. Use the exact task-specific metamodel files.\n\nThe user message contains a section titled REQUIRED OUTPUT CONTRACT. That section is binding and complete: it lists every allowed field name and every allowed field value of semantic_cases.json. Follow it literally. Do not introduce a field name or a field value that it does not list, and do not substitute a synonym for one that it does list. Where any other section of the prompt appears to disagree with it, the contract wins.\n\nReturn only fenced file blocks: exactly one ```json file=semantic_cases.json block and the model file blocks that it references. Never generate Java, JUnit, transformation code, Maven files, helper classes, or prose outside file blocks."
             }
           ]
         },
@@ -86,7 +86,7 @@
       "parameters": {
         "mode": "combine",
         "combineBy": "combineByPosition",
-        "numberInputs": 6,
+        "numberInputs": 7,
         "options": {
           "includeUnpaired": true
         }
@@ -420,6 +420,91 @@
         736,
         -368
       ]
+    },
+    {
+      "parameters": {
+        "fileSelector": "=/data/contract/atl/semantic_cases_contract.txt",
+        "options": {}
+      },
+      "id": "read-output-contract-atl",
+      "name": "Read output contract",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        448,
+        -160
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "text",
+        "destinationKey": "output_contract",
+        "options": {}
+      },
+      "id": "extract-text-from-contract-atl",
+      "name": "Extract text from contract",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        736,
+        -160
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "assemble-prompt-assignments-1",
+              "name": "assembled_prompt",
+              "value": "={{ \"## Task specification (describes the transformation under test: write tests for it, do not implement it)\\n\" + $json.prompt + \"\\n\\n## Authoritative metamodel files\\n\" + ($json.metamodel_text || \"\") + \"\\n\\n## REQUIRED OUTPUT CONTRACT (binding, overrides every other section)\\n\" + ($json.output_contract || \"\") + $if($(\"Extract text from examples file\").isExecuted, \"\\n\\n## Few-shot examples (they illustrate the binding contract above; on any conflict the contract wins)\\n\" + $(\"Extract text from examples file\").item.json.examples, \"\") + $if($(\"Extract text from grammar\").isExecuted, \"\\n\\n## ATLAS Transformation Language (ATL) grammar (syntax guidance only)\\n\" + $(\"Extract text from grammar\").item.json.grammar, \"\") + $if($(\"Extract text from helper methods\").isExecuted, \"\\n\\n## Existing helper methods (background only)\\n\" + $(\"Extract text from helper methods\").item.json.helper_methods, \"\") }}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "assemble-prompt",
+      "name": "Assemble prompt",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1232,
+        -288
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "toText",
+        "sourceProperty": "assembled_prompt",
+        "binaryPropertyName": "data",
+        "options": {}
+      },
+      "id": "convert-prompt-to-file",
+      "name": "Convert prompt to File",
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        1440,
+        -448
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "write",
+        "fileName": "=/data/artifacts/test_generation/atl/prompts/claude-sonnet-4/only_prompt/{{ $node[\"Merge\"].json.baseName }}.md",
+        "dataPropertyName": "data",
+        "options": {}
+      },
+      "id": "write-prompt-to-disk",
+      "name": "Write prompt to disk",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        1632,
+        -448
+      ]
     }
   ],
   "pinData": {},
@@ -472,7 +557,7 @@
       "main": [
         [
           {
-            "node": "(Re-)Generate test suite",
+            "node": "Assemble prompt",
             "type": "main",
             "index": 0
           }
@@ -517,6 +602,11 @@
           },
           {
             "node": "Set Parameters",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Read output contract",
             "type": "main",
             "index": 0
           }
@@ -698,6 +788,55 @@
             "node": "Merge",
             "type": "main",
             "index": 1
+          }
+        ]
+      ]
+    },
+    "Read output contract": {
+      "main": [
+        [
+          {
+            "node": "Extract text from contract",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract text from contract": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 6
+          }
+        ]
+      ]
+    },
+    "Assemble prompt": {
+      "main": [
+        [
+          {
+            "node": "(Re-)Generate test suite",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Convert prompt to File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Convert prompt to File": {
+      "main": [
+        [
+          {
+            "node": "Write prompt to disk",
+            "type": "main",
+            "index": 0
           }
         ]
       ]

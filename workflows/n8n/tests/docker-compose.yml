@@ -23,6 +23,9 @@ services:
       # Reference names enumerate tasks; the stage service resolves the matching
       # contract and exact metamodel files from its read-only repository view.
       - "../../../benchmark/tasks:/data/benchmark/tasks:ro"
+      # The output contract is not a prompting strategy: every variant must
+      # receive it, so it is mounted unconditionally alongside the examples.
+      - "../../../prompt_assets/tests/contract:/data/contract:ro"
       - "../../../prompt_assets/tests/few_shot:/data/examples:ro"
       - "../../../prompt_assets/tests/grammar:/data/grammar:ro"
       - "../../../prompt_assets/tests/helper_methods:/data/helper_methods:ro"

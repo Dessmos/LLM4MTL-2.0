@@ -7,13 +7,9 @@ For the current task, replace every synthetic identifier with an identifier from
 the deterministic model contract and the QVT-O task context. Never copy an
 identifier from these examples unless the current contract lists it exactly.
 
-The generated response must contain semantic test artifacts only:
-- one semantic_cases.json file block,
-- one or more generated source model file blocks,
-- no Java, no JUnit, no Maven files, and no prose outside file blocks.
-
-Always use canonical assertion payloads with the expected field. Do not use
-legacy task-specific assertion fields or alternate primary assertion keys.
+The binding output contract is delivered separately and always applies. The
+examples below only illustrate it; where an example looks like it disagrees
+with the contract, the contract wins.
 
 Example 1: canonical EMF source-to-EMF target response shape.
 Use concrete source types from the current contract. Do not instantiate abstract
@@ -21,7 +17,7 @@ types. The target model has no path because the harness creates it.
 
 ```json file=semantic_cases.json
 {
-  "schemaVersion": "1.0",
+  "schemaVersion": 1,
   "testClass": "GeneratedSyntheticEmfShapeExample",
   "transformation": "transformations/synthetic_emf_shape.qvto",
   "metamodels": [
@@ -31,6 +27,7 @@ types. The target model has no path because the harness creates it.
   "tests": [
     {
       "name": "concrete_sources_create_exact_target_objects",
+      "scenarioKind": "batch_transformation",
       "models": [
         {
           "name": "SourceRuntime",
@@ -90,7 +87,7 @@ to those contained objects with stable fragment paths.
 
 ```json file=semantic_cases.json
 {
-  "schemaVersion": "1.0",
+  "schemaVersion": 1,
   "testClass": "GeneratedSyntheticReferenceShapeExample",
   "transformation": "transformations/synthetic_reference_shape.qvto",
   "metamodels": [
@@ -100,6 +97,7 @@ to those contained objects with stable fragment paths.
   "tests": [
     {
       "name": "source_relationships_create_exact_target_links",
+      "scenarioKind": "batch_transformation",
       "models": [
         {
           "name": "InputRuntime",
@@ -153,7 +151,7 @@ with its own runtime model name and metamodelUri from the current contract.
 
 ```json file=semantic_cases.json
 {
-  "schemaVersion": "1.0",
+  "schemaVersion": 1,
   "testClass": "GeneratedSyntheticMultiSourceShapeExample",
   "transformation": "transformations/synthetic_multi_source_shape.qvto",
   "metamodels": [
@@ -164,6 +162,7 @@ with its own runtime model name and metamodelUri from the current contract.
   "tests": [
     {
       "name": "primary_and_lookup_sources_create_exact_target_values",
+      "scenarioKind": "batch_transformation",
       "models": [
         {
           "name": "PrimarySource",
@@ -229,7 +228,7 @@ root.
 
 ```json file=semantic_cases.json
 {
-  "schemaVersion": "1.0",
+  "schemaVersion": 1,
   "testClass": "GeneratedSyntheticPlainXmlShapeExample",
   "transformation": "transformations/synthetic_plain_xml_shape.qvto",
   "metamodels": [
@@ -239,6 +238,7 @@ root.
   "tests": [
     {
       "name": "namespaced_source_xml_creates_exact_target_elements",
+      "scenarioKind": "batch_transformation",
       "models": [
         {
           "name": "XmlSourceRuntime",

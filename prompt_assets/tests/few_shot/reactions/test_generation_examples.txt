@@ -4,9 +4,13 @@ This is format guidance only. Every identifier below is synthetic. Replace it
 with runtime slots, metamodel URIs, types, and features from the deterministic
 task contract. Emit no Java, Xtend, Maven files, or prose in the response.
 
+The binding output contract is delivered separately and always applies. The
+examples below only illustrate it; where an example looks like it disagrees
+with the contract, the contract wins.
+
 ```json file=semantic_cases.json
 {
-  "schemaVersion": "1.0",
+  "schemaVersion": 1,
   "testClass": "GeneratedSyntheticPropagationExample",
   "transformation": "transformations/SyntheticPropagation.reactions",
   "metamodels": [

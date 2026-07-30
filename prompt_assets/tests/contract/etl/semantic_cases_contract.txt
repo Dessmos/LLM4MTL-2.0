@@ -1,0 +1,161 @@
+ETL semantic test output contract.
+
+This section is binding and complete. It is the input contract of the Python
+semantic-test extractor: a response that deviates from it is rejected before
+anything is executed and is recorded as an invalid artifact, not as a failing
+test. Every allowed field name and every allowed field value of
+semantic_cases.json is stated below. Use no field name and no field value that
+this section does not list.
+
+The generated response must contain semantic test artifacts only:
+- one semantic_cases.json file block,
+- one or more generated source model file blocks,
+- no Java, no JUnit, no Maven files, and no prose outside file blocks.
+
+Always use canonical assertion payloads with the expected field. Do not use
+legacy task-specific assertion fields or alternate primary assertion keys.
+
+REQUIRED OUTPUT CONTRACT
+
+Follow this structure exactly. It is the input contract of the Python
+semantic-test extractor, not optional guidance.
+
+Use the case-sensitive runtime model names from the current ETL task:
+
+- `Tree2Graph`: `Tree` is an EMF source; `Graph` is an EMF target.
+- `base`, `equivalent`, `greedy`, `inheritance`, `lazy`,
+  `multiple_targets`, and `primary`: `Flowchart` is an EMF source; `HTML`
+  is an EMF target.
+- `rss2atom`: `RSS` is a `plainXml` source; `Atom` is a `plainXml` target.
+- `OO2DB`: `OO` and `OO2DB` are EMF sources; `DB` and `Trace` are EMF
+  targets. `OO` may also be used as a target when the scenario exercises that
+  part of the transformation. Use the role needed by the test; do not invent a
+  different runtime name.
+
+Never use synthetic names from the examples in an actual task. Copy each
+`metamodelUri` exactly from the authoritative metamodel input. Do not infer it
+from a filename.
+
+Allowed `models[].kind` values are exactly `"emf"` and `"plainXml"`.
+Direction belongs only in `models[].role`, whose allowed values are `"source"`,
+`"target"`, and `"inout"`.
+
+For every readable source model, include `path` and `"generated": true`. A
+target created by the harness has no `path` and uses `"generated": false`.
+For `plainXml`, omit `metamodelUri`.
+
+Every test must use `"scenarioKind": "batch_transformation"`. Every assertion
+must contain all four common fields:
+
+- `kind`;
+- `model`;
+- `type`;
+- `expected`.
+
+`model` must equal a `models[].name` from the same test. `type` must be an
+unqualified type name from that model's current metamodel. Never use `object`
+instead of `model` plus `type`.
+
+The only allowed assertion shapes are:
+
+```json
+{"kind": "count", "model": "<target runtime name>", "type": "<TargetType>", "expected": 1}
+```
+
+```json
+{
+  "kind": "featureValues",
+  "model": "<target runtime name>",
+  "type": "<TargetType>",
+  "feature": "<feature>",
+  "expected": ["<value>"]
+}
+```
+
+```json
+{
+  "kind": "pathValues",
+  "model": "<target runtime name>",
+  "type": "<TargetType>",
+  "path": "<feature.path>",
+  "expected": ["<value>"]
+}
+```
+
+```json
+{
+  "kind": "objects",
+  "model": "<target runtime name>",
+  "type": "<TargetType>",
+  "features": ["<feature1>", "<feature2>"],
+  "expected": [
+    {"<feature1>": "<value1>", "<feature2>": "<value2>"}
+  ]
+}
+```
+
+```json
+{
+  "kind": "referencePairs",
+  "model": "<target runtime name>",
+  "type": "<TargetLinkType>",
+  "source": "<sourceReference>.<identityFeature>",
+  "target": "<targetReference>.<identityFeature>",
+  "expected": [
+    {"source": "<source identity>", "target": "<target identity>"}
+  ]
+}
+```
+
+`count.expected` must be an integer. All other `expected` values above must be
+arrays. Do not replace `expected` with `value`, `values`, `equals`, `ids`,
+`pairs`, `where`, or `match`.
+
+The complete response shape is:
+
+```json file=semantic_cases.json
+{
+  "schemaVersion": 1,
+  "testClass": "<JavaIdentifier>",
+  "transformation": "transformations/<task>.etl",
+  "metamodels": [
+    {"name": "<runtime model name>", "uri": "<exact metamodel URI>"}
+  ],
+  "tests": [
+    {
+      "name": "<test_name>",
+      "scenarioKind": "batch_transformation",
+      "models": [
+        {
+          "name": "<exact source runtime name>",
+          "kind": "emf",
+          "role": "source",
+          "path": "models/<fixture_name>.model",
+          "generated": true,
+          "metamodelUri": "<exact source metamodel URI>"
+        },
+        {
+          "name": "<exact target runtime name>",
+          "kind": "emf",
+          "role": "target",
+          "generated": false,
+          "metamodelUri": "<exact target metamodel URI>"
+        }
+      ],
+      "assertions": [
+        {
+          "kind": "count",
+          "model": "<exact target runtime name>",
+          "type": "<unqualified target type>",
+          "expected": 1
+        }
+      ]
+    }
+  ]
+}
+```
+
+For `rss2atom`, use the same structure with `"kind": "plainXml"` for `RSS`
+and `Atom`, and omit `metamodelUri`. After the JSON block, emit exactly the XML
+file blocks referenced by readable model paths. Emit no target model file and
+no prose outside file blocks.

@@ -209,20 +209,33 @@ def synchronize_test_generation(
         payload["name"] = payload["name"].removesuffix("_smoke")
     else:
         generation = nodes["(Re-)Generate test suite"]
-        generation["parameters"]["text"] = _cloud_test_request(language)
+        # The assembled prompt is built in one Set node so that the exact text
+        # sent to the model is a value that can be archived, not an expression
+        # that only ever existed inside the generation node.
+        generation["parameters"]["text"] = "={{ $json.assembled_prompt }}"
         generation["parameters"]["messages"]["messageValues"] = [
             {"message": _test_generation_system_message(language)}
         ]
+    merge_name = "Merge prompt, task and models" if is_qwen else "Merge"
     payload = _replace_language_wide_models(
         payload,
         language=language,
         save_name="Save task name" if is_qwen else "Save file name",
-        merge_name=(
-            "Merge prompt, task and models" if is_qwen else "Merge"
-        ),
+        merge_name=merge_name,
         merge_input=2 if is_qwen else 1,
     )
-    return payload
+    return _wire_output_contract(
+        payload,
+        language=language,
+        merge_name=merge_name,
+        merge_input=3 if is_qwen else 6,
+        consumer=(
+            "Generate Test Suite with local Qwen"
+            if is_qwen
+            else "(Re-)Generate test suite"
+        ),
+        is_qwen=is_qwen,
+    )
 
 
 def synchronize_transformation_generation(
@@ -655,6 +668,163 @@ def _replace_language_wide_models(
     return payload
 
 
+CONTRACT_NODES = (
+    "Read output contract",
+    "Extract text from contract",
+    "Assemble prompt",
+    "Convert prompt to File",
+    "Write prompt to disk",
+)
+
+
+def _wire_output_contract(
+    payload: dict[str, Any],
+    *,
+    language: str,
+    merge_name: str,
+    merge_input: int,
+    consumer: str,
+    is_qwen: bool,
+) -> dict[str, Any]:
+    """Deliver the output contract on every strategy and archive the prompt.
+
+    The contract used to live inside the few-shot examples file, so only the
+    ``few_shot`` and ``few_shots_AND_grammar`` variants ever received it: the
+    other two asked for a structured artifact without ever stating its shape.
+    It is not a prompting treatment, so it hangs off the loop directly and the
+    ``Few_shot`` switch no longer decides whether the model is told what to
+    emit. The strategy axis now varies examples alone.
+
+    The assembled prompt is written next to the response it produced, because a
+    response that violates the contract is otherwise indistinguishable from a
+    prompt that never carried it.
+    """
+    nodes = {node["name"]: node for node in payload["nodes"]}
+    response_path = nodes["Write response to disk"]["parameters"]["fileName"]
+    if "/responses/" not in response_path:
+        raise ValueError("cannot derive the prompt archive path")
+
+    payload["nodes"] = [
+        node for node in payload["nodes"] if node["name"] not in CONTRACT_NODES
+    ]
+    connections = payload["connections"]
+    for name in CONTRACT_NODES:
+        connections.pop(name, None)
+    _remove_connection_targets(connections, set(CONTRACT_NODES))
+
+    offset = 0 if is_qwen else 1
+    payload["nodes"] += [
+        {
+            "parameters": {
+                "fileSelector": (
+                    f"=/data/contract/{language}/semantic_cases_contract.txt"
+                ),
+                "options": {},
+            },
+            "id": f"read-output-contract-{language}",
+            "name": "Read output contract",
+            "type": "n8n-nodes-base.readWriteFile",
+            "typeVersion": 1,
+            "position": [448 if offset else -512, -160 if offset else 96],
+        },
+        {
+            "parameters": {
+                "operation": "text",
+                "destinationKey": "output_contract",
+                "options": {},
+            },
+            "id": f"extract-text-from-contract-{language}",
+            "name": "Extract text from contract",
+            "type": "n8n-nodes-base.extractFromFile",
+            "typeVersion": 1,
+            "position": [736 if offset else -288, -160 if offset else 96],
+        },
+        {
+            "parameters": {
+                "assignments": {
+                    "assignments": [
+                        {
+                            "id": "assemble-prompt-assignments-1",
+                            "name": "assembled_prompt",
+                            "value": (
+                                _qwen_assembled_prompt()
+                                if is_qwen
+                                else _cloud_test_request(language)
+                            ),
+                            "type": "string",
+                        }
+                    ]
+                },
+                "includeOtherFields": True,
+                "options": {},
+            },
+            "id": "assemble-prompt",
+            "name": "Assemble prompt",
+            "type": "n8n-nodes-base.set",
+            "typeVersion": 3.4,
+            "position": [1232 if offset else 208, -288],
+        },
+        {
+            "parameters": {
+                "operation": "toText",
+                "sourceProperty": "assembled_prompt",
+                "binaryPropertyName": "data",
+                "options": {},
+            },
+            "id": "convert-prompt-to-file",
+            "name": "Convert prompt to File",
+            "type": "n8n-nodes-base.convertToFile",
+            "typeVersion": 1.1,
+            "position": [1440 if offset else 432, -448],
+        },
+        {
+            "parameters": {
+                "operation": "write",
+                "fileName": response_path.replace("/responses/", "/prompts/", 1),
+                "dataPropertyName": "data",
+                "options": {},
+            },
+            "id": "write-prompt-to-disk",
+            "name": "Write prompt to disk",
+            "type": "n8n-nodes-base.readWriteFile",
+            "typeVersion": 1,
+            "position": [1632 if offset else 656, -448],
+        },
+    ]
+
+    connections["Loop Over Items"]["main"][1].append(
+        {"node": "Read output contract", "type": "main", "index": 0}
+    )
+    connections["Read output contract"] = {
+        "main": [[
+            {"node": "Extract text from contract", "type": "main", "index": 0}
+        ]]
+    }
+    connections["Extract text from contract"] = {
+        "main": [[
+            {"node": merge_name, "type": "main", "index": merge_input}
+        ]]
+    }
+    connections[merge_name] = {
+        "main": [[{"node": "Assemble prompt", "type": "main", "index": 0}]]
+    }
+    connections["Assemble prompt"] = {
+        "main": [[
+            {"node": consumer, "type": "main", "index": 0},
+            {"node": "Convert prompt to File", "type": "main", "index": 0},
+        ]]
+    }
+    connections["Convert prompt to File"] = {
+        "main": [[
+            {"node": "Write prompt to disk", "type": "main", "index": 0}
+        ]]
+    }
+    for node in payload["nodes"]:
+        if node["name"] == merge_name:
+            node["parameters"]["numberInputs"] = merge_input + 1
+    return payload
+
+
 def _remove_connection_targets(
     value: Any,
     target_names: set[str],
@@ -749,13 +919,32 @@ def _qwen_prompt_request(language: str) -> str:
     )
 
 
+# The frozen task prompt describes the transformation under test. It is written
+# for the transformation generator, so test generation has to say out loud what
+# role it plays here, or the model answers it instead of testing it.
+TASK_SPECIFICATION_HEADER = (
+    "## Task specification (describes the transformation under test: "
+    "write tests for it, do not implement it)\\n"
+)
+CONTRACT_SECTION_HEADER = (
+    "\\n\\n## REQUIRED OUTPUT CONTRACT "
+    "(binding, overrides every other section)\\n"
+)
+FEW_SHOT_SECTION_HEADER = (
+    "\\n\\n## Few-shot examples (they illustrate the binding contract above; "
+    "on any conflict the contract wins)\\n"
+)
+
+
 def _cloud_test_request(language: str) -> str:
     grammar_name = INPUTS[language].display_name
     return (
-        '={{ $json.prompt + "\\n\\n## Authoritative metamodel files\\n" + '
+        f'={{{{ "{TASK_SPECIFICATION_HEADER}" + $json.prompt + '
+        '"\\n\\n## Authoritative metamodel files\\n" + '
         '($json.metamodel_text || "") + '
+        f'"{CONTRACT_SECTION_HEADER}" + ($json.output_contract || "") + '
         '$if($("Extract text from examples file").isExecuted, '
-        '"\\n\\n## Few-shot examples (guidance only)\\n" + '
+        f'"{FEW_SHOT_SECTION_HEADER}" + '
         '$("Extract text from examples file").item.json.examples, "") + '
         '$if($("Extract text from grammar").isExecuted, '
         f'"\\n\\n## {grammar_name} grammar (syntax guidance only)\\n" + '
@@ -766,23 +955,44 @@ def _cloud_test_request(language: str) -> str:
     )
 
 
+def _qwen_assembled_prompt() -> str:
+    """The local-Qwen variant has no examples, grammar, or helper sections."""
+    return (
+        f'={{{{ "{TASK_SPECIFICATION_HEADER}" + ($json.prompt || "") + '
+        '"\\n\\n## Authoritative metamodel files\\n" + '
+        '($json.metamodel_text || "") + '
+        f'"{CONTRACT_SECTION_HEADER}" + ($json.output_contract || "") }}}}'
+    )
+
+
 def _test_generation_system_message(language: str) -> str:
+    """Defer to the contract instead of paraphrasing it.
+
+    This message used to restate the artifact shape in its own words, and the
+    two texts disagreed. It listed the model fields as "name, kind, role, path,
+    generated, and metamodelUri only for EMF", which reads as the literal value
+    ``"EMF"``; it named neither the closed ``kind``/``role`` vocabularies nor
+    the mandatory ``model`` and ``type`` fields of an assertion. Being the
+    highest-priority instruction, it won over the contract that stated all of
+    them, and every generated ATL suite reproduced this message rather than the
+    contract. One authority now states the shape, and this message points at it.
+    """
     message = (
         f"Generate semantic test artifacts for {INPUTS[language].display_name} "
-        "from the reviewed shared task prompt. Follow that prompt and the exact "
-        "task-specific metamodel files. Return only fenced file blocks: exactly "
-        "one ```json file=semantic_cases.json block and the "
-        "```xml file=models/<name>.model blocks it references. Never generate "
-        "Java, JUnit, transformation code, Maven files, helper classes, or prose "
-        "outside file blocks. semantic_cases.json must contain schemaVersion, "
-        "testClass, transformation, metamodels, and tests. Each test contains "
-        "name, models, and assertions; each model contains name, kind, role, "
-        "path, generated, and metamodelUri only for EMF. Use only the canonical "
-        "generic assertion kinds count, featureValues, objects, pathValues, and "
-        "referencePairs. Every assertion uses expected; never use value, values, "
-        "equals, ids, pairs, sourceType, targetType, where, or match. Assertions "
-        "must describe observable target-model counts, feature values, links, "
-        "and absence of unjustified elements."
+        "from the reviewed shared task prompt. The task specification describes "
+        "the transformation under test: write tests for it, do not implement "
+        "it. Use the exact task-specific metamodel files.\n\n"
+        "The user message contains a section titled REQUIRED OUTPUT CONTRACT. "
+        "That section is binding and complete: it lists every allowed field "
+        "name and every allowed field value of semantic_cases.json. Follow it "
+        "literally. Do not introduce a field name or a field value that it does "
+        "not list, and do not substitute a synonym for one that it does list. "
+        "Where any other section of the prompt appears to disagree with it, the "
+        "contract wins.\n\n"
+        "Return only fenced file blocks: exactly one "
+        "```json file=semantic_cases.json block and the model file blocks that "
+        "it references. Never generate Java, JUnit, transformation code, Maven "
+        "files, helper classes, or prose outside file blocks."
     )
     if language == "reactions":
         message += (
@@ -801,9 +1011,7 @@ def _qwen_test_request(language: str) -> str:
     return (
         "={{ JSON.stringify({ model: 'qwen2.5-coder:7b', stream: false, "
         f"messages: [{{ role: 'system', content: {system} }}, "
-        "{ role: 'user', content: ($json.prompt || '') + "
-        "'\\n\\n## Authoritative metamodel files\\n' + "
-        "($json.metamodel_text || '') }], "
+        "{ role: 'user', content: ($json.assembled_prompt || '') }], "
         "options: { temperature: 0.1, top_p: 1 } }) }}"
     )
 

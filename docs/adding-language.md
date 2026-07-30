@@ -150,10 +150,21 @@ Add semantic-test prompt assets. Every asset is language-scoped, and a workflow
 only ever reads its own language's directory:
 
 ```text
+prompt_assets/tests/contract/<lang>/semantic_cases_contract.txt
 prompt_assets/tests/few_shot/<lang>/test_generation_examples.txt
 prompt_assets/tests/grammar/<lang>/EBNF.txt
 prompt_assets/tests/helper_methods/<lang>/
 ```
+
+The contract file is mandatory and is not a prompting strategy. It states the
+allowed field names and the closed field-value vocabularies of
+`semantic_cases.json`, and every test-generation export delivers it regardless
+of `Few_shot`, `Grammar`, and `Helper_methods`. It is the single authority on
+the artifact shape: the system message points at it rather than restating it,
+and the few-shot examples only illustrate it. Two descriptions of the same
+contract is how the last one drifted, and a whole ATL run was rejected before
+execution because the system message and the contract disagreed on
+`models[].kind`.
 
 The transformation side mirrors that layout under
 `prompt_assets/transformations/`. Create the directory even when a language has

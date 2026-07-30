@@ -109,6 +109,12 @@ class N8nWorkflowTests(unittest.TestCase):
             '"../../../prompt_assets/tests/helper_methods:/data/helper_methods:ro"',
             text,
         )
+        # The output contract is not a prompting treatment: it is mounted
+        # unconditionally so that every strategy variant can read it.
+        self.assertIn(
+            '"../../../prompt_assets/tests/contract:/data/contract:ro"',
+            text,
+        )
         self.assertIn("stage-service:", text)
         self.assertNotIn(
             '"../../../benchmark/metamodels:/data/models:ro"',
@@ -228,11 +234,28 @@ class N8nWorkflowTests(unittest.TestCase):
                         f"=/data/task_prompts/{language}/*.txt",
                         nodes[prompt_node_name]["parameters"]["fileSelector"],
                     )
+                    if "Read few shot examples" in nodes:
+                        self.assertEqual(
+                            (
+                                "=/data/examples/"
+                                f"{language}/test_generation_examples.txt"
+                            ),
+                            nodes["Read few shot examples"]["parameters"][
+                                "fileSelector"
+                            ],
+                        )
                     self.assertNotIn("Read model files", nodes)
                     self.assertIn(PROMPT_INPUT_NODE, nodes)
                     self.assertIn("metamodel_text", serialized)
+                    self.assertNotIn("model_contract_text", serialized)
                     self.assertNotIn("concatenated_model", serialized)
                     self.assertTrue(output.endswith(".md"))
+                    self._assert_contract_reaches_every_strategy(
+                        payload,
+                        nodes,
+                        language,
+                        output,
+                    )
                     self.assertNotIn("prompts_smoke", serialized)
                     self.assertNotIn(
                         "expert Java/JUnit test engineer",
@@ -249,6 +272,130 @@ class N8nWorkflowTests(unittest.TestCase):
                         self.assertIn("change_propagation", serialized)
                         self.assertIn("tests[].changes", serialized)
 
+    def _assert_contract_reaches_every_strategy(
+        self,
+        payload: dict,
+        nodes: dict,
+        language: str,
+        response_path: str,
+    ) -> None:
+        """The output contract is an input of every variant, not of few_shot.
+
+        It used to live in the few-shot examples file, so ``only_prompt`` and
+        ``grammar`` asked for a structured artifact without ever stating its
+        shape. The contract node therefore hangs off the loop, never off the
+        ``Few_shot`` switch, and the system message must defer to it instead of
+        restating the artifact in words that drifted away from it.
+        """
+        self.assertEqual(
+            f"=/data/contract/{language}/semantic_cases_contract.txt",
+            nodes["Read output contract"]["parameters"]["fileSelector"],
+        )
+        loop_targets = {
+            link["node"]
+            for branch in payload["connections"]["Loop Over Items"]["main"]
+            for link in branch
+        }
+        self.assertIn("Read output contract", loop_targets)
+
+        assembled = nodes["Assemble prompt"]["parameters"]["assignments"][
+            "assignments"
+        ][0]["value"]
+        self.assertIn("output_contract", assembled)
+        self.assertIn("REQUIRED OUTPUT CONTRACT", assembled)
+        # The grammar section is still guidance; the examples section is not,
+        # because it carries what the contract states.
+        self.assertNotIn("Few-shot examples (guidance only)", assembled)
+
+        generation = (
+            "Generate Test Suite with local Qwen"
+            if "Generate Test Suite with local Qwen" in nodes
+            else "(Re-)Generate test suite"
+        )
+        message = json.dumps(nodes[generation]["parameters"])
+        self.assertIn("assembled_prompt", message)
+        self.assertIn("REQUIRED OUTPUT CONTRACT", message)
+        for paraphrase in (
+            "metamodelUri only for EMF",
+            "Each test contains name, models, and assertions",
+        ):
+            self.assertNotIn(paraphrase, message)
+
+        # The prompt that produced a response is archived beside it, so an
+        # invalid artifact can be traced to the text that actually asked for it.
+        self.assertEqual(
+            response_path.replace("/responses/", "/prompts/", 1),
+            nodes["Write prompt to disk"]["parameters"]["fileName"],
+        )
+
+    def test_each_contract_file_declares_its_python_output_contract(self) -> None:
+        common_fragments = (
+            "REQUIRED OUTPUT CONTRACT",
+            '"schemaVersion": 1',
+            '"kind": "emf"',
+            '"expected"',
+            "Every assertion",
+            "Never use `object`",
+        )
+        language_fragments = {
+            "atl": (
+                '"name": "IN"',
+                '"name": "OUT"',
+                '"role": "source"',
+                '"role": "target"',
+            ),
+            "etl": (
+                "`Tree2Graph`",
+                "`Tree`",
+                "`Graph`",
+                "`rss2atom`",
+                "`RSS`",
+                "`Atom`",
+                "`OO2DB`",
+                "`Trace`",
+            ),
+            "qvto": (
+                "`inModel`",
+                "`outModel`",
+                "`ModelExtents`",
+                "`m`",
+                "`x`",
+                "`y`",
+            ),
+            "reactions": (
+                "`AmaltheaToAscet_*`",
+                "`FamiliesToPersons_*`",
+                "`NetworkToGraph_*`",
+                '"role": "inout"',
+                '"scenarioKind": "change_propagation"',
+                '"set_feature"',
+            ),
+        }
+
+        for language, specific_fragments in language_fragments.items():
+            contract = (
+                TARGET.prompt_assets
+                / "tests"
+                / "contract"
+                / language
+                / "semantic_cases_contract.txt"
+            ).read_text(encoding="utf-8")
+            examples = (
+                TARGET.prompt_assets
+                / "tests"
+                / "few_shot"
+                / language
+                / "test_generation_examples.txt"
+            ).read_text(encoding="utf-8")
+            for fragment in common_fragments + specific_fragments:
+                with self.subTest(language=language, fragment=fragment):
+                    self.assertIn(fragment, contract)
+            with self.subTest(language=language, fragment="single authority"):
+                # One file states the contract. The examples illustrate it and
+                # say so; two copies of a contract is how the last one drifted.
+                self.assertNotIn("REQUIRED OUTPUT CONTRACT", examples)
+                self.assertIn("the contract wins", examples)
+
     def test_every_prompt_asset_is_read_from_its_language_directory(self) -> None:
         """No workflow may read another language's assets, or a whole tree.
 
@@ -264,7 +411,8 @@ class N8nWorkflowTests(unittest.TestCase):
                 if not isinstance(selector, str):
                     continue
                 match = re.search(
-                    r"/data/(helper_methods|examples|grammar|task_prompts)/([^/]*)/",
+                    r"/data/(helper_methods|examples|grammar|task_prompts|contract)"
+                    r"/([^/]*)/",
                     selector,
                 )
                 if match is None:

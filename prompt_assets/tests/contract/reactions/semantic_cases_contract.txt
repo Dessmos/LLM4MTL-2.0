@@ -1,0 +1,181 @@
+Reactions semantic test output contract.
+
+This section is binding and complete. It is the input contract of the Python
+semantic-test extractor: a response that deviates from it is rejected before
+anything is executed and is recorded as an invalid artifact, not as a failing
+test. Every allowed field name and every allowed field value of
+semantic_cases.json is stated below. Use no field name and no field value that
+this section does not list.
+
+The generated response must contain semantic test artifacts only:
+- one semantic_cases.json file block,
+- one generated model file block for every path in models[],
+- no Java, no Xtend, no Maven files, and no prose outside file blocks.
+
+REQUIRED OUTPUT CONTRACT
+
+Follow this structure exactly. It is the input contract of the Python
+semantic-test extractor, not optional guidance.
+
+Use the case-sensitive runtime model names and URIs selected by the current
+Reactions task:
+
+- `AmaltheaToAscet_*`: `amalthea` uses
+  `http://vitruv.tools/methodologisttemplate/amalthea`; `ascet` uses
+  `http://vitruv.tools/methodologisttemplate/ascet`.
+- `FamiliesToPersons_*`: `families` uses
+  `http://vitruv.tools/methodologisttemplate/families`; `persons` uses
+  `http://vitruv.tools/methodologisttemplate/persons`.
+- `NetworkToGraph_*`: `network` uses
+  `http://vitruv.tools/methodologisttemplate/network`; `graph` uses
+  `http://vitruv.tools/methodologisttemplate/graph`.
+
+Both models are always EMF `"inout"` models. Each has a generated initial file,
+so every model entry must contain `path`, `"generated": true`, and its exact
+`metamodelUri`. Never rename the runtime slots to `sourceSlot`, `targetSlot`,
+`input`, or `output` in an actual task.
+
+Every test must use `"scenarioKind": "change_propagation"` and must contain a
+non-empty `changes` array. The only allowed `changes[].kind` values are:
+
+- `"create"`;
+- `"delete"`;
+- `"set_feature"`;
+- `"add_to_collection"`;
+- `"remove_from_collection"`;
+- `"move"`.
+
+Every change has `kind` and `target`. `target` has the exact runtime slot in
+`slot`, an unqualified metamodel type in `type`, and may have a `where` object
+that uniquely identifies an existing element. Use `feature` for
+`set_feature`, `add_to_collection`, `remove_from_collection`, and `move`.
+Use `value` for every change except `delete`. A created object value has this
+shape:
+
+```json
+{
+  "type": "<unqualified created type>",
+  "features": {"<feature>": "<initial value>"}
+}
+```
+
+Every assertion must contain `kind`, `model`, `type`, and `expected`. `model`
+must equal one of the exact runtime slot names in the same test. `type` is
+unqualified. Never use `object` instead of `model` plus `type`.
+
+The allowed assertion shapes are:
+
+```json
+{"kind": "count", "model": "<runtime slot>", "type": "<Type>", "expected": 1}
+```
+
+```json
+{
+  "kind": "featureValues",
+  "model": "<runtime slot>",
+  "type": "<Type>",
+  "feature": "<feature>",
+  "expected": ["<value>"]
+}
+```
+
+```json
+{
+  "kind": "pathValues",
+  "model": "<runtime slot>",
+  "type": "<Type>",
+  "path": "<feature.path>",
+  "expected": ["<value>"]
+}
+```
+
+```json
+{
+  "kind": "objects",
+  "model": "<runtime slot>",
+  "type": "<Type>",
+  "features": ["<feature1>", "<feature2>"],
+  "expected": [
+    {"<feature1>": "<value1>", "<feature2>": "<value2>"}
+  ]
+}
+```
+
+```json
+{
+  "kind": "referencePairs",
+  "model": "<runtime slot>",
+  "type": "<LinkType>",
+  "source": "<sourceReference>.<identityFeature>",
+  "target": "<targetReference>.<identityFeature>",
+  "expected": [
+    {"source": "<source identity>", "target": "<target identity>"}
+  ]
+}
+```
+
+`count.expected` must be an integer. All other `expected` values above must be
+arrays. Do not replace `expected` with `value`, `values`, `equals`, `ids`,
+`pairs`, `where`, or `match`.
+
+The complete response shape is:
+
+```json file=semantic_cases.json
+{
+  "schemaVersion": 1,
+  "testClass": "<JavaIdentifier>",
+  "transformation": "transformations/<task>.reactions",
+  "metamodels": [
+    {"name": "<changed runtime slot>", "uri": "<changed model URI>"},
+    {"name": "<observed runtime slot>", "uri": "<observed model URI>"}
+  ],
+  "tests": [
+    {
+      "name": "<test_name>",
+      "scenarioKind": "change_propagation",
+      "models": [
+        {
+          "name": "<changed runtime slot>",
+          "kind": "emf",
+          "role": "inout",
+          "path": "models/<changed_fixture>.model",
+          "generated": true,
+          "metamodelUri": "<changed model URI>"
+        },
+        {
+          "name": "<observed runtime slot>",
+          "kind": "emf",
+          "role": "inout",
+          "path": "models/<observed_fixture>.model",
+          "generated": true,
+          "metamodelUri": "<observed model URI>"
+        }
+      ],
+      "changes": [
+        {
+          "kind": "set_feature",
+          "target": {
+            "slot": "<changed runtime slot>",
+            "type": "<unqualified source type>",
+            "where": {"<identity feature>": "<before value>"}
+          },
+          "feature": "<changed feature>",
+          "value": "<after value>"
+        }
+      ],
+      "assertions": [
+        {
+          "kind": "featureValues",
+          "model": "<observed runtime slot>",
+          "type": "<unqualified observed type>",
+          "feature": "<observed feature>",
+          "expected": ["<after value>"]
+        }
+      ]
+    }
+  ]
+}
+```
+
+After the JSON block, emit exactly one XML file block for every path in
+`models[]`. Emit no prose outside file blocks.
