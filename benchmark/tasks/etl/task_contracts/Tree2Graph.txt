@@ -2,7 +2,7 @@
 
 Use this contract as ground truth. Do not infer or invent model names, metamodel URIs, XML namespaces, or type names.
 
-| Runtime model name | Role(s) | Kind | metamodelUri | XML nsPrefix | Types used by ETL |
+| Runtime model name | Role(s) | Kind | metamodelUri | XML nsPrefix | Types used by the transformation |
 |---|---|---|---|---|---|
 | Graph | target | emf | Graph | Graph | Edge, Node |
 | Tree | source | emf | Tree | Tree | Tree |

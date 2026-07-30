@@ -12,8 +12,8 @@
         "source"
       ],
       "kind": "emf",
-      "metamodelUri": "",
-      "metamodelNsPrefix": "",
+      "metamodelUri": "IEEE1471",
+      "metamodelNsPrefix": "IEEE1471",
       "metamodelAlias": "IEEE1471",
       "metamodelFile": "benchmark/metamodels/additional_models/ATL_model/IEEE1471ConceptualModel.ecore",
       "typesUsedInTransformation": [
@@ -55,8 +55,8 @@
         "target"
       ],
       "kind": "emf",
-      "metamodelUri": "",
-      "metamodelNsPrefix": "",
+      "metamodelUri": "MoDAF",
+      "metamodelNsPrefix": "MoDAF",
       "metamodelAlias": "MoDAF",
       "metamodelFile": "benchmark/metamodels/additional_models/ATL_model/MoDAF-AV.ecore",
       "typesUsedInTransformation": [
@@ -130,6 +130,7 @@
   "rules": [
     "semantic_cases model slots must map to runtimeName exactly.",
     "EMF namespace URIs and prefixes come only from this contract.",
+    "For plainXml slots, use kind='plainXml' and omit metamodelUri.",
     "Assertions and declarative changes may use only availableTypes.",
     "The reference transformation remains the behavioural oracle."
   ]

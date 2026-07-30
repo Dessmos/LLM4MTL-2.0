@@ -8,4 +8,4 @@ Define rule `Transition` mapping `Transition` similarly.
 
 Define rule `StepToTransition` mapping `PlaceToTransition` to `StepToTransition`, copying `location`, `name`, `grafcet`, and `from`/`to`.
 
-Define rule `TransitionToStep` mapping `TransitionToPlace` to `TransitionToStep`, also copying `location`, `name`, `grafcet`, and `from`/`to`.+
+Define rule `TransitionToStep` mapping `TransitionToPlace` to `TransitionToStep`, also copying `location`, `name`, `grafcet`, and `from`/`to`.

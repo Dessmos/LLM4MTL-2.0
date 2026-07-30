@@ -13,7 +13,7 @@ import unittest
 from pathlib import Path
 
 from llm4mtl.domain import ModelRole, ScenarioKind
-from llm4mtl.semantic_tests.extraction.semantic_cases import render_generated_suite
+from llm4mtl.languages import language_adapter
 from llm4mtl.semantic_tests.scenario_mapping import ScenarioMappingError, suite_from_spec
 
 SPEC = {
@@ -78,10 +78,9 @@ class ProductionGateTests(unittest.TestCase):
         spec["tests"][0]["assertions"][0]["kind"] = "count"
         extracted = {"semantic_cases.json": json.dumps(spec)}
 
-        _, validation = render_generated_suite(
+        _, validation = language_adapter("etl").render_suite_artifacts(
             "SmokeTask",
             extracted,
-            language="etl",
         )
         self.assertTrue(validation.valid)
 
@@ -89,10 +88,9 @@ class ProductionGateTests(unittest.TestCase):
             broken = json.loads(json.dumps(SPEC))
             broken["tests"][0]["models"][1]["name"] = "Tgt"
             broken["tests"][0]["assertions"][0]["model"] = "Tgt"
-            _, still_valid = render_generated_suite(
+            _, still_valid = language_adapter("etl").render_suite_artifacts(
                 "SmokeTask",
                 {"semantic_cases.json": json.dumps(broken)},
-                language="etl",
             )
             self.assertTrue(still_valid.valid)
 
@@ -103,10 +101,9 @@ class ProductionGateTests(unittest.TestCase):
         spec["tests"][0]["models"][0].pop("path")
         spec["tests"][0]["models"][0]["role"] = "source"
 
-        _, validation = render_generated_suite(
+        _, validation = language_adapter("etl").render_suite_artifacts(
             "SmokeTask",
             {"semantic_cases.json": json.dumps(spec)},
-            language="etl",
         )
         self.assertFalse(validation.valid)
 

@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://llm4mtl/schemas/contract.schema.json",
   "title": "Task model contract",
-  "description": "Deterministic structural ground truth for one transformation task. The camelCase representation is the currently persisted benchmark format. The snake_case representation remains accepted for compatibility with the originally published schema.",
+  "description": "Deterministic structural ground truth for one transformation task. The camelCase representation is the currently persisted benchmark format and is identical for every language: an ETL contract carries the same identity, provenance, and model fields an ATL, QVT-O, or Reactions contract carries. The snake_case representation remains accepted for compatibility with the originally published schema.",
   "oneOf": [
     {"$ref": "#/$defs/currentContract"},
     {"$ref": "#/$defs/schemaCompatibilityContract"}
@@ -14,7 +14,14 @@
     },
     "currentModel": {
       "type": "object",
-      "required": ["runtimeName", "roles", "kind"],
+      "required": [
+        "runtimeName",
+        "roles",
+        "kind",
+        "metamodelAlias",
+        "typesUsedInTransformation",
+        "availableTypes"
+      ],
       "additionalProperties": false,
       "properties": {
         "runtimeName": {"type": "string", "minLength": 1},
@@ -29,10 +36,6 @@
         "metamodelNsPrefix": {"type": ["string", "null"]},
         "metamodelAlias": {"type": ["string", "null"]},
         "metamodelFile": {"type": ["string", "null"]},
-        "typesUsedInEtL": {
-          "type": "array",
-          "items": {"type": "string"}
-        },
         "typesUsedInTransformation": {
           "type": "array",
           "items": {"type": "string"}
@@ -45,7 +48,15 @@
     },
     "currentContract": {
       "type": "object",
-      "required": ["task", "transformation", "models"],
+      "required": [
+        "schemaVersion",
+        "task",
+        "language",
+        "transformation",
+        "reference",
+        "sourceHash",
+        "models"
+      ],
       "additionalProperties": false,
       "properties": {
         "schemaVersion": {"type": "string"},
@@ -55,8 +66,8 @@
           "enum": ["etl", "atl", "qvto", "reactions"]
         },
         "transformation": {"type": "string", "minLength": 1},
-        "reference": {"type": "string"},
-        "sourceHash": {"type": "string"},
+        "reference": {"type": "string", "minLength": 1},
+        "sourceHash": {"type": "string", "minLength": 1},
         "models": {
           "type": "array",
           "minItems": 1,

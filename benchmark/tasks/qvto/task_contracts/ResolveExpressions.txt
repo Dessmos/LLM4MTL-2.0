@@ -2,7 +2,7 @@
 
 Use this contract as ground truth. Do not infer or invent model names, metamodel URIs, XML namespaces, or type names.
 
-| Runtime model name | Role(s) | Kind | metamodelUri | XML nsPrefix | Types used by transformation |
+| Runtime model name | Role(s) | Kind | metamodelUri | XML nsPrefix | Types used by the transformation |
 |---|---|---|---|---|---|
 | inModel | source | emf | http://www.eclipse.org/emf/2002/Ecore | ecore | EClass, EClassifier, EPackage |
 | outModel | target | emf | http://www.eclipse.org/emf/2002/Ecore | ecore | EClass, EClassifier, EPackage |

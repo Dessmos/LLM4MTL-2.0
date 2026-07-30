@@ -57,7 +57,13 @@ reference transformation
 The first LLM reconstructs only a concise natural-language task request; Python
 does not generate that text. Python deterministically validates the task
 contract and resolves the reference plus its exact metamodel paths. The raw
-task-contract JSON is not supplied to the LLM. Candidate prompts remain
+task-contract JSON is not supplied to the LLM.
+
+Resolution is identical for every language and fails closed on any of: an
+unknown task name, a path escaping the protected benchmark tree, a contract
+whose `language` disagrees with the request, or a contract whose `sourceHash`
+no longer matches the reference bytes. That last check is what keeps an edited
+reference from being described by a contract built for an older version of it. Candidate prompts remain
 untrusted output and are never consumed directly by evaluation. The reviewed
 file under `prompt_assets/task_prompts/` is the single task prompt used by both
 downstream generators.

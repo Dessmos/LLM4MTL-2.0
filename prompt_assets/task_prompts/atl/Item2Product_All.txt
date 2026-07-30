@@ -7,4 +7,4 @@ Define a helper operation `getCategory` in the context of `Item` that returns:
 - `'Apparel'` for type = `'Clothing'`
 - `'General'` otherwise
 
-Bind `Product.category` using `getCategory`.+
+Bind `Product.category` using `getCategory`.

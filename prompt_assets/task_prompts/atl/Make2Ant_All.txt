@@ -12,4 +12,4 @@ Add the following rules:
 
 4. `ShellLine2Task_Display`: when a ShellLine has `display = true`, create both an Echo task and an Exec task, each associated to the owning Rule and initialized from `command`.
 
-5. `ShellLine2Task_NoDisplay`: when a ShellLine has `display = false`, create only an Exec task associated to the owning Rule, initialized from `command`.+
+5. `ShellLine2Task_NoDisplay`: when a ShellLine has `display = false`, create only an Exec task associated to the owning Rule, initialized from `command`.

@@ -45,8 +45,8 @@ class PromptInputResolutionTests(unittest.TestCase):
         resolved = resolve_task_inputs("etl", "Tree2Graph")
         self.assertEqual(
             [
-                "benchmark/metamodels/etl/Graph.ecore",
-                "benchmark/metamodels/etl/Tree.ecore",
+                "benchmark/metamodels/additional_models/ETL_model/Graph.ecore",
+                "benchmark/metamodels/additional_models/ETL_model/Tree.ecore",
             ],
             [metamodel.path for metamodel in resolved.metamodels],
         )
@@ -54,9 +54,20 @@ class PromptInputResolutionTests(unittest.TestCase):
         self.assertNotIn("HTML.ecore", resolved.metamodel_text)
 
     def test_task_without_external_metamodel_file_resolves_an_empty_set(self) -> None:
-        resolved = resolve_task_inputs("qvto", "Constructors")
+        # rss2atom is plain XML on both sides, so no metamodel file exists to
+        # supply. Every task whose contract does name metamodel files receives
+        # them, in every language.
+        resolved = resolve_task_inputs("etl", "rss2atom")
         self.assertEqual((), resolved.metamodels)
         self.assertEqual("", resolved.metamodel_text)
+
+    def test_qvto_receives_the_ecore_metamodel_its_contract_names(self) -> None:
+        resolved = resolve_task_inputs("qvto", "Constructors")
+        self.assertEqual(
+            ["benchmark/metamodels/additional_models/QVT-O_model/Ecore.ecore"],
+            [metamodel.path for metamodel in resolved.metamodels],
+        )
+        self.assertIn("EClassifier", resolved.metamodel_text)
 
     def test_invalid_or_unknown_task_fails_without_fallback(self) -> None:
         for task in ("../Tree2Graph", "does-not-exist"):

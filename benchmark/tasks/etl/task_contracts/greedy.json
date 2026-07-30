@@ -1,20 +1,24 @@
 {
+  "schemaVersion": "1.0",
   "task": "greedy",
+  "language": "etl",
   "transformation": "greedy.etl",
   "reference": "benchmark/tasks/etl/references/greedy.etl",
+  "sourceHash": "1d32be2313b47a1a4315664d572280f3b222f13c9d22bd3980767b9314e4f780",
   "models": [
     {
       "runtimeName": "Flowchart",
       "roles": [
         "source"
       ],
-      "typesUsedInEtL": [
-        "NamedElement"
-      ],
       "kind": "emf",
       "metamodelUri": "flowchart",
       "metamodelNsPrefix": "flowchart",
+      "metamodelAlias": "Flowchart",
       "metamodelFile": "benchmark/metamodels/additional_models/ETL_model/Flowchart.ecore",
+      "typesUsedInTransformation": [
+        "NamedElement"
+      ],
       "availableTypes": [
         "NamedElement",
         "Flowchart",
@@ -30,13 +34,14 @@
       "roles": [
         "target"
       ],
-      "typesUsedInEtL": [
-        "H1"
-      ],
       "kind": "emf",
       "metamodelUri": "HTML",
       "metamodelNsPrefix": "HTML",
+      "metamodelAlias": "HTML",
       "metamodelFile": "benchmark/metamodels/additional_models/ETL_model/HTML.ecore",
+      "typesUsedInTransformation": [
+        "H1"
+      ],
       "availableTypes": [
         "HTMLElement",
         "DIV",
@@ -46,10 +51,10 @@
     }
   ],
   "rules": [
-    "models[].name in semantic_cases.json must equal runtimeName exactly.",
-    "For EMF models, models[].metamodelUri must equal metamodelUri exactly.",
-    "For generated EMF XMI, XML namespace URI/prefix must use metamodelUri/metamodelNsPrefix exactly.",
-    "For plainXml models, do not set metamodelUri and use kind='plainXml'.",
-    "Do not invent model names, metamodel URIs, metamodel files, or type names outside this contract."
+    "semantic_cases model slots must map to runtimeName exactly.",
+    "EMF namespace URIs and prefixes come only from this contract.",
+    "For plainXml slots, use kind='plainXml' and omit metamodelUri.",
+    "Assertions and declarative changes may use only availableTypes.",
+    "The reference transformation remains the behavioural oracle."
   ]
 }

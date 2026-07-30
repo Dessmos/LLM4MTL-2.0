@@ -5,4 +5,4 @@ Define the following rules:
 - **Item2Entry**: turn each item into an entry and include converted child elements.  
 - **Title2Title**, **Link2Link**, **Generator2Generator**, **Creator2Author**, **Description2Summary**, **ContentEncoded2Content**, and **PubDate2Published**: map corresponding RSS elements to their Atom counterparts, copying textual content.  
 
-Also, provide helper operations **appendChildren** and **appendEquivalentsOfChildrenOf** to attach converted elements.+
+Also, provide helper operations **appendChildren** and **appendEquivalentsOfChildrenOf** to attach converted elements.

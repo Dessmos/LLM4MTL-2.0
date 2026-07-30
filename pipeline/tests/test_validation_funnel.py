@@ -79,6 +79,13 @@ class FunnelFixture(unittest.TestCase):
         self.reference = self.references_root / "SmokeTask.etl"
         self.reference.write_text("rule R transform s : S!A to t : T!B { }\n", encoding="utf-8")
 
+        # A rendered suite is only an artifact if a deterministic contract backs
+        # it. That gate is the same in all four languages, so the fixture has to
+        # supply one rather than relying on ETL letting it through.
+        self.contracts_root = root / "task_contracts"
+        self.contracts_root.mkdir()
+        (self.contracts_root / "SmokeTask.json").write_text("{}", encoding="utf-8")
+
         self.harness = root / "harness"
         (self.harness / "src" / "test" / "java").mkdir(parents=True)
         self.observations_root = root / "observations"
@@ -102,7 +109,10 @@ class FunnelFixture(unittest.TestCase):
 
     def context(self) -> ValidationContext:
         return ValidationContext(
-            adapter=EtlAdapter(references_root=self.references_root),
+            adapter=EtlAdapter(
+                references_root=self.references_root,
+                contracts_root=self.contracts_root,
+            ),
             workspace=workspace_for(self.harness, self.observations_root),
             timeout=60,
         )

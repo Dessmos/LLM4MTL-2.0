@@ -1,4 +1,10 @@
-"""CLI for extracting generated ETL suites from Markdown responses."""
+"""CLI for extracting generated semantic-test suites from Markdown responses.
+
+The language is a required argument, not a default. It used to be hardcoded to
+ETL here while the roots came from ETL conventions, so pointing this command at
+an ATL, QVT-O, or Reactions response silently rendered an ETL harness and wrote
+it into the ETL tree.
+"""
 
 from __future__ import annotations
 
@@ -6,9 +12,13 @@ import argparse
 import sys
 from pathlib import Path
 
-from llm4mtl.conventions import ETL_CONFIG, default_generated_tests_root, default_responses_root
+from llm4mtl.conventions import (
+    default_generated_tests_root,
+    default_responses_root,
+    language_config,
+)
+from llm4mtl.languages import REQUIRED_LANGUAGES, language_adapter
 from llm4mtl.languages.base import LanguageAdapter
-from llm4mtl.languages import language_adapter
 from llm4mtl.semantic_tests.extraction.discovery import discover_responses
 from llm4mtl.semantic_tests.extraction.models import ResponseTarget
 from llm4mtl.semantic_tests.extraction.parser import extract_files
@@ -17,7 +27,16 @@ from llm4mtl.semantic_tests.extraction.writer import write_suite
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Extract generated ETL semantic test suites from Markdown responses."
+        description=(
+            "Extract generated semantic test suites from Markdown responses "
+            "for one language."
+        )
+    )
+    parser.add_argument(
+        "--language",
+        choices=sorted(REQUIRED_LANGUAGES),
+        required=True,
+        help="Language whose adapter renders the harness and whose roots are used.",
     )
     parser.add_argument(
         "--response",
@@ -31,14 +50,18 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--responses-root",
         type=Path,
-        default=default_responses_root(ETL_CONFIG),
-        help="Root containing <llm>/<strategy>/<task>.md responses.",
+        help=(
+            "Root containing <llm>/<strategy>/<task>.md responses. "
+            "Defaults to the selected language's responses root."
+        ),
     )
     parser.add_argument(
         "--generated-tests-root",
         type=Path,
-        default=default_generated_tests_root(ETL_CONFIG),
-        help="Root where <task>/candidates suites are written.",
+        help=(
+            "Root where <task>/candidates suites are written. "
+            "Defaults to the selected language's generated-tests root."
+        ),
     )
     parser.add_argument(
         "--task",
@@ -72,7 +95,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Parse and report what would be written without creating files.",
     )
-    return parser.parse_args(argv)
+    args = parser.parse_args(argv)
+    config = language_config(args.language)
+    if args.responses_root is None:
+        args.responses_root = default_responses_root(config)
+    if args.generated_tests_root is None:
+        args.generated_tests_root = default_generated_tests_root(config)
+    return args
 
 
 def extract_one(
@@ -113,7 +142,7 @@ def main(argv: list[str] | None = None) -> int:
 
     ok_count = 0
     fail_count = 0
-    adapter = language_adapter("etl")
+    adapter = language_adapter(args.language)
     for target in targets:
         ok, message = extract_one(target, args, adapter)
         if ok:

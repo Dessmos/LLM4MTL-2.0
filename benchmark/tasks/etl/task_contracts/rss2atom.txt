@@ -2,7 +2,7 @@
 
 Use this contract as ground truth. Do not infer or invent model names, metamodel URIs, XML namespaces, or type names.
 
-| Runtime model name | Role(s) | Kind | metamodelUri | XML nsPrefix | Types used by ETL |
+| Runtime model name | Role(s) | Kind | metamodelUri | XML nsPrefix | Types used by the transformation |
 |---|---|---|---|---|---|
 | Atom | target | plainXml |  |  | t_author, t_content, t_entry, t_feed, t_generator, t_link, t_name, t_published, t_summary, t_title |
 | RSS | source | plainXml |  |  | t_content:encoded, t_dc:creator, t_description, t_generator, t_item, t_link, t_pubDate, t_rss, t_title |

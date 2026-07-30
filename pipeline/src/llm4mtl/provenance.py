@@ -83,6 +83,7 @@ def input_hashes(language: str, task: str) -> dict[str, Any]:
     from llm4mtl.conventions import (
         default_references_root,
         default_task_contracts_root,
+        frozen_task_prompt,
         language_config,
     )
     from llm4mtl.task_contracts import load_task_contract
@@ -108,12 +109,7 @@ def input_hashes(language: str, task: str) -> dict[str, Any]:
         path = _metamodel_path(config.language_key, model.metamodel_file)
         metamodels[path.relative_to(REPO_ROOT).as_posix()] = file_sha256(path)
 
-    task_prompt = (
-        TARGET.prompt_assets
-        / "task_prompts"
-        / config.language_key
-        / f"{task}.txt"
-    )
+    task_prompt = frozen_task_prompt(config, task)
     if not task_prompt.is_file():
         raise ProvenanceError(
             f"frozen task prompt not found for {config.language_key}/{task}"

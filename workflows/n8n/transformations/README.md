@@ -56,14 +56,31 @@ docker compose down
 
 This directory contains:
 
-- `docker-compose.yml` – defines the n8n service.
-- `few_shot_examples/` – sample code snippets and prompts used for few‑shot prompting.
-- `grammar/` – grammar definitions of the Reactions Language and ATL in EBNF format.
-- `helper_methods/` – helper functions available to the language models during prompt construction.
-- `prompt_assets/task_prompts/` – the single reviewed task prompt per task,
-  mounted read-only for both downstream generators.
-- `mtl_snippets/` – legacy/static workflow inputs; new generated data is not written here.
-- `workflows/` – the actual n8n workflow definitions (`*.json`) to be imported into the running instance.
+- `docker-compose.yml` – defines the n8n service and every read-only mount.
+- `workflows/<lang>_variants/` – the n8n workflow definitions to import, one
+  directory per language. Each holds `Prompt_generation_<lang>.json` plus one
+  `Prompting_<LANG>_<model>_<strategy>.json` per model/strategy combination.
+  Reactions drives its grid from the single matrix workflow under
+  `workflows/updated_reactions_workflow/generate_reactions/` instead.
+
+Read-only inputs come from the repository, never from a copy inside this
+directory:
+
+| Mount | Repository source |
+|---|---|
+| `/data/benchmark/tasks` | `benchmark/tasks/<lang>/` — references and contracts |
+| `/data/models` | `benchmark/metamodels/` |
+| `/data/task_prompts` | `prompt_assets/task_prompts/<lang>/` — the one reviewed prompt per task |
+| `/data/examples` | `prompt_assets/transformations/few_shot/<lang>/` |
+| `/data/grammar` | `prompt_assets/transformations/grammar/<lang>/` |
+| `/data/helper_methods` | `prompt_assets/transformations/helper_methods/<lang>/` |
+
+Every asset is read from its own language's subdirectory. Model and strategy
+names are spelled exactly as `experiments/matrices/*.yaml` spells them
+(`only_prompt`, `grammar`, `few_shot`, `few_shots_AND_grammar`), because the
+response directory built from them is how a stage selects a run's responses.
+The compose environment sets `N8N_RESTRICT_FILE_ACCESS_TO=/data`, which permits
+n8n 2.x file nodes to access only this mounted workflow workspace.
 
 Generated output paths:
 

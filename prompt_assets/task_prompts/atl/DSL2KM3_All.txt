@@ -11,4 +11,4 @@ Then create rules:
 - `Relation2Class` mapping qualifying `Relationship` to KM3 `Class`.
 - `SimpleReference` and `ComplexReference` mapping `Role`s to KM3 `Reference`s (including opposites, multiplicities, containment).
 - `Attribute` mapping `ValueProperty` to KM3 `Attribute`.
-- `Enumeration`, `EnumLiteral`, `DataType` mapping corresponding DSL types to KM3.+
+- `Enumeration`, `EnumLiteral`, `DataType` mapping corresponding DSL types to KM3.

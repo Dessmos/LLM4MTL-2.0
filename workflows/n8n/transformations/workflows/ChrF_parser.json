@@ -62,7 +62,7 @@
     },
     {
       "parameters": {
-        "fileSelector": "/data/snippets/reactions_language/references/*",
+        "fileSelector": "/data/benchmark/tasks/reactions/references/*",
         "options": {}
       },
       "type": "n8n-nodes-base.readWriteFile",

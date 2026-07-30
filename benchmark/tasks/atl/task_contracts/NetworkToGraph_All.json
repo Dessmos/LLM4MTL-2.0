@@ -55,6 +55,7 @@
   "rules": [
     "semantic_cases model slots must map to runtimeName exactly.",
     "EMF namespace URIs and prefixes come only from this contract.",
+    "For plainXml slots, use kind='plainXml' and omit metamodelUri.",
     "Assertions and declarative changes may use only availableTypes.",
     "The reference transformation remains the behavioural oracle."
   ]

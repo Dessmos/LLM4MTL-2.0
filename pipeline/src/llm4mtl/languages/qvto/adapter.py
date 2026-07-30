@@ -55,8 +55,13 @@ class QvtoAdapter:
     language_id = "qvto"
     renderer_version = "qvto-junit-v1"
 
-    def __init__(self, references_root: Path | None = None) -> None:
+    def __init__(
+        self,
+        references_root: Path | None = None,
+        contracts_root: Path | None = None,
+    ) -> None:
         self._references_root = references_root or default_references_root(QVTO_CONFIG)
+        self._contracts_root = contracts_root or default_task_contracts_root(QVTO_CONFIG)
 
     def runtime_tool_versions(self) -> dict[str, str]:
         return {"qvto-harness": "1.0.0", "junit": "5.10.2"}
@@ -79,7 +84,7 @@ class QvtoAdapter:
         return self._references_root / f"{task}.qvto"
 
     def validate_suite_artifacts(self, suite: GeneratedSuite) -> ArtifactValidation:
-        contract = default_task_contracts_root(QVTO_CONFIG) / f"{suite.task}.json"
+        contract = self._contracts_root / f"{suite.task}.json"
         return validate_rendered_suite(suite, contract_exists=contract.is_file())
 
     def execute_suite(

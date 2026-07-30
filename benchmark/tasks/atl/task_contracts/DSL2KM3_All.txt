@@ -2,7 +2,7 @@
 
 Use this contract as ground truth. Do not infer or invent model names, metamodel URIs, XML namespaces, or type names.
 
-| Runtime model name | Role(s) | Kind | metamodelUri | XML nsPrefix | Types used by transformation |
+| Runtime model name | Role(s) | Kind | metamodelUri | XML nsPrefix | Types used by the transformation |
 |---|---|---|---|---|---|
 | IN | source | emf | DSL | DSL | Class, DomainModel, Enumeration, EnumerationLiteral, Relationship, Role, SimpleType, ValueProperty |
 | OUT | target | emf | KM3 | KM3 | Attribut, Attribute, Class, DataType, Datatype, EnumLiteral, Enumeration, Metamodel, Package, Reference |

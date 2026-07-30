@@ -88,7 +88,7 @@
         "assignments": {
           "assignments": [
             {
-              "id": "21770aaf-9e99-4902-be96-60adced92708",
+              "id": "save-file-name-assignments-1",
               "name": "baseName",
               "value": "={{$binary.data.fileName.split('.').slice(0,-1).join('.')}}",
               "type": "string"

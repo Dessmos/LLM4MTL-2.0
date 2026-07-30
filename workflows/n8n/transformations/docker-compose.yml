@@ -7,6 +7,7 @@ services:
       - GENERIC_TIMEZONE=Europe/Berlin
       - TZ=Europe/Berlin
       - N8N_SECURE_COOKIE=false
+      - N8N_RESTRICT_FILE_ACCESS_TO=/data
       # - N8N_BASIC_AUTH_ACTIVE=true
       # - N8N_BASIC_AUTH_USER=admin
       # - N8N_BASIC_AUTH_PASSWORD=supersecret
@@ -19,7 +20,8 @@ services:
       - "../../../artifacts/work:/data/artifacts"
       - "../../../prompt_assets/task_prompts:/data/task_prompts:ro"
       # Immutable source inputs are mounted read-only and stay outside artifacts/.
-      - "./mtl_snippets:/data/snippets:ro"
+      # Reference transformations come from benchmark/tasks only: the former
+      # ./mtl_snippets copy was a second, drifting source of the same files.
       - "../../../benchmark/tasks:/data/benchmark/tasks:ro"
       - "../../../prompt_assets/transformations/few_shot:/data/examples:ro"
       - "../../../benchmark/metamodels:/data/models:ro"

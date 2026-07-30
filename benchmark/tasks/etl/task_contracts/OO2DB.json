@@ -1,23 +1,27 @@
 {
+  "schemaVersion": "1.0",
   "task": "OO2DB",
+  "language": "etl",
   "transformation": "OO2DB.etl",
   "reference": "benchmark/tasks/etl/references/OO2DB.etl",
+  "sourceHash": "4b8e93f1fd455cfea5a05db2a4b4fe73ff73afaae565c0e79a4872b000736f69",
   "models": [
     {
       "runtimeName": "DB",
       "roles": [
         "target"
       ],
-      "typesUsedInEtL": [
+      "kind": "emf",
+      "metamodelUri": "DB",
+      "metamodelNsPrefix": "DB",
+      "metamodelAlias": "DB",
+      "metamodelFile": "benchmark/metamodels/additional_models/ETL_model/DB.ecore",
+      "typesUsedInTransformation": [
         "Column",
         "Database",
         "ForeignKey",
         "Table"
       ],
-      "kind": "emf",
-      "metamodelUri": "DB",
-      "metamodelNsPrefix": "DB",
-      "metamodelFile": "benchmark/metamodels/additional_models/ETL_model/DB.ecore",
       "availableTypes": [
         "DatabaseElement",
         "Database",
@@ -32,15 +36,16 @@
         "source",
         "target"
       ],
-      "typesUsedInEtL": [
+      "kind": "emf",
+      "metamodelUri": "OO",
+      "metamodelNsPrefix": "OO",
+      "metamodelAlias": "OO",
+      "metamodelFile": "benchmark/metamodels/additional_models/ETL_model/OO.ecore",
+      "typesUsedInTransformation": [
         "Attribute",
         "Class",
         "Reference"
       ],
-      "kind": "emf",
-      "metamodelUri": "OO",
-      "metamodelNsPrefix": "OO",
-      "metamodelFile": "benchmark/metamodels/additional_models/ETL_model/OO.ecore",
       "availableTypes": [
         "Package",
         "PackageableElement",
@@ -57,14 +62,15 @@
       "roles": [
         "source"
       ],
-      "typesUsedInEtL": [
-        "TypeMap",
-        "TypeMapping"
-      ],
       "kind": "emf",
       "metamodelUri": "TM",
       "metamodelNsPrefix": "TM",
+      "metamodelAlias": "OO2DB",
       "metamodelFile": "benchmark/metamodels/additional_models/ETL_model/TM.ecore",
+      "typesUsedInTransformation": [
+        "TypeMap",
+        "TypeMapping"
+      ],
       "availableTypes": [
         "TypeMap",
         "TypeMapping"
@@ -75,14 +81,15 @@
       "roles": [
         "target"
       ],
-      "typesUsedInEtL": [
-        "Trace",
-        "TraceLink"
-      ],
       "kind": "emf",
       "metamodelUri": "SimpleTrace",
       "metamodelNsPrefix": "SimpleTrace",
+      "metamodelAlias": "Trace",
       "metamodelFile": "benchmark/metamodels/additional_models/ETL_model/SimpleTrace.ecore",
+      "typesUsedInTransformation": [
+        "Trace",
+        "TraceLink"
+      ],
       "availableTypes": [
         "Trace",
         "TraceLink"
@@ -90,10 +97,10 @@
     }
   ],
   "rules": [
-    "models[].name in semantic_cases.json must equal runtimeName exactly.",
-    "For EMF models, models[].metamodelUri must equal metamodelUri exactly.",
-    "For generated EMF XMI, XML namespace URI/prefix must use metamodelUri/metamodelNsPrefix exactly.",
-    "For plainXml models, do not set metamodelUri and use kind='plainXml'.",
-    "Do not invent model names, metamodel URIs, metamodel files, or type names outside this contract."
+    "semantic_cases model slots must map to runtimeName exactly.",
+    "EMF namespace URIs and prefixes come only from this contract.",
+    "For plainXml slots, use kind='plainXml' and omit metamodelUri.",
+    "Assertions and declarative changes may use only availableTypes.",
+    "The reference transformation remains the behavioural oracle."
   ]
 }

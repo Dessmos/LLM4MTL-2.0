@@ -17,7 +17,7 @@ from __future__ import annotations
 import json
 from collections.abc import Callable
 
-from llm4mtl.conventions import ETL_CONFIG, LanguageConfig
+from llm4mtl.conventions import LanguageConfig
 from llm4mtl.domain import (
     CONTRACT_VIOLATION,
     INVALID_SEMANTIC_CASES,
@@ -50,11 +50,15 @@ def render_generated_suite(
     extracted: dict[str, str],
     *,
     language: str,
-    config: LanguageConfig = ETL_CONFIG,
-    transformation_extension: str = ".etl",
-    render_test: Callable[[str, dict[str, object], str], str] = render_semantic_test,
+    config: LanguageConfig,
+    transformation_extension: str,
+    render_test: Callable[[str, dict[str, object], str], str],
 ) -> tuple[dict[str, str], ArtifactValidation]:
     """Replace LLM-authored files with a deterministically rendered suite.
+
+    Every language argument is required. These used to default to ETL, so an
+    adapter that forgot one silently rendered ETL conventions under another
+    language's name.
 
     Returns the files to write and why the suite is (in)valid. Any ``.java`` the
     model produced is dropped in every path; the only Java that can survive is

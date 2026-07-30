@@ -1,21 +1,25 @@
 {
+  "schemaVersion": "1.0",
   "task": "Tree2Graph",
+  "language": "etl",
   "transformation": "Tree2Graph.etl",
   "reference": "benchmark/tasks/etl/references/Tree2Graph.etl",
+  "sourceHash": "9c0f62b753865c711402781e03f05619e6a94259a94653192805e6070ce1486c",
   "models": [
     {
       "runtimeName": "Graph",
       "roles": [
         "target"
       ],
-      "typesUsedInEtL": [
-        "Edge",
-        "Node"
-      ],
       "kind": "emf",
       "metamodelUri": "Graph",
       "metamodelNsPrefix": "Graph",
-      "metamodelFile": "benchmark/metamodels/etl/Graph.ecore",
+      "metamodelAlias": "Graph",
+      "metamodelFile": "benchmark/metamodels/additional_models/ETL_model/Graph.ecore",
+      "typesUsedInTransformation": [
+        "Edge",
+        "Node"
+      ],
       "availableTypes": [
         "Graph",
         "Node",
@@ -27,23 +31,24 @@
       "roles": [
         "source"
       ],
-      "typesUsedInEtL": [
-        "Tree"
-      ],
       "kind": "emf",
       "metamodelUri": "Tree",
       "metamodelNsPrefix": "Tree",
-      "metamodelFile": "benchmark/metamodels/etl/Tree.ecore",
+      "metamodelAlias": "Tree",
+      "metamodelFile": "benchmark/metamodels/additional_models/ETL_model/Tree.ecore",
+      "typesUsedInTransformation": [
+        "Tree"
+      ],
       "availableTypes": [
         "Tree"
       ]
     }
   ],
   "rules": [
-    "models[].name in semantic_cases.json must equal runtimeName exactly.",
-    "For EMF models, models[].metamodelUri must equal metamodelUri exactly.",
-    "For generated EMF XMI, XML namespace URI/prefix must use metamodelUri/metamodelNsPrefix exactly.",
-    "For plainXml models, do not set metamodelUri and use kind='plainXml'.",
-    "Do not invent model names, metamodel URIs, metamodel files, or type names outside this contract."
+    "semantic_cases model slots must map to runtimeName exactly.",
+    "EMF namespace URIs and prefixes come only from this contract.",
+    "For plainXml slots, use kind='plainXml' and omit metamodelUri.",
+    "Assertions and declarative changes may use only availableTypes.",
+    "The reference transformation remains the behavioural oracle."
   ]
 }

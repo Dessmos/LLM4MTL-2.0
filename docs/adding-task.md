@@ -47,30 +47,27 @@ oracle.
 8. Add tests for exact input resolution, contract enforcement, and provenance
    hashes.
 
-For ETL, the implemented generator is:
-
-```bash
-PYTHONPATH=pipeline/src .venv/bin/python \
-  -m llm4mtl.task_contracts.build_task_model_contracts
-```
-
-It processes all ETL references by default. Use its explicit root arguments
-when generating into a temporary directory for review. Do not run it against
-protected contracts merely to repair a failing experiment.
-
-For ATL, QVT-O, and Reactions, use:
+One generator covers every language:
 
 ```bash
 PYTHONPATH=pipeline/src .venv/bin/python \
   -m llm4mtl.task_contracts.build_language_task_contracts --language <lang>
 ```
 
+It processes all of that language's references by default. Use its explicit root
+arguments when generating into a temporary directory for review. Do not run it
+against protected contracts merely to repair a failing experiment.
+
 The builder derives runtime slots and metamodel aliases from the reference,
 namespace/classifier facts from protected Ecore inputs, and a source hash from
-the reference bytes. New contracts use the language-neutral
-`typesUsedInTransformation`; the loader still accepts the legacy ETL-specific
-field for stored-contract compatibility. Review the generated files before
-committing them.
+the reference bytes. Contracts have one shape in every language: `schemaVersion`,
+`task`, `language`, `transformation`, `reference`, `sourceHash`, `models`, and
+`rules`, with `typesUsedInTransformation` on each model. Review the generated
+files before committing them.
+
+`sourceHash` is enforced, not decorative: editing a reference without rebuilding
+its contract makes prompt-input resolution fail for that task rather than
+silently describing metamodels the reference no longer uses.
 
 Add the task name to the corresponding `experiments/matrices/thesis-<lang>.yaml`.
 `pipeline/tests/test_multilanguage_walking_skeletons.py` checks that every

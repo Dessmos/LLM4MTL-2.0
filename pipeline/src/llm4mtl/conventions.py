@@ -125,8 +125,27 @@ def default_generated_tests_root(config: LanguageConfig) -> Path:
     return test_generation_root() / "generated_tests" / config.generated_tests_dir
 
 
-def default_prompts_root(config: LanguageConfig) -> Path:
-    return generated_test_artifacts_root(config) / "prompts"
+def task_prompt_candidates_root(config: LanguageConfig) -> Path:
+    """Where n8n writes unreviewed prompt candidates, one directory per model.
+
+    Replaces the pre-v5 ``<lang>/prompts/<model>/`` tree, which no writer has
+    targeted since prompt generation moved to n8n.
+    """
+    from llm4mtl.paths import TARGET
+
+    return TARGET.artifacts_work / "task_prompt_candidates" / config.language_key
+
+
+def frozen_task_prompt(config: LanguageConfig, task: str) -> Path:
+    """The one reviewed prompt both generators consume for ``task``.
+
+    Single definition on purpose: this path is the join between the reviewed
+    benchmark input, the run's provenance hash, and the metadata of every suite
+    generated from it, and those three must never disagree.
+    """
+    from llm4mtl.paths import TARGET
+
+    return TARGET.prompt_assets / "task_prompts" / config.language_key / f"{task}.txt"
 
 
 def _benchmark_tasks_root(config: LanguageConfig) -> Path:

@@ -20,6 +20,7 @@ from llm4mtl.conventions import (
     language_config,
 )
 from llm4mtl.paths import REPO_ROOT, TARGET
+from llm4mtl.transformation_execution.hashing import file_sha256
 
 TASK_NAME = re.compile(r"^[A-Za-z0-9._-]+$")
 
@@ -48,6 +49,7 @@ class ResolvedTaskInputs:
     contract_path: str
     reference: PromptInputFile
     metamodels: tuple[PromptInputFile, ...]
+    metamodel_uris: tuple[str, ...]
     grammar: PromptInputFile
 
     @property
@@ -56,6 +58,16 @@ class ResolvedTaskInputs:
             f"### {metamodel.path}\n{metamodel.content}"
             for metamodel in self.metamodels
         )
+
+    @property
+    def metamodel_uri_text(self) -> str:
+        """The namespace URIs a generated transformation must reference.
+
+        These come from the contract, so a prompt cannot state a namespace the
+        task does not use. Transformation prompts used to hardcode one Vitruv
+        URI for every language, which was wrong for ETL and ATL.
+        """
+        return "\n".join(f"- {uri}" for uri in self.metamodel_uris)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -67,6 +79,8 @@ class ResolvedTaskInputs:
                 metamodel.to_dict() for metamodel in self.metamodels
             ],
             "metamodel_text": self.metamodel_text,
+            "metamodel_uris": list(self.metamodel_uris),
+            "metamodel_uri_text": self.metamodel_uri_text,
             "grammar": self.grammar.to_dict(),
         }
 
@@ -106,8 +120,10 @@ def resolve_task_inputs(language: str, task: str) -> ResolvedTaskInputs:
             f"task contract identity mismatch: expected {task!r}, "
             f"found {contract.get('task')!r}"
         )
+    # Every contract records its own language, so this check applies to every
+    # language rather than being skipped for whichever ones omitted the field.
     recorded_language = contract.get("language")
-    if recorded_language is not None and recorded_language != language_key:
+    if recorded_language != language_key:
         raise TaskInputResolutionError(
             f"task contract language mismatch: expected {language_key!r}, "
             f"found {recorded_language!r}"
@@ -125,8 +141,26 @@ def resolve_task_inputs(language: str, task: str) -> ResolvedTaskInputs:
             f"{reference_path.name!r} != {expected_transformation!r}"
         )
 
+    # The contract records the hash of the reference it was derived from. An
+    # edited reference therefore invalidates its contract loudly here, instead
+    # of the prompt quietly describing metamodels the reference no longer uses.
+    recorded_hash = contract.get("sourceHash")
+    actual_hash = file_sha256(reference_path)
+    if recorded_hash != actual_hash:
+        raise TaskInputResolutionError(
+            f"task contract is stale for {language_key}/{task}: "
+            f"reference hash {actual_hash} does not match recorded "
+            f"{recorded_hash}. Rebuild it with "
+            "python -m llm4mtl.task_contracts.build_language_task_contracts "
+            f"--language {language_key}"
+        )
+
     metamodel_paths: list[Path] = []
+    metamodel_uris: list[str] = []
     for model in contract["models"]:
+        recorded_uri = model.get("metamodelUri")
+        if recorded_uri and recorded_uri not in metamodel_uris:
+            metamodel_uris.append(str(recorded_uri))
         recorded_path = model.get("metamodelFile")
         if recorded_path is None:
             continue
@@ -156,6 +190,7 @@ def resolve_task_inputs(language: str, task: str) -> ResolvedTaskInputs:
         contract_path=_relative_path(contract_path),
         reference=_read_input(reference_path),
         metamodels=tuple(_read_input(path) for path in metamodel_paths),
+        metamodel_uris=tuple(metamodel_uris),
         grammar=_read_input(grammar_path),
     )
 

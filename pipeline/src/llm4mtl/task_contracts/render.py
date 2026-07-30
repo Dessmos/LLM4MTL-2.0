@@ -1,20 +1,18 @@
-"""Markdown rendering of a task contract for prompt construction.
+"""Human-readable rendering of a task contract.
 
-Both the injected contract header and the deterministic "Task context" block of
-a test-generation prompt are rendered from the same ``TaskContract`` here, so
-prompts can never disagree with the enforced ground truth.
+Every contract is written twice: the ``.json`` the pipeline enforces, and the
+``.txt`` rendered here for review. The table is deliberately language-neutral —
+it names the transformation's runtime slots, not any one language's concepts —
+so a reviewer reads ETL, ATL, QVT-O, and Reactions contracts the same way.
+
+This is review material, not prompt material: the raw contract never reaches an
+LLM. The prompt-generation stage receives the reference, the exact metamodel
+files the contract selects, and the grammar.
 """
 
 from __future__ import annotations
 
-from llm4mtl.task_contracts.models import ModelContract, TaskContract
-
-
-CONTRACT_MARKER_START = "<!-- BEGIN deterministic-model-contract -->"
-CONTRACT_MARKER_END = "<!-- END deterministic-model-contract -->"
-
-TASK_CONTEXT_MARKER_START = "<!-- BEGIN deterministic-task-context -->"
-TASK_CONTEXT_MARKER_END = "<!-- END deterministic-task-context -->"
+from llm4mtl.task_contracts.models import TaskContract
 
 
 def contract_header_markdown(contract: TaskContract) -> str:
@@ -25,7 +23,8 @@ def contract_header_markdown(contract: TaskContract) -> str:
         "Use this contract as ground truth. Do not infer or invent model names, "
         "metamodel URIs, XML namespaces, or type names.",
         "",
-        "| Runtime model name | Role(s) | Kind | metamodelUri | XML nsPrefix | Types used by ETL |",
+        "| Runtime model name | Role(s) | Kind | metamodelUri | XML nsPrefix | "
+        "Types used by the transformation |",
         "|---|---|---|---|---|---|",
     ]
     for model in contract.models:
@@ -36,7 +35,7 @@ def contract_header_markdown(contract: TaskContract) -> str:
                 kind=model.kind,
                 uri=model.metamodel_uri or "",
                 prefix=model.metamodel_ns_prefix or "",
-                types=", ".join(model.types_used_in_etl),
+                types=", ".join(model.types_used_in_transformation),
             )
         )
     lines.extend(
@@ -53,60 +52,3 @@ def contract_header_markdown(contract: TaskContract) -> str:
         ]
     )
     return "\n".join(lines)
-
-
-def contract_header_block(contract: TaskContract) -> str:
-    """The contract header wrapped in the injection markers."""
-    return "\n".join(
-        [
-            CONTRACT_MARKER_START,
-            contract_header_markdown(contract),
-            CONTRACT_MARKER_END,
-        ]
-    )
-
-
-def task_context_markdown(contract: TaskContract, reference_etl: str) -> str:
-    """Render the deterministic transformation + metamodels block.
-
-    This replaces free-text, LLM-authored transformation descriptions (the
-    source of Tree2Graph leakage) with the verbatim reference ETL and the exact
-    metamodels taken from the contract.
-    """
-    lines = [
-        "## Task context (must be used as ground truth)",
-        "",
-        f"- Transformation file: `{contract.transformation}`",
-        "- ETL rules (authoritative — derive every expected fact only from these):",
-        "",
-        "```etl",
-        reference_etl.strip("\n"),
-        "```",
-        "",
-        "- Metamodels for this task (from the deterministic contract; do not use any others):",
-    ]
-    for model in contract.models:
-        lines.append(f"  - {_model_context_line(model)}")
-    return "\n".join(lines)
-
-
-def task_context_block(contract: TaskContract, reference_etl: str) -> str:
-    """The task-context section wrapped in the injection markers."""
-    return "\n".join(
-        [
-            TASK_CONTEXT_MARKER_START,
-            task_context_markdown(contract, reference_etl),
-            TASK_CONTEXT_MARKER_END,
-        ]
-    )
-
-
-def _model_context_line(model: ModelContract) -> str:
-    roles = "/".join(model.roles)
-    types = ", ".join(model.types_used_in_etl) or "(none referenced by the ETL)"
-    if model.kind == "emf":
-        return (
-            f"`{model.runtime_name}` ({roles}, emf, metamodelUri `{model.metamodel_uri}`): "
-            f"types {types}"
-        )
-    return f"`{model.runtime_name}` ({roles}, plainXml): elements {types}"

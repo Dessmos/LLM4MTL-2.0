@@ -2,10 +2,10 @@
 
 Use this contract as ground truth. Do not infer or invent model names, metamodel URIs, XML namespaces, or type names.
 
-| Runtime model name | Role(s) | Kind | metamodelUri | XML nsPrefix | Types used by transformation |
+| Runtime model name | Role(s) | Kind | metamodelUri | XML nsPrefix | Types used by the transformation |
 |---|---|---|---|---|---|
-| IN | source | emf |  |  | Article, Author, AuthoredEntry, BibTeXEntry, BibTeXFile, Book, BookTitledEntry, DatedEntry, InBook, ThesisEntry, TitledEntry, Unpublished |
-| OUT | target | emf |  |  | Article, Book, DocBook, Para, Sect1 |
+| IN | source | emf | BibTex | BibTex | Article, Author, AuthoredEntry, BibTeXEntry, BibTeXFile, Book, BookTitledEntry, DatedEntry, InBook, ThesisEntry, TitledEntry, Unpublished |
+| OUT | target | emf | DocBook | DocBook | Article, Book, DocBook, Para, Sect1 |
 
 Mandatory rules:
 - In semantic_cases.json, each models[].name must equal one runtime model name above exactly.

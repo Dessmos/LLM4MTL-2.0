@@ -2,7 +2,7 @@
 
 Use this contract as ground truth. Do not infer or invent model names, metamodel URIs, XML namespaces, or type names.
 
-| Runtime model name | Role(s) | Kind | metamodelUri | XML nsPrefix | Types used by transformation |
+| Runtime model name | Role(s) | Kind | metamodelUri | XML nsPrefix | Types used by the transformation |
 |---|---|---|---|---|---|
 | IN | source | emf | http://vitruv.tools/reactionsparser/families | families | Member |
 | OUT | target | emf | http://vitruv.tools/reactionsparser/persons | persons | Female, Male |

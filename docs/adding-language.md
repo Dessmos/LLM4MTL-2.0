@@ -146,12 +146,19 @@ benchmark/tasks/<lang>/references/
 benchmark/tasks/<lang>/task_contracts/
 ```
 
-Add semantic-test prompt assets when required:
+Add semantic-test prompt assets. Every asset is language-scoped, and a workflow
+only ever reads its own language's directory:
 
 ```text
-prompt_assets/tests/few_shot/<lang>/
-prompt_assets/tests/grammar/<lang>/
+prompt_assets/tests/few_shot/<lang>/test_generation_examples.txt
+prompt_assets/tests/grammar/<lang>/EBNF.txt
+prompt_assets/tests/helper_methods/<lang>/
 ```
+
+The transformation side mirrors that layout under
+`prompt_assets/transformations/`. Create the directory even when a language has
+no helper methods to offer: the `Helper_methods` strategy flag exists for every
+language, so its glob has to resolve for every language.
 
 Add one reviewed prompt for each task:
 
@@ -188,7 +195,14 @@ file. Do not generate prompt text in Python and do not let downstream workflows
 read candidates directly.
 
 Transformation-generation assets predate this pipeline and are inputs to it;
-the adapter does not generate transformations.
+the adapter does not generate transformations. Their exports live in
+`workflows/n8n/transformations/workflows/<lang>_variants/` and are named
+`Prompting_<LANG>_<model>_<strategy>.json`, where `<model>` and `<strategy>` are
+spelled exactly as `experiments/matrices/*.yaml` spells them
+(`only_prompt`, `grammar`, `few_shot`, `few_shots_AND_grammar`). The response
+directory is derived from those same tokens and is how a stage selects a run's
+responses, so a language that invents its own spelling produces results no
+matrix can select.
 
 ## Required tests
 

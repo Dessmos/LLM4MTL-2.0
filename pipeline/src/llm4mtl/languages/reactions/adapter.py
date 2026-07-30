@@ -38,8 +38,13 @@ class ReactionsAdapter:
     language_id = "reactions"
     renderer_version = "reactions-junit-v1"
 
-    def __init__(self, references_root: Path | None = None) -> None:
+    def __init__(
+        self,
+        references_root: Path | None = None,
+        contracts_root: Path | None = None,
+    ) -> None:
         self._references_root = references_root or default_references_root(REACTIONS_CONFIG)
+        self._contracts_root = contracts_root or default_task_contracts_root(REACTIONS_CONFIG)
 
     def runtime_tool_versions(self) -> dict[str, str]:
         return {"vitruv": "3.1.2", "junit": "5.13.2"}
@@ -62,7 +67,7 @@ class ReactionsAdapter:
         return self._references_root / f"{task}.reactions"
 
     def validate_suite_artifacts(self, suite: GeneratedSuite) -> ArtifactValidation:
-        contract = default_task_contracts_root(REACTIONS_CONFIG) / f"{suite.task}.json"
+        contract = self._contracts_root / f"{suite.task}.json"
         return validate_rendered_suite(suite, contract_exists=contract.is_file())
 
     def execute_suite(

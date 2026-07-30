@@ -4,4 +4,4 @@ Define a rule `ComponentContainer2AscetModule` that creates an `AscetModule` fro
 
 Define a rule `TaskRoot2SoftwareTask` that maps only root `Task` elements (those without a container) to `SoftwareTask`, copying the `name`.
 
-The `Task2SoftwareTask` rule should generally map any `Task` to `SoftwareTask`, copying `name`.+
+The `Task2SoftwareTask` rule should generally map any `Task` to `SoftwareTask`, copying `name`.

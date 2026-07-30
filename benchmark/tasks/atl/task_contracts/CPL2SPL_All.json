@@ -12,7 +12,7 @@
         "source"
       ],
       "kind": "emf",
-      "metamodelUri": "",
+      "metamodelUri": "CPL",
       "metamodelNsPrefix": "",
       "metamodelAlias": "CPL",
       "metamodelFile": "benchmark/metamodels/additional_models/ATL_model/CPL.ecore",
@@ -78,7 +78,7 @@
         "target"
       ],
       "kind": "emf",
-      "metamodelUri": "",
+      "metamodelUri": "SPL",
       "metamodelNsPrefix": "",
       "metamodelAlias": "SPL",
       "metamodelFile": "benchmark/metamodels/additional_models/ATL_model/SPL.ecore",
@@ -211,6 +211,7 @@
   "rules": [
     "semantic_cases model slots must map to runtimeName exactly.",
     "EMF namespace URIs and prefixes come only from this contract.",
+    "For plainXml slots, use kind='plainXml' and omit metamodelUri.",
     "Assertions and declarative changes may use only availableTypes.",
     "The reference transformation remains the behavioural oracle."
   ]

@@ -63,8 +63,8 @@ class StageServiceTests(unittest.TestCase):
         )
         self.assertEqual(
             [
-                "benchmark/metamodels/etl/Graph.ecore",
-                "benchmark/metamodels/etl/Tree.ecore",
+                "benchmark/metamodels/additional_models/ETL_model/Graph.ecore",
+                "benchmark/metamodels/additional_models/ETL_model/Tree.ecore",
             ],
             [metamodel["path"] for metamodel in body["metamodels"]],
         )

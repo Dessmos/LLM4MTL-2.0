@@ -15,7 +15,7 @@
     {
       "parameters": {
         "promptType": "define",
-        "text": "={{ $json.prompt + \"\\n\\n## Authoritative metamodel files\\n\" + ($json.metamodel_text || \"\") + ($(\"Set Parameters\").item.json.Few_shot ? \"\\n\\n## Few-shot examples (guidance only)\\n\" + $(\"Extract text from examples file\").item.json.examples : \"\") + ($(\"Set Parameters\").item.json.Grammar ? \"\\n\\n## ATLAS Transformation Language (ATL) grammar (syntax guidance only)\\n\" + $(\"Extract text from grammar\").item.json.grammar : \"\") + ($(\"Set Parameters\").item.json.Helper_methods ? \"\\n\\n## Existing helper methods (background only)\\n\" + $(\"Extract text from helper methods\").item.json.helper_methods : \"\") }}",
+        "text": "={{ $json.prompt + \"\\n\\n## Authoritative metamodel files\\n\" + ($json.metamodel_text || \"\") + $if($(\"Extract text from examples file\").isExecuted, \"\\n\\n## Few-shot examples (guidance only)\\n\" + $(\"Extract text from examples file\").item.json.examples, \"\") + $if($(\"Extract text from grammar\").isExecuted, \"\\n\\n## ATLAS Transformation Language (ATL) grammar (syntax guidance only)\\n\" + $(\"Extract text from grammar\").item.json.grammar, \"\") + $if($(\"Extract text from helper methods\").isExecuted, \"\\n\\n## Existing helper methods (background only)\\n\" + $(\"Extract text from helper methods\").item.json.helper_methods, \"\") }}",
         "messages": {
           "messageValues": [
             {
@@ -200,7 +200,7 @@
           },
           "conditions": [
             {
-              "id": "b2c3d4e5-2002-4e02-b002-200000000001",
+              "id": "few-shot-conditions-1",
               "leftValue": "={{ $json.Few_shot }}",
               "rightValue": "",
               "operator": {
@@ -234,7 +234,7 @@
           },
           "conditions": [
             {
-              "id": "b2c3d4e5-2002-4e02-b002-200000000002",
+              "id": "grammar-conditions-1",
               "leftValue": "={{ $json.Grammar }}",
               "rightValue": "",
               "operator": {
@@ -268,7 +268,7 @@
           },
           "conditions": [
             {
-              "id": "b2c3d4e5-2002-4e02-b002-200000000003",
+              "id": "helper-methods-conditions-1",
               "leftValue": "={{ $json.Helper_methods }}",
               "rightValue": "",
               "operator": {
@@ -293,7 +293,7 @@
     },
     {
       "parameters": {
-        "fileSelector": "/data/helper_methods//*",
+        "fileSelector": "=/data/helper_methods/atl/*",
         "options": {}
       },
       "type": "n8n-nodes-base.readWriteFile",
@@ -327,31 +327,6 @@
     },
     {
       "parameters": {
-        "model": {
-          "__rl": true,
-          "value": "claude-sonnet-4-20250514",
-          "mode": "list",
-          "cachedResultName": "Claude Sonnet 4"
-        },
-        "options": {}
-      },
-      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
-      "typeVersion": 1.3,
-      "position": [
-        1232,
-        368
-      ],
-      "id": "b2c3d4e5-2002-4e02-b002-000000000014",
-      "name": "Anthropic Chat Model",
-      "credentials": {
-        "anthropicApi": {
-          "id": "R9d6pMqZ8LzipdDW",
-          "name": "Anthropic account"
-        }
-      }
-    },
-    {
-      "parameters": {
         "operation": "text",
         "destinationKey": "helper_methods",
         "options": {}
@@ -367,49 +342,22 @@
     },
     {
       "parameters": {
-        "model": {
-          "__rl": true,
-          "value": "gpt-5",
-          "mode": "list",
-          "cachedResultName": "gpt-5"
-        },
-        "options": {
-          "timeout": 600000
-        }
-      },
-      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
-      "typeVersion": 1.2,
-      "position": [
-        1232,
-        64
-      ],
-      "id": "b2c3d4e5-2002-4e02-b002-000000000017",
-      "name": "OpenAI Chat Model",
-      "credentials": {
-        "openAiApi": {
-          "id": "8mtpdiKzgoTWwPSM",
-          "name": "OpenAi account"
-        }
-      }
-    },
-    {
-      "parameters": {
         "assignments": {
           "assignments": [
             {
-              "id": "b2c3d4e5-2002-4e02-b002-200000000004",
+              "id": "set-parameters-assignments-1",
               "name": "Few_shot",
               "value": false,
               "type": "boolean"
             },
             {
-              "id": "b2c3d4e5-2002-4e02-b002-200000000005",
+              "id": "set-parameters-assignments-2",
               "name": "Grammar",
               "value": true,
               "type": "boolean"
             },
             {
-              "id": "b2c3d4e5-2002-4e02-b002-200000000006",
+              "id": "set-parameters-assignments-3",
               "name": "Helper_methods",
               "value": false,
               "type": "boolean"
@@ -432,7 +380,7 @@
         "assignments": {
           "assignments": [
             {
-              "id": "b2c3d4e5-2002-4e02-b002-200000000007",
+              "id": "save-file-name-assignments-1",
               "name": "baseName",
               "value": "={{$binary.data.fileName.split('.').slice(0,-1).join('.')}}",
               "type": "string"
@@ -690,11 +638,6 @@
         ]
       ]
     },
-    "Anthropic Chat Model": {
-      "ai_languageModel": [
-        []
-      ]
-    },
     "Extract text from helper methods": {
       "main": [
         [
@@ -704,11 +647,6 @@
             "index": 4
           }
         ]
-      ]
-    },
-    "OpenAI Chat Model": {
-      "ai_languageModel": [
-        []
       ]
     },
     "Set Parameters": {

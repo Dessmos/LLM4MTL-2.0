@@ -6,4 +6,4 @@ Define a rule `Class2Interface` that maps each `Class` to an `Interface`, copyin
 
 Define a rule `Method2Method` that maps each `Method` to an `Interface` `Method`, copying `name`, `returnType`, and `parameters`.
 
-Define a rule `Parameter2Parameter` that maps each `Parameter` to an `Interface` `Parameter`, copying `name` and `type`.+
+Define a rule `Parameter2Parameter` that maps each `Parameter` to an `Interface` `Parameter`, copying `name` and `type`.

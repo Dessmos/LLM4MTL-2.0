@@ -2,9 +2,9 @@
 
 Use this contract as ground truth. Do not infer or invent model names, metamodel URIs, XML namespaces, or type names.
 
-| Runtime model name | Role(s) | Kind | metamodelUri | XML nsPrefix | Types used by transformation |
+| Runtime model name | Role(s) | Kind | metamodelUri | XML nsPrefix | Types used by the transformation |
 |---|---|---|---|---|---|
-| IN | source | emf |  |  | Attribute, Element, Text |
+| IN | source | emf | XML | XML | Attribute, Element, Text |
 | OUT | target | emf | DSL | DSL | Class, DomainModel, Enumeration, EnumerationLiteral, Relationship, Role, SimpleType, ValueProperty |
 
 Mandatory rules:

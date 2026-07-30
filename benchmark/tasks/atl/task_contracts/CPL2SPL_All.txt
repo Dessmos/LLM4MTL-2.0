@@ -2,10 +2,10 @@
 
 Use this contract as ground truth. Do not infer or invent model names, metamodel URIs, XML namespaces, or type names.
 
-| Runtime model name | Role(s) | Kind | metamodelUri | XML nsPrefix | Types used by transformation |
+| Runtime model name | Role(s) | Kind | metamodelUri | XML nsPrefix | Types used by the transformation |
 |---|---|---|---|---|---|
-| IN | source | emf |  |  | AddressSwitch, Busy, CPL, Default, Element, Incoming, Location, NoAnswer, Node, Otherwise, Proxy, Redirect, Redirection, SubAction, SubCall, SwitchedAddress |
-| OUT | target | emf |  |  | ClientErrorResponse, CompoundStat, ConstantExp, DeclarationStat, Dialog, ForwardExp, FunctionCall, FunctionCallExp, HeadedMessageField, LocalFunctionDeclaration, Method, Program, ReasonMessageField, RedirectionErrorResponse, ResponseConstant, ReturnStat, SIPHeaderPlace, SIPMethodName, SelectCase, SelectDefault, SelectStat, Service, SimpleType, StringConstant, URIConstant, Variable, VariableDeclaration, WithExp |
+| IN | source | emf | CPL |  | AddressSwitch, Busy, CPL, Default, Element, Incoming, Location, NoAnswer, Node, Otherwise, Proxy, Redirect, Redirection, SubAction, SubCall, SwitchedAddress |
+| OUT | target | emf | SPL |  | ClientErrorResponse, CompoundStat, ConstantExp, DeclarationStat, Dialog, ForwardExp, FunctionCall, FunctionCallExp, HeadedMessageField, LocalFunctionDeclaration, Method, Program, ReasonMessageField, RedirectionErrorResponse, ResponseConstant, ReturnStat, SIPHeaderPlace, SIPMethodName, SelectCase, SelectDefault, SelectStat, Service, SimpleType, StringConstant, URIConstant, Variable, VariableDeclaration, WithExp |
 
 Mandatory rules:
 - In semantic_cases.json, each models[].name must equal one runtime model name above exactly.

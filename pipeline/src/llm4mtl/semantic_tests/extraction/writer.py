@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from llm4mtl.conventions import (
-    default_prompts_root,
+    frozen_task_prompt,
     language_config,
     n8n_workflows_root,
     relative_or_absolute,
@@ -80,7 +80,10 @@ def build_metadata(
     adapter: LanguageAdapter,
 ) -> dict[str, object]:
     config = language_config(adapter.language_id)
-    prompt_path = default_prompts_root(config) / target.llm / f"{target.task}.txt"
+    # The reviewed, frozen prompt is the one both generators actually consumed.
+    # This used to name a pre-v5 per-model prompt directory that no longer
+    # exists, so every suite recorded prompt_file: null.
+    prompt_path = frozen_task_prompt(config, target.task)
     workflow_path = (
         n8n_workflows_root(config)
         / "test_generation"

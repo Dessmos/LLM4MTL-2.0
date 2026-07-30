@@ -40,7 +40,10 @@ def contract_from_mapping(data: dict[str, Any], task: str | None = None) -> Task
     resolved_task = str(data.get("task") or task or "")
     return TaskContract(
         task=resolved_task,
-        transformation=str(data.get("transformation") or f"{resolved_task}.etl"),
+        # The contract names its own transformation file. There is no default:
+        # guessing ".etl" here is how a missing field used to become an ETL
+        # assumption inside an ATL, QVT-O, or Reactions run.
+        transformation=str(data.get("transformation") or ""),
         models=models,
     )
 
@@ -58,9 +61,11 @@ def _model_from_dict(raw: dict[str, Any]) -> ModelContract:
             str(type_name)
             for type_name in (
                 raw.get("typesUsedInTransformation")
-                or raw.get("typesUsedInEtL")
+                # The snake_case spelling is the originally published schema,
+                # still accepted by schemas/contract.schema.json. The former
+                # ETL-only "typesUsedInEtL" spelling is not: every benchmark
+                # contract now uses the one language-neutral key.
                 or raw.get("types_used_in_transformation")
-                or raw.get("types_used_in_etl")
                 or []
             )
         ),

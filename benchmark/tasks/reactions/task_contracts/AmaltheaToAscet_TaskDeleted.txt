@@ -2,7 +2,7 @@
 
 Use this contract as ground truth. Do not infer or invent model names, metamodel URIs, XML namespaces, or type names.
 
-| Runtime model name | Role(s) | Kind | metamodelUri | XML nsPrefix | Types used by transformation |
+| Runtime model name | Role(s) | Kind | metamodelUri | XML nsPrefix | Types used by the transformation |
 |---|---|---|---|---|---|
 | ascet | inout | emf | http://vitruv.tools/methodologisttemplate/ascet | ascet | Task |
 | amalthea | inout | emf | http://vitruv.tools/methodologisttemplate/amalthea | amalthea | Task |

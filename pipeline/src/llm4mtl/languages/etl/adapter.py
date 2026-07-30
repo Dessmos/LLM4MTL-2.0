@@ -17,7 +17,11 @@ import sys
 from pathlib import Path
 from typing import Sequence
 
-from llm4mtl.conventions import ETL_CONFIG, default_references_root
+from llm4mtl.conventions import (
+    ETL_CONFIG,
+    default_references_root,
+    default_task_contracts_root,
+)
 from llm4mtl.domain import (
     ArtifactValidation,
     GeneratedSuite,
@@ -27,13 +31,15 @@ from llm4mtl.domain import (
     TransformationOutcome,
 )
 from llm4mtl.languages.base import Workspace
-from llm4mtl.languages.common import materialize_parser, pom_properties
+from llm4mtl.languages.common import (
+    materialize_parser,
+    pom_properties,
+    validate_rendered_suite,
+)
 from llm4mtl.paths import TARGET
 from llm4mtl.semantic_tests.suite_execution import execute_suite_against
+from llm4mtl.semantic_tests.codegen.java import render_semantic_test
 from llm4mtl.semantic_tests.extraction.semantic_cases import render_generated_suite
-from llm4mtl.semantic_tests.suites.metadata import artifact_invalid_reason
-from llm4mtl.semantic_tests.technical_validation.resources import check_models_load
-from llm4mtl.semantic_tests.technical_validation.smoke import junit_test_method_counts
 
 PARSER_TIMEOUT_SECONDS = 900
 
@@ -44,8 +50,13 @@ class EtlAdapter:
     language_id = "etl"
     renderer_version = "etl-junit-v1"
 
-    def __init__(self, references_root: Path | None = None) -> None:
+    def __init__(
+        self,
+        references_root: Path | None = None,
+        contracts_root: Path | None = None,
+    ) -> None:
         self._references_root = references_root or default_references_root(ETL_CONFIG)
+        self._contracts_root = contracts_root or default_task_contracts_root(ETL_CONFIG)
 
     def reference_transformation(self, task: str) -> Path:
         return self._references_root / f"{task}.etl"
@@ -71,41 +82,20 @@ class EtlAdapter:
             task,
             extracted,
             language=self.language_id,
+            config=ETL_CONFIG,
+            transformation_extension=".etl",
+            render_test=render_semantic_test,
         )
 
     def validate_suite_artifacts(self, suite: GeneratedSuite) -> ArtifactValidation:
         """Everything that disqualifies a suite without running Maven.
 
-        Cheap, and it keeps a malformed suite from reaching the engine only to
-        fail with a diagnostic about a missing test selector.
+        The checks are the shared ones. ETL used to reimplement them, which is
+        how it ended up the one language that accepted a suite with no task
+        contract behind it.
         """
-        reason = artifact_invalid_reason(suite.path) or self._static_rejection(suite)
-        if reason:
-            return ArtifactValidation(
-                valid=False, reason_code="ARTIFACT_INVALID", violations=(reason,)
-            )
-        return ArtifactValidation(valid=True)
-
-    @staticmethod
-    def _static_rejection(suite: GeneratedSuite) -> str:
-        java_paths = sorted(suite.path.glob("*.java"))
-        if not java_paths:
-            return "No rendered Java harness found in suite root"
-
-        models_dir = suite.path / "models"
-        model_paths = (
-            [path for path in models_dir.rglob("*") if path.is_file()]
-            if models_dir.is_dir()
-            else []
-        )
-        if not model_paths:
-            return "No generated model/resource files found under models/"
-
-        if not any(junit_test_method_counts(java_paths).values()):
-            return "No JUnit @Test methods found in the rendered harness"
-
-        models_load, model_error = check_models_load(model_paths)
-        return "" if models_load else model_error
+        contract = self._contracts_root / f"{suite.task}.json"
+        return validate_rendered_suite(suite, contract_exists=contract.is_file())
 
     def execute_suite(
         self,

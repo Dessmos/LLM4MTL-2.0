@@ -13,4 +13,4 @@ Define separate rules to generate paragraphs depending on whether a `BibTeXEntry
 - `TitledEntry_Title_NoArticle` and `TitledEntry_NoTitle_NoArticle` for non-`Article` titled entries, controlled by membership in `titledEntrySet`, creating entry and/or title paragraphs.
 - `Article_Title_Journal`, `Article_NoTitle_Journal`, `Article_Title_NoJournal`, `Article_NoTitle_NoJournal` for `Article` instances, combining membership in `titledEntrySet` and `articleSet` and creating entry, title, and/or journal `Para` elements accordingly.
 
-Use `resolveTemp` where needed to reference previously created title and journal paragraphs from `Main`.+
+Use `resolveTemp` where needed to reference previously created title and journal paragraphs from `Main`.

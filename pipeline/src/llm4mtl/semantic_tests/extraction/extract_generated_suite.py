@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Extract generated ETL semantic test suites from n8n Markdown responses."""
+"""Extract generated semantic test suites from n8n Markdown responses."""
 
 from __future__ import annotations
 

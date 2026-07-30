@@ -25,6 +25,7 @@ services:
       - "../../../benchmark/tasks:/data/benchmark/tasks:ro"
       - "../../../prompt_assets/tests/few_shot:/data/examples:ro"
       - "../../../prompt_assets/tests/grammar:/data/grammar:ro"
+      - "../../../prompt_assets/tests/helper_methods:/data/helper_methods:ro"
       - "../../../prompt_assets/diagnosis:/data/diagnosis_prompts:ro"
 
   stage-service:

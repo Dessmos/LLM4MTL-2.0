@@ -24,6 +24,18 @@ MODELS = (
     "gemini-2-5-pro",
     "qwen2-5-coder-7b",
 )
+
+# The prompting axis, spelled exactly as experiments/matrices/*.yaml spells it.
+# Response directories are named after these, and a stage selects a run's
+# responses by directory name — so a language that spells one of them
+# differently (QVT-O's former "zero_shot" and "few_shot_AND_grammar") produces
+# results no matrix can ever select.
+STRATEGIES = (
+    "only_prompt",
+    "grammar",
+    "few_shot",
+    "few_shots_AND_grammar",
+)
 RESPONSE_IDENTITY = re.compile(r"/responses/([^/]+)/([^/]+)/")
 
 
@@ -31,24 +43,60 @@ RESPONSE_IDENTITY = re.compile(r"/responses/([^/]+)/([^/]+)/")
 class WorkflowInputs:
     display_name: str
     reference_extension: str
+    # What "follow the grammar exactly" means in this language, and what its
+    # named entities are called. These are the only parts of the transformation
+    # instruction that may differ between languages; everything around them is
+    # shared, so a model is asked for the same thing in every language.
+    grammar_constructs: str
+    named_entities: str
+    extra_rule: str = ""
 
 
 INPUTS = {
     "etl": WorkflowInputs(
         display_name="Epsilon Transformation Language (ETL)",
         reference_extension="etl",
+        grammar_constructs=(
+            "transformation rules with transform/to, @lazy/@greedy/@abstract/"
+            "@primary annotations, guard conditions, pre/post blocks, "
+            "operations, EOL expressions, equivalent operator ::=, etc."
+        ),
+        named_entities="transformation and rule",
     ),
     "atl": WorkflowInputs(
         display_name="ATLAS Transformation Language (ATL)",
         reference_extension="atl",
+        grammar_constructs=(
+            "module header, create section, matched/called rules, helpers, "
+            "OCL expressions, etc."
+        ),
+        named_entities="module, transformation, and rule",
     ),
     "qvto": WorkflowInputs(
         display_name="QVT Operational (QVT-O)",
         reference_extension="qvto",
+        grammar_constructs=(
+            "modeltype declarations, transformation header with in/out "
+            "parameters, main() entry point, mapping declarations with "
+            "optional when clauses, init blocks, constructors, mapping "
+            "extensions such as inherits/merges/disjuncts, resolve "
+            "expressions, object literals, etc."
+        ),
+        named_entities="transformation and mapping",
     ),
     "reactions": WorkflowInputs(
         display_name="Vitruv Reactions Language",
         reference_extension="reactions",
+        grammar_constructs=(
+            "imports, transformation block, reactions, routines, guards, "
+            "create/update sections, persistence paths, correspondence links, "
+            "etc."
+        ),
+        named_entities="transformation, reaction, and routine",
+        extra_rule=(
+            "Use as much of the Reactions Language as possible and fall back "
+            "to Xtend only where the language cannot express the change."
+        ),
     ),
 }
 
@@ -72,6 +120,7 @@ def synchronize_prompt_generation(
     model: str,
 ) -> dict[str, Any]:
     """Make prompt generation resolve exact inputs and write review candidates."""
+    payload = _normalize_workflow_shape(payload)
     inputs = INPUTS[language]
     nodes = {node["name"]: node for node in payload["nodes"]}
     nodes["Read reference file"]["parameters"]["fileSelector"] = (
@@ -141,6 +190,7 @@ def synchronize_test_generation(
     language: str,
 ) -> dict[str, Any]:
     """Make test generation consume the one frozen prompt for each task."""
+    payload = _normalize_workflow_shape(payload)
     _response_identity(payload)
     nodes = {node["name"]: node for node in payload["nodes"]}
     is_qwen = "Read Qwen prompt files" in nodes
@@ -148,6 +198,7 @@ def synchronize_test_generation(
     nodes[prompt_node_name]["parameters"]["fileSelector"] = (
         f"=/data/task_prompts/{language}/*.txt"
     )
+    _scope_helper_methods(nodes, language)
 
     if is_qwen:
         nodes["Save task name"]["parameters"]["assignments"]["assignments"][0][
@@ -179,6 +230,7 @@ def synchronize_transformation_generation(
     language: str,
 ) -> dict[str, Any]:
     """Make transformation generation use the shared prompt and exact models."""
+    payload = _normalize_workflow_shape(payload)
     nodes = {node["name"]: node for node in payload["nodes"]}
     if "Read prompt files" not in nodes or "(Re-)Generate code" not in nodes:
         raise ValueError("not a supported transformation-generation workflow")
@@ -186,11 +238,12 @@ def synchronize_transformation_generation(
     nodes["Read prompt files"]["parameters"]["fileSelector"] = (
         f"=/data/task_prompts/{language}/*.txt"
     )
+    _scope_helper_methods(nodes, language)
     generation = nodes["(Re-)Generate code"]
-    generation["parameters"]["text"] = generation["parameters"]["text"].replace(
-        "$json.concatenated_model",
-        "$json.metamodel_text",
-    )
+    generation["parameters"]["text"] = _transformation_request()
+    generation["parameters"].setdefault("messages", {})["messageValues"] = [
+        {"message": _transformation_system_message(language)}
+    ]
     save_name = (
         "Save file name"
         if "Save file name" in nodes
@@ -209,20 +262,19 @@ def synchronize_reactions_matrix(
     payload: dict[str, Any],
 ) -> dict[str, Any]:
     """Use exact task inputs in the multi-model Reactions matrix workflow."""
+    payload = _normalize_workflow_shape(payload)
     nodes = {node["name"]: node for node in payload["nodes"]}
     nodes["Read prompt files"]["parameters"]["fileSelector"] = (
         "=/data/task_prompts/reactions/*.txt"
     )
+    _scope_helper_methods(nodes, "reactions")
     for generation_name in (
         "(Re-)Generate code1",
         "(Re-)Generate code3",
         "(Re-)Generate Code2",
     ):
         generation = nodes[generation_name]
-        generation["parameters"]["text"] = generation["parameters"]["text"].replace(
-            "$json.concatenated_model",
-            "$json.metamodel_text",
-        )
+        generation["parameters"]["text"] = _transformation_request()
 
     obsolete = {
         "Read model files",
@@ -266,7 +318,7 @@ def synchronize_reactions_matrix(
         connections.pop(name, None)
     _remove_connection_targets(connections, obsolete)
 
-    trigger = connections["When clicking ‘Execute workflow’"]["main"][0]
+    trigger = connections[TRIGGER_NODE]["main"][0]
     trigger[:] = [
         target for target in trigger if target["node"] not in obsolete
     ]
@@ -403,6 +455,159 @@ def _prompt_generation_connections(
         "main": [[{"node": "Loop Over Items", "type": "main", "index": 0}]]
     }
     return connections
+
+
+TRIGGER_NODE = "When clicking 'Execute workflow'"
+
+# Provider-side identifiers for the models the matrices name. Pinned here so a
+# language cannot run a different build of "the same" model: QVT-O's Gemini
+# exports asked for "models/gemini-2-5-pro", which is not a Google model id at
+# all — those four runs would have failed rather than produced QVT-O results.
+PROVIDER_MODEL_IDS = {
+    "@n8n/n8n-nodes-langchain.lmChatGoogleGemini": "models/gemini-2.5-pro",
+}
+
+
+def _pin_provider_model_ids(payload: dict[str, Any]) -> dict[str, Any]:
+    for node in payload["nodes"]:
+        pinned = PROVIDER_MODEL_IDS.get(node.get("type", ""))
+        if pinned is not None and node["parameters"].get("modelName") != pinned:
+            node["parameters"]["modelName"] = pinned
+    return payload
+
+
+def _normalize_workflow_shape(payload: dict[str, Any]) -> dict[str, Any]:
+    """Remove per-workflow cosmetic drift that blocks byte comparison.
+
+    Two things drifted per language rather than per purpose: the manual trigger
+    was labelled with curly quotes in the ATL and Reactions exports and straight
+    quotes elsewhere, and ATL's field assignments carried duplicate ids. Neither
+    changes behaviour, but while they differ no one can diff two languages'
+    workflows and see only the intended differences.
+    """
+    for node in payload["nodes"]:
+        if node["type"] == "n8n-nodes-base.manualTrigger" and node["name"] != TRIGGER_NODE:
+            payload["connections"] = _rename_connection_node(
+                payload["connections"],
+                node["name"],
+                TRIGGER_NODE,
+            )
+            node["name"] = TRIGGER_NODE
+        slug = re.sub(r"[^a-z0-9]+", "-", node["name"].lower()).strip("-")
+        parameters = node.get("parameters", {})
+        for holder in ("assignments", "conditions"):
+            entries = parameters.get(holder, {})
+            entries = entries.get(holder) if isinstance(entries, dict) else None
+            if not isinstance(entries, list):
+                continue
+            for index, entry in enumerate(entries, 1):
+                if isinstance(entry, dict) and "id" in entry:
+                    entry["id"] = f"{slug}-{holder}-{index}"
+    return _pin_provider_model_ids(_drop_unwired_chat_models(payload))
+
+
+def _drop_unwired_chat_models(payload: dict[str, Any]) -> dict[str, Any]:
+    """Keep only the provider node a workflow actually runs on.
+
+    Model/strategy exports are produced by copying a sibling, so the ETL and ATL
+    transformation workflows carried Anthropic and Gemini nodes with an empty
+    ``ai_languageModel`` connection alongside the provider they use. They cannot
+    execute, but they make a gpt-5 export look like it needs three credentials,
+    and they are the reason two languages' exports could not be diffed.
+    """
+    connections = payload.get("connections", {})
+    wired = {
+        name
+        for name, outputs in connections.items()
+        if any(targets for targets in outputs.get("ai_languageModel", []))
+    }
+    payload["nodes"] = [
+        node
+        for node in payload["nodes"]
+        if not node["type"].startswith("@n8n/n8n-nodes-langchain.lmChat")
+        or node["name"] in wired
+    ]
+    live = {node["name"] for node in payload["nodes"]}
+    for name in [name for name in connections if name not in live]:
+        connections.pop(name)
+    return payload
+
+
+def _transformation_system_message(language: str) -> str:
+    """One instruction, one rule list, for every language.
+
+    The four languages' instructions had drifted into four different texts:
+    different rule numbering (ATL skipped rule 4), different punctuation, and a
+    QVT-O display name used nowhere else. Only the grammar clause, the names of
+    a language's declared entities, and one optional extra rule may differ.
+    """
+    inputs = INPUTS[language]
+    rules = [
+        f"Follow the {inputs.display_name} grammar exactly "
+        f"({inputs.grammar_constructs}).",
+        f"Use the {inputs.named_entities} names provided by the user whenever "
+        "they are specified.",
+        "If a name is missing, invent a concise, CamelCase name that matches "
+        "the intent.",
+        "Reference only the metamodel namespace URIs given in the request; do "
+        "not invent, rename, or substitute a namespace.",
+    ]
+    if inputs.extra_rule:
+        rules.append(inputs.extra_rule)
+    rules.append(
+        "Do **not** wrap the result in Markdown fences, and do **not** add "
+        "commentary, explanations, or blank lines beyond what the language "
+        "requires."
+    )
+    numbered = "\n".join(f"{index}. {rule}" for index, rule in enumerate(rules, 1))
+    return (
+        f"You are an expert developer for the **{inputs.display_name}** "
+        "(model transformation DSL).\n"
+        "Your job is to translate the user's natural-language specification "
+        f"into a complete, syntactically valid .{inputs.reference_extension} "
+        "file.\n\nRules\n"
+        f"{numbered}"
+    )
+
+
+def _transformation_request() -> str:
+    """The user turn. Identical in every language, including the namespaces.
+
+    The namespace line used to be a hardcoded Vitruv URI in every workflow,
+    which was simply untrue for ETL and ATL. It now comes from the contract.
+    """
+    return (
+        "={{ $json.prompt }}\n\n"
+        "-- End of request.\n"
+        "Here are the authoritative metamodel files:\n"
+        "{{ $json.metamodel_text }}\n\n"
+        "The metamodel namespace URIs for this task are:\n"
+        "{{ $json.metamodel_uri_text }}\n\n"
+        "{{ $if($('Extract text from examples file').isExecuted, "
+        '"Here are some examples as guideline:\\n" + '
+        "$('Extract text from examples file').item.json.examples, \"\") }}\n\n"
+        "{{ $if($('Extract text from grammar').isExecuted, "
+        '"Here is the grammar of the Language:\\n" + '
+        "$('Extract text from grammar').item.json.grammar, \"\") }}\n\n"
+        "{{ $if($('Extract text from helper methods').isExecuted, "
+        '"Here are helper methods you can use:\\n" + '
+        "$('Extract text from helper methods').item.json.helper_methods, \"\") }}"
+    )
+
+
+def _scope_helper_methods(nodes: dict[str, Any], language: str) -> None:
+    """Read helper methods from this language's directory, like every other asset.
+
+    Every workflow but one used ``/data/helper_methods//*``, which globs the
+    language directories themselves rather than the files inside them — and on
+    the test-generation instance the volume was not even mounted. Few-shot
+    examples and grammars have always been language-scoped; helper methods now
+    are too.
+    """
+    node = nodes.get("Read helper methods")
+    if node is None:
+        return
+    node["parameters"]["fileSelector"] = f"=/data/helper_methods/{language}/*"
 
 
 def _replace_language_wide_models(
@@ -549,15 +754,15 @@ def _cloud_test_request(language: str) -> str:
     return (
         '={{ $json.prompt + "\\n\\n## Authoritative metamodel files\\n" + '
         '($json.metamodel_text || "") + '
-        '($("Set Parameters").item.json.Few_shot ? '
+        '$if($("Extract text from examples file").isExecuted, '
         '"\\n\\n## Few-shot examples (guidance only)\\n" + '
-        '$("Extract text from examples file").item.json.examples : "") + '
-        '($("Set Parameters").item.json.Grammar ? '
+        '$("Extract text from examples file").item.json.examples, "") + '
+        '$if($("Extract text from grammar").isExecuted, '
         f'"\\n\\n## {grammar_name} grammar (syntax guidance only)\\n" + '
-        '$("Extract text from grammar").item.json.grammar : "") + '
-        '($("Set Parameters").item.json.Helper_methods ? '
+        '$("Extract text from grammar").item.json.grammar, "") + '
+        '$if($("Extract text from helper methods").isExecuted, '
         '"\\n\\n## Existing helper methods (background only)\\n" + '
-        '$("Extract text from helper methods").item.json.helper_methods : "") }}'
+        '$("Extract text from helper methods").item.json.helper_methods, "") }}'
     )
 
 

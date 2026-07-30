@@ -2,10 +2,10 @@
 
 Use this contract as ground truth. Do not infer or invent model names, metamodel URIs, XML namespaces, or type names.
 
-| Runtime model name | Role(s) | Kind | metamodelUri | XML nsPrefix | Types used by transformation |
+| Runtime model name | Role(s) | Kind | metamodelUri | XML nsPrefix | Types used by the transformation |
 |---|---|---|---|---|---|
-| IN | source | emf |  |  | ArchitecturalDescription, Architecture, Concern, Environment, IEEE1471Model, LibraryViewpoint, Mission, Model, Rationale, Stakeholder, System, View, Viewpoint |
-| OUT | target | emf |  |  | ArchitecturalDescription, ArchitecturalFramework, ArchitecturalProduct, Architecture, Concern, Elements, Enterprise, Environment, MoDAFModel, OperationalMission, Stakeholder, StakeholderHasConcern, View |
+| IN | source | emf | IEEE1471 | IEEE1471 | ArchitecturalDescription, Architecture, Concern, Environment, IEEE1471Model, LibraryViewpoint, Mission, Model, Rationale, Stakeholder, System, View, Viewpoint |
+| OUT | target | emf | MoDAF | MoDAF | ArchitecturalDescription, ArchitecturalFramework, ArchitecturalProduct, Architecture, Concern, Elements, Enterprise, Environment, MoDAFModel, OperationalMission, Stakeholder, StakeholderHasConcern, View |
 
 Mandatory rules:
 - In semantic_cases.json, each models[].name must equal one runtime model name above exactly.

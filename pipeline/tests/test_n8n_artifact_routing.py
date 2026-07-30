@@ -97,15 +97,20 @@ class N8nArtifactRoutingTests(unittest.TestCase):
         self.assertEqual("n8n-nodes-base.httpRequest", persist["type"])
         self.assertIn("/runs/{{ $json.run_id }}/diagnoses", persist["parameters"]["url"])
 
-    def test_snippets_contains_only_immutable_inputs(self) -> None:
-        for snippets_root in WORKFLOWS_ROOT.glob("*/mtl_snippets"):
-            for path in snippets_root.rglob("*"):
-                if not path.is_file():
-                    continue
-                relative_parts = path.relative_to(snippets_root).parts
-                self.assertTrue(
-                    "references" in relative_parts or "task_contracts" in relative_parts,
-                    f"generated or unclassified file remains in snippets: {path}",
+    def test_no_workflow_tree_keeps_its_own_copy_of_the_benchmark(self) -> None:
+        """Task inputs live in benchmark/ only.
+
+        Each n8n tree used to carry an ``mtl_snippets/`` copy of the reference
+        transformations, mounted at ``/data/snippets``. Two copies of the same
+        protected input is one copy too many: they drift, and a workflow reading
+        the stale one produces results attributed to a reference that never ran.
+        """
+        self.assertEqual([], sorted(WORKFLOWS_ROOT.glob("*/mtl_snippets")))
+        for compose in sorted(WORKFLOWS_ROOT.glob("*/docker-compose.yml")):
+            with self.subTest(compose=compose):
+                self.assertNotIn(
+                    "/data/snippets",
+                    compose.read_text(encoding="utf-8"),
                 )
 
 

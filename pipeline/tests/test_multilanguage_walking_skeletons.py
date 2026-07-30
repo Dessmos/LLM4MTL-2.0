@@ -23,14 +23,14 @@ from llm4mtl.languages import (
     language_adapter,
 )
 from llm4mtl.paths import TARGET
+from llm4mtl.prompt_assembly.n8n_exports import STRATEGIES
 from llm4mtl.semantic_tests.suite_execution import (
     GENERATED_TRANSFORMATION_ROLE,
     record_observation,
 )
 from llm4mtl.task_contracts.build_language_task_contracts import (
-    build_atl_contract,
-    build_qvto_contract,
-    build_reactions_contract,
+    BUILDERS,
+    REFERENCE_EXTENSIONS,
 )
 from llm4mtl.transformation_execution.hashing import file_sha256
 from llm4mtl.workspace import materialize_engine
@@ -72,6 +72,11 @@ class FourLanguageCoverageTests(unittest.TestCase):
                         TARGET.benchmark / "tasks" / language / "task_contracts"
                     ).glob("*.json")
                 }
+                self.assertEqual(
+                    list(STRATEGIES),
+                    matrix["transformation_strategies"],
+                    "the prompting axis must be spelled the same everywhere",
+                )
                 self.assertTrue(tasks <= references)
                 self.assertTrue(tasks <= contracts)
                 if language != "etl":
@@ -115,10 +120,19 @@ class FourLanguageCoverageTests(unittest.TestCase):
                         "contract",
                         contract_payload,
                     )
-                    if language != "etl":
-                        for model in contract_payload["models"]:
-                            self.assertIn("typesUsedInTransformation", model)
-                            self.assertNotIn("typesUsedInEtL", model)
+                    self.assertEqual(language, contract_payload["language"])
+                    for model in contract_payload["models"]:
+                        self.assertIn("typesUsedInTransformation", model)
+                        self.assertNotIn("typesUsedInEtL", model)
+                        if model["kind"] != "emf":
+                            continue
+                        # An EMF slot without a namespace is not usable ground
+                        # truth: enforcement rewrites generated models from it.
+                        # Seven ATL contracts carried "" because their metamodel
+                        # file wraps several packages and only the wrapper was
+                        # read.
+                        self.assertTrue(model["metamodelUri"], model["runtimeName"])
+                        self.assertTrue(model["metamodelFile"], model["runtimeName"])
                 run_specs = expand_matrix(matrix)
                 self.assertTrue(run_specs)
                 self.assertEqual(len(run_specs), len({spec.run_id for spec in run_specs}))
@@ -144,18 +158,14 @@ class FourLanguageCoverageTests(unittest.TestCase):
                     json.loads(first["semantic_cases.json"])["transformation"],
                 )
 
-    def test_non_etl_contracts_are_reproducible_from_protected_inputs(self) -> None:
-        builders = {
-            "atl": build_atl_contract,
-            "qvto": build_qvto_contract,
-            "reactions": build_reactions_contract,
-        }
-        for language, builder in builders.items():
+    def test_every_contract_is_reproducible_from_protected_inputs(self) -> None:
+        self.assertEqual(set(REQUIRED_LANGUAGES), set(BUILDERS))
+        for language, builder in BUILDERS.items():
             references = TARGET.benchmark / "tasks" / language / "references"
             contracts = TARGET.benchmark / "tasks" / language / "task_contracts"
-            for reference in sorted(references.iterdir()):
-                if not reference.is_file():
-                    continue
+            found = sorted(references.glob(f"*{REFERENCE_EXTENSIONS[language]}"))
+            self.assertTrue(found, language)
+            for reference in found:
                 with self.subTest(language=language, task=reference.stem):
                     expected = json.loads(
                         (contracts / f"{reference.stem}.json").read_text(

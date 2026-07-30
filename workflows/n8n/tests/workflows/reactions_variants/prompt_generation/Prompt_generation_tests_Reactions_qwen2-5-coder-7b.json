@@ -45,7 +45,7 @@
         "assignments": {
           "assignments": [
             {
-              "id": "b2c3d4e5-2001-4e01-b001-100000000001",
+              "id": "save-reaction-name-assignments-1",
               "name": "baseName",
               "value": "={{$binary.data.fileName.split('.').slice(0,-1).join('.')}}",
               "type": "string"
@@ -86,7 +86,7 @@
         "assignments": {
           "assignments": [
             {
-              "id": "b2c3d4e5-2001-4e01-b001-100000000002",
+              "id": "extract-qwen-prompt-text-assignments-1",
               "name": "text",
               "value": "={{ $json.message.content }}",
               "type": "string"

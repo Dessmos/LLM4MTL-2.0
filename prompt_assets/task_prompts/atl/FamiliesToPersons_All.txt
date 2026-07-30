@@ -7,4 +7,4 @@ The module should define three helpers in the context of `Member`:
 
 Add two transformation rules:
 - `Member2Male` maps each `Member` where `isMale()` is true to a `Male` with `fullName = firstName + ' ' + familyLastName()`.
-- `Member2Female` maps each `Member` where `isFemale()` is true to a `Female` with the same `fullName` construction.+
+- `Member2Female` maps each `Member` where `isFemale()` is true to a `Female` with the same `fullName` construction.

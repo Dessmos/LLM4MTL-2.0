@@ -12,21 +12,13 @@ from __future__ import annotations
 from llm4mtl.task_contracts.enforcement import enforce_contract
 from llm4mtl.task_contracts.loader import contract_from_mapping, load_task_contract
 from llm4mtl.task_contracts.models import ModelContract, TaskContract
-from llm4mtl.task_contracts.render import (
-    contract_header_block,
-    contract_header_markdown,
-    task_context_block,
-    task_context_markdown,
-)
+from llm4mtl.task_contracts.render import contract_header_markdown
 
 __all__ = [
     "ModelContract",
     "TaskContract",
     "contract_from_mapping",
-    "contract_header_block",
     "contract_header_markdown",
     "enforce_contract",
     "load_task_contract",
-    "task_context_block",
-    "task_context_markdown",
 ]

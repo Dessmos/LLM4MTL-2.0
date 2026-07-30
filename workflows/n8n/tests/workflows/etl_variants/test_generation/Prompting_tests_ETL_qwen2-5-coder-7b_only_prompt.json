@@ -47,7 +47,7 @@
         "assignments": {
           "assignments": [
             {
-              "id": "c3d4e5f6-2003-4f03-c003-100000000001",
+              "id": "save-task-name-assignments-1",
               "name": "baseName",
               "value": "={{$binary.data.fileName.replace(/\\.txt$/, '')}}",
               "type": "string"
@@ -122,7 +122,7 @@
         "assignments": {
           "assignments": [
             {
-              "id": "c3d4e5f6-2003-4f03-c003-100000000002",
+              "id": "extract-qwen-test-text-assignments-1",
               "name": "text",
               "value": "={{ $json.message.content }}",
               "type": "string"

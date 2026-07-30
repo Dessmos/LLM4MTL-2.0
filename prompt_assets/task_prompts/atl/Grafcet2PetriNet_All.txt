@@ -12,4 +12,4 @@ Define the following rules:
 
 - Rule `PlaceToTransition`: map each `StepToTransition` to `PlaceToTransition`, copying `location`, `name`, `net`, and the `from`/`to` references.
 
-- Rule `TransitionToPlace`: map each `TransitionToStep` to `TransitionToPlace`, copying `location`, `name`, `net`, and the `from`/`to` references.+
+- Rule `TransitionToPlace`: map each `TransitionToStep` to `TransitionToPlace`, copying `location`, `name`, `net`, and the `from`/`to` references.

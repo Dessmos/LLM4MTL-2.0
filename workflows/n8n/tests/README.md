@@ -27,12 +27,17 @@ Mounted paths inside the container:
 /data/task_prompts
 /data/examples
 /data/grammar
+/data/helper_methods
 /data/diagnosis_prompts
 ```
 
 Immutable references and contracts remain under `benchmark/`; the stage service
 resolves exact metamodel files from its repository mount. Grammar, few-shot
-assets, and frozen task prompts remain under `prompt_assets/`.
+assets, helper methods, and frozen task prompts remain under `prompt_assets/`.
+
+Each of `/data/examples`, `/data/grammar`, and `/data/helper_methods` holds one
+subdirectory per language, and a workflow reads only its own — the strategy
+flags select *whether* an asset is appended, never *whose* asset it is.
 
 Run the selected model's `prompt_generation` workflow to create a review
 candidate. The stage service resolves

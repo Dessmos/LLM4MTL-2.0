@@ -89,7 +89,10 @@ class IdentityAxisTests(unittest.TestCase):
         self.assertEqual(64, len(hashes["task_contract"]))
         self.assertEqual(64, len(hashes["task_prompt"]))
         self.assertEqual(
-            {"benchmark/metamodels/etl/Graph.ecore", "benchmark/metamodels/etl/Tree.ecore"},
+            {
+                "benchmark/metamodels/additional_models/ETL_model/Graph.ecore",
+                "benchmark/metamodels/additional_models/ETL_model/Tree.ecore",
+            },
             set(hashes["metamodels"]),
         )
 

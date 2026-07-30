@@ -10,16 +10,16 @@
         -560
       ],
       "id": "7f67440e-9bda-41e1-b072-f2c517ef9ba4",
-      "name": "When clicking ‘Execute workflow’"
+      "name": "When clicking 'Execute workflow'"
     },
     {
       "parameters": {
         "promptType": "define",
-        "text": "={{ $json.prompt }}\n\n-- End of request.\nHere are the models:\n{{ $json.metamodel_text }}\n\nThe models are located here:\n\"http://vitruv.tools/methodologisttemplate/[modelname]\"\n\n{{ $('Set Parameters').item.json.Few_shot ? \"Here are some examples as guideline:\\n\" + $('Extract text from examples file').item.json.examples : \"\" }}\n\n\n{{ $('Set Parameters').item.json.Grammar ? \"Here is the grammar of the Language:\\n\" + $('Extract text from grammar').item.json.grammar : \"\"}}\n\n{{ $('Set Parameters').item.json.Helper_methods ? \"Here are helper methods you can use:\\n\" + $('Extract text from helper methods').item.json.helper_methods : \"\"}}",
+        "text": "={{ $json.prompt }}\n\n-- End of request.\nHere are the authoritative metamodel files:\n{{ $json.metamodel_text }}\n\nThe metamodel namespace URIs for this task are:\n{{ $json.metamodel_uri_text }}\n\n{{ $if($('Extract text from examples file').isExecuted, \"Here are some examples as guideline:\\n\" + $('Extract text from examples file').item.json.examples, \"\") }}\n\n{{ $if($('Extract text from grammar').isExecuted, \"Here is the grammar of the Language:\\n\" + $('Extract text from grammar').item.json.grammar, \"\") }}\n\n{{ $if($('Extract text from helper methods').isExecuted, \"Here are helper methods you can use:\\n\" + $('Extract text from helper methods').item.json.helper_methods, \"\") }}",
         "messages": {
           "messageValues": [
             {
-              "message": "You are an expert developer for the **ATLAS Transformation Language (ATL)** (model transformation DSL).\nYour job is to translate the user’s natural-language specification into a complete, syntactically valid .atl file.\n\nRules  \n1. Follow the ATL grammar exactly (module header, create section, matched/called rules, helpers, OCL expressions, etc.). \n2. Use the module, transformation, and rule names provided by the user whenever they are specified.  \n3. If a name is missing, invent a concise, CamelCase name that matches the intent.\n5. Do **not** wrap it in Markdown fences, and do **not** add commentary,\n   explanations, or blank lines beyond what the language requires."
+              "message": "You are an expert developer for the **ATLAS Transformation Language (ATL)** (model transformation DSL).\nYour job is to translate the user's natural-language specification into a complete, syntactically valid .atl file.\n\nRules\n1. Follow the ATLAS Transformation Language (ATL) grammar exactly (module header, create section, matched/called rules, helpers, OCL expressions, etc.).\n2. Use the module, transformation, and rule names provided by the user whenever they are specified.\n3. If a name is missing, invent a concise, CamelCase name that matches the intent.\n4. Reference only the metamodel namespace URIs given in the request; do not invent, rename, or substitute a namespace.\n5. Do **not** wrap the result in Markdown fences, and do **not** add commentary, explanations, or blank lines beyond what the language requires."
             }
           ]
         },
@@ -200,7 +200,7 @@
           },
           "conditions": [
             {
-              "id": "5ae157e2-f4ea-484a-9cf4-0341022bdbd3",
+              "id": "few-shot-conditions-1",
               "leftValue": "={{ $json.Few_shot }}",
               "rightValue": "",
               "operator": {
@@ -234,7 +234,7 @@
           },
           "conditions": [
             {
-              "id": "5ae157e2-f4ea-484a-9cf4-0341022bdbd3",
+              "id": "grammar-conditions-1",
               "leftValue": "={{ $json.Grammar }}",
               "rightValue": "",
               "operator": {
@@ -268,7 +268,7 @@
           },
           "conditions": [
             {
-              "id": "5ae157e2-f4ea-484a-9cf4-0341022bdbd3",
+              "id": "helper-methods-conditions-1",
               "leftValue": "={{ $json.Helper_methods }}",
               "rightValue": "",
               "operator": {
@@ -293,7 +293,7 @@
     },
     {
       "parameters": {
-        "fileSelector": "/data/helper_methods//*",
+        "fileSelector": "=/data/helper_methods/atl/*",
         "options": {}
       },
       "type": "n8n-nodes-base.readWriteFile",
@@ -304,51 +304,6 @@
       ],
       "id": "39e0bc29-08fe-4ae4-a50d-8371c5cb268f",
       "name": "Read helper methods"
-    },
-    {
-      "parameters": {
-        "modelName": "models/gemini-2.5-pro",
-        "options": {}
-      },
-      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
-      "typeVersion": 1,
-      "position": [
-        1232,
-        208
-      ],
-      "id": "9526ed91-1732-4d91-869b-af18dfbb3508",
-      "name": "Google Gemini Chat Model",
-      "credentials": {
-        "googlePalmApi": {
-          "id": "nUZ88X2Akoz1dXpt",
-          "name": "Google Gemini(PaLM) Api account"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "model": {
-          "__rl": true,
-          "value": "claude-sonnet-4-20250514",
-          "mode": "list",
-          "cachedResultName": "Claude Sonnet 4"
-        },
-        "options": {}
-      },
-      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
-      "typeVersion": 1.3,
-      "position": [
-        1232,
-        368
-      ],
-      "id": "81686d71-9c88-4852-8dbe-90d5e79f9e6b",
-      "name": "Anthropic Chat Model",
-      "credentials": {
-        "anthropicApi": {
-          "id": "R9d6pMqZ8LzipdDW",
-          "name": "Anthropic account"
-        }
-      }
     },
     {
       "parameters": {
@@ -397,19 +352,19 @@
         "assignments": {
           "assignments": [
             {
-              "id": "9773c101-2aba-4290-bd38-0f4618b76ca5",
+              "id": "set-parameters-assignments-1",
               "name": "Few_shot",
               "value": false,
               "type": "boolean"
             },
             {
-              "id": "0642b67c-81a4-46e1-a890-049c6102c42f",
+              "id": "set-parameters-assignments-2",
               "name": "Grammar",
               "value": false,
               "type": "boolean"
             },
             {
-              "id": "28d72bc6-1a8c-48b8-8af2-0fd1f442dda5",
+              "id": "set-parameters-assignments-3",
               "name": "Helper_methods",
               "value": false,
               "type": "boolean"
@@ -432,7 +387,7 @@
         "assignments": {
           "assignments": [
             {
-              "id": "9773c101-2aba-4290-bd38-0f4618b76ca5",
+              "id": "save-file-name-assignments-1",
               "name": "baseName",
               "value": "={{$binary.data.fileName.split('.').slice(0,-1).join('.')}}",
               "type": "string"
@@ -471,7 +426,7 @@
   ],
   "pinData": {},
   "connections": {
-    "When clicking ‘Execute workflow’": {
+    "When clicking 'Execute workflow'": {
       "main": [
         [
           {
@@ -677,16 +632,6 @@
             "index": 0
           }
         ]
-      ]
-    },
-    "Google Gemini Chat Model": {
-      "ai_languageModel": [
-        []
-      ]
-    },
-    "Anthropic Chat Model": {
-      "ai_languageModel": [
-        []
       ]
     },
     "Extract text from helper methods": {

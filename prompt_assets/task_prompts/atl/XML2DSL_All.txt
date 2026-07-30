@@ -4,4 +4,4 @@ Define helpers on Element: getAttrBool, getAttrVal, get, getType, getEnumId, get
 
 Implement rule DomainModel creating DomainModel and the four SimpleType instances.
 
-Implement rule Class, rule Relationship, rule Role, rule ValueProperty, rule Enumeration, and rule EnumerationLiteral, wiring all references (superType/subTypes, roles, owner, types, containment) exactly as in the models.+
+Implement rule Class, rule Relationship, rule Role, rule ValueProperty, rule Enumeration, and rule EnumerationLiteral, wiring all references (superType/subTypes, roles, owner, types, containment) exactly as in the models.
