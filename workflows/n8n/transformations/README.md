@@ -40,9 +40,11 @@ Follow these steps to build and start the n8n container:
    - Open the **Credentials** section in n8n and add your API keys (e.g. OpenAI, Google Cloud).
    - Update the workflow nodes to reference your credentials if necessary.
 
-6. Run the workflows to generate prompts and evaluate model transformation code.
-   Generated prompts and responses are stored under
-   `artifacts/work/transformation_generation/<language>/` on the host.
+6. Run the workflows to evaluate model transformation code. Transformation
+   generation reads the same frozen
+   `prompt_assets/task_prompts/<language>/<task>.txt` as semantic-test
+   generation. New prompt-generation candidates are written separately under
+   `artifacts/work/task_prompt_candidates/`.
 
 To stop the service, run:
 
@@ -58,17 +60,16 @@ This directory contains:
 - `few_shot_examples/` – sample code snippets and prompts used for few‑shot prompting.
 - `grammar/` – grammar definitions of the Reactions Language and ATL in EBNF format.
 - `helper_methods/` – helper functions available to the language models during prompt construction.
-- `models/` – example metamodel files referenced by the workflows.
+- `prompt_assets/task_prompts/` – the single reviewed task prompt per task,
+  mounted read-only for both downstream generators.
 - `mtl_snippets/` – legacy/static workflow inputs; new generated data is not written here.
 - `workflows/` – the actual n8n workflow definitions (`*.json`) to be imported into the running instance.
 
 Generated output paths:
 
 ```text
-artifacts/work/transformation_generation/etl/{prompts,responses}/
-artifacts/work/transformation_generation/atl/{prompts,responses}/
-artifacts/work/transformation_generation/qvto/{prompts,responses}/
-artifacts/work/transformation_generation/reactions/{prompts,responses}/
+artifacts/work/task_prompt_candidates/<language>/<model>/
+artifacts/work/transformation_generation/<language>/responses/
 ```
 
 Use this setup to replicate the evaluation pipeline described in the thesis or to experiment with new prompts and strategies.

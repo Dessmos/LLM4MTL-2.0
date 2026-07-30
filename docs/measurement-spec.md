@@ -17,8 +17,9 @@ Implemented:
   and generated-transformation execution;
 - one run-local reference execution observation shared by the technical and
   reference stages;
-- the language adapter boundary and the ETL adapter;
-- typed, language-neutral scenario and execution-outcome records.
+- the language adapter boundary and adapters for ETL, ATL, QVT-O, and Reactions;
+- typed, language-neutral scenario and execution-outcome records;
+- run-local EMF execution snapshots from ATL, QVT-O, and Reactions harnesses.
 
 Not implemented yet:
 

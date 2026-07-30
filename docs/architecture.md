@@ -18,10 +18,10 @@ architecture:
   engine internals do not define shared pipeline concepts;
 - all engine execution happens in a materialized run-local copy.
 
-The required transformation languages are ETL, ATL, QVT-O, and Reactions. ETL
-is currently implemented end to end through the adapter boundary. The other
-languages are declared and fail closed until their adapters and conventions
-exist.
+The required transformation languages are ETL, ATL, QVT-O, and Reactions. All
+four are registered through the same adapter boundary and have deterministic
+rendering, parser integration, reference/generated-transformation execution,
+and run-local evidence. There is no language fallback.
 
 ## Ownership
 
@@ -101,7 +101,9 @@ derive results from stored facts and must not call language engines.
   scenarios, observations, and transformation outcomes.
 - `languages/` — `LanguageAdapter`, static registry, and concrete adapters.
 - `task_contracts/` — deterministic structural contracts and enforcement.
-- `prompt_assembly/` — deterministic prompt construction.
+- `prompt_assembly/` — exact task-input resolution and synchronization of the
+  prompt/transformation/test n8n exports. It resolves files but never authors
+  the natural-language task prompt.
 - `semantic_tests/extraction/` — fenced artifact extraction, semantic-case
   normalization, shared-contract mapping, and deterministic renderer dispatch.
 - `semantic_tests/validation.py` — shared artifact/technical/reference funnel.
@@ -140,6 +142,35 @@ measurement-driven boundaries settle.
 
 Registration is static in `languages/registry.py`. Missing required adapters fail
 before a run writes partial results. There is no ETL fallback.
+
+Prompt generation resolves
+`reference → task_contract → exact task-specific metamodels`. Python owns this
+deterministic and path-safe selection; n8n owns the LLM call. The LLM writes a
+candidate natural-language task prompt under `artifacts/work/`. After review,
+the frozen `prompt_assets/task_prompts/<lang>/<task>.txt` is the single prompt
+read by both transformation generation and semantic-test generation. Neither
+downstream stage reads prompt candidates or a model-specific alternative.
+
+The semantic-test LLM also receives the exact task metamodel contents and the
+selected few-shot/grammar strategy inputs, then writes its raw response as
+`.md`. Python does not author the task prompt or replace an LLM stage; it
+validates and renders the resulting declarative semantic artifacts after
+extraction.
+
+ATL and QVT-O render batch scenarios. Reactions renders the shared declarative
+change vocabulary into Vitruv operations; it never accepts generated Java or
+Xtend change code. ATL, QVT-O, and Reactions also write deterministic EMF XMI
+snapshots beneath the supplied workspace observation directory. These raw
+snapshots are execution evidence; semantic equivalence remains owned by the
+future shared comparator.
+
+The frozen Reactions harness contains an unused dependency on an unpublished
+SDQ demo artifact. Its adapter removes that dependency only from the
+materialized run-local POM. The engine template is not edited. The frozen
+standalone Reactions parser also reports unresolved generated metamodel types
+as semantic-link diagnostics; the adapter distinguishes those known diagnostics
+from grammar errors, while the run-local Maven compilation remains the
+semantic-link authority.
 
 The active adapter is intentionally narrower than the eventual measurement
 subsystem. Mutation, instrumentation, and semantic snapshot comparison are
@@ -205,7 +236,8 @@ Invariants:
 
 Provenance in the immutable manifest records the git revision and dirty state,
 schema versions, renderer version, runtime tool versions, and hashes of the
-reference transformation, task contract, and metamodels.
+reference transformation, task contract, exact task metamodels, and shared
+frozen task prompt.
 
 ## Workspace and candidate immutability
 
@@ -299,6 +331,5 @@ See `n8n-python-contract.md` and `runner-api.md`.
 - typed LLM-call telemetry recorded in the run journal.
 
 The comparator, mutation subsystem, full cost telemetry ingest, and thesis
-metrics are not implemented by the first three architecture batches. Current
-code establishes the integrity, adapter, scenario, and validation foundations
-they require.
+metrics remain future work. The current code establishes the four-language
+execution, integrity, scenario, and validation foundations they require.

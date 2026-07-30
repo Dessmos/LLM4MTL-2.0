@@ -18,14 +18,15 @@ benchmark/tasks/<lang>/
     └── <task>.txt
 ```
 
-Metamodels are stored under `benchmark/metamodels/`. The current ETL contract
-builder also resolves legacy metamodel locations exposed by the frozen harness,
-but new code must resolve repository paths through `llm4mtl.paths` and
-`llm4mtl.conventions`.
+Metamodels are stored under `benchmark/metamodels/`. Every non-null
+`models[].metamodelFile` must be the exact repository-relative path to the
+metamodel used by that task. The prompt-input resolver follows only these paths;
+there is no language-wide directory fallback.
 
 The JSON contract is the machine-readable structural contract. The text form is
-its deterministic prompt rendering. The reference transformation remains the
-behavioural oracle.
+its deterministic contract rendering, not the standalone prompt produced by
+the prompt-generation LLM. The reference transformation remains the behavioural
+oracle.
 
 ## Steps
 
@@ -38,8 +39,13 @@ behavioural oracle.
 4. Generate or update the task contract deterministically.
 5. Review runtime model names, roles, metamodel URIs, metamodel files, and
    available types in the generated JSON.
-6. Add task-specific prompt examples only when they are genuinely required.
-7. Add tests for contract enforcement and provenance hashes.
+6. Run prompt generation and review its candidate under
+   `artifacts/work/task_prompt_candidates/<lang>/<model>/<task>.txt`.
+7. Freeze exactly one approved prompt as
+   `prompt_assets/task_prompts/<lang>/<task>.txt`. Both transformation and
+   semantic-test generation read this same file.
+8. Add tests for exact input resolution, contract enforcement, and provenance
+   hashes.
 
 For ETL, the implemented generator is:
 
@@ -52,10 +58,37 @@ It processes all ETL references by default. Use its explicit root arguments
 when generating into a temporary directory for review. Do not run it against
 protected contracts merely to repair a failing experiment.
 
-Other languages need an equivalent deterministic contract builder before their
-adapters are considered complete. The command should derive structural facts
-from the language's reference/metamodel inputs rather than hand-maintained
-duplicate mappings.
+For ATL, QVT-O, and Reactions, use:
+
+```bash
+PYTHONPATH=pipeline/src .venv/bin/python \
+  -m llm4mtl.task_contracts.build_language_task_contracts --language <lang>
+```
+
+The builder derives runtime slots and metamodel aliases from the reference,
+namespace/classifier facts from protected Ecore inputs, and a source hash from
+the reference bytes. New contracts use the language-neutral
+`typesUsedInTransformation`; the loader still accepts the legacy ETL-specific
+field for stored-contract compatibility. Review the generated files before
+committing them.
+
+Add the task name to the corresponding `experiments/matrices/thesis-<lang>.yaml`.
+`pipeline/tests/test_multilanguage_walking_skeletons.py` checks that every
+matrix task has a matching reference and machine-readable contract and that
+each language has grammar and few-shot prompt resources.
+
+Run the selected n8n `prompt_generation` workflow. Its LLM output is a candidate
+task prompt:
+
+```text
+artifacts/work/task_prompt_candidates/<lang>/<model>/<task>.txt
+```
+
+Review it before replacing
+`prompt_assets/task_prompts/<lang>/<task>.txt`. Then run transformation
+generation and test generation; both consume that one frozen file. The test LLM
+writes its untrusted response as `.md` beneath the corresponding
+`responses/<model>/<strategy>/` directory.
 
 ## Identity and provenance
 
@@ -66,7 +99,8 @@ At run creation, provenance records hashes of:
 
 - the reference transformation;
 - the task contract;
-- every metamodel named by the contract.
+- every metamodel named by the contract;
+- the frozen task prompt shared by both generators.
 
 Missing protected inputs abort run creation. A run must never silently record a
 null oracle or reuse an artifact from another task.

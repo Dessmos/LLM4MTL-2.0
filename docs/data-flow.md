@@ -1,8 +1,8 @@
 # Data flow
 
-> Status: active description of the implemented ETL semantic-test vertical
-> slice. Mutation evaluation, cost ingest, and the remaining language adapters
-> are identified separately as target work.
+> Status: active description of the implemented four-language semantic-test
+> pipeline. Mutation evaluation and cost ingest are identified separately as
+> target work.
 
 ## Control and data planes
 
@@ -32,6 +32,39 @@ shared Python stage → LanguageAdapter → run-local workspace
 
 Stage requests cannot redefine language, task, models, strategies, seed, or
 variant. Those selections are reconstructed from the manifest.
+
+## Shared task-prompt generation and LLM input
+
+Prompt generation and the two downstream generators are separate LLM calls
+owned by n8n:
+
+```text
+reference transformation
+  → matching task_contract
+  → exact metamodel files named by that contract
+  + language grammar
+  → prompt-generation LLM
+  → artifacts/work/task_prompt_candidates/<lang>/<model>/<task>.txt
+  → human review / checked-in freeze
+  → prompt_assets/task_prompts/<lang>/<task>.txt
+  ├─→ transformation-generation LLM
+  └─→ semantic-test-generation LLM
+       + the same exact task metamodels
+       + selected few-shot/grammar strategy inputs
+       → artifacts/work/test_generation/<lang>/responses/<model>/<strategy>/<task>.md
+```
+
+The first LLM reconstructs only a concise natural-language task request; Python
+does not generate that text. Python deterministically validates the task
+contract and resolves the reference plus its exact metamodel paths. The raw
+task-contract JSON is not supplied to the LLM. Candidate prompts remain
+untrusted output and are never consumed directly by evaluation. The reviewed
+file under `prompt_assets/task_prompts/` is the single task prompt used by both
+downstream generators.
+
+The semantic-test LLM must produce declarative `semantic_cases.json` and input
+model files, never Java/JUnit or transformation code. Its `.md` response is
+untrusted generated output.
 
 ## Semantic-test generation and extraction
 
@@ -92,6 +125,13 @@ selected generated transformations
 For ETL, the frozen parser still emits a compatibility CSV, but the adapter
 redirects it beneath the current run's observation directory. It is evidence,
 not a gate, and nothing is written to `engines/etl/parser/results`.
+
+Every parser executes from a run-local materialization. ATL and QVT-O normalize
+their parser markers into typed observations. The frozen Reactions parser lacks
+the harness-generated metamodel classes and therefore reports a small known set
+of unresolved-link diagnostics for otherwise valid references; those
+diagnostics do not become grammar failures. Actual semantic linking is still
+checked by compilation in the run-local Reactions harness.
 
 ## Technical and reference validation
 
@@ -166,6 +206,44 @@ current-run reference-valid candidate
 The standalone `transformation_execution` CLI follows the same eligibility rule:
 it requires `--observations-root` and does not discover historical
 `validated/` copies.
+
+ATL, QVT-O, and Reactions render post-execution EMF snapshots. Reference
+execution writes them to:
+
+```text
+runs/<run-id>/observations/snapshots/*.xmi
+```
+
+Generated-transformation execution isolates each candidate by its content hash:
+
+```text
+runs/<run-id>/observations/generated_transformations/<sha256>/snapshots/*.xmi
+```
+
+Each execution also writes a schema-validated `suite_execution.json` beneath
+the corresponding observation root. At this stage the JUnit assertions, not
+byte comparison of snapshots, determine suite success.
+
+## Four-language task inputs
+
+The static registry contains exactly:
+
+```text
+etl, atl, qvto, reactions
+```
+
+For each language, tasks are data under `benchmark/tasks/<lang>/` and matrices
+under `experiments/matrices/`. Adding a task does not change shared stage code.
+The language's prompt-generation workflow identifies a reference task. The
+stage service follows that reference to its task contract and rejects missing,
+escaping, or stale paths instead of falling back to a language-wide metamodel
+glob. Few-shot and grammar strategy inputs for downstream LLMs remain explicit
+in n8n.
+
+The repository includes opt-in real-engine walking skeletons for one
+representative task per language. They traverse schema/contract validation,
+rendering, parsing, reference execution, generated-transformation execution,
+snapshot/evidence storage, and workspace cleanup.
 
 ## Run completion
 

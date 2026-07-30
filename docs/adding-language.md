@@ -6,9 +6,8 @@ A language extends the pipeline through the typed adapter boundary. It does not
 copy the experiment runner, validation funnel, run store, stage service, or n8n
 routing.
 
-The four thesis languages are `etl`, `atl`, `qvto`, and `reactions`. ETL is the
-reference implementation; the other three are declared but deliberately fail
-closed until their adapters and filesystem conventions exist.
+The four thesis languages are `etl`, `atl`, `qvto`, and `reactions`; all four
+implement this contract. Their packages are the concrete examples to follow.
 
 ## Frozen engines
 
@@ -30,7 +29,8 @@ For `<lang>`, add:
 ```text
 pipeline/src/llm4mtl/languages/<lang>/
 ├── __init__.py
-└── adapter.py
+├── adapter.py
+└── rendering.py
 ```
 
 The adapter structurally implements
@@ -153,6 +153,40 @@ prompt_assets/tests/few_shot/<lang>/
 prompt_assets/tests/grammar/<lang>/
 ```
 
+Add one reviewed prompt for each task:
+
+```text
+prompt_assets/task_prompts/<lang>/<task>.txt
+```
+
+Generate the four model-specific prompt-generation exports and synchronize the
+test-generation exports with:
+
+```bash
+PYTHONPATH=pipeline/src .venv/bin/python \
+  -m llm4mtl.prompt_assembly.n8n_exports --write
+```
+
+The prompt-generation exports enumerate references and call the stage service:
+
+```text
+/data/benchmark/tasks/<lang>/references/*
+POST http://stage-service:8129/prompt-inputs/resolve
+```
+
+The service validates the matching task contract and returns the reference,
+grammar, and only the exact metamodel files named by that contract. The raw
+contract is not sent to the LLM. Prompt candidates are written to:
+
+```text
+/data/artifacts/task_prompt_candidates/<lang>/<model>/<task>.txt
+```
+
+After review, freeze one prompt under `/data/task_prompts/<lang>/<task>.txt`.
+Both transformation-generation and test-generation exports read that same
+file. Do not generate prompt text in Python and do not let downstream workflows
+read candidates directly.
+
 Transformation-generation assets predate this pipeline and are inputs to it;
 the adapter does not generate transformations.
 
@@ -174,6 +208,17 @@ Add contract and characterization coverage modelled on
 For Reactions, the representative case must exercise a real change-propagation
 scenario. If that requires a Reactions-only field in the shared pipeline, revise
 the domain contract before registering the adapter.
+
+The opt-in real-engine gate is:
+
+```bash
+LLM4MTL_RUN_ENGINE_TESTS=1 .venv/bin/pytest -q \
+  pipeline/tests/test_multilanguage_walking_skeletons.py::RealEngineWalkingSkeletonTests
+```
+
+It must pass before a new adapter is considered executable. Default Python tests
+still validate deterministic rendering and all matrix inputs without invoking
+Maven.
 
 ## What must remain unchanged
 

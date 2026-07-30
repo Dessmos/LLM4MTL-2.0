@@ -22,23 +22,37 @@ Mounted paths inside the container:
 
 ```text
 /data/workflows
-/data/snippets
 /data/artifacts
+/data/benchmark/tasks
+/data/task_prompts
 /data/examples
 /data/grammar
-/data/models
-/data/baseline/ETL_Test/resources
-/data/baseline/ETL_Parser/resources
+/data/diagnosis_prompts
 ```
 
-Immutable inputs remain under `benchmark/` and `prompt_assets/` on the host.
-Generated data is written to:
+Immutable references and contracts remain under `benchmark/`; the stage service
+resolves exact metamodel files from its repository mount. Grammar, few-shot
+assets, and frozen task prompts remain under `prompt_assets/`.
+
+Run the selected model's `prompt_generation` workflow to create a review
+candidate. The stage service resolves
+`reference → task_contract → exact task-specific metamodels`, and n8n invokes
+the LLM with those files and the grammar:
 
 ```text
-artifacts/work/test_generation/etl/prompts/
-artifacts/work/test_generation/etl/prompts_smoke/
-artifacts/work/test_generation/etl/prompt_drafts/
-artifacts/work/test_generation/etl/responses/
+artifacts/work/task_prompt_candidates/<language>/<model>/<task>.txt
+```
+
+Evaluation does not read this directory. Review the candidate and deliberately
+replace the corresponding
+`prompt_assets/task_prompts/<language>/<task>.txt`. Both transformation and
+test generation read this same frozen file.
+
+Run the matching `test_generation` workflow. It invokes the test-generation LLM
+and writes:
+
+```text
+artifacts/work/test_generation/<language>/responses/<model>/<strategy>/<task>.md
 ```
 
 File access is explicitly restricted to the mounted workflow workspace:

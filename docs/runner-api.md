@@ -11,6 +11,7 @@ JDK, Maven, repository inputs, and the frozen engine templates at runtime.
 
 ```http
 GET  /health
+POST /prompt-inputs/resolve
 POST /runs
 GET  /runs/{run_id}
 
@@ -19,6 +20,31 @@ GET  /runs/{run_id}/stages/{stage}
 
 POST /runs/{run_id}/diagnoses
 ```
+
+## Resolve exact prompt inputs
+
+```http
+POST /prompt-inputs/resolve
+Content-Type: application/json
+```
+
+```json
+{"language": "etl", "task": "Tree2Graph"}
+```
+
+The service loads `benchmark/tasks/<language>/task_contracts/<task>.json`,
+validates it, follows its exact repository-relative reference and
+`metamodelFile` paths, and reads the language grammar. Paths must remain inside
+the corresponding protected `benchmark` trees. There is no filename search or
+language-wide metamodel fallback.
+
+The response contains `reference`, `metamodels`, `metamodel_text`, and `grammar`
+with their repository-relative paths and UTF-8 content. It includes
+`contract_path` for provenance, but never the raw task-contract JSON supplied
+to the resolver. n8n passes the resolved reference, metamodel contents, grammar,
+and task name to the prompt-generation LLM.
+
+Unknown tasks, invalid contracts, stale paths, and path traversal return `422`.
 
 ## Health
 
