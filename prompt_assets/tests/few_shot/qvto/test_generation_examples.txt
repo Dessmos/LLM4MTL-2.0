@@ -33,7 +33,7 @@ types. The target model has no path because the harness creates it.
           "name": "SourceRuntime",
           "kind": "emf",
           "role": "source",
-          "path": "models/synthetic_sources.model",
+          "path": "models/synthetic_sources.xmi",
           "generated": true,
           "metamodelUri": "SyntheticSource"
         },
@@ -70,7 +70,7 @@ types. The target model has no path because the harness creates it.
 }
 ```
 
-```xml file=models/synthetic_sources.model
+```xml file=models/synthetic_sources.xmi
 <?xml version="1.0" encoding="UTF-8"?>
 <xmi:XMI xmi:version="2.0"
     xmlns:xmi="http://www.omg.org/XMI"
@@ -103,7 +103,7 @@ to those contained objects with stable fragment paths.
           "name": "InputRuntime",
           "kind": "emf",
           "role": "source",
-          "path": "models/synthetic_references.model",
+          "path": "models/synthetic_references.xmi",
           "generated": true,
           "metamodelUri": "SyntheticInput"
         },
@@ -132,7 +132,7 @@ to those contained objects with stable fragment paths.
 }
 ```
 
-```xml file=models/synthetic_references.model
+```xml file=models/synthetic_references.xmi
 <?xml version="1.0" encoding="UTF-8"?>
 <src:SourceRoot xmi:version="2.0"
     xmlns:xmi="http://www.omg.org/XMI"
@@ -168,7 +168,7 @@ with its own runtime model name and metamodelUri from the current contract.
           "name": "PrimarySource",
           "kind": "emf",
           "role": "source",
-          "path": "models/synthetic_primary.model",
+          "path": "models/synthetic_primary.xmi",
           "generated": true,
           "metamodelUri": "SyntheticPrimary"
         },
@@ -176,7 +176,7 @@ with its own runtime model name and metamodelUri from the current contract.
           "name": "LookupSource",
           "kind": "emf",
           "role": "source",
-          "path": "models/synthetic_lookup.model",
+          "path": "models/synthetic_lookup.xmi",
           "generated": true,
           "metamodelUri": "SyntheticLookup"
         },
@@ -203,7 +203,7 @@ with its own runtime model name and metamodelUri from the current contract.
 }
 ```
 
-```xml file=models/synthetic_primary.model
+```xml file=models/synthetic_primary.xmi
 <?xml version="1.0" encoding="UTF-8"?>
 <primary:PrimaryRoot xmi:version="2.0"
     xmlns:xmi="http://www.omg.org/XMI"
@@ -212,80 +212,11 @@ with its own runtime model name and metamodelUri from the current contract.
 </primary:PrimaryRoot>
 ```
 
-```xml file=models/synthetic_lookup.model
+```xml file=models/synthetic_lookup.xmi
 <?xml version="1.0" encoding="UTF-8"?>
 <lookup:LookupRoot xmi:version="2.0"
     xmlns:xmi="http://www.omg.org/XMI"
     xmlns:lookup="SyntheticLookup">
   <entries source="raw" target="mapped"/>
 </lookup:LookupRoot>
-```
-
-Example 4: canonical plainXml source-to-plainXml target response shape.
-For plainXml models, use kind="plainXml" and omit metamodelUri. If the source
-XML uses namespaced elements, declare every prefix on the generated source XML
-root.
-
-```json file=semantic_cases.json
-{
-  "schemaVersion": 1,
-  "testClass": "GeneratedSyntheticPlainXmlShapeExample",
-  "transformation": "transformations/synthetic_plain_xml_shape.qvto",
-  "metamodels": [
-    {"name": "XmlSourceRuntime"},
-    {"name": "XmlTargetRuntime"}
-  ],
-  "tests": [
-    {
-      "name": "namespaced_source_xml_creates_exact_target_elements",
-      "scenarioKind": "batch_transformation",
-      "models": [
-        {
-          "name": "XmlSourceRuntime",
-          "kind": "plainXml",
-          "role": "source",
-          "path": "models/synthetic_source.xml",
-          "generated": true
-        },
-        {
-          "name": "XmlTargetRuntime",
-          "kind": "plainXml",
-          "role": "target",
-          "generated": false
-        }
-      ],
-      "assertions": [
-        {"kind": "count", "model": "XmlTargetRuntime", "type": "t_targetItem", "expected": 1},
-        {
-          "kind": "pathValues",
-          "model": "XmlTargetRuntime",
-          "type": "t_targetTitle",
-          "path": "text",
-          "expected": ["Synthetic title"]
-        },
-        {
-          "kind": "pathValues",
-          "model": "XmlTargetRuntime",
-          "type": "t_targetLink",
-          "path": "a_href",
-          "expected": ["https://synthetic.example/item"]
-        }
-      ]
-    }
-  ]
-}
-```
-
-```xml file=models/synthetic_source.xml
-<?xml version="1.0" encoding="UTF-8"?>
-<sourceRoot
-    xmlns:meta="https://synthetic.example/meta"
-    xmlns:content="https://synthetic.example/content">
-  <item>
-    <title>Synthetic title</title>
-    <link>https://synthetic.example/item</link>
-    <meta:author>Example Author</meta:author>
-    <content:body>Example body</content:body>
-  </item>
-</sourceRoot>
 ```

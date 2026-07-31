@@ -396,6 +396,44 @@ class N8nWorkflowTests(unittest.TestCase):
                 self.assertNotIn("REQUIRED OUTPUT CONTRACT", examples)
                 self.assertIn("the contract wins", examples)
 
+    def test_qvto_fixtures_use_an_extension_its_harness_can_load(self) -> None:
+        """QVT-O generated fixtures must be `.xmi`, never `.model`.
+
+        `QvtoTestBase` loads a fixture with `ResourceSet.getResource`, which
+        resolves the resource factory by file extension, and it registers only
+        `ecore` and `xmi`. The contract inherited ATL's `.model` wording, where
+        the extension is irrelevant because the ATL VM's own EMF handler reads
+        the file. All ten QVT-O suites therefore emitted `.model` and every one
+        of them failed with "a registered resource factory is needed" before a
+        single assertion ran.
+        """
+        registrations = (
+            TARGET.engines
+            / "qvto"
+            / "harness"
+            / "qvto-tests"
+            / "actual"
+            / "src"
+            / "test"
+            / "java"
+            / "org"
+            / "eclipse"
+            / "qvto"
+            / "tests"
+            / "QvtoTestBase.java"
+        ).read_text(encoding="utf-8")
+        loadable = set(re.findall(r'\.put\("([a-z]+)",\s*new \w*ResourceFactoryImpl', registrations))
+        self.assertIn("xmi", loadable)
+
+        for asset in (
+            TARGET.prompt_assets / "tests" / "contract" / "qvto" / "semantic_cases_contract.txt",
+            TARGET.prompt_assets / "tests" / "few_shot" / "qvto" / "test_generation_examples.txt",
+        ):
+            text = asset.read_text(encoding="utf-8")
+            for path in re.findall(r"models/[^\s\"`]+", text):
+                with self.subTest(asset=asset.name, path=path):
+                    self.assertIn(path.rsplit(".", 1)[-1], loadable)
+
     def test_every_prompt_asset_is_read_from_its_language_directory(self) -> None:
         """No workflow may read another language's assets, or a whole tree.
 
