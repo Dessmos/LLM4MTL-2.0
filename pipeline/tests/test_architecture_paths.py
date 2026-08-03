@@ -434,6 +434,67 @@ class N8nWorkflowTests(unittest.TestCase):
                 with self.subTest(asset=asset.name, path=path):
                     self.assertIn(path.rsplit(".", 1)[-1], loadable)
 
+    def test_reactions_assets_never_seed_a_model_root(self) -> None:
+        """No Reactions fixture may carry a root object.
+
+        Vitruv records the changes made inside a view. A root loaded from a file
+        and handed to `registerRoot` records nothing, so the run dies in
+        `registerInitialModel` with "TransactionalChangeImpl (empty)" before any
+        assertion runs; ten of twelve generated suites failed exactly there. The
+        deeper reason to keep this rule is that seeding the observed model makes
+        a test assert the elements it planted itself, so it would pass even when
+        the transformation does nothing. All three reference test classes
+        register exactly one root, always on the changed side, and build every
+        element through recorded changes.
+        """
+        contract = (
+            TARGET.prompt_assets
+            / "tests" / "contract" / "reactions" / "semantic_cases_contract.txt"
+        ).read_text(encoding="utf-8")
+        examples = (
+            TARGET.prompt_assets
+            / "tests" / "few_shot" / "reactions" / "test_generation_examples.txt"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("NEITHER GENERATED MODEL FILE MAY CONTAIN A ROOT OBJECT", contract)
+        self.assertNotIn("Each has a generated initial file", contract)
+
+        blocks = re.findall(r"```xml file=[^\n]+\n(.*?)```", contract + examples, re.S)
+        self.assertTrue(blocks)
+        for block in blocks:
+            with self.subTest(block=block.strip()[:60]):
+                # An empty XMI wrapper is a single self-closing element; any
+                # other element in the block is a seeded root or its content.
+                elements = re.findall(r"<(?!\?|/)([A-Za-z_][\w.:-]*)", block)
+                self.assertEqual(["xmi:XMI"], elements)
+                self.assertTrue(block.rstrip().endswith("/>"))
+
+    def test_reactions_example_shows_both_change_value_shapes(self) -> None:
+        """The example must demonstrate the reference value, not only creation.
+
+        A created object value is right for a containment feature and wrong for
+        a plain reference, where it builds an object no container holds and the
+        run dies with "dangling object … detected". While the example showed
+        only created values, that is what the generator produced for reference
+        features.
+        """
+        examples = (
+            TARGET.prompt_assets
+            / "tests" / "few_shot" / "reactions" / "test_generation_examples.txt"
+        ).read_text(encoding="utf-8")
+        block = re.search(
+            r"```json file=semantic_cases\.json\n(.*?)```", examples, re.S
+        )
+        self.assertIsNotNone(block)
+        values = [
+            change["value"]
+            for test in json.loads(block.group(1))["tests"]
+            for change in test.get("changes", [])
+            if isinstance(change.get("value"), dict)
+        ]
+        self.assertTrue(any("features" in value for value in values))
+        self.assertTrue(any("where" in value and "slot" in value for value in values))
+
     def test_every_prompt_asset_is_read_from_its_language_directory(self) -> None:
         """No workflow may read another language's assets, or a whole tree.
 

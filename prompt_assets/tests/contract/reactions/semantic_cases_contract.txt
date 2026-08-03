@@ -30,10 +30,43 @@ Reactions task:
   `http://vitruv.tools/methodologisttemplate/network`; `graph` uses
   `http://vitruv.tools/methodologisttemplate/graph`.
 
-Both models are always EMF `"inout"` models. Each has a generated initial file,
-so every model entry must contain `path`, `"generated": true`, and its exact
-`metamodelUri`. Never rename the runtime slots to `sourceSlot`, `targetSlot`,
-`input`, or `output` in an actual task.
+Both models are always EMF `"inout"` models. Every model entry must contain
+`path`, `"generated": true`, and its exact `metamodelUri`. Never rename the
+runtime slots to `sourceSlot`, `targetSlot`, `input`, or `output` in an actual
+task.
+
+NEITHER GENERATED MODEL FILE MAY CONTAIN A ROOT OBJECT
+
+Every generated model file is an empty XMI wrapper. It declares the metamodel
+prefix and nothing else:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<xmi:XMI xmi:version="2.0"
+    xmlns:xmi="http://www.omg.org/XMI"
+    xmlns:<prefix>="<exact model URI>"/>
+```
+
+The whole initial state is built by `changes`, never by the file. Begin the
+`changes` array with a `create` of the root object, then add the elements the
+test needs, and only then perform the change under test. A `create` without
+`feature` registers its value as a new root.
+
+Two rules follow, and both are absolute:
+
+- The observed model must never receive content of its own. Everything in it
+  has to arrive through change propagation, because that propagation is exactly
+  what the test measures. A test that writes the expected observed elements into
+  its own initial file asserts what it planted and passes even when the
+  transformation does nothing.
+- The changed model must not be seeded either. Vitruv records changes made
+  inside a view; a root loaded from a file and handed to `registerRoot` records
+  nothing, and the run fails with "Cannot identify the packages of this change:
+  TransactionalChangeImpl (empty)" before a single assertion is evaluated.
+
+Building the initial state through `changes` also propagates it, so the
+observed side of the pre-state is produced by the transformation rather than
+asserted into existence.
 
 Every test must use `"scenarioKind": "change_propagation"` and must contain a
 non-empty `changes` array. The only allowed `changes[].kind` values are:
@@ -49,15 +82,49 @@ Every change has `kind` and `target`. `target` has the exact runtime slot in
 `slot`, an unqualified metamodel type in `type`, and may have a `where` object
 that uniquely identifies an existing element. Use `feature` for
 `set_feature`, `add_to_collection`, `remove_from_collection`, and `move`.
-Use `value` for every change except `delete`. A created object value has this
-shape:
+Use `value` for every change except `delete`. A `value` has one of exactly two
+shapes, and choosing the wrong one is the most common way to produce a suite
+that cannot run.
+
+A created object value builds a new object:
 
 ```json
 {
   "type": "<unqualified created type>",
-  "features": {"<feature>": "<initial value>"}
+  "features": {"<single-valued attribute>": "<initial value>"}
 }
 ```
+
+A reference value names an element that already exists:
+
+```json
+{
+  "slot": "<runtime slot>",
+  "type": "<unqualified type>",
+  "where": {"<identity feature>": "<value>"}
+}
+```
+
+Four rules govern which to use:
+
+- `features` sets single-valued attributes only. A multi-valued feature or a
+  reference is never set there; establish it with its own `add_to_collection`
+  change afterwards. Passing a plain string for a multi-valued feature fails
+  with "class java.lang.String cannot be cast to class java.util.Collection".
+- Use a created object value only for a containment feature. For a
+  non-containment reference the value must be a reference value naming an
+  element an earlier change already created; a created object value there
+  builds an object that no container holds, and the run then fails with
+  "dangling object ... detected".
+- Each runtime slot has exactly one root object for the whole test. Create it
+  with a single `create` that has no `feature`, before anything else. Never
+  create a second root in the same slot and never `delete` a root: both
+  produce an empty change and fail with "Cannot identify the packages of this
+  change: TransactionalChangeImpl (empty)".
+- `changes` only ever touch the changed slot. The observed slot receives no
+  `create` and no `add_to_collection` of its own, exactly as its file receives
+  no root: everything observed there must be the transformation's work, or the
+  test proves nothing.
 
 Every assertion must contain `kind`, `model`, `type`, and `expected`. `model`
 must equal one of the exact runtime slot names in the same test. `type` is
@@ -153,6 +220,20 @@ The complete response shape is:
       ],
       "changes": [
         {
+          "kind": "create",
+          "target": {"slot": "<changed runtime slot>", "type": "<root type>"},
+          "value": {"type": "<root type>", "features": {}}
+        },
+        {
+          "kind": "add_to_collection",
+          "target": {"slot": "<changed runtime slot>", "type": "<root type>"},
+          "feature": "<containment feature>",
+          "value": {
+            "type": "<unqualified source type>",
+            "features": {"<identity feature>": "<before value>"}
+          }
+        },
+        {
           "kind": "set_feature",
           "target": {
             "slot": "<changed runtime slot>",
@@ -178,4 +259,5 @@ The complete response shape is:
 ```
 
 After the JSON block, emit exactly one XML file block for every path in
-`models[]`. Emit no prose outside file blocks.
+`models[]`. Each of those blocks is the empty XMI wrapper shown above and
+contains no root object. Emit no prose outside file blocks.

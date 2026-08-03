@@ -8,6 +8,16 @@ The binding output contract is delivered separately and always applies. The
 examples below only illustrate it; where an example looks like it disagrees
 with the contract, the contract wins.
 
+Note what the example does not do: neither generated file contains a root
+object, and the observed model is never given content. The element the change
+renames is created by the `changes` array, and its counterpart on the observed
+side exists only because the transformation created it.
+
+Note also the two value shapes. `elements` is a containment feature, so its
+values build new objects. `related` is a plain reference, so its value names an
+element an earlier change already created instead of building another one; a
+created object value there would leave an object no container holds.
+
 ```json file=semantic_cases.json
 {
   "schemaVersion": 1,
@@ -26,7 +36,7 @@ with the contract, the contract wins.
           "name": "sourceSlot",
           "kind": "emf",
           "role": "inout",
-          "path": "models/source.xmi",
+          "path": "models/source.model",
           "generated": true,
           "metamodelUri": "SyntheticSource"
         },
@@ -34,12 +44,43 @@ with the contract, the contract wins.
           "name": "targetSlot",
           "kind": "emf",
           "role": "inout",
-          "path": "models/target.xmi",
+          "path": "models/target.model",
           "generated": true,
           "metamodelUri": "SyntheticTarget"
         }
       ],
       "changes": [
+        {
+          "kind": "create",
+          "target": {"slot": "sourceSlot", "type": "SourceRoot"},
+          "value": {"type": "SourceRoot", "features": {}}
+        },
+        {
+          "kind": "add_to_collection",
+          "target": {"slot": "sourceSlot", "type": "SourceRoot"},
+          "feature": "elements",
+          "value": {"type": "SourceElement", "features": {"name": "before"}}
+        },
+        {
+          "kind": "add_to_collection",
+          "target": {"slot": "sourceSlot", "type": "SourceRoot"},
+          "feature": "elements",
+          "value": {"type": "SourceElement", "features": {"name": "neighbour"}}
+        },
+        {
+          "kind": "add_to_collection",
+          "target": {
+            "slot": "sourceSlot",
+            "type": "SourceElement",
+            "where": {"name": "before"}
+          },
+          "feature": "related",
+          "value": {
+            "slot": "sourceSlot",
+            "type": "SourceElement",
+            "where": {"name": "neighbour"}
+          }
+        },
         {
           "kind": "set_feature",
           "target": {
@@ -65,20 +106,16 @@ with the contract, the contract wins.
 }
 ```
 
-```xml file=models/source.xmi
+```xml file=models/source.model
 <?xml version="1.0" encoding="UTF-8"?>
-<src:SourceRoot xmi:version="2.0"
+<xmi:XMI xmi:version="2.0"
     xmlns:xmi="http://www.omg.org/XMI"
-    xmlns:src="SyntheticSource">
-  <elements name="before"/>
-</src:SourceRoot>
+    xmlns:src="SyntheticSource"/>
 ```
 
-```xml file=models/target.xmi
+```xml file=models/target.model
 <?xml version="1.0" encoding="UTF-8"?>
-<tgt:TargetRoot xmi:version="2.0"
+<xmi:XMI xmi:version="2.0"
     xmlns:xmi="http://www.omg.org/XMI"
-    xmlns:tgt="SyntheticTarget">
-  <elements label="before"/>
-</tgt:TargetRoot>
+    xmlns:tgt="SyntheticTarget"/>
 ```
