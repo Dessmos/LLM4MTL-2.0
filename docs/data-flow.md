@@ -282,8 +282,34 @@ Run status is derived from stage facts:
 
 ## Diagnosis
 
-When n8n decides that semantic failure needs LLM diagnosis, it sends the
-normalized diagnosis result to:
+Before an LLM diagnosis, Python can assemble one small evidence bundle for one
+concrete failed assertion from the immutable run facts:
+
+```text
+manifest + syntax attempt + execution attempt
+  + semantic_cases.json + input/actual models + comparator difference
+  + task prompt + exact metamodels + reference result + Surefire evidence
+  → one immutable per-assertion failure report
+```
+
+The local orchestration command is:
+
+```text
+python -m llm4mtl.experiment_runner diagnosis report --request <request.json> --output <report.json>
+```
+
+It emits a Source Diagnosis bundle only when the generated transformation
+passed parser validation and the selected semantic assertion was evaluated and
+failed. The selected `test_case_id` and `assertion_id` must match the Surefire
+failure. The structured actual-vs-expected difference is an observed comparator
+input; the report assembler never infers it from an error string.
+
+This report command is deterministic post-execution processing rather than a
+new contract stage. It does not rewrite the execution attempt, call an LLM,
+classify the source, or return a workflow route.
+
+When n8n decides that the prepared semantic failure needs LLM diagnosis, it
+sends the normalized diagnosis result to:
 
 ```text
 POST /runs/<run-id>/diagnoses

@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import io
 import tempfile
 import unittest
+from contextlib import redirect_stdout
 from pathlib import Path
+from unittest.mock import patch
 
-from llm4mtl.experiment_runner.cli import build_parser, config_from_args
+from llm4mtl.experiment_runner.cli import build_parser, config_from_args, main
 from llm4mtl.experiment_runner.config import ConfigError, load_pipeline_config, parse_simple_yaml
 from llm4mtl.experiment_runner.models import PipelineConfig
 from llm4mtl.experiment_runner.orchestrator import ExperimentOrchestrator
@@ -104,8 +107,62 @@ class CliTests(unittest.TestCase):
         with self.assertRaises(ConfigError):
             config_from_args(args)
 
+    def test_diagnosis_report_dispatches_through_the_orchestrator(self) -> None:
+        report = {
+            "identity": {"run_id": "run-001"},
+            "source_diagnosis": {"eligible": True},
+        }
+        stdout = io.StringIO()
+        with patch.object(
+            ExperimentOrchestrator,
+            "assemble_failure_report",
+            return_value=report,
+        ) as assemble:
+            with redirect_stdout(stdout):
+                exit_code = main(
+                    [
+                        "diagnosis",
+                        "report",
+                        "--request",
+                        "artifacts/work/request.json",
+                        "--output",
+                        "artifacts/work/report.json",
+                    ]
+                )
+
+        self.assertEqual(0, exit_code)
+        assemble.assert_called_once_with(
+            Path("artifacts/work/request.json"),
+            Path("artifacts/work/report.json"),
+        )
+        self.assertIn("Diagnosis eligible: true", stdout.getvalue())
+
 
 class OrchestratorTests(unittest.TestCase):
+    def test_failure_report_command_delegates_to_the_shared_assembler(self) -> None:
+        orchestrator = ExperimentOrchestrator(REPO_ROOT)
+        request = object()
+        expected = {"report_type": "semantic_test_case_failure"}
+        with patch(
+            "llm4mtl.experiment_runner.orchestrator.load_report_request",
+            return_value=request,
+        ) as load_request:
+            with patch(
+                "llm4mtl.experiment_runner.orchestrator.write_failure_report",
+                return_value=expected,
+            ) as write_report:
+                actual = orchestrator.assemble_failure_report(
+                    Path("request.json"),
+                    Path("artifacts/work/report.json"),
+                )
+
+        self.assertEqual(expected, actual)
+        load_request.assert_called_once_with(Path("request.json"))
+        write_report.assert_called_once_with(
+            request,
+            Path("artifacts/work/report.json"),
+        )
+
     def test_dry_run_does_not_create_run_directory(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             repo_root = Path(temp_dir)

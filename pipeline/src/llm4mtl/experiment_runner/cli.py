@@ -10,10 +10,11 @@ from pathlib import Path
 from llm4mtl.experiment_runner.config import ConfigError, load_pipeline_config, load_resolved_config, validate_config
 from llm4mtl.experiment_runner.models import PipelineConfig, RunResult
 from llm4mtl.experiment_runner.orchestrator import ExperimentOrchestrator
+from llm4mtl.semantic_tests.failure_report import FailureReportError
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="python3 -m Experiment_Runner")
+    parser = argparse.ArgumentParser(prog="python -m llm4mtl.experiment_runner")
     domains = parser.add_subparsers(dest="domain", required=True)
 
     tests = domains.add_parser("tests", help="Generated-test extraction and validation.")
@@ -56,6 +57,23 @@ def build_parser() -> argparse.ArgumentParser:
     add_execution(transformations_validate)
     transformations_validate.add_argument("--suite-id")
     transformations_validate.add_argument("--suite", action="append", type=Path)
+
+    diagnosis = domains.add_parser(
+        "diagnosis",
+        help="Prepare deterministic evidence for source diagnosis.",
+    )
+    diagnosis_actions = diagnosis.add_subparsers(dest="action", required=True)
+    diagnosis_report = diagnosis_actions.add_parser(
+        "report",
+        help="Assemble one per-assertion failure report from an existing run.",
+    )
+    diagnosis_report.add_argument("--request", type=Path, required=True)
+    diagnosis_report.add_argument("--output", type=Path, required=True)
+    diagnosis_report.add_argument(
+        "--output-format",
+        choices=("text", "json"),
+        default="text",
+    )
 
     pipeline = domains.add_parser("pipeline", help="Full experiment pipeline.")
     pipeline_actions = pipeline.add_subparsers(dest="action", required=True)
@@ -257,15 +275,47 @@ def emit_result(result: RunResult, output_format: str) -> None:
         print(f"Run metadata: {result.run_dir}")
 
 
+def emit_failure_report_result(
+    report: dict[str, object],
+    output: Path,
+    output_format: str,
+) -> None:
+    """Print a compact command result without duplicating the evidence file."""
+    source_diagnosis = report.get("source_diagnosis")
+    diagnosis_eligible = (
+        source_diagnosis.get("eligible")
+        if isinstance(source_diagnosis, dict)
+        else None
+    )
+    payload = {
+        "status": "created",
+        "report": str(output),
+        "identity": report.get("identity"),
+        "diagnosis_eligible": diagnosis_eligible,
+    }
+    if output_format == "json":
+        print(json.dumps(payload, indent=2, ensure_ascii=False))
+        return
+    print(f"Failure report: {output}")
+    print(f"Diagnosis eligible: {str(diagnosis_eligible).lower()}")
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     try:
+        if args.domain == "diagnosis" and args.action == "report":
+            report = ExperimentOrchestrator().assemble_failure_report(
+                args.request,
+                args.output,
+            )
+            emit_failure_report_result(report, args.output, args.output_format)
+            return 0
         config = config_from_args(args)
         result = ExperimentOrchestrator().run(config)
         emit_result(result, config.output_format)
         return 0 if result.status in {"completed", "dry_run"} else 1
-    except ConfigError as exc:
+    except (ConfigError, FailureReportError) as exc:
         output_format = getattr(args, "output_format", None) or "text"
         if output_format == "json":
             print(json.dumps({"status": "error", "error": str(exc)}, ensure_ascii=False))

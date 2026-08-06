@@ -6,7 +6,7 @@ import hashlib
 import json
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Callable
+from typing import Any, Callable
 
 from llm4mtl.experiment_runner.adapters.test_generation import TestGenerationAdapter
 from llm4mtl.experiment_runner.adapters.transformation_parser import TransformationParserAdapter
@@ -17,6 +17,10 @@ from llm4mtl import run_store
 from llm4mtl.paths import REPO_ROOT, TARGET
 from llm4mtl.provenance import build_provenance
 from llm4mtl.run_store.attempts import existing_attempts
+from llm4mtl.semantic_tests.failure_report import (
+    load_report_request,
+    write_failure_report,
+)
 from llm4mtl.serialization.json_io import read_json, write_json
 from llm4mtl.stage_contract import (
     CONTRACT_STAGE_IDS,
@@ -40,6 +44,20 @@ class ExperimentOrchestrator:
         self.tests = TestGenerationAdapter(self.repo_root)
         self.parser = TransformationParserAdapter(self.repo_root)
         self.transformations = TransformationValidationAdapter(self.repo_root)
+
+    def assemble_failure_report(
+        self,
+        request_path: Path,
+        output_path: Path,
+    ) -> dict[str, Any]:
+        """Create one diagnosis evidence report from an existing run attempt.
+
+        This is a deterministic post-execution command, not a contract stage:
+        it neither invokes the diagnosis LLM nor modifies the run's manifest,
+        events, or recorded stage attempts.
+        """
+        request = load_report_request(request_path)
+        return write_failure_report(request, output_path)
 
     def run(self, config: PipelineConfig) -> RunResult:
         validate_config(config)
