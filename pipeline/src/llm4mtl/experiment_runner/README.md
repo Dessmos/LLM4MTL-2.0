@@ -31,7 +31,7 @@ After an execution attempt has recorded a parser-passing transformation and a
 concrete semantic assertion failure, assemble the evidence through the same
 orchestrator CLI:
 
-    PYTHONPATH=pipeline/src .venv/bin/python -m llm4mtl.experiment_runner diagnosis report \
+    .venv/bin/llm4mtl diagnosis report \
       --request artifacts/work/runs/<run-id>/diagnosis-request.json \
       --output artifacts/work/runs/<run-id>/diagnosis-evidence/<test-case>/<assertion>.json
 
@@ -39,7 +39,9 @@ The request format and all required fields are documented in
 `llm4mtl.semantic_tests.failure_report`. It identifies the immutable run
 manifest, syntax and execution attempt evidence, generated/reference execution
 observations, one `test_case_id`, one `assertion_id`, the structured comparator
-difference, and any explicit snapshot, Surefire, or execution-log paths.
+difference, and explicit snapshot and Surefire paths. An execution-log path is
+optional because the report records it only when one exists. No evidence paths
+are discovered automatically.
 
 The command creates the output once and refuses to overwrite it. It also
 verifies that the selected execution attempt, suite, transformation, Surefire

@@ -89,9 +89,29 @@ class N8nArtifactRoutingTests(unittest.TestCase):
         document = json.loads(path.read_text(encoding="utf-8"))
         nodes = {node["name"]: node for node in document["nodes"]}
 
+        validation_code = nodes["Validate Evidence Bundle"]["parameters"]["jsCode"]
+        for evidence_field in (
+            "original_task_description",
+            "relevant_source_and_target_metamodel_constraints",
+            "generated_transformation",
+            "failing_test_case_or_assertion",
+            "input_model",
+            "expected_output_or_properties",
+            "actual_target_model",
+            "structured_actual_vs_expected_difference",
+            "execution_error_or_log",
+            "reference_transformation_result",
+        ):
+            self.assertIn(evidence_field, validation_code)
+        self.assertIn("parser passed and semantic test failed", validation_code)
+
         provenance_code = nodes["Attach Diagnosis Provenance"]["parameters"]["jsCode"]
         self.assertIn("provider: context.provider", provenance_code)
         self.assertIn("model", provenance_code)
+        self.assertIn("transformation_defect", provenance_code)
+        self.assertIn("test_defect", provenance_code)
+        self.assertIn("ambiguous", provenance_code)
+        self.assertNotIn("source.content", provenance_code)
 
         persist = nodes["Persist Diagnosis Artifact"]
         self.assertEqual("n8n-nodes-base.httpRequest", persist["type"])

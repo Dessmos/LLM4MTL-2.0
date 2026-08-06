@@ -130,7 +130,21 @@ The table below is policy guidance, not Python-owned state:
 
 ## Diagnosis result
 
-The diagnosis LLM runs in n8n. Python accepts only the normalized result:
+The diagnosis LLM runs in n8n and returns exactly:
+
+```json
+{
+  "classification": "transformation_defect",
+  "confidence": "high",
+  "reasoning_summary": "The generated transformation omitted the target node.",
+  "evidence": ["The expected node is listed in missing_elements."],
+  "test_case_id": "case-1"
+}
+```
+
+`classification` is `transformation_defect`, `test_defect`, or `ambiguous`.
+n8n does not route inside the diagnosis subworkflow. It maps the verdict to the
+existing Python persistence contract before calling the stage service:
 
 ```json
 {
@@ -144,7 +158,7 @@ The diagnosis LLM runs in n8n. Python accepts only the normalized result:
 }
 ```
 
-Classification is one of:
+The persisted `classification` is one of:
 
 ```text
 TRANSFORMATION_DEFECT

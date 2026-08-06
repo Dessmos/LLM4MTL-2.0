@@ -13,6 +13,7 @@ from llm4mtl.experiment_runner.models import PipelineConfig
 from llm4mtl.experiment_runner.orchestrator import ExperimentOrchestrator
 from llm4mtl.experiment_runner.adapters.transformation_validation import TransformationValidationAdapter
 from llm4mtl.paths import LEGACY_PROJECT_ROOT, TARGET
+from llm4mtl.semantic_tests.failure_report import FailureReportError, ReportRequest
 
 
 REPO_ROOT = LEGACY_PROJECT_ROOT
@@ -136,6 +137,32 @@ class CliTests(unittest.TestCase):
             Path("artifacts/work/report.json"),
         )
         self.assertIn("Diagnosis eligible: true", stdout.getvalue())
+
+    def test_failure_report_requires_explicit_runtime_evidence_paths(self) -> None:
+        payload = {
+            "run_manifest": "README.md",
+            "syntax_evidence": "README.md",
+            "execution_evidence": "README.md",
+            "generated_execution": "README.md",
+            "reference_execution": None,
+            "test_case_id": "case-1",
+            "assertion_id": "assertion-001",
+            "attempt": 1,
+            "actual_target_models": ["README.md"],
+            "surefire_reports": ["README.md"],
+            "execution_log": None,
+            "actual_vs_expected": None,
+        }
+
+        for required_field in ("actual_target_models", "surefire_reports"):
+            with self.subTest(required_field=required_field):
+                incomplete = {**payload}
+                del incomplete[required_field]
+                with self.assertRaisesRegex(
+                    FailureReportError,
+                    f"{required_field} must be an array of paths",
+                ):
+                    ReportRequest.from_payload(incomplete)
 
 
 class OrchestratorTests(unittest.TestCase):

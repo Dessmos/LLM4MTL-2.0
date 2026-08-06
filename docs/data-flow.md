@@ -295,7 +295,7 @@ manifest + syntax attempt + execution attempt
 The local orchestration command is:
 
 ```text
-python -m llm4mtl.experiment_runner diagnosis report --request <request.json> --output <report.json>
+llm4mtl diagnosis report --request <request.json> --output <report.json>
 ```
 
 It emits a Source Diagnosis bundle only when the generated transformation
@@ -303,6 +303,8 @@ passed parser validation and the selected semantic assertion was evaluated and
 failed. The selected `test_case_id` and `assertion_id` must match the Surefire
 failure. The structured actual-vs-expected difference is an observed comparator
 input; the report assembler never infers it from an error string.
+Actual-model snapshots and Surefire reports are explicit request paths; the
+assembler does not discover substitutes.
 
 This report command is deterministic post-execution processing rather than a
 new contract stage. It does not rewrite the execution attempt, call an LLM,

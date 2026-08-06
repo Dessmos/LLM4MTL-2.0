@@ -2,179 +2,82 @@
   "name": "LLM4MTL - Diagnose Semantic Failure",
   "nodes": [
     {
-      "parameters": {
-        "inputSource": "passthrough"
-      },
+      "parameters": {"inputSource": "passthrough"},
       "id": "e1000000-0000-4000-8000-000000000001",
       "name": "Workflow Trigger",
       "type": "n8n-nodes-base.executeWorkflowTrigger",
       "typeVersion": 1.1,
-      "position": [-1660, 0]
+      "position": [-1440, 0]
     },
     {
       "parameters": {
-        "jsCode": "const input = $input.first().json;\nconst component = /^[A-Za-z0-9._-]+$/;\nconst safeComponent = (value, name) => {\n  if (typeof value !== 'string' || !component.test(value)) throw new Error(`${name} must be one safe path component`);\n  return value;\n};\nif (input.outcome_code !== 'SEMANTIC_EXECUTION_FAILED') throw new Error('Diagnosis requires SEMANTIC_EXECUTION_FAILED');\nconst runId = safeComponent(input.run_id, 'run_id');\nconst executionAttempt = Number(input.execution_attempt);\nif (!Number.isInteger(executionAttempt) || executionAttempt < 1) throw new Error('execution_attempt must be a positive integer');\nconst alias = safeComponent(input.diagnosis_provider ?? input.provider, 'diagnosis_provider').toLowerCase();\nconst provider = alias === 'gemini' ? 'google' : alias;\nif (!['openai', 'anthropic', 'google'].includes(provider)) throw new Error(`Unsupported diagnosis provider: ${provider}`);\nconst suiteId = input.suite_id == null ? null : safeComponent(input.suite_id, 'suite_id');\nconst caseId = input.case_id == null ? null : safeComponent(input.case_id, 'case_id');\nconst runtimeContext = input.runtime_context;\nif (!runtimeContext || Array.isArray(runtimeContext) || typeof runtimeContext !== 'object') throw new Error('runtime_context is required');\nconst runtimeKeys = Object.keys(runtimeContext);\nif (runtimeKeys.some((key) => !['transformation_kind', 'source_model', 'target_model'].includes(key))) throw new Error('runtime_context contains an unsupported field');\nfor (const key of ['transformation_kind', 'source_model', 'target_model']) {\n  if (typeof runtimeContext[key] !== 'string' || !runtimeContext[key].trim() || runtimeContext[key].length > 200) throw new Error(`runtime_context.${key} must be a concise string`);\n}\nreturn [{ json: {\n  run_id: runId, execution_attempt: executionAttempt, provider, suite_id: suiteId, case_id: caseId,\n  runtime_context: runtimeContext,\n  execution_evidence_path: `/data/artifacts/runs/${runId}/stages/execution/attempts/attempt-${String(executionAttempt).padStart(3, '0')}/evidence.json`,\n  evidence_ref: `stages/execution/attempts/attempt-${String(executionAttempt).padStart(3, '0')}/result.json`\n} }];"
+        "jsCode": "const input = $input.first().json;\nconst component = /^[A-Za-z0-9._-]+$/;\nif (input.outcome_code !== 'SEMANTIC_EXECUTION_FAILED') throw new Error('Diagnosis requires SEMANTIC_EXECUTION_FAILED');\nif (typeof input.run_id !== 'string' || !component.test(input.run_id)) throw new Error('run_id must be one safe path component');\nif (!Number.isInteger(input.execution_attempt) || input.execution_attempt < 1) throw new Error('execution_attempt must be a positive integer');\nif (!['openai', 'anthropic', 'google'].includes(input.diagnosis_provider)) throw new Error('diagnosis_provider must be openai, anthropic, or google');\nif (typeof input.failure_report_path !== 'string') throw new Error('failure_report_path is required');\nconst reportPath = input.failure_report_path.replace(/\\\\/g, '/');\nconst runPrefix = `artifacts/work/runs/${input.run_id}/`;\nif (!reportPath.startsWith(runPrefix) || reportPath.includes('..') || reportPath.includes(',')) throw new Error('failure_report_path must identify this run under artifacts/work');\nreturn [{ json: {\n  run_id: input.run_id, execution_attempt: input.execution_attempt, provider: input.diagnosis_provider,\n  failure_report_path: `/data/artifacts/${reportPath.slice('artifacts/work/'.length)}`,\n  evidence_ref: reportPath.slice(runPrefix.length),\n  system_prompt_path: '/data/diagnosis_prompts/semantic_failure_diagnosis.md'\n} }];"
       },
       "id": "e1000000-0000-4000-8000-000000000002",
       "name": "Validate Input",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [-1440, 0]
-    },
-    {
-      "parameters": {
-        "fileSelector": "={{ $json.execution_evidence_path }}",
-        "options": {}
-      },
-      "id": "e1000000-0000-4000-8000-000000000003",
-      "name": "Get Execution Evidence",
-      "type": "n8n-nodes-base.readWriteFile",
-      "typeVersion": 1,
       "position": [-1220, 0]
     },
     {
-      "parameters": {
-        "operation": "text",
-        "destinationKey": "execution_evidence_text",
-        "options": {}
-      },
-      "id": "e1000000-0000-4000-8000-000000000004",
-      "name": "Extract Execution Evidence",
-      "type": "n8n-nodes-base.extractFromFile",
+      "parameters": {"fileSelector": "={{ $json.failure_report_path }}", "options": {}},
+      "id": "e1000000-0000-4000-8000-000000000003",
+      "name": "Read Failure Report",
+      "type": "n8n-nodes-base.readWriteFile",
       "typeVersion": 1,
       "position": [-1000, 0]
     },
     {
-      "parameters": {
-        "jsCode": "const input = $('Validate Input').first().json;\nlet executionEvidence;\ntry { executionEvidence = JSON.parse($input.first().json.execution_evidence_text); } catch (error) { throw new Error(`Invalid execution evidence JSON: ${error.message}`); }\nconst pairs = executionEvidence.details?.pairs;\nif (!Array.isArray(pairs)) throw new Error('Execution evidence has no pairs');\nconst normalizeRepositoryPath = (raw, name) => {\n  const path = String(raw ?? '').replace(/\\\\/g, '/');\n  const marker = 'artifacts/work/';\n  const index = path.indexOf(marker);\n  if (index < 0) throw new Error(`${name} is not under artifacts/work`);\n  const relative = path.slice(index);\n  if (relative.includes('..') || relative.includes(',')) throw new Error(`${name} is unsafe`);\n  return relative;\n};\nconst failed = pairs.filter((pair) => pair && pair.assertions_passed === false);\nconst matching = failed.filter((pair) => {\n  if (!input.suite_id) return true;\n  const suite = String(pair.suite ?? '').replace(/\\\\/g, '/');\n  return suite.endsWith(`/${input.suite_id}`);\n});\nif (matching.length !== 1) throw new Error(`Expected exactly one failed pair, found ${matching.length}; pass suite_id when needed`);\nconst pair = matching[0];\nconst suitePath = normalizeRepositoryPath(pair.suite, 'pair.suite');\nconst transformationPath = normalizeRepositoryPath(pair.transformation, 'pair.transformation');\nconst generatedExecutionPath = normalizeRepositoryPath(pair.evidence, 'pair.evidence');\nconst parts = suitePath.split('/');\nconst generatedTestsIndex = parts.indexOf('generated_tests');\nif (generatedTestsIndex < 0 || parts[generatedTestsIndex + 3] !== 'candidates') throw new Error('Failed pair has an unexpected suite path');\nconst language = parts[generatedTestsIndex + 1];\nconst task = parts[generatedTestsIndex + 2];\nconst testModel = parts[generatedTestsIndex + 4];\nconst testStrategy = parts[generatedTestsIndex + 5];\nconst suiteId = parts[generatedTestsIndex + 6];\nconst component = /^[A-Za-z0-9._-]+$/;\nfor (const [name, value] of Object.entries({ language, task, testModel, testStrategy, suiteId })) {\n  if (typeof value !== 'string' || !component.test(value)) throw new Error(`Unsafe ${name} in failed pair`);\n}\nif (!['etl', 'atl', 'qvto', 'reactions'].includes(language)) throw new Error(`Unsupported language: ${language}`);\nconst extension = { etl: 'etl', atl: 'atl', qvto: 'qvto', reactions: 'reactions' }[language];\nif (!transformationPath.endsWith(`/${task}.${extension}`)) throw new Error('Failed pair transformation does not match its task');\nconst dataPath = (repositoryPath) => `/data/artifacts/${repositoryPath.slice('artifacts/work/'.length)}`;\nconst suiteDataPath = dataPath(suitePath);\nconst referenceExecutionPath = `/data/artifacts/runs/${input.run_id}/observations/${task}/${testModel}/${testStrategy}/${suiteId}/suite_execution.json`;\nconst corePaths = [\n  '/data/diagnosis_prompts/semantic_failure_diagnosis.md',\n  `/data/task_prompts/${language}/${task}.txt`,\n  dataPath(transformationPath),\n  `${suiteDataPath}/semantic_cases.json`,\n  referenceExecutionPath,\n  dataPath(generatedExecutionPath),\n  `/data/artifacts/runs/${input.run_id}/workspaces/${language}/**/surefire-reports/TEST-*.xml`\n];\nreturn [{ json: {\n  ...input, language, task, suite_id: suiteId, suite_data_path: suiteDataPath,\n  generated_execution_repository_path: generatedExecutionPath,\n  core_file_selector: `{${corePaths.join(',')}}`\n} }];"
-      },
-      "id": "e1000000-0000-4000-8000-000000000005",
-      "name": "Select Failed Pair",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
+      "parameters": {"operation": "text", "destinationKey": "failure_report_text", "options": {}},
+      "id": "e1000000-0000-4000-8000-000000000004",
+      "name": "Extract Failure Report",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
       "position": [-780, 0]
     },
     {
       "parameters": {
-        "method": "POST",
-        "url": "http://stage-service:8129/prompt-inputs/resolve",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ { language: $json.language, task: $json.task } }}",
-        "options": {}
+        "jsCode": "const context = $('Validate Input').first().json;\nlet report;\ntry { report = JSON.parse($input.first().json.failure_report_text); } catch (error) { throw new Error(`Invalid failure report JSON: ${error.message}`); }\nif (report.report_type !== 'semantic_test_case_failure') throw new Error('Unexpected failure report type');\nif (report.identity.run_id !== context.run_id || report.identity.attempt !== context.execution_attempt) throw new Error('Failure report identity does not match the requested run and attempt');\nif (report.test_case_result.syntax_check.status !== 'passed' || report.test_case_result.semantic_status !== 'failed') throw new Error('Diagnosis requires parser passed and semantic test failed');\nif (report.source_diagnosis.eligible !== true || report.source_diagnosis.reason !== 'parser_passed_and_semantic_test_failed') throw new Error('Failure report is not eligible for source diagnosis');\nconst bundle = report.source_diagnosis.evidence_bundle;\nif (!bundle || Array.isArray(bundle) || typeof bundle !== 'object') throw new Error('Failure report has no evidence bundle');\nconst required = ['original_task_description', 'relevant_source_and_target_metamodel_constraints', 'generated_transformation', 'failing_test_case_or_assertion', 'input_model', 'expected_output_or_properties', 'actual_target_model', 'structured_actual_vs_expected_difference', 'execution_error_or_log', 'reference_transformation_result'];\nif (JSON.stringify(Object.keys(bundle).sort()) !== JSON.stringify([...required].sort())) throw new Error(`Evidence bundle must contain exactly: ${required.join(', ')}`);\nconst failing = bundle.failing_test_case_or_assertion;\nif (typeof failing.test_case_id !== 'string' || !failing.test_case_id || typeof failing.assertion_id !== 'string' || !failing.assertion_id) throw new Error('Evidence bundle must identify one test case and assertion');\nif (failing.test_case_id !== report.test_case_result.test_case_id || failing.assertion_id !== report.test_case_result.assertion_id) throw new Error('Evidence bundle selectors disagree with the failure report');\nconst difference = bundle.structured_actual_vs_expected_difference;\nconst differenceFields = ['missing_elements', 'extra_elements', 'wrong_types', 'wrong_attributes', 'reference_mismatches'];\nif (difference.available !== true || differenceFields.some((field) => !Array.isArray(difference[field]))) throw new Error('Evidence bundle requires a complete structured actual-vs-expected difference');\nreturn [{ json: { ...context, test_case_id: failing.test_case_id, assertion_id: failing.assertion_id, evidence_bundle: bundle } }];"
       },
-      "id": "e1000000-0000-4000-8000-000000000006",
-      "name": "Resolve Exact Metamodels",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
+      "id": "e1000000-0000-4000-8000-000000000005",
+      "name": "Validate Evidence Bundle",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [-560, 0]
     },
     {
-      "parameters": {
-        "fileSelector": "={{ $('Select Failed Pair').item.json.core_file_selector }}",
-        "options": {}
-      },
-      "id": "e1000000-0000-4000-8000-000000000007",
-      "name": "Read Diagnosis Evidence Files",
+      "parameters": {"fileSelector": "={{ $json.system_prompt_path }}", "options": {}},
+      "id": "e1000000-0000-4000-8000-000000000006",
+      "name": "Read Diagnosis Prompt",
       "type": "n8n-nodes-base.readWriteFile",
       "typeVersion": 1,
       "position": [-340, 0]
     },
     {
-      "parameters": {
-        "assignments": {
-          "assignments": [
-            {
-              "id": "evidence-file-name",
-              "name": "evidence_file_name",
-              "value": "={{ $binary.data.fileName }}",
-              "type": "string"
-            }
-          ]
-        },
-        "includeOtherFields": true,
-        "options": {}
-      },
-      "id": "e1000000-0000-4000-8000-000000000008",
-      "name": "Keep Evidence File Names",
-      "type": "n8n-nodes-base.set",
-      "typeVersion": 3.4,
+      "parameters": {"operation": "text", "destinationKey": "system_prompt", "options": {}},
+      "id": "e1000000-0000-4000-8000-000000000007",
+      "name": "Extract Diagnosis Prompt",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
       "position": [-120, 0]
     },
     {
       "parameters": {
-        "operation": "text",
-        "destinationKey": "evidence_file_content",
-        "options": {}
+        "jsCode": "const context = $('Validate Evidence Bundle').first().json;\nconst systemPrompt = $input.first().json.system_prompt;\nif (typeof systemPrompt !== 'string' || !systemPrompt.trim()) throw new Error('Diagnosis prompt is empty');\nreturn [{ json: { ...context, system_prompt: systemPrompt.trim(), user_prompt: JSON.stringify(context.evidence_bundle, null, 2) } }];"
       },
-      "id": "e1000000-0000-4000-8000-000000000009",
-      "name": "Extract Diagnosis Evidence Files",
-      "type": "n8n-nodes-base.extractFromFile",
-      "typeVersion": 1,
-      "position": [100, 0]
-    },
-    {
-      "parameters": {
-        "jsCode": "const pair = $('Select Failed Pair').first().json;\nconst files = $input.all().map((item) => ({ name: item.json.evidence_file_name, content: item.json.evidence_file_content }));\nconst requireFile = (name) => {\n  const found = files.filter((file) => file.name === name);\n  if (found.length !== 1 || typeof found[0].content !== 'string') throw new Error(`Expected exactly one ${name}`);\n  return found[0].content;\n};\nconst parseJson = (text, name) => { try { return JSON.parse(text); } catch (error) { throw new Error(`Invalid ${name}: ${error.message}`); } };\nconst prompt = requireFile('semantic_failure_diagnosis.md').trim();\nconst taskDescription = requireFile(`${pair.task}.txt`).trim();\nconst extension = { etl: 'etl', atl: 'atl', qvto: 'qvto', reactions: 'reactions' }[pair.language];\nconst generatedTransformation = requireFile(`${pair.task}.${extension}`);\nconst semanticCases = parseJson(requireFile('semantic_cases.json'), 'semantic_cases.json');\nconst suiteExecutions = files.filter((file) => file.name === 'suite_execution.json').map((file) => parseJson(file.content, 'suite_execution.json'));\nconst referenceExecution = suiteExecutions.find((value) => value.inputs?.transformation?.role === 'reference_transformation');\nconst generatedExecution = suiteExecutions.find((value) => value.inputs?.transformation?.role === 'generated_transformation');\nif (!referenceExecution || !generatedExecution) throw new Error('Reference or generated suite_execution.json is missing');\nif (referenceExecution.suite_id !== pair.suite_id || generatedExecution.suite_id !== pair.suite_id) throw new Error('Execution evidence identifies another suite');\nif (referenceExecution.observation?.reference_valid !== true || referenceExecution.observation?.assertions_passed !== true) throw new Error('Suite did not pass on the reference transformation');\nif (generatedExecution.observation?.assertions_passed !== false) throw new Error('Generated transformation execution did not fail');\nconst decode = (value) => String(value ?? '').replace(/&quot;/g, '\"').replace(/&apos;/g, \"'\").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');\nconst attribute = (text, name) => decode(text.match(new RegExp(`${name}=\\\"([^\\\"]*)\\\"`, 'i'))?.[1] ?? '');\nconst failures = [];\nfor (const report of files.filter((file) => file.name.startsWith('TEST-') && file.name.endsWith('.xml'))) {\n  for (const testcase of report.content.matchAll(/<testcase\\b([^>]*)>([\\s\\S]*?)<\\/testcase>/gi)) {\n    const failure = testcase[2].match(/<(failure|error)\\b([^>]*)>([\\s\\S]*?)<\\/\\1>/i) ?? testcase[2].match(/<(failure|error)\\b([^>]*)\\/>/i);\n    if (!failure) continue;\n    const message = attribute(failure[2], 'message');\n    const stackTrace = decode(String(failure[3] ?? '').replace(/^<!\\[CDATA\\[/, '').replace(/\\]\\]>$/, '').trim());\n    const expectedActual = `${message}\\n${stackTrace}`.match(/expected(?:\\s*:)?\\s*<([^>]*)>\\s*(?:but was|actual(?:\\s*:)?)(?:\\s*:)?\\s*<([^>]*)>/i);\n    failures.push({\n      test_method: attribute(testcase[1], 'name'), test_class: attribute(testcase[1], 'classname'),\n      type: attribute(failure[2], 'type') || failure[1].toLowerCase(), message,\n      expected: expectedActual?.[1] ?? null, actual: expectedActual?.[2] ?? null, stack_trace: stackTrace\n    });\n  }\n}\nif (!failures.length) throw new Error('No Surefire failure/error found');\nconst sanitize = (value) => {\n  const words = String(value).split(/[^A-Za-z0-9]+/).filter(Boolean);\n  if (!words.length) return 'generatedSemanticCase';\n  const [first, ...rest] = words;\n  let method = first.slice(0, 1).toLowerCase() + first.slice(1) + rest.map((word) => word.slice(0, 1).toUpperCase() + word.slice(1)).join('');\n  if (!/^[A-Za-z_]/.test(method)) method = `case${method}`;\n  return method;\n};\nconst testClass = String(semanticCases.testClass ?? '');\nconst tests = Array.isArray(semanticCases.tests) ? semanticCases.tests : [];\nconst matching = tests.flatMap((semanticCase) => {\n  const method = sanitize(semanticCase.name);\n  return failures.filter((failure) => failure.test_method === method && (!testClass || failure.test_class === testClass || failure.test_class.endsWith(`.${testClass}`))).map((failure) => ({ semanticCase, failure }));\n}).filter((entry) => !pair.case_id || entry.semanticCase.name === pair.case_id);\nif (matching.length !== 1) throw new Error(`Expected exactly one failing case, found ${matching.length}; pass case_id when needed`);\nconst { semanticCase, failure } = matching[0];\nconst modelSlots = Array.isArray(semanticCase.models) ? semanticCase.models : (Array.isArray(semanticCases.models) ? semanticCases.models : []);\nconst fixturePaths = [...new Set(modelSlots.map((model) => model.path).filter(Boolean).map(String))].sort();\nif (!fixturePaths.length) throw new Error('Failing case has no fixture files');\nif (fixturePaths.some((path) => !/^models\\/[A-Za-z0-9._-]+\\.(?:xmi|xml|model)$/.test(path))) throw new Error('Failing case contains an unsupported fixture path');\nconst fixtureDataPaths = fixturePaths.map((path) => `${pair.suite_data_path}/${path}`);\nconst referenceResult = {\n  reference_valid: true, assertions_passed: true, technically_executable: referenceExecution.observation.technically_executable\n};\nconst generatedObservation = generatedExecution.observation;\nconst generatedResult = {\n  technically_executable: generatedObservation.technically_executable, assertions_evaluated: generatedObservation.assertions_evaluated,\n  assertions_passed: generatedObservation.assertions_passed, failure_stage: generatedObservation.failure_stage,\n  error_summary: generatedObservation.error_summary, timed_out: generatedObservation.timed_out, maven_exit_code: generatedObservation.maven_exit_code\n};\nreturn [{ json: {\n  run_id: pair.run_id, provider: pair.provider, evidence_ref: pair.evidence_ref, runtime_context: pair.runtime_context,\n  case_id: semanticCase.name, system_prompt: prompt, task_description: taskDescription,\n  generated_transformation: generatedTransformation, failing_case: semanticCase, reference_result: referenceResult,\n  generated_result: generatedResult, failure, fixture_names: fixturePaths.map((path) => path.slice('models/'.length)),\n  fixture_file_selector: fixtureDataPaths.length === 1 ? fixtureDataPaths[0] : `{${fixtureDataPaths.join(',')}}`\n} }];"
-      },
-      "id": "e1000000-0000-4000-8000-000000000010",
-      "name": "Select Failing Case",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [320, 0]
-    },
-    {
-      "parameters": {
-        "fileSelector": "={{ $json.fixture_file_selector }}",
-        "options": {}
-      },
-      "id": "e1000000-0000-4000-8000-000000000011",
-      "name": "Read Required Fixtures",
-      "type": "n8n-nodes-base.readWriteFile",
-      "typeVersion": 1,
-      "position": [540, 0]
-    },
-    {
-      "parameters": {
-        "operation": "text",
-        "destinationKey": "fixture_content",
-        "options": {}
-      },
-      "id": "e1000000-0000-4000-8000-000000000012",
-      "name": "Extract Required Fixtures",
-      "type": "n8n-nodes-base.extractFromFile",
-      "typeVersion": 1,
-      "position": [760, 0]
-    },
-    {
-      "parameters": {
-        "jsCode": "const selected = $('Select Failing Case').first().json;\nconst fixtureItems = $input.all();\nif (fixtureItems.length !== selected.fixture_names.length) throw new Error('Not every required fixture was loaded');\nconst fixtures = fixtureItems.map((item, index) => {\n  const fileName = item.binary?.data?.fileName ?? selected.fixture_names[index];\n  const content = item.json.fixture_content;\n  if (!selected.fixture_names.includes(fileName) || typeof content !== 'string') throw new Error('Unexpected fixture file');\n  return { path: `models/${fileName}`, content };\n}).sort((left, right) => left.path.localeCompare(right.path));\nconst resolved = $('Resolve Exact Metamodels').first().json;\nconst metamodels = Array.isArray(resolved.metamodels) ? resolved.metamodels.map((model) => ({ path: model.path, content: model.content })) : [];\nconst bundle = {\n  task_description: selected.task_description,\n  runtime_context: selected.runtime_context,\n  metamodels,\n  generated_transformation: selected.generated_transformation,\n  failing_case: selected.failing_case,\n  fixtures,\n  reference_result: selected.reference_result,\n  generated_result: selected.generated_result,\n  failure: selected.failure\n};\nreturn [{ json: {\n  run_id: selected.run_id, provider: selected.provider, evidence_ref: selected.evidence_ref, case_id: selected.case_id,\n  system_prompt: selected.system_prompt, user_prompt: JSON.stringify(bundle, null, 2)\n} }];"
-      },
-      "id": "e1000000-0000-4000-8000-000000000013",
+      "id": "e1000000-0000-4000-8000-000000000008",
       "name": "Assemble Diagnosis Bundle",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [980, 0]
+      "position": [100, 0]
     },
     {
       "parameters": {
         "rules": {
           "values": [
-            {
-              "conditions": {"options": {"caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 2}, "conditions": [{"id": "provider-openai", "leftValue": "={{ $json.provider }}", "rightValue": "openai", "operator": {"type": "string", "operation": "equals"}}], "combinator": "and"},
-              "renameOutput": true,
-              "outputKey": "OpenAI"
-            },
-            {
-              "conditions": {"options": {"caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 2}, "conditions": [{"id": "provider-anthropic", "leftValue": "={{ $json.provider }}", "rightValue": "anthropic", "operator": {"type": "string", "operation": "equals"}}], "combinator": "and"},
-              "renameOutput": true,
-              "outputKey": "Anthropic"
-            },
-            {
-              "conditions": {"options": {"caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 2}, "conditions": [{"id": "provider-google", "leftValue": "={{ $json.provider }}", "rightValue": "google", "operator": {"type": "string", "operation": "equals"}}], "combinator": "and"},
-              "renameOutput": true,
-              "outputKey": "Google"
-            }
+            {"conditions": {"options": {"caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 2}, "conditions": [{"id": "provider-openai", "leftValue": "={{ $json.provider }}", "rightValue": "openai", "operator": {"type": "string", "operation": "equals"}}], "combinator": "and"}, "renameOutput": true, "outputKey": "OpenAI"},
+            {"conditions": {"options": {"caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 2}, "conditions": [{"id": "provider-anthropic", "leftValue": "={{ $json.provider }}", "rightValue": "anthropic", "operator": {"type": "string", "operation": "equals"}}], "combinator": "and"}, "renameOutput": true, "outputKey": "Anthropic"},
+            {"conditions": {"options": {"caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 2}, "conditions": [{"id": "provider-google", "leftValue": "={{ $json.provider }}", "rightValue": "google", "operator": {"type": "string", "operation": "equals"}}], "combinator": "and"}, "renameOutput": true, "outputKey": "Google"}
           ]
         },
         "options": {}
@@ -183,92 +86,68 @@
       "name": "Call Diagnosis LLM",
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3.2,
-      "position": [1200, 0]
+      "position": [320, 0]
     },
     {
-      "parameters": {
-        "promptType": "define",
-        "text": "={{ $('Assemble Diagnosis Bundle').item.json.user_prompt }}",
-        "messages": {"messageValues": [{"message": "={{ $('Assemble Diagnosis Bundle').item.json.system_prompt }}"}]},
-        "batching": {}
-      },
+      "parameters": {"promptType": "define", "text": "={{ $('Assemble Diagnosis Bundle').item.json.user_prompt }}", "messages": {"messageValues": [{"message": "={{ $('Assemble Diagnosis Bundle').item.json.system_prompt }}"}]}, "batching": {}},
       "id": "e1000000-0000-4000-8000-000000000015",
       "name": "Diagnose with OpenAI",
       "type": "@n8n/n8n-nodes-langchain.chainLlm",
       "typeVersion": 1.7,
-      "position": [1440, -240]
+      "position": [560, -240]
     },
     {
-      "parameters": {
-        "model": {"__rl": true, "value": "gpt-5", "mode": "list", "cachedResultName": "gpt-5"},
-        "options": {"temperature": 0, "timeout": 600000}
-      },
+      "parameters": {"model": {"__rl": true, "value": "gpt-5", "mode": "list", "cachedResultName": "gpt-5"}, "options": {"temperature": 0, "timeout": 600000}},
       "id": "e1000000-0000-4000-8000-000000000016",
       "name": "OpenAI Diagnosis Model",
       "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
       "typeVersion": 1.2,
-      "position": [1440, -40],
+      "position": [560, -40],
       "credentials": {"openAiApi": {"id": "8mtpdiKzgoTWwPSM", "name": "OpenAi account"}}
     },
     {
-      "parameters": {
-        "promptType": "define",
-        "text": "={{ $('Assemble Diagnosis Bundle').item.json.user_prompt }}",
-        "messages": {"messageValues": [{"message": "={{ $('Assemble Diagnosis Bundle').item.json.system_prompt }}"}]},
-        "batching": {}
-      },
+      "parameters": {"promptType": "define", "text": "={{ $('Assemble Diagnosis Bundle').item.json.user_prompt }}", "messages": {"messageValues": [{"message": "={{ $('Assemble Diagnosis Bundle').item.json.system_prompt }}"}]}, "batching": {}},
       "id": "e1000000-0000-4000-8000-000000000017",
       "name": "Diagnose with Anthropic",
       "type": "@n8n/n8n-nodes-langchain.chainLlm",
       "typeVersion": 1.7,
-      "position": [1440, 0]
+      "position": [560, 0]
     },
     {
-      "parameters": {
-        "model": {"__rl": true, "value": "claude-sonnet-4-20250514", "mode": "list", "cachedResultName": "Claude Sonnet 4"},
-        "options": {"temperature": 0}
-      },
+      "parameters": {"model": {"__rl": true, "value": "claude-sonnet-4-20250514", "mode": "list", "cachedResultName": "Claude Sonnet 4"}, "options": {"temperature": 0}},
       "id": "e1000000-0000-4000-8000-000000000018",
       "name": "Anthropic Diagnosis Model",
       "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
       "typeVersion": 1.3,
-      "position": [1440, 200],
+      "position": [560, 200],
       "credentials": {"anthropicApi": {"id": "R9d6pMqZ8LzipdDW", "name": "Anthropic account"}}
     },
     {
-      "parameters": {
-        "promptType": "define",
-        "text": "={{ $('Assemble Diagnosis Bundle').item.json.user_prompt }}",
-        "messages": {"messageValues": [{"message": "={{ $('Assemble Diagnosis Bundle').item.json.system_prompt }}"}]},
-        "batching": {}
-      },
+      "parameters": {"promptType": "define", "text": "={{ $('Assemble Diagnosis Bundle').item.json.user_prompt }}", "messages": {"messageValues": [{"message": "={{ $('Assemble Diagnosis Bundle').item.json.system_prompt }}"}]}, "batching": {}},
       "id": "e1000000-0000-4000-8000-000000000019",
       "name": "Diagnose with Google",
       "type": "@n8n/n8n-nodes-langchain.chainLlm",
       "typeVersion": 1.7,
-      "position": [1440, 240]
+      "position": [560, 240]
     },
     {
-      "parameters": {
-        "modelName": "models/gemini-2.5-pro",
-        "options": {"temperature": 0}
-      },
+      "parameters": {"modelName": "models/gemini-2.5-pro", "options": {"temperature": 0}},
       "id": "e1000000-0000-4000-8000-000000000020",
       "name": "Google Diagnosis Model",
       "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
       "typeVersion": 1,
-      "position": [1440, 440],
+      "position": [560, 440],
       "credentials": {"googlePalmApi": {"id": "nUZ88X2Akoz1dXpt", "name": "Google Gemini(PaLM) Api account"}}
     },
     {
       "parameters": {
-        "jsCode": "const source = $input.first().json;\nconst context = $('Assemble Diagnosis Bundle').first().json;\nconst raw = [source.text, source.content, source.output, source.response, source.message?.content, source.choices?.[0]?.message?.content].find((value) => typeof value === 'string' && value.trim());\nif (!raw) throw new Error('Diagnosis LLM returned no text');\nlet parsed;\ntry { parsed = JSON.parse(raw.trim()); } catch (error) { throw new Error(`Diagnosis LLM returned invalid JSON: ${error.message}`); }\nif (!parsed || Array.isArray(parsed) || typeof parsed !== 'object') throw new Error('Diagnosis response must be one JSON object');\nconst requiredKeys = ['case_id', 'source_classification', 'failure_category', 'confidence', 'feedback_summary', 'evidence'];\nif (JSON.stringify(Object.keys(parsed).sort()) !== JSON.stringify([...requiredKeys].sort())) throw new Error(`Diagnosis response must contain exactly: ${requiredKeys.join(', ')}`);\nif (parsed.case_id !== context.case_id) throw new Error('Diagnosis case_id does not match the failing case');\nconst sourceClassification = String(parsed.source_classification ?? '').trim().toUpperCase();\nconst classificationMap = { LIKELY_TRANSFORMATION_DEFECT: 'TRANSFORMATION_DEFECT', LIKELY_TEST_DEFECT: 'TEST_DEFECT', AMBIGUOUS: 'AMBIGUOUS' };\nconst classification = classificationMap[sourceClassification];\nif (!classification) throw new Error(`Invalid source_classification: ${sourceClassification}`);\nconst failureCategory = String(parsed.failure_category ?? '').trim().toUpperCase();\nif (!/^[A-Z][A-Z0-9_]{1,63}$/.test(failureCategory)) throw new Error('failure_category must be concise UPPER_SNAKE_CASE');\nconst confidence = String(parsed.confidence ?? '').trim().toLowerCase();\nif (!['low', 'medium', 'high'].includes(confidence)) throw new Error(`Invalid confidence: ${confidence}`);\nconst feedbackSummary = String(parsed.feedback_summary ?? '').trim();\nif (!feedbackSummary || feedbackSummary.length > 1000) throw new Error('feedback_summary must be 1-1000 characters');\nif (!Array.isArray(parsed.evidence) || parsed.evidence.length < 1 || parsed.evidence.length > 8 || parsed.evidence.some((entry) => typeof entry !== 'string' || !entry.trim() || entry.length > 1000)) throw new Error('evidence must contain 1-8 concise strings');\nconst modelByProvider = { openai: 'gpt-5', anthropic: 'claude-sonnet-4-20250514', google: 'models/gemini-2.5-pro' };\nconst model = modelByProvider[context.provider];\nif (!model) throw new Error(`No diagnosis model configured for provider: ${context.provider}`);\nreturn [{ json: {\n  schema_version: '1.0', classification, evidence_ref: context.evidence_ref,\n  rationale: `${feedbackSummary} Evidence: ${parsed.evidence.map((entry) => entry.trim()).join(' | ')}`,\n  provider: context.provider, model, created_at: new Date().toISOString(), run_id: context.run_id,\n  case_id: context.case_id, source_classification: sourceClassification, failure_category: failureCategory,\n  confidence, feedback_summary: feedbackSummary, evidence: parsed.evidence.map((entry) => entry.trim())\n} }];"
+        "jsCode": "const source = $input.first().json;\nconst context = $('Assemble Diagnosis Bundle').first().json;\nif (typeof source.text !== 'string' || !source.text.trim()) throw new Error('Diagnosis LLM returned no text');\nlet parsed;\ntry { parsed = JSON.parse(source.text.trim()); } catch (error) { throw new Error(`Diagnosis LLM returned invalid JSON: ${error.message}`); }\nif (!parsed || Array.isArray(parsed) || typeof parsed !== 'object') throw new Error('Diagnosis response must be one JSON object');\nconst required = ['classification', 'confidence', 'reasoning_summary', 'evidence', 'test_case_id'];\nif (JSON.stringify(Object.keys(parsed).sort()) !== JSON.stringify([...required].sort())) throw new Error(`Diagnosis response must contain exactly: ${required.join(', ')}`);\nif (parsed.test_case_id !== context.test_case_id) throw new Error('Diagnosis test_case_id does not match the failing case');\nif (!['transformation_defect', 'test_defect', 'ambiguous'].includes(parsed.classification)) throw new Error('Invalid diagnosis classification');\nif (!['low', 'medium', 'high'].includes(parsed.confidence)) throw new Error('Invalid diagnosis confidence');\nif (typeof parsed.reasoning_summary !== 'string' || !parsed.reasoning_summary.trim() || parsed.reasoning_summary.length > 1000) throw new Error('reasoning_summary must be 1-1000 characters');\nif (!Array.isArray(parsed.evidence) || parsed.evidence.length < 1 || parsed.evidence.length > 8 || parsed.evidence.some((entry) => typeof entry !== 'string' || !entry.trim() || entry.length > 1000)) throw new Error('evidence must contain 1-8 concise strings');\nconst persistedClassification = { transformation_defect: 'TRANSFORMATION_DEFECT', test_defect: 'TEST_DEFECT', ambiguous: 'AMBIGUOUS' }[parsed.classification];\nconst model = { openai: 'gpt-5', anthropic: 'claude-sonnet-4-20250514', google: 'models/gemini-2.5-pro' }[context.provider];\nconst evidence = parsed.evidence.map((entry) => entry.trim());\nreturn [{ json: {\n  schema_version: '1.0', persisted_classification: persistedClassification, evidence_ref: context.evidence_ref,\n  rationale: `${parsed.reasoning_summary.trim()} Evidence: ${evidence.join(' | ')}`, provider: context.provider, model,\n  created_at: new Date().toISOString(), run_id: context.run_id, classification: parsed.classification,\n  confidence: parsed.confidence, reasoning_summary: parsed.reasoning_summary.trim(), evidence, test_case_id: parsed.test_case_id\n} }];"
       },
       "id": "e1000000-0000-4000-8000-000000000021",
       "name": "Attach Diagnosis Provenance",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1680, 0]
+      "position": [800, 0]
     },
     {
       "parameters": {
@@ -276,39 +155,34 @@
         "url": "=http://stage-service:8129/runs/{{ $json.run_id }}/diagnoses",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ { schema_version: $json.schema_version, classification: $json.classification, evidence_ref: $json.evidence_ref, rationale: $json.rationale, provider: $json.provider, model: $json.model, created_at: $json.created_at } }}",
+        "jsonBody": "={{ { schema_version: $json.schema_version, classification: $json.persisted_classification, evidence_ref: $json.evidence_ref, rationale: $json.rationale, provider: $json.provider, model: $json.model, created_at: $json.created_at } }}",
         "options": {}
       },
       "id": "e1000000-0000-4000-8000-000000000022",
       "name": "Persist Diagnosis Artifact",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1900, 0]
+      "position": [1020, 0]
     },
     {
       "parameters": {
-        "jsCode": "const persisted = $input.first().json;\nconst verdict = $('Attach Diagnosis Provenance').first().json;\nreturn [{ json: {\n  case_id: verdict.case_id, classification: verdict.classification, source_classification: verdict.source_classification,\n  failure_category: verdict.failure_category, confidence: verdict.confidence, feedback_summary: verdict.feedback_summary,\n  evidence: verdict.evidence, provider: persisted.provider, model: persisted.model, created_at: persisted.created_at,\n  attempt: persisted.attempt, artifact: persisted.artifact\n} }];"
+        "jsCode": "const verdict = $('Attach Diagnosis Provenance').first().json;\nreturn [{ json: { classification: verdict.classification, confidence: verdict.confidence, reasoning_summary: verdict.reasoning_summary, evidence: verdict.evidence, test_case_id: verdict.test_case_id } }];"
       },
       "id": "e1000000-0000-4000-8000-000000000023",
       "name": "Return Verdict",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2120, 0]
+      "position": [1240, 0]
     }
   ],
   "connections": {
     "Workflow Trigger": {"main": [[{"node": "Validate Input", "type": "main", "index": 0}]]},
-    "Validate Input": {"main": [[{"node": "Get Execution Evidence", "type": "main", "index": 0}]]},
-    "Get Execution Evidence": {"main": [[{"node": "Extract Execution Evidence", "type": "main", "index": 0}]]},
-    "Extract Execution Evidence": {"main": [[{"node": "Select Failed Pair", "type": "main", "index": 0}]]},
-    "Select Failed Pair": {"main": [[{"node": "Resolve Exact Metamodels", "type": "main", "index": 0}]]},
-    "Resolve Exact Metamodels": {"main": [[{"node": "Read Diagnosis Evidence Files", "type": "main", "index": 0}]]},
-    "Read Diagnosis Evidence Files": {"main": [[{"node": "Keep Evidence File Names", "type": "main", "index": 0}]]},
-    "Keep Evidence File Names": {"main": [[{"node": "Extract Diagnosis Evidence Files", "type": "main", "index": 0}]]},
-    "Extract Diagnosis Evidence Files": {"main": [[{"node": "Select Failing Case", "type": "main", "index": 0}]]},
-    "Select Failing Case": {"main": [[{"node": "Read Required Fixtures", "type": "main", "index": 0}]]},
-    "Read Required Fixtures": {"main": [[{"node": "Extract Required Fixtures", "type": "main", "index": 0}]]},
-    "Extract Required Fixtures": {"main": [[{"node": "Assemble Diagnosis Bundle", "type": "main", "index": 0}]]},
+    "Validate Input": {"main": [[{"node": "Read Failure Report", "type": "main", "index": 0}]]},
+    "Read Failure Report": {"main": [[{"node": "Extract Failure Report", "type": "main", "index": 0}]]},
+    "Extract Failure Report": {"main": [[{"node": "Validate Evidence Bundle", "type": "main", "index": 0}]]},
+    "Validate Evidence Bundle": {"main": [[{"node": "Read Diagnosis Prompt", "type": "main", "index": 0}]]},
+    "Read Diagnosis Prompt": {"main": [[{"node": "Extract Diagnosis Prompt", "type": "main", "index": 0}]]},
+    "Extract Diagnosis Prompt": {"main": [[{"node": "Assemble Diagnosis Bundle", "type": "main", "index": 0}]]},
     "Assemble Diagnosis Bundle": {"main": [[{"node": "Call Diagnosis LLM", "type": "main", "index": 0}]]},
     "Call Diagnosis LLM": {"main": [[{"node": "Diagnose with OpenAI", "type": "main", "index": 0}], [{"node": "Diagnose with Anthropic", "type": "main", "index": 0}], [{"node": "Diagnose with Google", "type": "main", "index": 0}]]},
     "OpenAI Diagnosis Model": {"ai_languageModel": [[{"node": "Diagnose with OpenAI", "type": "ai_languageModel", "index": 0}]]},
@@ -320,12 +194,8 @@
     "Attach Diagnosis Provenance": {"main": [[{"node": "Persist Diagnosis Artifact", "type": "main", "index": 0}]]},
     "Persist Diagnosis Artifact": {"main": [[{"node": "Return Verdict", "type": "main", "index": 0}]]}
   },
-  "settings": {
-    "executionOrder": "v1"
-  },
+  "settings": {"executionOrder": "v1"},
   "active": false,
   "pinData": {},
-  "meta": {
-    "templateCredsSetupCompleted": false
-  }
+  "meta": {"templateCredsSetupCompleted": false}
 }

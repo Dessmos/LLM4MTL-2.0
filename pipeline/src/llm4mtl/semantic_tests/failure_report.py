@@ -8,7 +8,7 @@ that evidence.
 
 Run it through the experiment orchestrator with::
 
-    python -m llm4mtl.experiment_runner diagnosis report \
+    llm4mtl diagnosis report \
       --request request.json --output artifacts/work/.../failure-report.json
 
 The module also keeps a direct ``python -m llm4mtl.semantic_tests.failure_report``
@@ -25,8 +25,8 @@ The request is one JSON object with these fields::
       "test_case_id": "case_name",
       "assertion_id": "assertion-001",
       "attempt": 1,
-      "actual_target_models": [".../snapshot.xmi"],          # optional if discoverable
-      "surefire_reports": [".../TEST-GeneratedTest.xml"],   # optional; auto-discovered
+      "actual_target_models": [".../snapshot.xmi"],
+      "surefire_reports": [".../TEST-GeneratedTest.xml"],
       "execution_log": ".../execution.log",                 # optional
       "actual_vs_expected": {                                # required for diagnosis
         "missing_elements": [],
@@ -141,10 +141,10 @@ class ReportRequest:
             assertion_id=assertion_id,
             attempt=attempt,
             actual_target_models=_input_paths(
-                payload.get("actual_target_models", []), "actual_target_models"
+                payload.get("actual_target_models"), "actual_target_models"
             ),
             surefire_reports=_input_paths(
-                payload.get("surefire_reports", []), "surefire_reports"
+                payload.get("surefire_reports"), "surefire_reports"
             ),
             execution_log=_optional_input_path(
                 payload.get("execution_log"), "execution_log"
@@ -198,15 +198,12 @@ def build_failure_report(request: ReportRequest) -> dict[str, Any]:
     input_models = _input_models(test_case, suite_dir)
     expected_target_models = _expected_target_models(test_case, suite_dir)
 
-    actual_model_paths = request.actual_target_models or _discover_actual_models(
-        request.generated_execution, request.test_case_id
+    actual_target_models = [
+        _text_artifact(path) for path in request.actual_target_models
+    ]
+    surefire_evidence = _surefire_evidence(
+        request.surefire_reports, request.test_case_id
     )
-    actual_target_models = [_text_artifact(path) for path in actual_model_paths]
-
-    report_paths = request.surefire_reports or _discover_surefire_reports(
-        request.run_manifest.parent
-    )
-    surefire_evidence = _surefire_evidence(report_paths, request.test_case_id)
     execution_error = {
         "error_summary": str(observation.get("error_summary", "")),
         "exceptions": surefire_evidence["exceptions"],
@@ -683,31 +680,6 @@ def _expected_target_models(
             }
         )
     return artifacts
-
-
-def _discover_actual_models(
-    generated_execution_path: Path, test_case_id: str
-) -> tuple[Path, ...]:
-    try:
-        generated_root = generated_execution_path.parents[4]
-    except IndexError:
-        return ()
-    snapshots = generated_root / "snapshots"
-    if not snapshots.is_dir():
-        return ()
-    method_name = sanitize_method_name(test_case_id).lower()
-    return tuple(
-        path
-        for path in sorted(snapshots.rglob("*"))
-        if path.is_file() and method_name in path.name.lower()
-    )
-
-
-def _discover_surefire_reports(run_dir: Path) -> tuple[Path, ...]:
-    workspace = run_dir / "workspaces"
-    if not workspace.is_dir():
-        return ()
-    return tuple(sorted(workspace.rglob("surefire-reports/TEST-*.xml")))
 
 
 def _surefire_evidence(

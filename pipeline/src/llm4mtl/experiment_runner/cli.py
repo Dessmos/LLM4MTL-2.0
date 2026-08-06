@@ -14,7 +14,7 @@ from llm4mtl.semantic_tests.failure_report import FailureReportError
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="python -m llm4mtl.experiment_runner")
+    parser = argparse.ArgumentParser(prog="llm4mtl")
     domains = parser.add_subparsers(dest="domain", required=True)
 
     tests = domains.add_parser("tests", help="Generated-test extraction and validation.")

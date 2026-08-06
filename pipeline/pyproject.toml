@@ -15,15 +15,13 @@ dependencies = ["jsonschema>=4.18"]
 dev = ["pytest>=7", "fastapi", "uvicorn", "httpx"]
 service = ["fastapi", "uvicorn[standard]"]
 
+[project.scripts]
+llm4mtl = "llm4mtl.experiment_runner.cli:main"
+
 # src layout: the importable package lives under pipeline/src/llm4mtl.
 [tool.setuptools.packages.find]
 where = ["src"]
 include = ["llm4mtl*"]
-
-# NOTE: the console entry point
-#   [project.scripts]
-#   llm4mtl = "llm4mtl.cli:main"
-# is added in a later stage, once `llm4mtl/cli.py` exists.
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
