@@ -1,150 +1,1306 @@
 {
-  "name": "LLM4MTL Agent Pipeline",
+  "name": "LLM4MTL Master Pipeline",
   "nodes": [
     {
-      "parameters": {},
-      "id": "start-node",
-      "name": "Start",
-      "type": "n8n-nodes-base.manualTrigger",
-      "typeVersion": 1,
+      "id": "master-form-trigger",
+      "name": "Configure and Start Pipeline",
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.3,
       "position": [
-        240,
+        0,
         300
-      ]
+      ],
+      "webhookId": "4b91494f-47be-4bb7-8ef3-35b53b151ba1",
+      "parameters": {
+        "formTitle": "LLM4MTL Master Pipeline",
+        "formDescription": "<p>Select languages, strategies, stage ablations, and a provider for each LLM role. Then configure the selected model and n8n credential in the matching standard AI Model node on the canvas.</p>",
+        "formFields": {
+          "values": [
+            {
+              "fieldType": "html",
+              "elementName": "models_heading",
+              "html": "<h3>LLM roles</h3><p>Models are selected with the built-in selector of the matching OpenAI, Anthropic, or Google Gemini Chat Model node. This form selects only which configured provider node each role uses.</p>"
+            },
+            {
+              "fieldLabel": "Transformation Generation provider",
+              "fieldName": "transformation_provider",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "OpenAI"
+                  },
+                  {
+                    "option": "Anthropic"
+                  },
+                  {
+                    "option": "Google Gemini"
+                  }
+                ]
+              },
+              "defaultValue": "Anthropic",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Transformation Generation strategy",
+              "fieldName": "transformation_strategy",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "only_prompt"
+                  },
+                  {
+                    "option": "few_shot"
+                  },
+                  {
+                    "option": "grammar"
+                  },
+                  {
+                    "option": "few_shots_AND_grammar"
+                  }
+                ]
+              },
+              "defaultValue": "grammar",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Semantic Test Generation provider",
+              "fieldName": "semantic_test_provider",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "OpenAI"
+                  },
+                  {
+                    "option": "Anthropic"
+                  },
+                  {
+                    "option": "Google Gemini"
+                  }
+                ]
+              },
+              "defaultValue": "OpenAI",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Semantic Test Generation strategy",
+              "fieldName": "semantic_test_strategy",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "only_prompt"
+                  },
+                  {
+                    "option": "few_shot"
+                  },
+                  {
+                    "option": "grammar"
+                  },
+                  {
+                    "option": "few_shots_AND_grammar"
+                  }
+                ]
+              },
+              "defaultValue": "few_shot",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Source Diagnosis provider",
+              "fieldName": "source_diagnosis_provider",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "OpenAI"
+                  },
+                  {
+                    "option": "Anthropic"
+                  },
+                  {
+                    "option": "Google Gemini"
+                  }
+                ]
+              },
+              "defaultValue": "OpenAI",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Refinement provider",
+              "fieldName": "refinement_provider",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "OpenAI"
+                  },
+                  {
+                    "option": "Anthropic"
+                  },
+                  {
+                    "option": "Google Gemini"
+                  }
+                ]
+              },
+              "defaultValue": "Anthropic",
+              "requiredField": true
+            },
+            {
+              "fieldType": "html",
+              "elementName": "scope_heading",
+              "html": "<h3>Run scope</h3>"
+            },
+            {
+              "fieldLabel": "Languages",
+              "fieldName": "languages",
+              "fieldType": "checkbox",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "ETL"
+                  },
+                  {
+                    "option": "ATL"
+                  },
+                  {
+                    "option": "QVT-O"
+                  },
+                  {
+                    "option": "Reactions"
+                  }
+                ]
+              },
+              "requiredField": true,
+              "defaultValue": "ETL,ATL,QVT-O,Reactions",
+              "limitSelection": "range",
+              "minSelections": 1,
+              "maxSelections": 4
+            },
+            {
+              "fieldLabel": "Refinement iterations",
+              "fieldName": "max_refinement_iterations",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "0"
+                  },
+                  {
+                    "option": "1"
+                  },
+                  {
+                    "option": "2"
+                  },
+                  {
+                    "option": "3"
+                  },
+                  {
+                    "option": "4"
+                  },
+                  {
+                    "option": "5"
+                  }
+                ]
+              },
+              "defaultValue": "2",
+              "requiredField": true
+            },
+            {
+              "fieldType": "html",
+              "elementName": "ablation_heading",
+              "html": "<h3>Pipeline stages / ablation</h3><p>Every disableable component has an explicit Enabled or Disabled value.</p>"
+            },
+            {
+              "fieldLabel": "Semantic Test Generation",
+              "fieldName": "test_generation",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "Enabled"
+                  },
+                  {
+                    "option": "Disabled"
+                  }
+                ]
+              },
+              "defaultValue": "Enabled",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Semantic Test Extraction",
+              "fieldName": "test_extraction",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "Enabled"
+                  },
+                  {
+                    "option": "Disabled"
+                  }
+                ]
+              },
+              "defaultValue": "Enabled",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Technical Validation",
+              "fieldName": "technical_validation",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "Enabled"
+                  },
+                  {
+                    "option": "Disabled"
+                  }
+                ]
+              },
+              "defaultValue": "Enabled",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Reference Validation",
+              "fieldName": "reference_validation",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "Enabled"
+                  },
+                  {
+                    "option": "Disabled"
+                  }
+                ]
+              },
+              "defaultValue": "Enabled",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Transformation Generation",
+              "fieldName": "transformation_generation",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "Enabled"
+                  },
+                  {
+                    "option": "Disabled"
+                  }
+                ]
+              },
+              "defaultValue": "Enabled",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Syntax Validation",
+              "fieldName": "syntax_validation",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "Enabled"
+                  },
+                  {
+                    "option": "Disabled"
+                  }
+                ]
+              },
+              "defaultValue": "Enabled",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Semantic Execution",
+              "fieldName": "semantic_execution",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "Enabled"
+                  },
+                  {
+                    "option": "Disabled"
+                  }
+                ]
+              },
+              "defaultValue": "Enabled",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Source Diagnosis",
+              "fieldName": "source_diagnosis",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "Enabled"
+                  },
+                  {
+                    "option": "Disabled"
+                  }
+                ]
+              },
+              "defaultValue": "Enabled",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Parser Feedback",
+              "fieldName": "parser_feedback",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "Enabled"
+                  },
+                  {
+                    "option": "Disabled"
+                  }
+                ]
+              },
+              "defaultValue": "Enabled",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Semantic Feedback",
+              "fieldName": "semantic_feedback",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "Enabled"
+                  },
+                  {
+                    "option": "Disabled"
+                  }
+                ]
+              },
+              "defaultValue": "Enabled",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Test Refinement",
+              "fieldName": "test_refinement",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "Enabled"
+                  },
+                  {
+                    "option": "Disabled"
+                  }
+                ]
+              },
+              "defaultValue": "Enabled",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Transformation Refinement",
+              "fieldName": "transformation_refinement",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "Enabled"
+                  },
+                  {
+                    "option": "Disabled"
+                  }
+                ]
+              },
+              "defaultValue": "Enabled",
+              "requiredField": true
+            },
+            {
+              "fieldType": "hiddenField",
+              "fieldName": "n8n_workflow_root",
+              "fieldValue": "/data/repository/workflows/n8n"
+            }
+          ]
+        },
+        "responseMode": "onReceived",
+        "options": {
+          "buttonLabel": "Start pipeline",
+          "appendAttribution": false,
+          "path": "llm4mtl-master",
+          "respondWithOptions": {
+            "values": {
+              "respondWith": "text",
+              "formSubmittedText": "LLM4MTL pipeline accepted. Follow the execution in n8n."
+            }
+          }
+        }
+      }
     },
     {
+      "id": "master-validate-config",
+      "name": "Validate Config and Build Run Queue",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        460,
+        300
+      ],
       "parameters": {
-        "assignments": {
-          "assignments": [
+        "jsCode": "const form = $input.first().json;\n\n  const asList = (value) => {\n    if (Array.isArray(value)) return value.map(String).map((item) => item.trim()).filter(Boolean);\n    if (typeof value !== 'string') return [];\n    return value.split(',').map((item) => item.trim()).filter(Boolean);\n  };\n\n  const providers = {\n    OpenAI: {\n      id: 'openai',\n      nodeSuffix: 'OpenAI Chat Model',\n    },\n    Anthropic: {\n      id: 'anthropic',\n      nodeSuffix: 'Anthropic Chat Model',\n    },\n    'Google Gemini': {\n      id: 'google',\n      nodeSuffix: 'Google Gemini Chat Model',\n    },\n  };\n  const roleNodes = {\n    transformation: 'Transformation Generation',\n    semantic_test: 'Semantic Test Generation',\n    source_diagnosis: 'Source Diagnosis',\n    refinement: 'Refinement',\n  };\n  const selectedModel = (role, providerLabel) => {\n    const provider = providers[providerLabel];\n    if (!provider) throw new Error(`Select a supported provider for ${role}`);\n    const nodeName = `${roleNodes[role]} - ${provider.nodeSuffix}`;\n    const parameters = $(nodeName).params;\n    const configuredModel = provider.id === 'google' ? parameters.modelName : parameters.model;\n    const model = configuredModel && typeof configuredModel === 'object'\n      ? configuredModel.value\n      : configuredModel;\n    if (typeof model !== 'string' || !model.trim()) {\n      throw new Error(`Select a model in the built-in selector of ${nodeName}`);\n    }\n    return {\n      provider: provider.id,\n      model: model.trim(),\n      configuration_node: nodeName,\n    };\n  };\n\n  const strategies = ['only_prompt', 'few_shot', 'grammar', 'few_shots_AND_grammar'];\n  if (!strategies.includes(form.transformation_strategy)) {\n    throw new Error('Select a supported Transformation Generation strategy');\n  }\n  if (!strategies.includes(form.semantic_test_strategy)) {\n    throw new Error('Select a supported Semantic Test Generation strategy');\n  }\n\n  const languageOptions = {\n    ETL: 'etl',\n    ATL: 'atl',\n    'QVT-O': 'qvto',\n    Reactions: 'reactions',\n  };\n  const languages = [...new Set(asList(form.languages).map((label) => languageOptions[label]))];\n  if (languages.length === 0 || languages.some((language) => !language)) {\n    throw new Error('Select at least one supported language');\n  }\n\n  const refinementOptions = [0, 1, 2, 3, 4, 5];\n  const maxRefinementIterations = Number(form.max_refinement_iterations);\n  if (!refinementOptions.includes(maxRefinementIterations)) {\n    throw new Error('Refinement iterations must be selected from 0 through 5');\n  }\n\n  const stageFields = [\n    'test_generation',\n    'test_extraction',\n    'technical_validation',\n    'reference_validation',\n    'transformation_generation',\n    'syntax_validation',\n    'semantic_execution',\n    'source_diagnosis',\n    'parser_feedback',\n    'semantic_feedback',\n    'test_refinement',\n    'transformation_refinement',\n  ];\n  const stages = {};\n  for (const stage of stageFields) {\n    if (!['Enabled', 'Disabled'].includes(form[stage])) {\n      throw new Error(`${stage} must be explicitly Enabled or Disabled`);\n    }\n    stages[stage] = form[stage] === 'Enabled';\n  }\n\n  const root = String(form.n8n_workflow_root || '/data/repository/workflows/n8n').replace(/\\/$/, '');\n  if (!root.startsWith('/data/') || root.includes('..')) {\n    throw new Error('Workflow root must be a contained read-only mount below /data');\n  }\n\n  const llms = {\n    transformation: {\n      ...selectedModel('transformation', form.transformation_provider),\n      strategy: form.transformation_strategy,\n    },\n    semantic_test: {\n      ...selectedModel('semantic_test', form.semantic_test_provider),\n      strategy: form.semantic_test_strategy,\n    },\n    source_diagnosis: selectedModel('source_diagnosis', form.source_diagnosis_provider),\n    refinement: selectedModel('refinement', form.refinement_provider),\n  };\n\n  const disabledStages = stageFields.filter((stage) => !stages[stage]);\n  const pipelineVariant = disabledStages.length === 0\n    ? 'full'\n    : `ablation:${disabledStages.join('+')}`;\n  const taskDefaults = {\n    etl: 'Tree2Graph',\n    atl: 'NetworkToGraph_All',\n    qvto: 'Mappings',\n    reactions: 'FamiliesToPersons_CreatedFather',\n  };\n  const labels = {\n    etl: 'ETL',\n    atl: 'ATL',\n    qvto: 'QVTO',\n    reactions: 'Reactions',\n  };\n\n  const runSpecs = languages.map((language) => {\n    const label = labels[language];\n    const transformationWorkflow = language === 'reactions'\n      ? `${root}/transformations/workflows/updated_reactions_workflow/generate_reactions/LLM4MTL_Generate_Reactions_for_all_Configurations.json`\n      : `${root}/transformations/workflows/${language}_variants/Prompting_${label}_*_${llms.transformation.strategy}.json`;\n    return {\n      language,\n      language_label: label,\n      task: taskDefaults[language],\n      transformation_model: llms.transformation.model,\n      test_generation_model: llms.semantic_test.model,\n      transformation_strategy: llms.transformation.strategy,\n      test_generation_strategy: llms.semantic_test.strategy,\n      seed: 1,\n      pipeline_variant: pipelineVariant,\n      test_generation_workflow: `${root}/tests/workflows/${language}_variants/test_generation/Prompting_tests_${label}_*_${llms.semantic_test.strategy}.json`,\n      transformation_generation_workflow: transformationWorkflow,\n      diagnosis_workflow: `${root}/subworkflows/diagnosis/llm-diagnosis.json`,\n    };\n  });\n\n  return [{\n    json: {\n      config: {\n        llms,\n        max_refinement_iterations: maxRefinementIterations,\n        stages,\n        pipeline_variant: pipelineVariant,\n      },\n      run_specs: runSpecs,\n      run_index: 0,\n      current: {\n        ...runSpecs[0],\n        run_id: null,\n        suite_id: null,\n        refinement_iteration: 0,\n        generation_purpose: 'initial',\n        has_transformation: false,\n        timeline: [],\n        terminal_status: null,\n        terminal_reason: null,\n      },\n      results: [],\n      action: null,\n      completed_action: null,\n      last_result: null,\n    },\n  }];"
+      }
+    },
+    {
+      "id": "master-state-machine",
+      "name": "State Machine",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        700,
+        300
+      ],
+      "parameters": {
+        "jsCode": "const state = structuredClone($input.first().json);\nconst flags = state.config.stages;\nconst maxRefinements = state.config.max_refinement_iterations;\n\nconst actionFlag = {\n  generate_tests: 'test_generation',\n  extract: 'test_extraction',\n  technical: 'technical_validation',\n  reference: 'reference_validation',\n  generate_transformations: 'transformation_generation',\n  syntax: 'syntax_validation',\n  execution: 'semantic_execution',\n  diagnose: 'source_diagnosis',\n};\nconst stageIds = {\n  extract: 'extract',\n  technical: 'technical-validation',\n  reference: 'reference-validation',\n  syntax: 'syntax-validation',\n  execution: 'execution',\n};\n\nfunction choose(action) {\n  state.action = action;\n  state.stage_id = stageIds[action] || null;\n  state.subworkflow_path = null;\n  state.subworkflow_input = null;\n  if (action === 'generate_tests') {\n    state.subworkflow_path = state.current.test_generation_workflow;\n    state.subworkflow_input = {\n      language: state.current.language,\n      task: state.current.task,\n      provider: (state.current.refinement_iteration > 0 ? state.config.llms.refinement : state.config.llms.semantic_test).provider,\n      model: (state.current.refinement_iteration > 0 ? state.config.llms.refinement : state.config.llms.semantic_test).model,\n      strategy: state.config.llms.semantic_test.strategy,\n      llm_role: state.current.refinement_iteration > 0 ? 'refinement' : 'semantic_test',\n      run_id: state.current.run_id,\n      refinement_iteration: state.current.refinement_iteration,\n      refinement_reason: state.current.refinement_reason || null,\n    };\n  } else if (action === 'generate_transformations') {\n    state.subworkflow_path = state.current.transformation_generation_workflow;\n    state.subworkflow_input = {\n      language: state.current.language,\n      task: state.current.task,\n      provider: (state.current.refinement_iteration > 0 ? state.config.llms.refinement : state.config.llms.transformation).provider,\n      model: (state.current.refinement_iteration > 0 ? state.config.llms.refinement : state.config.llms.transformation).model,\n      strategy: state.config.llms.transformation.strategy,\n      llm_role: state.current.refinement_iteration > 0 ? 'refinement' : 'transformation',\n      run_id: state.current.run_id,\n      refinement_iteration: state.current.refinement_iteration,\n      refinement_reason: state.current.refinement_reason || null,\n    };\n  } else if (action === 'diagnose') {\n    state.subworkflow_path = state.current.diagnosis_workflow;\n    state.subworkflow_input = {\n      run_id: state.current.run_id,\n      outcome_code: 'SEMANTIC_EXECUTION_FAILED',\n      execution_attempt: state.current.execution_result.attempt,\n      diagnosis_provider: state.config.llms.source_diagnosis.provider,\n      model: state.config.llms.source_diagnosis.model,\n      llm_role: 'source_diagnosis',\n      failure_report_path: state.current.failure_report_path,\n    };\n  }\n}\n\nfunction finish(status, reason) {\n  state.current.terminal_status = status;\n  state.current.terminal_reason = reason;\n  choose('final');\n}\n\nfunction nextEnabled(actions, emptyReason) {\n  for (const action of actions) {\n    if (flags[actionFlag[action]]) {\n      choose(action);\n      return;\n    }\n  }\n  finish('incomplete', emptyReason);\n}\n\nfunction afterTestArtifact() {\n  nextEnabled(\n    ['extract', 'technical', 'reference', 'generate_transformations', 'syntax', 'execution'],\n    'NO_POST_TEST_GENERATION_STAGE_ENABLED',\n  );\n}\n\nfunction afterValidatedTests() {\n  if (state.current.has_transformation) {\n    nextEnabled(['syntax', 'execution'], 'NO_TRANSFORMATION_EVALUATION_STAGE_ENABLED');\n    return;\n  }\n  nextEnabled(\n    ['generate_transformations', 'syntax', 'execution'],\n    'NO_TRANSFORMATION_STAGE_ENABLED',\n  );\n}\n\nfunction requestRefinement(target, reason) {\n  const refinementFlag = target === 'tests' ? flags.test_refinement : flags.transformation_refinement;\n  const generationFlag = target === 'tests' ? flags.test_generation : flags.transformation_generation;\n  if (!refinementFlag || !generationFlag) {\n    finish('completed_with_failures', `${reason}:REFINEMENT_DISABLED`);\n    return;\n  }\n  if (state.current.refinement_iteration >= maxRefinements) {\n    finish('completed_with_failures', `${reason}:REFINEMENT_LIMIT_REACHED`);\n    return;\n  }\n  state.current.refinement_iteration += 1;\n  state.current.suite_id = `${state.current.run_id}_${String(state.current.refinement_iteration).padStart(3, '0')}`;\n  state.current.refinement_reason = reason;\n  state.current.generation_purpose = `${target}_refinement`;\n  choose(target === 'tests' ? 'generate_tests' : 'generate_transformations');\n}\n\nfunction recordStage(action, result) {\n  state.current.timeline.push({\n    action,\n    stage: result.stage || null,\n    status: result.status || null,\n    outcome_code: result.outcome_code || null,\n    attempt: result.attempt || null,\n    counts: result.counts || {},\n    artifacts: result.artifacts || {},\n  });\n}\n\nconst completed = state.completed_action;\nconst result = state.last_result || {};\n\nif (!completed) {\n  choose('create_run');\n} else if (completed === 'create_run') {\n  if (typeof result.run_id !== 'string' || !result.run_id) {\n    throw new Error('POST /runs did not return run_id');\n  }\n  state.current.run_id = result.run_id;\n  state.current.suite_id = `${result.run_id}_000`;\n  nextEnabled(\n    ['generate_tests', 'extract', 'technical', 'reference', 'generate_transformations', 'syntax', 'execution'],\n    'ALL_PIPELINE_STAGES_DISABLED',\n  );\n} else if (completed === 'generate_tests') {\n  state.current.timeline.push({\n    action: 'generate_tests',\n    refinement_iteration: state.current.refinement_iteration,\n    purpose: state.current.generation_purpose,\n    workflow: state.current.test_generation_workflow,\n  });\n  afterTestArtifact();\n} else if (completed === 'extract') {\n  recordStage(completed, result);\n  if (result.outcome_code === 'EXTRACTED') {\n    nextEnabled(\n      ['technical', 'reference', 'generate_transformations', 'syntax', 'execution'],\n      'NO_STAGE_AFTER_EXTRACTION_ENABLED',\n    );\n  } else if (result.outcome_code === 'TEST_SPEC_INVALID') {\n    requestRefinement('tests', result.outcome_code);\n  } else if (result.outcome_code === 'INFRASTRUCTURE_ERROR') {\n    finish('failed', 'EXTRACTION_INFRASTRUCTURE_ERROR');\n  } else {\n    finish('incomplete', result.outcome_code || 'UNKNOWN_EXTRACTION_OUTCOME');\n  }\n} else if (completed === 'technical') {\n  recordStage(completed, result);\n  if (result.outcome_code === 'TECH_VALID') {\n    nextEnabled(\n      ['reference', 'generate_transformations', 'syntax', 'execution'],\n      'NO_STAGE_AFTER_TECHNICAL_VALIDATION_ENABLED',\n    );\n  } else if (['TECH_COMPILE_FAILED', 'TECH_EXEC_FAILED', 'TEST_SPEC_INVALID'].includes(result.outcome_code)) {\n    requestRefinement('tests', result.outcome_code);\n  } else if (result.outcome_code === 'INFRASTRUCTURE_ERROR') {\n    finish('failed', 'TECHNICAL_VALIDATION_INFRASTRUCTURE_ERROR');\n  } else {\n    finish('incomplete', result.outcome_code || 'UNKNOWN_TECHNICAL_OUTCOME');\n  }\n} else if (completed === 'reference') {\n  recordStage(completed, result);\n  if (result.outcome_code === 'REFERENCE_VALIDATED') {\n    afterValidatedTests();\n  } else if (result.outcome_code === 'REFERENCE_VALIDATION_FAILED') {\n    requestRefinement('tests', result.outcome_code);\n  } else if (result.outcome_code === 'INFRASTRUCTURE_ERROR') {\n    finish('failed', 'REFERENCE_VALIDATION_INFRASTRUCTURE_ERROR');\n  } else {\n    finish('incomplete', result.outcome_code || 'UNKNOWN_REFERENCE_OUTCOME');\n  }\n} else if (completed === 'generate_transformations') {\n  state.current.has_transformation = true;\n  state.current.timeline.push({\n    action: 'generate_transformations',\n    refinement_iteration: state.current.refinement_iteration,\n    purpose: state.current.generation_purpose,\n    workflow: state.current.transformation_generation_workflow,\n  });\n  nextEnabled(['syntax', 'execution'], 'NO_STAGE_AFTER_TRANSFORMATION_GENERATION_ENABLED');\n} else if (completed === 'syntax') {\n  recordStage(completed, result);\n  if (result.outcome_code === 'SYNTAX_VALID') {\n    nextEnabled(['execution'], 'SEMANTIC_EXECUTION_DISABLED');\n  } else if (result.outcome_code === 'SYNTAX_INVALID') {\n    if (flags.parser_feedback) {\n      requestRefinement('transformations', result.outcome_code);\n    } else {\n      finish('completed_with_failures', 'SYNTAX_INVALID:PARSER_FEEDBACK_DISABLED');\n    }\n  } else if (result.outcome_code === 'INFRASTRUCTURE_ERROR') {\n    finish('failed', 'SYNTAX_VALIDATION_INFRASTRUCTURE_ERROR');\n  } else {\n    finish('incomplete', result.outcome_code || 'UNKNOWN_SYNTAX_OUTCOME');\n  }\n} else if (completed === 'execution') {\n  recordStage(completed, result);\n  state.current.execution_result = result;\n  if (result.outcome_code === 'SEMANTIC_PASSED') {\n    finish('completed', 'SEMANTIC_PASSED');\n  } else if (result.outcome_code === 'SEMANTIC_EXECUTION_FAILED') {\n    const failureReport = result.artifacts?.failure_report_path || result.artifacts?.failure_report;\n    if (flags.source_diagnosis && failureReport) {\n      state.current.failure_report_path = failureReport;\n      choose('diagnose');\n    } else if (flags.source_diagnosis) {\n      finish('incomplete', 'SOURCE_DIAGNOSIS_EVIDENCE_NOT_EXPOSED');\n    } else {\n      requestRefinement('transformations', 'SEMANTIC_EXECUTION_FAILED_WITHOUT_DIAGNOSIS');\n    }\n  } else if (result.outcome_code === 'INFRASTRUCTURE_ERROR') {\n    finish('failed', 'SEMANTIC_EXECUTION_INFRASTRUCTURE_ERROR');\n  } else {\n    finish('incomplete', result.outcome_code || 'UNKNOWN_EXECUTION_OUTCOME');\n  }\n} else if (completed === 'diagnose') {\n  const verdict = Array.isArray(result.items) ? result.items[0] || {} : result;\n  state.current.timeline.push({\n    action: 'diagnose',\n    classification: verdict.classification || null,\n    confidence: verdict.confidence || null,\n    test_case_id: verdict.test_case_id || null,\n  });\n  if (!flags.semantic_feedback && ['transformation_defect', 'test_defect'].includes(verdict.classification)) {\n    finish('completed_with_failures', `${verdict.classification.toUpperCase()}:SEMANTIC_FEEDBACK_DISABLED`);\n  } else if (verdict.classification === 'transformation_defect') {\n    requestRefinement('transformations', 'DIAGNOSED_TRANSFORMATION_DEFECT');\n  } else if (verdict.classification === 'test_defect') {\n    requestRefinement('tests', 'DIAGNOSED_TEST_DEFECT');\n  } else if (verdict.classification === 'ambiguous') {\n    finish('completed_with_failures', 'AMBIGUOUS_SOURCE_DIAGNOSIS');\n  } else {\n    finish('incomplete', 'INVALID_SOURCE_DIAGNOSIS_RESULT');\n  }\n} else if (completed === 'final') {\n  state.results.push({\n    run_id: state.current.run_id,\n    language: state.current.language,\n    task: state.current.task,\n    status: state.current.terminal_status || 'incomplete',\n    reason: state.current.terminal_reason || 'NO_TERMINAL_REASON',\n    refinement_iterations: state.current.refinement_iteration,\n    suite_id: state.current.suite_id,\n    timeline: state.current.timeline,\n    artifacts: result,\n  });\n  state.run_index += 1;\n  if (state.run_index >= state.run_specs.length) {\n    choose('complete');\n  } else {\n    const next = state.run_specs[state.run_index];\n    state.current = {\n      ...next,\n      run_id: null,\n      suite_id: null,\n      refinement_iteration: 0,\n      generation_purpose: 'initial',\n      has_transformation: false,\n      timeline: [],\n      terminal_status: null,\n      terminal_reason: null,\n    };\n    state.completed_action = null;\n    state.last_result = null;\n    choose('create_run');\n  }\n} else {\n  throw new Error(`Unknown completed action: ${completed}`);\n}\n\nstate.completed_action = null;\nstate.last_result = null;\nreturn [{ json: state }];"
+      }
+    },
+    {
+      "id": "master-route-action",
+      "name": "Route Next Action",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        940,
+        300
+      ],
+      "parameters": {
+        "rules": {
+          "values": [
             {
-              "id": "cfg-language",
-              "name": "language",
-              "value": "etl",
-              "type": "string"
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "route-create_run",
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "create_run",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "create_run"
             },
             {
-              "id": "cfg-task",
-              "name": "task",
-              "value": "Tree2Graph",
-              "type": "string"
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "route-subworkflow",
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "^(generate_tests|generate_transformations|diagnose)$",
+                    "operator": {
+                      "type": "string",
+                      "operation": "regex"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "subworkflow"
             },
             {
-              "id": "cfg-transformation-model",
-              "name": "transformation_model",
-              "value": "claude-sonnet-4",
-              "type": "string"
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "route-python_stage",
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "^(extract|technical|reference|syntax|execution)$",
+                    "operator": {
+                      "type": "string",
+                      "operation": "regex"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "python_stage"
             },
             {
-              "id": "cfg-strategy",
-              "name": "strategy",
-              "value": "grammar",
-              "type": "string"
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "route-final",
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "final",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "final"
             },
             {
-              "id": "cfg-test-generation-model",
-              "name": "test_generation_model",
-              "value": "gpt-5",
-              "type": "string"
-            },
-            {
-              "id": "cfg-seed",
-              "name": "seed",
-              "value": 1,
-              "type": "number"
-            },
-            {
-              "id": "cfg-pipeline-variant",
-              "name": "pipeline_variant",
-              "value": "full",
-              "type": "string"
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "route-complete",
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "complete",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "complete"
             }
           ]
         },
         "options": {}
-      },
-      "id": "config-node",
-      "name": "Config",
-      "type": "n8n-nodes-base.set",
-      "typeVersion": 3.4,
-      "position": [
-        460,
-        300
-      ]
+      }
     },
     {
+      "id": "master-create-run",
+      "name": "Create Immutable Run",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1180,
+        -120
+      ],
       "parameters": {
         "method": "POST",
         "url": "http://stage-service:8129/runs",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ { \"language\": $json.language, \"task\": $json.task, \"transformation_model\": $json.transformation_model, \"test_generation_model\": $json.test_generation_model, \"transformation_strategy\": $json.strategy, \"test_generation_strategy\": $json.strategy, \"seed\": $json.seed, \"pipeline_variant\": $json.pipeline_variant } }}",
+        "jsonBody": "={{ { language: $json.current.language, task: $json.current.task, transformation_model: $json.current.transformation_model, test_generation_model: $json.current.test_generation_model, transformation_strategy: $json.current.transformation_strategy, test_generation_strategy: $json.current.test_generation_strategy, seed: $json.current.seed, pipeline_variant: $json.current.pipeline_variant } }}",
         "options": {}
-      },
-      "id": "create-run-node",
-      "name": "Create Run",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        680,
-        300
-      ]
+      }
     },
     {
+      "id": "master-read-subworkflow",
+      "name": "Read Existing Subworkflow",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        1180,
+        80
+      ],
       "parameters": {
-        "method": "POST",
-        "url": "=http://stage-service:8129/runs/{{ $json.run_id }}/stages/syntax-validation",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ {} }}",
+        "fileSelector": "={{ $json.subworkflow_path }}",
         "options": {}
-      },
-      "id": "syntax-stage-node",
-      "name": "Stage: syntax-validation",
+      }
+    },
+    {
+      "id": "master-extract-subworkflow",
+      "name": "Extract Subworkflow JSON",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        1400,
+        80
+      ],
+      "parameters": {
+        "operation": "text",
+        "destinationKey": "workflow_text",
+        "options": {}
+      }
+    },
+    {
+      "id": "master-make-callable",
+      "name": "Make Existing Workflow Callable",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1620,
+        80
+      ],
+      "parameters": {
+        "jsCode": "const state = $('State Machine').first().json;\n  const providerNodeTypes = {\n    openai: '@n8n/n8n-nodes-langchain.lmChatOpenAi',\n    anthropic: '@n8n/n8n-nodes-langchain.lmChatAnthropic',\n    google: '@n8n/n8n-nodes-langchain.lmChatGoogleGemini',\n  };\n  const providerNodeNames = {\n    openai: 'OpenAI Chat Model',\n    anthropic: 'Anthropic Chat Model',\n    google: 'Google Gemini Chat Model',\n  };\n  const provider = state.subworkflow_input?.provider || state.subworkflow_input?.diagnosis_provider;\n  const model = state.subworkflow_input?.model;\n  const strategy = state.subworkflow_input?.strategy;\n  const expectedType = providerNodeTypes[provider];\n  if (!expectedType || typeof model !== 'string' || !model.trim()) {\n    throw new Error('Subworkflow execution requires a configured provider and model');\n  }\n\n  const candidates = [];\n  for (const item of $input.all()) {\n    const raw = item.json.workflow_text;\n    if (typeof raw !== 'string' || !raw.trim()) continue;\n    try {\n      const candidate = JSON.parse(raw);\n      if (\n        Array.isArray(candidate.nodes)\n        && candidate.connections\n        && candidate.nodes.some((node) => node.type === expectedType)\n      ) {\n        candidates.push(candidate);\n      }\n    } catch (error) {\n      throw new Error(`Invalid subworkflow JSON at ${state.subworkflow_path}: ${error.message}`);\n    }\n  }\n  if (candidates.length === 0) {\n    throw new Error(`No ${provider} subworkflow matched ${state.subworkflow_path}`);\n  }\n  candidates.sort((left, right) => String(left.name || '').localeCompare(String(right.name || '')));\n  const workflow = candidates[0];\n\n  const modelNode = workflow.nodes.find((node) => node.type === expectedType);\n  const currentModelSetting = provider === 'google'\n    ? modelNode.parameters.modelName\n    : modelNode.parameters.model;\n  const originalModel = currentModelSetting && typeof currentModelSetting === 'object'\n    ? currentModelSetting.value\n    : currentModelSetting;\n  if (provider === 'google') {\n    modelNode.parameters.modelName = currentModelSetting && typeof currentModelSetting === 'object'\n      ? { ...currentModelSetting, value: model, cachedResultName: model }\n      : model;\n  } else {\n    modelNode.parameters.model = currentModelSetting && typeof currentModelSetting === 'object'\n      ? { ...currentModelSetting, value: model, cachedResultName: model }\n      : model;\n  }\n\n  const artifactModel = model\n    .replace(/^models\\//, '')\n    .replace(/[^A-Za-z0-9_-]+/g, '-')\n    .replace(/^-+|-+$/g, '');\n  const artifactPathPattern = /\\/(?:responses|prompts)\\/([^/]+)\\//;\n  const originalArtifactMatch = JSON.stringify(workflow).match(artifactPathPattern);\n  const replaceArtifactPaths = (value) => {\n    if (typeof value === 'string') {\n      return value.replace(\n        /\\/(responses|prompts)\\/[^/]+\\//g,\n        `/$1/${artifactModel}/`,\n      );\n    }\n    if (Array.isArray(value)) return value.map(replaceArtifactPaths);\n    if (value && typeof value === 'object') {\n      return Object.fromEntries(\n        Object.entries(value).map(([key, nested]) => [key, replaceArtifactPaths(nested)]),\n      );\n    }\n    return value;\n  };\n  for (const node of workflow.nodes) {\n    if (node !== modelNode) node.parameters = replaceArtifactPaths(node.parameters);\n  }\n  if (originalArtifactMatch && typeof workflow.name === 'string') {\n    workflow.name = workflow.name.replace(originalArtifactMatch[1], artifactModel);\n  }\n\n  const diagnosisProvenance = workflow.nodes.find((node) => node.name === 'Attach Diagnosis Provenance');\n  if (\n    diagnosisProvenance\n    && typeof diagnosisProvenance.parameters?.jsCode === 'string'\n    && typeof originalModel === 'string'\n  ) {\n    diagnosisProvenance.parameters.jsCode = diagnosisProvenance.parameters.jsCode.replaceAll(\n      originalModel,\n      model,\n    );\n  }\n\n  const matrixModels = workflow.nodes.find((node) => node.name === 'Define LLM models to use');\n  const matrixStrategies = workflow.nodes.find((node) => node.name === 'Define Strategies');\n  if (matrixModels && matrixStrategies) {\n    if (typeof strategy !== 'string') {\n      throw new Error('The Reactions generation matrix requires a selected strategy');\n    }\n    const strategyFlags = {\n      only_prompt: { Few_shot: false, Grammar: false, Helper_methods: false },\n      grammar: { Few_shot: false, Grammar: true, Helper_methods: false },\n      few_shot: { Few_shot: true, Grammar: false, Helper_methods: false },\n      few_shots_AND_grammar: { Few_shot: true, Grammar: true, Helper_methods: false },\n    }[strategy];\n    if (!strategyFlags) throw new Error(`Unsupported Reactions strategy: ${strategy}`);\n    matrixModels.parameters.jsonOutput = JSON.stringify({\n      llms: [{\n        name: artifactModel,\n        node: providerNodeNames[provider],\n      }],\n    }, null, 2);\n    matrixStrategies.parameters.jsonOutput = JSON.stringify({\n      strategies: [{\n        name: strategy,\n        ...strategyFlags,\n      }],\n    }, null, 2);\n    const selectedChain = workflow.connections[modelNode.name]\n      ?.ai_languageModel\n      ?.flat()\n      ?.find((connection) => connection.type === 'ai_languageModel')\n      ?.node;\n    const providerIf = workflow.nodes.find((node) => {\n      if (node.type !== 'n8n-nodes-base.if' || !selectedChain) return false;\n      const outputs = workflow.connections[node.name]?.main || [];\n      return outputs.some((connections) => connections.some(\n        (connection) => connection.node === selectedChain,\n      ));\n    });\n    if (!providerIf) throw new Error(`Reactions workflow has no routing branch for ${provider}`);\n    const llmCondition = providerIf.parameters.conditions.conditions.find(\n      (condition) => condition.leftValue?.includes('llmName'),\n    );\n    if (!llmCondition) throw new Error(`Reactions provider branch has no llmName condition: ${provider}`);\n    llmCondition.rightValue = artifactModel;\n  }\n\n  const callableTrigger = workflow.nodes.find(\n    (node) => node.type === 'n8n-nodes-base.executeWorkflowTrigger',\n  );\n  if (!callableTrigger) {\n    const manualTrigger = workflow.nodes.find(\n      (node) => node.type === 'n8n-nodes-base.manualTrigger',\n    );\n    if (!manualTrigger) {\n      throw new Error(`Subworkflow has no supported start node: ${state.subworkflow_path}`);\n    }\n    manualTrigger.type = 'n8n-nodes-base.executeWorkflowTrigger';\n    manualTrigger.typeVersion = 1.1;\n    manualTrigger.parameters = { inputSource: 'passthrough' };\n  }\n  workflow.active = false;\n\n  return [{\n    json: {\n      ...state,\n      ...(state.subworkflow_input || {}),\n      workflow_json: workflow,\n    },\n  }];"
+      }
+    },
+    {
+      "id": "master-execute-subworkflow",
+      "name": "Execute Existing Subworkflow",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        1840,
+        80
+      ],
+      "parameters": {
+        "source": "parameter",
+        "workflowJson": "={{ $json.workflow_json }}",
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "master-python-stage",
+      "name": "Run Existing Python Stage",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        900,
+        1180,
         300
-      ]
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=http://stage-service:8129/runs/{{ $json.current.run_id }}/stages/{{ $json.stage_id }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { suite_id: $json.current.suite_id, verbose: false } }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "master-final-artifacts",
+      "name": "Read Final Run Artifacts",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1180,
+        500
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "=http://stage-service:8129/runs/{{ $json.current.run_id }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "master-capture-result",
+      "name": "Capture Action Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2080,
+        300
+      ],
+      "parameters": {
+        "jsCode": "const state = $('State Machine').first().json;\nconst items = $input.all();\nconst lastResult = items.length === 1\n  ? items[0].json\n  : { items: items.map((item) => item.json) };\nreturn [{\n  json: {\n    ...state,\n    completed_action: state.action,\n    last_result: lastResult,\n  },\n}];"
+      }
+    },
+    {
+      "id": "master-return",
+      "name": "Final Result and Artifacts",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1180,
+        700
+      ],
+      "parameters": {
+        "jsCode": "const state = $input.first().json;\nconst statuses = state.results.map((result) => result.status);\nconst status = statuses.includes('failed')\n  ? 'failed'\n  : statuses.includes('completed_with_failures')\n    ? 'completed_with_failures'\n    : statuses.includes('incomplete')\n      ? 'incomplete'\n      : 'completed';\nreturn [{\n  json: {\n    status,\n    run_count: state.results.length,\n    languages: state.results.map((result) => result.language),\n    pipeline_variant: state.config.pipeline_variant,\n    results: state.results,\n  },\n}];"
+      }
+    },
+    {
+      "id": "master-transformation-generation-openai",
+      "name": "Transformation Generation - OpenAI Chat Model",
+      "position": [
+        0,
+        980
+      ],
+      "notesInFlow": true,
+      "notes": "Configuration node for the Transformation Generation role. Select the model with this node's built-in selector and attach a standard n8n credential. The master keeps the LLM call inside the existing subworkflow.",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-5",
+          "mode": "list",
+          "cachedResultName": "gpt-5"
+        },
+        "options": {
+          "temperature": 0,
+          "timeout": 600000
+        }
+      }
+    },
+    {
+      "id": "master-transformation-generation-anthropic",
+      "name": "Transformation Generation - Anthropic Chat Model",
+      "position": [
+        300,
+        980
+      ],
+      "notesInFlow": true,
+      "notes": "Configuration node for the Transformation Generation role. Select the model with this node's built-in selector and attach a standard n8n credential. The master keeps the LLM call inside the existing subworkflow.",
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.3,
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "claude-sonnet-4-20250514",
+          "mode": "list",
+          "cachedResultName": "Claude Sonnet 4"
+        },
+        "options": {
+          "temperature": 0
+        }
+      }
+    },
+    {
+      "id": "master-transformation-generation-google-gemini",
+      "name": "Transformation Generation - Google Gemini Chat Model",
+      "position": [
+        600,
+        980
+      ],
+      "notesInFlow": true,
+      "notes": "Configuration node for the Transformation Generation role. Select the model with this node's built-in selector and attach a standard n8n credential. The master keeps the LLM call inside the existing subworkflow.",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "parameters": {
+        "modelName": "models/gemini-2.5-pro",
+        "options": {
+          "temperature": 0
+        }
+      }
+    },
+    {
+      "id": "master-semantic-test-generation-openai",
+      "name": "Semantic Test Generation - OpenAI Chat Model",
+      "position": [
+        0,
+        1240
+      ],
+      "notesInFlow": true,
+      "notes": "Configuration node for the Semantic Test Generation role. Select the model with this node's built-in selector and attach a standard n8n credential. The master keeps the LLM call inside the existing subworkflow.",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-5",
+          "mode": "list",
+          "cachedResultName": "gpt-5"
+        },
+        "options": {
+          "temperature": 0,
+          "timeout": 600000
+        }
+      }
+    },
+    {
+      "id": "master-semantic-test-generation-anthropic",
+      "name": "Semantic Test Generation - Anthropic Chat Model",
+      "position": [
+        300,
+        1240
+      ],
+      "notesInFlow": true,
+      "notes": "Configuration node for the Semantic Test Generation role. Select the model with this node's built-in selector and attach a standard n8n credential. The master keeps the LLM call inside the existing subworkflow.",
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.3,
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "claude-sonnet-4-20250514",
+          "mode": "list",
+          "cachedResultName": "Claude Sonnet 4"
+        },
+        "options": {
+          "temperature": 0
+        }
+      }
+    },
+    {
+      "id": "master-semantic-test-generation-google-gemini",
+      "name": "Semantic Test Generation - Google Gemini Chat Model",
+      "position": [
+        600,
+        1240
+      ],
+      "notesInFlow": true,
+      "notes": "Configuration node for the Semantic Test Generation role. Select the model with this node's built-in selector and attach a standard n8n credential. The master keeps the LLM call inside the existing subworkflow.",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "parameters": {
+        "modelName": "models/gemini-2.5-pro",
+        "options": {
+          "temperature": 0
+        }
+      }
+    },
+    {
+      "id": "master-source-diagnosis-openai",
+      "name": "Source Diagnosis - OpenAI Chat Model",
+      "position": [
+        0,
+        1500
+      ],
+      "notesInFlow": true,
+      "notes": "Configuration node for the Source Diagnosis role. Select the model with this node's built-in selector and attach a standard n8n credential. The master keeps the LLM call inside the existing subworkflow.",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-5",
+          "mode": "list",
+          "cachedResultName": "gpt-5"
+        },
+        "options": {
+          "temperature": 0,
+          "timeout": 600000
+        }
+      }
+    },
+    {
+      "id": "master-source-diagnosis-anthropic",
+      "name": "Source Diagnosis - Anthropic Chat Model",
+      "position": [
+        300,
+        1500
+      ],
+      "notesInFlow": true,
+      "notes": "Configuration node for the Source Diagnosis role. Select the model with this node's built-in selector and attach a standard n8n credential. The master keeps the LLM call inside the existing subworkflow.",
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.3,
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "claude-sonnet-4-20250514",
+          "mode": "list",
+          "cachedResultName": "Claude Sonnet 4"
+        },
+        "options": {
+          "temperature": 0
+        }
+      }
+    },
+    {
+      "id": "master-source-diagnosis-google-gemini",
+      "name": "Source Diagnosis - Google Gemini Chat Model",
+      "position": [
+        600,
+        1500
+      ],
+      "notesInFlow": true,
+      "notes": "Configuration node for the Source Diagnosis role. Select the model with this node's built-in selector and attach a standard n8n credential. The master keeps the LLM call inside the existing subworkflow.",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "parameters": {
+        "modelName": "models/gemini-2.5-pro",
+        "options": {
+          "temperature": 0
+        }
+      }
+    },
+    {
+      "id": "master-refinement-openai",
+      "name": "Refinement - OpenAI Chat Model",
+      "position": [
+        0,
+        1760
+      ],
+      "notesInFlow": true,
+      "notes": "Configuration node for the Refinement role. Select the model with this node's built-in selector and attach a standard n8n credential. The master keeps the LLM call inside the existing subworkflow.",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-5",
+          "mode": "list",
+          "cachedResultName": "gpt-5"
+        },
+        "options": {
+          "temperature": 0,
+          "timeout": 600000
+        }
+      }
+    },
+    {
+      "id": "master-refinement-anthropic",
+      "name": "Refinement - Anthropic Chat Model",
+      "position": [
+        300,
+        1760
+      ],
+      "notesInFlow": true,
+      "notes": "Configuration node for the Refinement role. Select the model with this node's built-in selector and attach a standard n8n credential. The master keeps the LLM call inside the existing subworkflow.",
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.3,
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "claude-sonnet-4-20250514",
+          "mode": "list",
+          "cachedResultName": "Claude Sonnet 4"
+        },
+        "options": {
+          "temperature": 0
+        }
+      }
+    },
+    {
+      "id": "master-refinement-google-gemini",
+      "name": "Refinement - Google Gemini Chat Model",
+      "position": [
+        600,
+        1760
+      ],
+      "notesInFlow": true,
+      "notes": "Configuration node for the Refinement role. Select the model with this node's built-in selector and attach a standard n8n credential. The master keeps the LLM call inside the existing subworkflow.",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "parameters": {
+        "modelName": "models/gemini-2.5-pro",
+        "options": {
+          "temperature": 0
+        }
+      }
     }
   ],
+  "pinData": {},
   "connections": {
-    "Start": {
+    "Validate Config and Build Run Queue": {
       "main": [
         [
           {
-            "node": "Config",
+            "node": "State Machine",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Config": {
+    "State Machine": {
       "main": [
         [
           {
-            "node": "Create Run",
+            "node": "Route Next Action",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Create Run": {
+    "Route Next Action": {
       "main": [
         [
           {
-            "node": "Stage: syntax-validation",
+            "node": "Create Immutable Run",
             "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Read Existing Subworkflow",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Run Existing Python Stage",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Read Final Run Artifacts",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Final Result and Artifacts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Immutable Run": {
+      "main": [
+        [
+          {
+            "node": "Capture Action Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Existing Subworkflow": {
+      "main": [
+        [
+          {
+            "node": "Extract Subworkflow JSON",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Subworkflow JSON": {
+      "main": [
+        [
+          {
+            "node": "Make Existing Workflow Callable",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Make Existing Workflow Callable": {
+      "main": [
+        [
+          {
+            "node": "Execute Existing Subworkflow",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Existing Subworkflow": {
+      "main": [
+        [
+          {
+            "node": "Capture Action Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Existing Python Stage": {
+      "main": [
+        [
+          {
+            "node": "Capture Action Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Final Run Artifacts": {
+      "main": [
+        [
+          {
+            "node": "Capture Action Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Capture Action Result": {
+      "main": [
+        [
+          {
+            "node": "State Machine",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Configure and Start Pipeline": {
+      "main": [
+        [
+          {
+            "node": "Validate Config and Build Run Queue",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Transformation Generation - OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Validate Config and Build Run Queue",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Transformation Generation - Anthropic Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Validate Config and Build Run Queue",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Transformation Generation - Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Validate Config and Build Run Queue",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Semantic Test Generation - OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Validate Config and Build Run Queue",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Semantic Test Generation - Anthropic Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Validate Config and Build Run Queue",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Semantic Test Generation - Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Validate Config and Build Run Queue",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Source Diagnosis - OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Validate Config and Build Run Queue",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Source Diagnosis - Anthropic Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Validate Config and Build Run Queue",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Source Diagnosis - Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Validate Config and Build Run Queue",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Refinement - OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Validate Config and Build Run Queue",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Refinement - Anthropic Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Validate Config and Build Run Queue",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Refinement - Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Validate Config and Build Run Queue",
+            "type": "ai_languageModel",
             "index": 0
           }
         ]
       ]
     }
   },
+  "active": false,
   "settings": {
-    "executionOrder": "v1"
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
   },
-  "active": false
+  "tags": [],
+  "meta": {
+    "templateCredsSetupCompleted": false
+  }
 }
