@@ -1,11 +1,50 @@
-"""Markdown fenced-block parsing for generated suite artifacts."""
+"""Resolve a response's fenced blocks to the artifacts it actually declared.
+
+Extraction reads what the response says. It does not work out what the response
+probably meant.
+
+That distinction is an RQ1 measurement boundary. The extract stage is the first
+gate of the validation funnel, so a parser that recovers a file name from
+surrounding prose, keeps the first of two blocks claiming the same file, or
+files an unrecognized artifact under ``models/`` is answering the research
+question on the model's behalf. The prompt contract asks for named file blocks
+and nothing else:
+
+    The generated response must contain semantic test artifacts only:
+    - one semantic_cases.json file block,
+    - one or more generated source model file blocks,
+    - no Java, no JUnit, no Maven files, and no prose outside file blocks.
+
+So every block must name its own file, in its own info string:
+
+    ```json file=semantic_cases.json
+    ```xml file=models/input.model
+
+Anything else raises :class:`ExtractionError`. The extract stage records the
+response as a failed extraction and keeps going — the workflow survives, the
+candidate stays in the denominator, and the failure is attributed to the
+response that caused it.
+"""
 
 from __future__ import annotations
 
 import re
 from pathlib import Path
 
-from llm4mtl.semantic_tests.extraction.models import ALLOWED_EXTENSIONS, Block
+from llm4mtl.semantic_tests.extraction.models import (
+    ALLOWED_EXTENSIONS,
+    Block,
+    ExtractionError,
+)
+
+# `file=`, `filename=`, or `path=` inside the fence's info string.
+DECLARED_PATH = re.compile(
+    r"(?:^|\s)(?:file|filename|path)\s*=\s*[\"']?([^\"'\s`{}]+)",
+    re.IGNORECASE,
+)
+
+MODEL_EXTENSIONS = {".model", ".xmi", ".xml"}
+MODELS_DIRECTORY = "models"
 
 
 def parse_fenced_blocks(markdown: str) -> list[Block]:
@@ -21,85 +60,78 @@ def clean_content(text: str) -> str:
 
 
 def extract_files(markdown: str) -> dict[str, str]:
-    blocks = parse_fenced_blocks(markdown)
+    """The artifacts this response declared, keyed by their canonical path.
+
+    Raises :class:`ExtractionError` when a block does not name its file, names
+    one whose role the contract does not define, or repeats an identity another
+    block already claimed. A response containing no fenced block at all yields
+    an empty result, which the caller already reports as nothing to extract.
+    """
     extracted: dict[str, str] = {}
-
-    for block in blocks:
-        raw_path = infer_file_path(block, markdown)
-        if not raw_path:
-            continue
-        normalized = normalize_generated_path(raw_path)
-        if not normalized:
-            continue
-        extracted.setdefault(normalized, block.content)
-
+    for index, block in enumerate(parse_fenced_blocks(markdown), start=1):
+        declared = declared_file_path(block)
+        if declared is None:
+            raise ExtractionError(
+                f"block #{index} (```{block.info}) does not name a file. Every "
+                "block must declare its own path, for example "
+                "```json file=semantic_cases.json"
+            )
+        path = canonical_generated_path(declared, block_index=index)
+        if path in extracted:
+            raise ExtractionError(
+                f"block #{index} claims the artifact {path!r}, which an earlier "
+                "block already declared. Each artifact must be emitted once."
+            )
+        extracted[path] = block.content
     return extracted
 
 
-def infer_file_path(block: Block, markdown: str) -> str | None:
-    from_info = file_path_from_info(block.info)
-    if from_info:
-        return from_info
+def declared_file_path(block: Block) -> str | None:
+    """The path this block states for itself, or ``None`` when it states none.
 
-    prefix = markdown[max(0, block.start - 400) : block.start]
-    return file_path_from_nearby_text(prefix)
-
-
-def file_path_from_info(info: str) -> str | None:
-    match = re.search(
-        r"(?:^|\s)(?:file|filename|path)\s*=\s*[\"']?([^\"'\s`{}]+)",
-        info,
-        re.IGNORECASE,
-    )
+    Only the block's own info string is consulted. Reading the prose before a
+    block is how an illustrative snippet became a generated artifact.
+    """
+    match = DECLARED_PATH.search(block.info)
     if match:
         return match.group(1)
 
-    first = info.split()[0] if info.split() else ""
-    if looks_like_extractable_file(first):
+    # A bare info string that is itself a file name, e.g. ```semantic_cases.json
+    first = block.info.split()[0] if block.info.split() else ""
+    if Path(first.strip()).suffix.lower() in ALLOWED_EXTENSIONS:
         return first
 
     return None
 
 
-def file_path_from_nearby_text(text: str) -> str | None:
-    match = re.search(
-        r"(?:file|filename|path)\s*[:=]\s*[`\"']?([^`\"'\s]+)",
-        text,
-        re.IGNORECASE,
-    )
-    if match and looks_like_extractable_file(match.group(1)):
-        return match.group(1)
-
-    match = re.search(r"([A-Za-z0-9_./-]+\.(?:java|json|model|xmi|xml))", text)
-    if match:
-        return match.group(1)
-
-    return None
-
-
-def looks_like_extractable_file(value: str) -> bool:
-    return Path(value.strip()).suffix.lower() in ALLOWED_EXTENSIONS
-
-
-def normalize_generated_path(path_value: str) -> str | None:
-    cleaned = path_value.strip().replace("\\", "/").lstrip("/")
+def canonical_generated_path(declared: str, *, block_index: int) -> str:
+    """Canonicalize a declared path, or refuse a role the contract does not define."""
+    cleaned = declared.strip().replace("\\", "/").lstrip("/")
     path = Path(cleaned)
     if path.is_absolute() or ".." in path.parts:
-        return None
+        raise ExtractionError(
+            f"block #{block_index} declares {declared!r}, which escapes the suite directory"
+        )
 
     suffix = path.suffix.lower()
     if suffix not in ALLOWED_EXTENSIONS:
-        return None
+        allowed = ", ".join(sorted(ALLOWED_EXTENSIONS))
+        raise ExtractionError(
+            f"block #{block_index} declares {declared!r}, whose role the contract "
+            f"does not define. Generated artifacts use: {allowed}"
+        )
 
-    if suffix == ".java":
-        return path.name
-    if suffix == ".json":
+    if suffix in {".java", ".json"}:
         return path.name
 
-    if path.parts and path.parts[0] == "models":
+    if path.parts[:1] == (MODELS_DIRECTORY,):
         return str(path)
 
-    return f"models/{path.name}"
+    raise ExtractionError(
+        f"block #{block_index} declares the model file {declared!r} outside "
+        f"{MODELS_DIRECTORY}/. Generated model files belong under "
+        f"{MODELS_DIRECTORY}/, as the paths in semantic_cases.json reference them."
+    )
 
 
 def java_files(extracted: dict[str, str]) -> list[str]:

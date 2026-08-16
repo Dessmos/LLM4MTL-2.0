@@ -20,7 +20,7 @@ from llm4mtl.conventions import (
 from llm4mtl.languages import REQUIRED_LANGUAGES, language_adapter
 from llm4mtl.languages.base import LanguageAdapter
 from llm4mtl.semantic_tests.extraction.discovery import discover_responses
-from llm4mtl.semantic_tests.extraction.models import ResponseTarget
+from llm4mtl.semantic_tests.extraction.models import ExtractionError, ResponseTarget
 from llm4mtl.semantic_tests.extraction.parser import extract_files
 from llm4mtl.semantic_tests.extraction.writer import write_suite
 
@@ -120,7 +120,13 @@ def extract_one(
         return False, f"response not found: {target.response_path}"
 
     markdown = target.response_path.read_text(encoding="utf-8")
-    extracted = extract_files(markdown)
+    try:
+        extracted = extract_files(markdown)
+    except ExtractionError as exc:
+        # A response whose artifacts cannot be identified is a failed
+        # extraction, not a reason to stop the run. No suite is written,
+        # because there is no specification to write one from.
+        return False, f"cannot extract artifacts from {target.response_path}: {exc}"
     if not extracted:
         return False, f"no extractable artifact blocks found in {target.response_path}"
 
