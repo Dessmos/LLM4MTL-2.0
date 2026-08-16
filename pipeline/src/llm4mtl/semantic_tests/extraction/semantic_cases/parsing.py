@@ -10,7 +10,7 @@ from llm4mtl.artifact_schemas import ArtifactSchemaError, validate_artifact
 from .errors import SemanticCasesError
 from .legacy_adapter import is_legacy_tree2graph_spec, normalize_legacy_tree2graph_spec
 from .normalization import normalize_schema_variants
-from llm4mtl.semantic_tests.semantic_spec import SEMANTIC_CASES_FILE, effective_models
+from llm4mtl.semantic_tests.semantic_spec import SEMANTIC_CASES_FILE
 
 
 def parse_semantic_cases(
@@ -57,8 +57,12 @@ def validate_semantic_cases(spec: dict[str, Any], target_task: str) -> None:
             raise SemanticCasesError(f"{SEMANTIC_CASES_FILE} test #{index} must be an object")
         if not test.get("name"):
             raise SemanticCasesError(f"{SEMANTIC_CASES_FILE} test #{index} is missing name")
-        models = effective_models(spec, test)
-        if not models:
+        # Read raw rather than through `effective_models`, which copies each
+        # entry into a dict: a response that wrote a string where a model object
+        # belongs must be reported as an invalid specification, not raise an
+        # unhandled coercion error out of the extractor.
+        models = test["models"] if "models" in test else spec.get("models", [])
+        if not isinstance(models, list) or not models:
             raise SemanticCasesError(f"{SEMANTIC_CASES_FILE} test #{index} must define models")
         validate_models(models, index)
         assertions = test.get("assertions")
