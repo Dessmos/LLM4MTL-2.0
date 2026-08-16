@@ -143,7 +143,7 @@ class PhaseClassificationTests(unittest.TestCase):
 
         self.assertFalse(observation.is_technically_executable)
         self.assertFalse(observation.assertions_evaluated)
-        self.assertEqual("test_runtime", observation.failure_stage)
+        self.assertEqual("unclassified_runtime", observation.failure_stage)
 
     def test_an_unknown_xml_error_is_not_attributed_to_the_engine(self) -> None:
         observation = classify_maven_run(
@@ -156,8 +156,125 @@ class PhaseClassificationTests(unittest.TestCase):
             ),
         )
 
-        self.assertEqual("test_runtime", observation.failure_stage)
+        self.assertEqual("unclassified_runtime", observation.failure_stage)
         self.assertFalse(observation.is_technically_executable)
+
+
+class NoTestRanTests(unittest.TestCase):
+    """A suite that never executed a test must never look reference-valid.
+
+    Both languages that pass ``-Dsurefire.failIfNoSpecifiedTests=false`` (QVT-O
+    and Reactions) exit 0 when the test selector matches nothing. An exit code
+    alone therefore says nothing about whether a test ran.
+    """
+
+    def test_a_report_counting_zero_tests_is_a_discovery_failure(self) -> None:
+        observation = classify_maven_run(
+            CommandResult(exit_code=0, stdout="", stderr=""),
+            report_of(tests=0, failures=0, errors=0),
+        )
+
+        self.assertEqual("test_discovery", observation.failure_stage)
+        self.assertFalse(observation.assertions_evaluated)
+        self.assertFalse(observation.is_reference_valid)
+
+    def test_exit_zero_without_any_test_summary_is_a_discovery_failure(self) -> None:
+        observation = classify_maven_run(
+            CommandResult(exit_code=0, stdout="[INFO] BUILD SUCCESS", stderr=""), None
+        )
+
+        self.assertEqual("test_discovery", observation.failure_stage)
+        self.assertFalse(observation.is_reference_valid)
+
+    def test_a_console_summary_of_zero_tests_is_a_discovery_failure(self) -> None:
+        observation = classify_maven_run(
+            CommandResult(
+                exit_code=0,
+                stdout="Tests run: 0, Failures: 0, Errors: 0, Skipped: 0",
+                stderr="",
+            ),
+            None,
+        )
+
+        self.assertEqual("test_discovery", observation.failure_stage)
+        self.assertFalse(observation.is_reference_valid)
+
+    def test_a_console_run_that_did_execute_tests_still_passes(self) -> None:
+        observation = classify_maven_run(
+            CommandResult(
+                exit_code=0,
+                stdout="Tests run: 3, Failures: 0, Errors: 0, Skipped: 0",
+                stderr="",
+            ),
+            None,
+        )
+
+        self.assertEqual("", observation.failure_stage)
+        self.assertTrue(observation.is_reference_valid)
+
+
+class PerEngineMarkerTests(unittest.TestCase):
+    """Every message here was taken from a recorded run under artifacts/work/runs/."""
+
+    def stage_for(self, message: str) -> str:
+        return classify_maven_run(
+            CONSOLE, report_of(tests=1, failures=0, errors=1, messages=(message,))
+        ).failure_stage
+
+    def test_emf_xmi_exceptions_are_model_loading(self) -> None:
+        for message in (
+            "aTest: org.eclipse.emf.ecore.xmi.PackageNotFoundException: "
+            "Package with uri 'CPL' not found.",
+            "aTest: org.eclipse.emf.ecore.xmi.ClassNotFoundException: "
+            "Class 'EClassifier' is not found or is abstract.",
+            "aTest: org.eclipse.emf.ecore.xmi.FeatureNotFoundException: "
+            "Feature 'isLoaded' not found.",
+        ):
+            with self.subTest(message=message):
+                self.assertEqual("model_loading", self.stage_for(message))
+
+    def test_qvto_resource_creation_failure_is_model_loading(self) -> None:
+        self.assertEqual(
+            "model_loading",
+            self.stage_for("aTest: Cannot create a resource for 'file:/tmp/out.xmi'"),
+        )
+
+    def test_atl_missing_model_is_model_loading(self) -> None:
+        for message in (
+            "aTest: Cannot find reference model amalthea",
+            "aTest: Could not find model amalthea",
+        ):
+            with self.subTest(message=message):
+                self.assertEqual("model_loading", self.stage_for(message))
+
+    def test_vitruv_change_propagation_failures_are_engine_runtime(self) -> None:
+        for message in (
+            "aTest(Path): Cannot identify the packages of this change: "
+            "TransactionalChangeImpl (empty)",
+            "aTest(Path): dangling object "
+            "tools.vitruv.methodologisttemplate.model.network.impl.SystemImpl@dffa30b detected",
+        ):
+            with self.subTest(message=message):
+                self.assertEqual("engine_runtime", self.stage_for(message))
+
+    def test_atl_vm_operation_lookup_failure_is_engine_runtime(self) -> None:
+        self.assertEqual(
+            "engine_runtime",
+            self.stage_for(
+                "aTest: Operation not found: AmaltheaToAscet_All : "
+                "ASMModule.including(java.util.ArrayList)"
+            ),
+        )
+
+    def test_genuinely_ambiguous_messages_stay_unclassified(self) -> None:
+        for message in (
+            # Could be the generated harness or the engine.
+            "aTest(Path): class java.lang.String cannot be cast to class java.util.Collection",
+            # Could be an unregistered model or a real type error.
+            "aTest: Type 'Source!Tree' not found",
+        ):
+            with self.subTest(message=message):
+                self.assertEqual("unclassified_runtime", self.stage_for(message))
 
 
 if __name__ == "__main__":

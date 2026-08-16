@@ -168,7 +168,7 @@ class EtlAdapterContractTests(unittest.TestCase):
                 "llm4mtl.semantic_tests.suite_execution.run_maven",
                 return_value=command_result,
             ) as run_maven:
-                observation = self.adapter.execute_suite(
+                observation, evidence = self.adapter.execute_suite(
                     _suite(suite_dir),
                     transformation,
                     Workspace(engine_dir, root / "observations"),
@@ -186,6 +186,10 @@ class EtlAdapterContractTests(unittest.TestCase):
                 timeout=240,
             )
             self.assertTrue(observation.is_reference_valid)
+            # The adapter hands back the raw output alongside the verdict, so a
+            # caller can archive it before the next `mvn clean` deletes it.
+            self.assertEqual(command_result.stdout, evidence.stdout)
+            self.assertEqual(0, evidence.exit_code)
             self.assertFalse(
                 engine_dir.joinpath(
                     "src/test/java/generated/GeneratedSmokeTest.java"
@@ -225,7 +229,7 @@ class EtlAdapterContractTests(unittest.TestCase):
             failure_stage="engine_runtime",
             error_summary="EOL runtime failure",
         )
-        test_error = SuiteExecutionObservation(
+        unclassified = SuiteExecutionObservation(
             compiled=True,
             tests_discovered=True,
             models_loaded=False,
@@ -234,13 +238,22 @@ class EtlAdapterContractTests(unittest.TestCase):
             assertions_passed=False,
             timed_out=False,
             maven_exit_code=1,
-            failure_stage="test_runtime",
+            failure_stage="unclassified_runtime",
             error_summary="NullPointerException",
         )
 
         outcome = self.adapter.normalize_transformation_failure(runtime)
         self.assertEqual(OutcomeStatus.RUNTIME_FAILED, outcome.status)
-        self.assertIsNone(self.adapter.normalize_transformation_failure(test_error))
+
+        # This mapping is only ever reached for a reference-validated suite, so
+        # an unrecognized throw is a runtime failure of the pairing rather than
+        # an unusable observation. Returning None would drop it into the
+        # suite-side bucket and out of the semantic-correctness denominator.
+        unclassified_outcome = self.adapter.normalize_transformation_failure(unclassified)
+        self.assertEqual(OutcomeStatus.RUNTIME_FAILED, unclassified_outcome.status)
+        self.assertTrue(
+            unclassified_outcome.status.is_attributable_to_the_transformation
+        )
 
 
 class ReactionsParserNormalizationTests(unittest.TestCase):

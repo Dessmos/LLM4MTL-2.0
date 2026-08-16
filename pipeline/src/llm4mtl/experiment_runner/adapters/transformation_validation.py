@@ -132,18 +132,22 @@ class TransformationValidationAdapter:
                 )
                 if observation is None:
                     workspace = workspace_for(engine_dir, pair_root)
-                    observation = adapter.execute_suite(
+                    observation, raw_evidence = adapter.execute_suite(
                         suite,
                         transformation,
                         workspace,
                         DEFAULT_PAIR_TIMEOUT_SECONDS,
                     )
+                    # Archived here, inside the per-pair lock: pair N+1 runs
+                    # `mvn clean` in the same workspace and deletes the reports
+                    # that explain pair N.
                     evidence_path = record_observation(
                         pair_root,
                         suite,
                         transformation,
                         observation,
                         transformation_role=GENERATED_TRANSFORMATION_ROLE,
+                        evidence=raw_evidence,
                     )
                 else:
                     evidence_path = observation_path(pair_root, suite)
@@ -274,7 +278,20 @@ def execution_counts(
         tuple[SuiteExecutionObservation, TransformationOutcome | None]
     ],
 ) -> dict[str, int]:
-    """Count pairs by what the run established about the transformation."""
+    """Count pairs by what the run established about the transformation.
+
+    Every pair counted here has a reference-validated suite: the selection gate
+    in :meth:`TransformationValidationAdapter.select_validated_suites` admits
+    only suites whose reference observation was technically executable and whose
+    assertions passed. So a failure at this point is a semantic execution
+    failure of the pairing, and it is counted as one — Source Diagnosis decides
+    afterwards whether the transformation, the test, or neither should change.
+
+    ``evaluated`` (= ``passed`` + ``failed``) is the denominator of semantic
+    correctness. ``skipped`` stays outside it for the residual cases where the
+    harness could not run this pair at all, so an unobserved pair never becomes
+    either a pass or a fail.
+    """
     passed = failed = skipped = infrastructure = 0
     for observation, failure_outcome in observations:
         if failure_outcome is not None and failure_outcome.status in {
@@ -292,7 +309,7 @@ def execution_counts(
         ):
             failed += 1
         else:
-            # A suite-side problem: the transformation was never judged.
+            # The harness could not run this pair at all: nothing was judged.
             skipped += 1
     return {
         "evaluated": passed + failed,

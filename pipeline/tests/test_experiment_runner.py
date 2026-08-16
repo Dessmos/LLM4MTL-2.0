@@ -154,15 +154,23 @@ class CliTests(unittest.TestCase):
             "actual_vs_expected": None,
         }
 
-        for required_field in ("actual_target_models", "surefire_reports"):
-            with self.subTest(required_field=required_field):
-                incomplete = {**payload}
-                del incomplete[required_field]
-                with self.assertRaisesRegex(
-                    FailureReportError,
-                    f"{required_field} must be an array of paths",
-                ):
-                    ReportRequest.from_payload(incomplete)
+        incomplete = {**payload}
+        del incomplete["actual_target_models"]
+        with self.assertRaisesRegex(
+            FailureReportError, "actual_target_models must be an array of paths"
+        ):
+            ReportRequest.from_payload(incomplete)
+
+        # `surefire_reports` may be omitted only when the run archived the
+        # execution evidence itself. Here the generated execution has no archive
+        # beside it, so an omitted field is still refused rather than producing a
+        # report with silently empty runtime evidence.
+        incomplete = {**payload}
+        del incomplete["surefire_reports"]
+        with self.assertRaisesRegex(
+            FailureReportError, "archived execution evidence"
+        ):
+            ReportRequest.from_payload(incomplete)
 
 
 class OrchestratorTests(unittest.TestCase):

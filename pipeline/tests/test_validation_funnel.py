@@ -20,6 +20,7 @@ from llm4mtl.domain import GeneratedSuite
 from llm4mtl.external_tools.maven import CommandResult
 from llm4mtl.languages.etl.adapter import EtlAdapter
 from llm4mtl.semantic_tests.reference_validation.runner import validate_suite
+from llm4mtl.semantic_tests.execution_evidence import RawExecutionEvidence
 from llm4mtl.semantic_tests.suite_execution import (
     classify_maven_run,
     read_observation,
@@ -223,6 +224,17 @@ class ReferenceValidationTests(FunnelFixture):
         self.assertFalse(verdict.is_judged_as_oracle)
 
 
+def _evidence() -> RawExecutionEvidence:
+    """A stand-in for what the adapter captured, for tests that stub execution."""
+    return RawExecutionEvidence(
+        exit_code=0,
+        timed_out=False,
+        stdout="Tests run: 1, Failures: 0, Errors: 0\n",
+        stderr="",
+        reports_present=False,
+    )
+
+
 class ObservationReuseTests(FunnelFixture):
     def test_the_technical_execution_is_not_repeated(self) -> None:
         with patch(
@@ -262,7 +274,7 @@ class ObservationReuseTests(FunnelFixture):
         with patch.object(
             context.adapter,
             "execute_suite",
-            return_value=observation,
+            return_value=(observation, _evidence()),
         ) as execute:
             with ThreadPoolExecutor(max_workers=8) as pool:
                 verdicts = list(

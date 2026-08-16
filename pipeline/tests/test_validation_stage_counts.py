@@ -172,8 +172,8 @@ class ObservationScopeTests(unittest.TestCase):
 
 
 class TransformationExecutionCountTests(unittest.TestCase):
-    def test_unknown_test_runtime_is_not_counted_against_the_transformation(self) -> None:
-        observation = SuiteExecutionObservation(
+    def unclassified_observation(self, **overrides: object) -> SuiteExecutionObservation:
+        fields = dict(
             compiled=True,
             tests_discovered=True,
             models_loaded=False,
@@ -182,18 +182,52 @@ class TransformationExecutionCountTests(unittest.TestCase):
             assertions_passed=False,
             timed_out=False,
             maven_exit_code=1,
-            failure_stage="test_runtime",
+            failure_stage="unclassified_runtime",
             error_summary="NullPointerException",
         )
-        adapter = EtlAdapter()
+        fields.update(overrides)
+        return SuiteExecutionObservation(**fields)  # type: ignore[arg-type]
 
-        counts = execution_counts(
+    def counts_for(self, observation: SuiteExecutionObservation) -> dict[str, int]:
+        adapter = EtlAdapter()
+        return execution_counts(
             [(observation, adapter.normalize_transformation_failure(observation))]
         )
 
-        self.assertEqual(0, counts["evaluated"])
-        self.assertEqual(0, counts["failed"])
+    def test_unclassified_runtime_on_a_validated_suite_is_a_semantic_failure(self) -> None:
+        """Pairs reaching this stage have already passed reference validation.
+
+        The suite compiled, ran, and its assertions held against the trusted
+        reference, so an unrecognized throw here is a failure of this pairing.
+        Withholding the verdict would drop it out of the denominator; Source
+        Diagnosis, not the counter, decides what to refine.
+        """
+        counts = self.counts_for(self.unclassified_observation())
+
+        self.assertEqual(1, counts["failed"])
+        self.assertEqual(1, counts["evaluated"])
+        self.assertEqual(0, counts["skipped"])
+
+    def test_evaluated_is_exactly_passed_plus_failed(self) -> None:
+        for stage in ("assertion_failure", "engine_runtime", "unclassified_runtime"):
+            with self.subTest(stage=stage):
+                counts = self.counts_for(
+                    self.unclassified_observation(
+                        failure_stage=stage,
+                        assertions_evaluated=stage == "assertion_failure",
+                    )
+                )
+                self.assertEqual(
+                    counts["evaluated"], counts["passed"] + counts["failed"]
+                )
+
+    def test_a_pair_the_harness_could_not_run_stays_out_of_the_denominator(self) -> None:
+        counts = self.counts_for(
+            self.unclassified_observation(failure_stage="model_loading")
+        )
+
         self.assertEqual(1, counts["skipped"])
+        self.assertEqual(0, counts["evaluated"])
 
 
 if __name__ == "__main__":

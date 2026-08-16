@@ -25,9 +25,13 @@ from llm4mtl.semantic_tests.suite_execution import (
     classify_maven_run,
     execution_workspace_lock,
 )
+from llm4mtl.semantic_tests.execution_evidence import (
+    RawExecutionEvidence,
+    capture_execution_evidence,
+)
 from llm4mtl.semantic_tests.suites.java import infer_fqcn
 from llm4mtl.semantic_tests.suites.metadata import artifact_invalid_reason
-from llm4mtl.semantic_tests.surefire import read_surefire_reports
+from llm4mtl.semantic_tests.surefire import UNCLASSIFIED_RUNTIME, read_surefire_reports
 from llm4mtl.semantic_tests.technical_validation.resources import check_models_load
 from llm4mtl.semantic_tests.technical_validation.smoke import junit_test_method_counts
 from llm4mtl.workspace.injection import Injection
@@ -94,8 +98,13 @@ def execute_maven_suite(
     maven_cwd: Path,
     maven_command: list[str],
     reports_root: Path,
-) -> SuiteExecutionObservation:
-    """Inject one suite into its run-local harness and classify one Maven run."""
+) -> tuple[SuiteExecutionObservation, RawExecutionEvidence]:
+    """Inject one suite into its run-local harness and classify one Maven run.
+
+    Returns the observation and the raw evidence behind it, read while the
+    workspace lock is still held: the next execution's ``mvn clean`` deletes the
+    reports this one produced.
+    """
     java_paths = sorted(suite.path.glob("*.java"))
     model_paths = sorted(
         path for path in (suite.path / "models").rglob("*") if path.is_file()
@@ -127,15 +136,25 @@ def execute_maven_suite(
             )
             result = run_maven(command, cwd=maven_cwd, timeout=timeout)
             reports = read_surefire_reports(reports_root)
+            evidence = capture_execution_evidence(result, reports_root, reports)
         finally:
             injection.restore()
-    return classify_maven_run(result, reports)
+    return classify_maven_run(result, reports), evidence
 
 
 def normalize_failure(
     observation: SuiteExecutionObservation,
 ) -> TransformationOutcome | None:
-    """Map shared execution phases without fabricating successful snapshots."""
+    """Map shared execution phases without fabricating successful snapshots.
+
+    Reached only from the generated-transformation stage, whose pairs are all
+    reference-validated: the suite compiled, ran, and its assertions held
+    against the trusted reference. A throw here is therefore a failure of this
+    pairing, and ``unclassified_runtime`` maps to the same runtime outcome as a
+    recognized engine throw. Which sub-phase threw is unknown, but the phase is
+    not — and whether the transformation or the test should be refined is Source
+    Diagnosis's decision, made later from the recorded evidence.
+    """
     if observation.timed_out:
         return TransformationOutcome(
             status=OutcomeStatus.TIMED_OUT,
@@ -145,6 +164,7 @@ def normalize_failure(
         "transformation_parse": OutcomeStatus.PARSE_FAILED,
         "java_compilation": OutcomeStatus.COMPILE_FAILED,
         "engine_runtime": OutcomeStatus.RUNTIME_FAILED,
+        UNCLASSIFIED_RUNTIME: OutcomeStatus.RUNTIME_FAILED,
         "infrastructure": OutcomeStatus.INFRASTRUCTURE_FAILED,
     }.get(observation.failure_stage)
     if status is None:

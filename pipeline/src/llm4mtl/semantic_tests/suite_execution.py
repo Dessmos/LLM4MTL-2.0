@@ -35,9 +35,18 @@ from llm4mtl.semantic_tests.reference_validation.maven_status import (
     executes,
     transformation_parse_failed,
 )
+from llm4mtl.semantic_tests.execution_evidence import (
+    RawExecutionEvidence,
+    capture_execution_evidence,
+    write_execution_evidence,
+)
 from llm4mtl.semantic_tests.suites.injection import inject_suite
 from llm4mtl.semantic_tests.suites.java import infer_fqcn
-from llm4mtl.semantic_tests.surefire import SurefireReport, read_surefire_reports
+from llm4mtl.semantic_tests.surefire import (
+    UNCLASSIFIED_RUNTIME,
+    SurefireReport,
+    read_surefire_reports,
+)
 from llm4mtl.serialization.json_io import read_json, write_json
 from llm4mtl.transformation_execution.hashing import directory_sha256, file_sha256
 from llm4mtl.workspace.injection import Injection
@@ -73,7 +82,10 @@ def classify_maven_run(
     if not did_compile:
         return _phase_failure(result, "java_compilation", compiled=False)
 
-    if reports is None or reports.is_empty:
+    # Only the total absence of readable XML may fall back to the console. A
+    # report that parsed and counted zero tests is evidence that nothing ran,
+    # and `_classify_from_reports` turns it into a test-discovery failure.
+    if reports is None:
         return _classify_from_console(result, did_compile)
     return _classify_from_reports(result, reports)
 
@@ -89,7 +101,7 @@ def _classify_from_reports(
         "model_loading",
         "transformation_parse",
         "engine_runtime",
-        "test_runtime",
+        UNCLASSIFIED_RUNTIME,
     }:
         # The harness never got far enough to judge the oracle.
         return SuiteExecutionObservation(
@@ -128,20 +140,27 @@ def _classify_from_console(result: CommandResult, did_compile: bool) -> SuiteExe
         return _phase_failure(result, "test_discovery", compiled=did_compile)
 
     counts = _console_test_counts(result.output)
-    if counts is not None and counts[2] > 0:
+    if counts is None or counts[0] == 0:
+        # No XML, and no "Tests run: N" line saying a test ran. An exit code of
+        # 0 in that state is not evidence of a passing suite: it is what
+        # `-Dsurefire.failIfNoSpecifiedTests=false` produces when the selector
+        # matched nothing, and treating it as success would validate a suite
+        # that never executed.
+        return _phase_failure(result, "test_discovery", compiled=True)
+    if counts[2] > 0:
         # Console summaries distinguish JUnit errors from assertion failures but
-        # do not identify which harness phase threw. Without XML, attributing an
-        # error to the oracle or transformation would invent evidence.
+        # do not identify which harness phase threw. Without XML, naming a phase
+        # would invent evidence.
         return _phase_failure(
-            result, "test_runtime", compiled=True, tests_discovered=True
+            result, UNCLASSIFIED_RUNTIME, compiled=True, tests_discovered=True
         )
-    if result.exit_code != 0 and (counts is None or counts[1] == 0):
+    if result.exit_code != 0 and counts[1] == 0:
         return _phase_failure(
-            result, "test_runtime", compiled=True, tests_discovered=True
+            result, UNCLASSIFIED_RUNTIME, compiled=True, tests_discovered=True
         )
 
-    assertions_passed = result.exit_code == 0 and (
-        counts is None or (counts[1] == 0 and counts[2] == 0)
+    assertions_passed = (
+        result.exit_code == 0 and counts[1] == 0 and counts[2] == 0
     )
     return SuiteExecutionObservation(
         compiled=True,
@@ -197,12 +216,16 @@ def execute_suite_against(
     transformation: Path,
     test_project_dir: Path,
     timeout: int,
-) -> SuiteExecutionObservation:
+    ) -> tuple[SuiteExecutionObservation, RawExecutionEvidence]:
     """Run one rendered suite against ``transformation`` and observe the outcome.
 
     The transformation is always injected explicitly: executability is only
     meaningful relative to a known transformation, and the harness ships its own
     copies that would otherwise be used silently.
+
+    Returns the observation and the raw evidence behind it. The evidence is read
+    while the workspace lock is still held, because the next execution's
+    ``mvn clean`` deletes the reports this one produced.
     """
     java_paths = sorted(suite.path.glob("*.java"))
     model_paths = sorted(path for path in (suite.path / "models").rglob("*") if path.is_file())
@@ -225,13 +248,13 @@ def execute_suite_against(
                 timeout=timeout,
             )
             # `mvn clean` wipes target/ first, so these reports describe this run only.
-            reports = read_surefire_reports(
-                test_project_dir / "target" / "surefire-reports"
-            )
+            reports_root = test_project_dir / "target" / "surefire-reports"
+            reports = read_surefire_reports(reports_root)
+            evidence = capture_execution_evidence(result, reports_root, reports)
         finally:
             injection.restore()
 
-    return classify_maven_run(result, reports)
+    return classify_maven_run(result, reports), evidence
 
 
 @contextmanager
@@ -288,25 +311,43 @@ def record_observation(
     observation: SuiteExecutionObservation,
     *,
     transformation_role: TransformationRole = REFERENCE_TRANSFORMATION_ROLE,
+    evidence: RawExecutionEvidence | None = None,
 ) -> Path:
     """Persist an observation together with the inputs it was derived from.
 
     Validated on write: the funnel's denominators are derived from these records,
     so a malformed one would corrupt a metric rather than fail a stage.
+
+    When ``evidence`` is supplied it is archived beside the observation in the
+    same call, so the run's permanent artifacts hold the complete Maven output
+    and Surefire reports this observation was derived from. That has to happen
+    here rather than at the end of the stage: the workspace those reports live
+    in is wiped by the next execution's ``mvn clean``.
     """
     path = observation_path(observations_root, suite)
+    identity = _suite_identity(suite)
+    inputs = _input_identity(
+        suite,
+        transformation,
+        transformation_role=transformation_role,
+    )
     payload = {
         "schema_version": SCHEMA_VERSION,
-        **_suite_identity(suite),
-        "inputs": _input_identity(
-            suite,
-            transformation,
-            transformation_role=transformation_role,
-        ),
+        **identity,
+        "inputs": inputs,
         "observation": observation.to_dict(),
     }
     validate_artifact("suite-execution", payload)
     write_json(path, payload)
+    if evidence is not None:
+        write_execution_evidence(
+            path,
+            evidence,
+            suite_identity=identity,
+            inputs=inputs,
+            failure_stage=observation.failure_stage,
+            error_summary=observation.error_summary,
+        )
     return path
 
 

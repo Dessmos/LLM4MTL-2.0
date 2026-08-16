@@ -57,16 +57,24 @@ def contract_stage_id(internal_name: str) -> str:
 
 
 def is_skipped(stage: str, result: StageResult) -> bool:
-    """True when the stage executed nothing and therefore observed nothing."""
+    """True when the stage executed nothing and therefore observed nothing.
+
+    Every stage that can judge nothing needs a branch here. Without one, a stage
+    whose pairs all landed in ``skipped`` or ``inconclusive`` has no recorded
+    failure, and the final ``passed`` fallthrough in :func:`stage_status` reports
+    a run that established nothing as a passing one.
+    """
     if result.status == "skipped":
         return True
+    counts = result.counts
     if stage == "reference-validation":
-        counts = result.counts
         return (
             counts.get("validated", 0) == 0
             and counts.get("invalid", 0) == 0
             and counts.get("skipped", 0) > 0
         )
+    if stage == "execution":
+        return counts.get("evaluated", 0) == 0 and counts.get("skipped", 0) > 0
     return False
 
 

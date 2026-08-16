@@ -123,6 +123,42 @@ class PayloadTests(unittest.TestCase):
         self.assertEqual("passed", payload["status"])
         self.assertEqual(1, payload["attempt"])
 
+    def test_an_execution_that_judged_nothing_never_reports_passed(self) -> None:
+        """No verdict is not a pass.
+
+        ``evaluated`` is the denominator of semantic correctness. A stage that
+        ran pairs but reached a verdict on none of them has an empty numerator
+        AND an empty denominator, and the contract's final ``passed``
+        fallthrough used to turn that into SEMANTIC_PASSED.
+        """
+        nothing_judged = result(
+            "transformation_validation",
+            "completed",
+            execution_pairs=3,
+            evaluated=0,
+            passed=0,
+            failed=0,
+            skipped=3,
+        )
+
+        self.assertEqual("skipped", stage_status("execution", nothing_judged))
+        self.assertNotEqual("SEMANTIC_PASSED", outcome_code("execution", nothing_judged))
+
+    def test_unrunnable_pairs_do_not_block_a_verdict_on_the_others(self) -> None:
+        """A partly unrunnable run still reports the verdict it did reach."""
+        partly_judged = result(
+            "transformation_validation",
+            "completed",
+            execution_pairs=3,
+            evaluated=2,
+            passed=2,
+            failed=0,
+            skipped=1,
+        )
+
+        self.assertEqual("passed", stage_status("execution", partly_judged))
+        self.assertEqual("SEMANTIC_PASSED", outcome_code("execution", partly_judged))
+
     def test_payload_shape_is_declared_by_json_schema(self) -> None:
         payload = to_stage_payload(
             "extract",
