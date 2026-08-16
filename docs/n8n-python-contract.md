@@ -99,6 +99,58 @@ The generic skip fallback is `SKIPPED`; stage implementations should provide a
 specific recorded reason where policy needs to distinguish missing upstream
 evidence.
 
+### Unrecognized runtime failures
+
+`unclassified_runtime` is an execution-PHASE observation: the run threw and no
+marker identified which phase threw. It is never a statement about who is at
+fault. The two stages read it differently, and both readings follow from where
+the suite is in the pipeline:
+
+* **reference validation** — the suite has not been proven yet, so an
+  unclassified throw (like `model_loading` or `engine_runtime`) leaves it
+  `NOT_EXECUTABLE`. It is not reference-validated and never reaches the
+  generated-transformation stage.
+* **execution against a generated transformation** — every pair here has a
+  reference-validated suite, so the same phase counts as a semantic execution
+  failure (`failed`).
+
+Attribution — transformation, test, or neither — is decided only by Source
+Diagnosis, from the evidence the observation carries.
+
+## Execution evidence
+
+Maven writes its Surefire XML into the engine workspace, and every execution
+starts with `mvn clean`. The reports explaining execution N therefore stop
+existing when execution N+1 begins, and the workspace is scratch space that no
+recorded result may depend on.
+
+Each execution observation is therefore archived together with the evidence it
+was derived from, at the moment the observation is written:
+
+```text
+<run>/observations/.../<suite_id>/
+    suite_execution.json                     the observation and its verdict
+    execution_evidence/
+        evidence.json                        schemas/execution-evidence.schema.json
+        maven-stdout.log                     complete, untruncated
+        maven-stderr.log                     complete, untruncated
+        surefire/TEST-*.xml                  every report that existed
+```
+
+For generated-transformation executions the observation root already carries the
+transformation hash, so the archive is per execution pair. `evidence.json` names
+the suite, the transformation, and its role (`reference_transformation` or
+`generated_transformation`), so evidence can never be read against the wrong
+execution.
+
+`surefire.present` is recorded explicitly, and the counts are `null` when no
+report parsed. An absent report is never presented as a run with no failures.
+
+`error_summary` on the observation remains a short derived summary for routing;
+it is not a substitute for the archived streams. Source Diagnosis reads the
+archive — a failure-report request that omits `surefire_reports` resolves them
+from it.
+
 ## Validation-funnel routing facts
 
 One physical reference execution yields both technical and oracle facts:

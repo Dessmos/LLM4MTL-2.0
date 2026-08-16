@@ -95,10 +95,14 @@ def observe_suite(suite: GeneratedSuite, context: ValidationContext) -> SuiteVer
     with observation_lock(observations_root, suite):
         observation = read_observation(observations_root, suite, reference)
         if observation is None:
-            observation = context.adapter.execute_suite(
+            observation, evidence = context.adapter.execute_suite(
                 suite, reference, context.workspace, context.timeout
             )
-            record_observation(observations_root, suite, reference, observation)
+            # Recorded in the same call: the reports behind this observation only
+            # exist until the next suite's `mvn clean` runs in this workspace.
+            record_observation(
+                observations_root, suite, reference, observation, evidence=evidence
+            )
 
     return SuiteVerdict(
         suite,

@@ -17,6 +17,7 @@ from llm4mtl.domain import (
     TransformationOutcome,
 )
 from llm4mtl.languages.base import Workspace
+from llm4mtl.semantic_tests.execution_evidence import RawExecutionEvidence
 from llm4mtl.languages.common import (
     execute_maven_suite,
     materialize_parser,
@@ -93,7 +94,7 @@ class QvtoAdapter:
         transformation: Path,
         workspace: Workspace,
         timeout: int,
-    ) -> SuiteExecutionObservation:
+    ) -> tuple[SuiteExecutionObservation, RawExecutionEvidence]:
         project = workspace.engine_dir / "qvto-tests"
         actual = project / "actual"
         return execute_maven_suite(

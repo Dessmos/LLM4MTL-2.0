@@ -40,6 +40,12 @@ class OutcomeStatus(str, Enum):
         Infrastructure failures and timeouts do not: they say the experiment
         could not observe the transformation, which must stay distinguishable
         from observing that it misbehaved.
+
+        This vocabulary is reached only from the generated-transformation stage,
+        where the suite has already passed reference validation. It records what
+        the run observed, not who is at fault: deciding whether the
+        transformation, the test, or neither should be refined is Source
+        Diagnosis's job, from the evidence this outcome carries.
         """
         return self not in {OutcomeStatus.INFRASTRUCTURE_FAILED, OutcomeStatus.TIMED_OUT}
 

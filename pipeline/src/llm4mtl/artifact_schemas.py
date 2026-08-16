@@ -65,6 +65,7 @@ SCHEMA_FILES: dict[str, str] = {
     "run-index": "run-index.schema.json",
     "diagnosis": "diagnosis.schema.json",
     "suite-execution": "suite-execution.schema.json",
+    "execution-evidence": "execution-evidence.schema.json",
     "generation-result": "generation-result.schema.json",
     "semantic-cases": "semantic_cases.schema.json",
     "contract": "contract.schema.json",

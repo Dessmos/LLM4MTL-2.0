@@ -26,7 +26,7 @@ The request is one JSON object with these fields::
       "assertion_id": "assertion-001",
       "attempt": 1,
       "actual_target_models": [".../snapshot.xmi"],
-      "surefire_reports": [".../TEST-GeneratedTest.xml"],
+      "surefire_reports": [".../TEST-GeneratedTest.xml"],   # optional, see below
       "execution_log": ".../execution.log",                 # optional
       "actual_vs_expected": {                                # required for diagnosis
         "missing_elements": [],
@@ -43,6 +43,14 @@ models, the generated transformation and suite, the reviewed task description,
 and exact metamodels are resolved from the recorded identities.  Every input
 path must stay inside the repository, and the output must stay under
 ``artifacts/work``.  The output is created once and never overwritten.
+
+``surefire_reports`` and ``execution_log`` may be omitted, and normally should
+be: the run archives its own Maven output and Surefire XML beside each execution
+observation, and that archive is the only copy that still describes the
+execution once the next pair's ``mvn clean`` has run.  Omitting them reads the
+archive; naming them explicitly still works for evidence held elsewhere.  A
+request that omits them for an execution with no archive is refused rather than
+producing a report whose runtime evidence is silently empty.
 """
 
 from __future__ import annotations
@@ -58,6 +66,7 @@ from typing import Any, Sequence
 
 from llm4mtl.paths import REPO_ROOT, TARGET
 from llm4mtl.semantic_tests.codegen.java_rendering import sanitize_method_name
+from llm4mtl.semantic_tests.execution_evidence import archived_execution_evidence
 from llm4mtl.serialization.json_io import read_json, write_json_once
 from llm4mtl.transformation_execution.hashing import directory_sha256, file_sha256
 
@@ -125,15 +134,31 @@ class ReportRequest:
             raise FailureReportError("attempt must be a positive integer")
 
         actual_vs_expected = _validate_difference(payload.get("actual_vs_expected"))
+        generated_execution = _input_path(
+            payload.get("generated_execution"), "generated_execution"
+        )
+        # The workspace those reports were produced in is wiped by the next
+        # `mvn clean`, so a request that named them there would break as soon as
+        # the run continued. Omitting them therefore means "read the run's own
+        # archive", which is the only copy that still describes this execution.
+        #
+        # Nothing is inferred either way: an archive that recorded no Surefire
+        # report yields no report, and a request that names neither an explicit
+        # path nor an archived execution is refused rather than producing a
+        # report whose runtime evidence is silently empty.
+        archived = archived_execution_evidence(generated_execution)
+        if "surefire_reports" not in payload and archived.directory is None:
+            raise FailureReportError(
+                "surefire_reports must be an array of paths, or the generated "
+                "execution must have archived execution evidence beside it"
+            )
         return cls(
             run_manifest=_input_path(payload.get("run_manifest"), "run_manifest"),
             syntax_evidence=_input_path(payload.get("syntax_evidence"), "syntax_evidence"),
             execution_evidence=_input_path(
                 payload.get("execution_evidence"), "execution_evidence"
             ),
-            generated_execution=_input_path(
-                payload.get("generated_execution"), "generated_execution"
-            ),
+            generated_execution=generated_execution,
             reference_execution=_optional_input_path(
                 payload.get("reference_execution"), "reference_execution"
             ),
@@ -143,11 +168,15 @@ class ReportRequest:
             actual_target_models=_input_paths(
                 payload.get("actual_target_models"), "actual_target_models"
             ),
-            surefire_reports=_input_paths(
-                payload.get("surefire_reports"), "surefire_reports"
+            surefire_reports=(
+                _input_paths(payload["surefire_reports"], "surefire_reports")
+                if "surefire_reports" in payload
+                else archived.surefire_reports
             ),
-            execution_log=_optional_input_path(
-                payload.get("execution_log"), "execution_log"
+            execution_log=(
+                _optional_input_path(payload.get("execution_log"), "execution_log")
+                if "execution_log" in payload
+                else archived.execution_log
             ),
             actual_vs_expected=actual_vs_expected,
         )

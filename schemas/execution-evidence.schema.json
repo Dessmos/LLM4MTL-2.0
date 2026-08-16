@@ -1,0 +1,179 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://llm4mtl/schemas/execution-evidence.schema.json",
+  "title": "Raw execution evidence",
+  "description": "The authoritative record of one Maven invocation, captured before the next `mvn clean` deletes it and stored in the run's permanent artifacts beside the suite-execution observation it explains. Source Diagnosis reads this instead of the workspace, which is scratch space that does not survive the next execution. This artifact records evidence only: it never carries a verdict, and the observation remains the sole source of the classification. `surefire.present` is stated explicitly so an absent report can never be read as a run with zero failures; when no report parsed, the counts are null rather than 0.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "language",
+    "task",
+    "llm",
+    "strategy",
+    "suite_id",
+    "inputs",
+    "maven",
+    "surefire",
+    "classification"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "language": {
+      "type": "string",
+      "minLength": 1
+    },
+    "task": {
+      "type": "string"
+    },
+    "llm": {
+      "type": "string"
+    },
+    "strategy": {
+      "type": "string"
+    },
+    "suite_id": {
+      "type": "string"
+    },
+    "inputs": {
+      "description": "The same artifact references the observation records, so both name one suite and one transformation in one role. `transformation.role` distinguishes a reference execution from a generated-transformation execution.",
+      "type": "object",
+      "required": [
+        "suite",
+        "transformation"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "suite": {
+          "$ref": "#/$defs/artifactRef"
+        },
+        "transformation": {
+          "$ref": "#/$defs/artifactRef"
+        }
+      }
+    },
+    "maven": {
+      "description": "The complete captured output of the invocation. `stdout`/`stderr` name sibling files holding the untruncated streams; the byte counts let a reader verify nothing was lost.",
+      "type": "object",
+      "required": [
+        "exit_code",
+        "timed_out",
+        "stdout",
+        "stderr",
+        "stdout_bytes",
+        "stderr_bytes"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "exit_code": {
+          "type": ["integer", "string"]
+        },
+        "timed_out": {
+          "type": "boolean"
+        },
+        "stdout": {
+          "type": "string",
+          "minLength": 1
+        },
+        "stderr": {
+          "type": "string",
+          "minLength": 1
+        },
+        "stdout_bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "stderr_bytes": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "surefire": {
+      "type": "object",
+      "required": [
+        "present",
+        "directory",
+        "reports",
+        "tests",
+        "failures",
+        "errors"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "present": {
+          "description": "Whether any TEST-*.xml existed at capture time. False means the reports are genuinely absent, never that the run was clean.",
+          "type": "boolean"
+        },
+        "directory": {
+          "type": "string",
+          "minLength": 1
+        },
+        "reports": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "tests": {
+          "description": "Null when no report parsed. An unknown count is not zero.",
+          "type": ["integer", "null"],
+          "minimum": 0
+        },
+        "failures": {
+          "type": ["integer", "null"],
+          "minimum": 0
+        },
+        "errors": {
+          "type": ["integer", "null"],
+          "minimum": 0
+        }
+      }
+    },
+    "classification": {
+      "description": "A copy of the observation's verdict fields, so the evidence is self-describing. Recorded from the verdict, never an input to it.",
+      "type": "object",
+      "required": [
+        "failure_stage",
+        "error_summary"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "failure_stage": {
+          "type": "string"
+        },
+        "error_summary": {
+          "type": "string"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "artifactRef": {
+      "type": "object",
+      "required": [
+        "path",
+        "sha256",
+        "role"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "role": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}

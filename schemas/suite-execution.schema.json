@@ -94,6 +94,7 @@
           ]
         },
         "failure_stage": {
+          "description": "Which harness phase failed. `unclassified_runtime` means the run threw and no marker identified the phase: it is not a claim about the suite or the transformation, and consumers must count it apart from both. `test_runtime` is legacy: it was the catch-all this value replaced and is retained only so observations recorded before that change stay readable; current code never writes it.",
           "type": "string",
           "enum": [
             "",
@@ -103,6 +104,7 @@
             "model_loading",
             "transformation_parse",
             "engine_runtime",
+            "unclassified_runtime",
             "test_runtime",
             "assertion_failure",
             "timeout",

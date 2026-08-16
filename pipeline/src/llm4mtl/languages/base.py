@@ -29,6 +29,7 @@ from llm4mtl.domain import (
     SuiteExecutionObservation,
     TransformationOutcome,
 )
+from llm4mtl.semantic_tests.execution_evidence import RawExecutionEvidence
 
 
 @dataclass(frozen=True)
@@ -68,8 +69,15 @@ class LanguageAdapter(Protocol):
         transformation: Path,
         workspace: Workspace,
         timeout: int,
-    ) -> SuiteExecutionObservation:
-        """Run ``suite`` against ``transformation`` and report the observed facts."""
+    ) -> tuple[SuiteExecutionObservation, RawExecutionEvidence]:
+        """Run ``suite`` against ``transformation`` and report the observed facts.
+
+        Returns the observation and the raw Maven/Surefire evidence it was
+        derived from. The evidence is part of this contract because it can only
+        be read inside the execution: the workspace it lives in is wiped by the
+        next execution's ``mvn clean``, so a caller that asked for it afterwards
+        would find it gone.
+        """
 
     def normalize_transformation_failure(
         self,

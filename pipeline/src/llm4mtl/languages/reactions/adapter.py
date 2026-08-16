@@ -20,6 +20,7 @@ from llm4mtl.domain import (
     TransformationOutcome,
 )
 from llm4mtl.languages.base import Workspace
+from llm4mtl.semantic_tests.execution_evidence import RawExecutionEvidence
 from llm4mtl.languages.common import (
     execute_maven_suite,
     materialize_parser,
@@ -76,7 +77,7 @@ class ReactionsAdapter:
         transformation: Path,
         workspace: Workspace,
         timeout: int,
-    ) -> SuiteExecutionObservation:
+    ) -> tuple[SuiteExecutionObservation, RawExecutionEvidence]:
         _remove_unused_legacy_dependency(workspace.engine_dir / "consistency/pom.xml")
         return execute_maven_suite(
             suite,

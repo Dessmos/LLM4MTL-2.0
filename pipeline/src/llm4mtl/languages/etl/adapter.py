@@ -31,6 +31,7 @@ from llm4mtl.domain import (
     TransformationOutcome,
 )
 from llm4mtl.languages.base import Workspace
+from llm4mtl.semantic_tests.execution_evidence import RawExecutionEvidence
 from llm4mtl.languages.common import (
     materialize_parser,
     pom_properties,
@@ -38,6 +39,7 @@ from llm4mtl.languages.common import (
 )
 from llm4mtl.paths import TARGET
 from llm4mtl.semantic_tests.suite_execution import execute_suite_against
+from llm4mtl.semantic_tests.surefire import UNCLASSIFIED_RUNTIME
 from llm4mtl.semantic_tests.codegen.java import render_semantic_test
 from llm4mtl.semantic_tests.extraction.semantic_cases import render_generated_suite
 
@@ -103,14 +105,19 @@ class EtlAdapter:
         transformation: Path,
         workspace: Workspace,
         timeout: int,
-    ) -> SuiteExecutionObservation:
+    ) -> tuple[SuiteExecutionObservation, RawExecutionEvidence]:
         return execute_suite_against(suite, transformation, workspace.engine_dir, timeout)
 
     def normalize_transformation_failure(
         self,
         observation: SuiteExecutionObservation,
     ) -> TransformationOutcome | None:
-        """Map ETL engine failures without inventing a semantic snapshot."""
+        """Map ETL engine failures without inventing a semantic snapshot.
+
+        Same contract as :func:`llm4mtl.languages.common.normalize_failure`: the
+        suite is already reference-validated here, so an unrecognized throw is a
+        runtime failure of this pairing rather than an unusable observation.
+        """
         if observation.timed_out:
             return TransformationOutcome(
                 status=OutcomeStatus.TIMED_OUT,
@@ -119,6 +126,7 @@ class EtlAdapter:
         status = {
             "transformation_parse": OutcomeStatus.PARSE_FAILED,
             "engine_runtime": OutcomeStatus.RUNTIME_FAILED,
+            UNCLASSIFIED_RUNTIME: OutcomeStatus.RUNTIME_FAILED,
             "infrastructure": OutcomeStatus.INFRASTRUCTURE_FAILED,
         }.get(observation.failure_stage)
         if status is None:

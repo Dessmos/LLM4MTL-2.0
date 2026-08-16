@@ -17,6 +17,7 @@ from llm4mtl.domain import (
 )
 from llm4mtl.languages.atl.rendering import render_atl_test
 from llm4mtl.languages.base import Workspace
+from llm4mtl.semantic_tests.execution_evidence import RawExecutionEvidence
 from llm4mtl.languages.common import (
     execute_maven_suite,
     materialize_parser,
@@ -73,7 +74,7 @@ class AtlAdapter:
         transformation: Path,
         workspace: Workspace,
         timeout: int,
-    ) -> SuiteExecutionObservation:
+    ) -> tuple[SuiteExecutionObservation, RawExecutionEvidence]:
         return execute_maven_suite(
             suite,
             transformation,
