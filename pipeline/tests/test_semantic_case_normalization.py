@@ -230,6 +230,77 @@ class RepresentationNormalizationStillAppliesTests(unittest.TestCase):
         self.assertEqual(["Tree", "Graph"], [m["name"] for m in spec["tests"][0]["models"]])
 
 
+class NoUndefinedExpectedValuesTests(unittest.TestCase):
+    """A value the contract does not define must not be given one by the emitter.
+
+    `null` in an expected pair used to reach Java generation, where Python's
+    f-string turned it into the literal text "None" — while one Java emitter
+    would have printed `null` and the other the string "null" for the observed
+    side. Three spellings of "absent", none of them defined anywhere.
+    """
+
+    def reference_pairs(self, expected: list) -> str:
+        return spec_with(
+            {
+                "kind": "referencePairs",
+                "model": "Graph",
+                "type": "Edge",
+                "source": "source.name",
+                "target": "target.name",
+                "expected": expected,
+            }
+        )
+
+    def test_a_pair_with_a_null_target_is_rejected(self) -> None:
+        with self.assertRaisesRegex(SemanticCasesError, "no target identity"):
+            parse(self.reference_pairs([{"source": "a", "target": None}]))
+
+    def test_a_pair_with_a_null_source_is_rejected(self) -> None:
+        with self.assertRaisesRegex(SemanticCasesError, "no source identity"):
+            parse(self.reference_pairs([{"source": None, "target": "b"}]))
+
+    def test_a_pair_missing_an_endpoint_entirely_is_rejected(self) -> None:
+        with self.assertRaisesRegex(SemanticCasesError, "no target identity"):
+            parse(self.reference_pairs([{"source": "a"}]))
+
+    def test_complete_pairs_are_accepted(self) -> None:
+        spec = parse(self.reference_pairs([{"source": "a", "target": "b"}]))
+
+        self.assertEqual(
+            [{"source": "a", "target": "b"}], spec["tests"][0]["assertions"][0]["expected"]
+        )
+
+    def test_an_expected_object_missing_a_declared_feature_is_rejected(self) -> None:
+        with self.assertRaisesRegex(SemanticCasesError, "no value for declared feature"):
+            parse(
+                spec_with(
+                    {
+                        "kind": "objects",
+                        "model": "Graph",
+                        "type": "Node",
+                        "features": ["name", "label"],
+                        "expected": [{"name": "a", "label": None}],
+                    }
+                )
+            )
+
+    def test_no_java_is_rendered_for_a_specification_with_a_null_endpoint(self) -> None:
+        generated, validation = render_generated_suite(
+            "Tree2Graph",
+            {SEMANTIC_CASES_FILE: self.reference_pairs([{"source": "a", "target": None}])},
+            language="etl",
+            config=ETL_CONFIG,
+            transformation_extension=".etl",
+            render_test=render_semantic_test,
+        )
+
+        self.assertFalse(validation.valid)
+        self.assertEqual(INVALID_SEMANTIC_CASES, validation.reason_code)
+        # The corruption this replaces was a rendered `"a->None"` expectation.
+        self.assertEqual([], [name for name in generated if name.endswith(".java")])
+        self.assertNotIn("None", json.dumps(generated))
+
+
 class AmbiguityBecomesAnInvalidCandidateTests(unittest.TestCase):
     def test_a_malformed_specification_yields_an_invalid_artifact_not_a_crash(self) -> None:
         extracted = {

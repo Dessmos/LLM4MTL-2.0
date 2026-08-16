@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import subprocess
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -33,6 +34,10 @@ from llm4mtl.semantic_tests.extraction.semantic_cases import render_generated_su
 from llm4mtl.semantic_tests.suites.java import slug
 
 PARSER_TIMEOUT_SECONDS = 1200
+
+# `ReactionsCli` prints this exact line for a run in which the parser returned
+# issues; the number is the measured issue count.
+SYNTAX_ISSUES = re.compile(r"Syntax issues \((\d+)\):")
 
 
 class ReactionsAdapter:
@@ -167,7 +172,7 @@ class ReactionsAdapter:
             ) or _contains_only_unresolved_linkage_diagnostics(diagnostic)
             observations[transformation] = ParseObservation(
                 parsed=syntax_valid,
-                problem_count=0 if syntax_valid else 1,
+                problem_count=_reported_issue_count(diagnostic, completed, output),
                 diagnostic=(
                     ""
                     if completed.returncode == 0 and output.is_file()
@@ -175,6 +180,32 @@ class ReactionsAdapter:
                 ),
             )
         return observations
+
+
+def _reported_issue_count(
+    diagnostic: str,
+    completed: subprocess.CompletedProcess[str],
+    output: Path,
+) -> int | None:
+    """How many issues the Reactions parser reported, or ``None`` if it said nothing.
+
+    ``ReactionsCli`` prints ``Syntax issues (N):`` and exits non-zero whenever
+    the Xtext parser returns issues, and writes the XMI and exits 0 when it
+    returns none. Those are the only two states in which a count was measured;
+    a build failure, a crash, or a timeout produces neither, and reporting a
+    number for them would invent a measurement.
+
+    This is deliberately independent of the syntax verdict. A run whose issues
+    are all known false positives of the frozen standalone parser is still a run
+    in which the parser counted them, so the count is reported as measured while
+    ``parsed`` records the judgement.
+    """
+    reported = SYNTAX_ISSUES.search(diagnostic)
+    if reported:
+        return int(reported.group(1))
+    if completed.returncode == 0 and output.is_file():
+        return 0
+    return None
 
 
 def _contains_only_unresolved_linkage_diagnostics(diagnostic: str) -> bool:

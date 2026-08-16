@@ -143,8 +143,63 @@ def validate_assertions(assertions: list[dict[str, Any]], model_names: set[str],
                 raise SemanticCasesError(
                     f"test #{test_index} objects assertion #{assertion_index} is incomplete"
                 )
+            validate_object_expectations(assertion, test_index, assertion_index)
         if kind == "referencePairs":
             if not assertion.get("source") or not assertion.get("target") or not isinstance(assertion.get("expected"), list):
                 raise SemanticCasesError(
                     f"test #{test_index} referencePairs assertion #{assertion_index} is incomplete"
+                )
+            validate_reference_pair_expectations(assertion, test_index, assertion_index)
+
+
+def validate_reference_pair_expectations(
+    assertion: dict[str, Any], test_index: int, assertion_index: int
+) -> None:
+    """Every expected pair must name both endpoints.
+
+    The harness derives the observed pairs by combining the values reachable
+    along `source` and `target`, so an object whose target path yields nothing
+    contributes no pair at all. An expectation with a null endpoint therefore
+    cannot be satisfied by any model, and rendering it would only decide how the
+    absence is spelled: Python renders `None`, one Java emitter renders `null`
+    and the other the string "null". Nothing in the contract defines that value,
+    so the specification is rejected rather than assigned a meaning here.
+    """
+    for pair_index, pair in enumerate(assertion["expected"], start=1):
+        if not isinstance(pair, dict):
+            raise SemanticCasesError(
+                f"test #{test_index} referencePairs assertion #{assertion_index} "
+                f"expected pair #{pair_index} must be an object with source and target"
+            )
+        for endpoint in ("source", "target"):
+            if pair.get(endpoint) is None:
+                raise SemanticCasesError(
+                    f"test #{test_index} referencePairs assertion #{assertion_index} "
+                    f"expected pair #{pair_index} has no {endpoint} identity; "
+                    "a pair with a missing endpoint can never be observed"
+                )
+
+
+def validate_object_expectations(
+    assertion: dict[str, Any], test_index: int, assertion_index: int
+) -> None:
+    """Every expected object must carry each declared feature with a value.
+
+    The signature the harness compares is built from `features`, so an entry
+    that omits one, or sets it to null, would be compared as the literal text of
+    whatever the emitter happens to print for an absent value.
+    """
+    features = [str(feature) for feature in assertion["features"]]
+    for object_index, expected in enumerate(assertion["expected"], start=1):
+        if not isinstance(expected, dict):
+            raise SemanticCasesError(
+                f"test #{test_index} objects assertion #{assertion_index} "
+                f"expected object #{object_index} must be an object"
+            )
+        for feature in features:
+            if expected.get(feature) is None:
+                raise SemanticCasesError(
+                    f"test #{test_index} objects assertion #{assertion_index} "
+                    f"expected object #{object_index} has no value for declared "
+                    f"feature {feature!r}"
                 )

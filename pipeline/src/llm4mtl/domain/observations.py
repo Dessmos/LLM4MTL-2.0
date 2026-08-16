@@ -13,6 +13,12 @@ from dataclasses import dataclass
 from typing import Any
 
 # Why a generated suite cannot become an executable test.
+#
+# EXTRACTION_FAILED is recorded before any specification is read: the response's
+# file blocks could not be resolved to an unambiguous artifact set. The candidate
+# is still persisted so the response stays in the funnel's denominator, but it
+# carries no artifacts and is never executed.
+EXTRACTION_FAILED = "EXTRACTION_FAILED"
 MISSING_SEMANTIC_CASES = "MISSING_SEMANTIC_CASES"
 INVALID_SEMANTIC_CASES = "INVALID_SEMANTIC_CASES"
 CONTRACT_VIOLATION = "CONTRACT_VIOLATION"
@@ -43,10 +49,22 @@ class ArtifactValidation:
 
 @dataclass(frozen=True)
 class ParseObservation:
-    """Whether a transformation is syntactically accepted by its language parser."""
+    """Whether a transformation is syntactically accepted by its language parser.
+
+    ``problem_count`` is ``None`` when the parser reported no count for this
+    transformation, and an integer only when it actually measured one. The two
+    are different facts: a parser that returned nothing has not established that
+    the transformation has zero problems, and an errors-per-LOC figure computed
+    over a substituted zero would understate exactly the runs where the parser
+    failed to report. ``None`` is therefore the default — a producer that
+    measures a count states it.
+
+    ``parsed`` is independent of it: a transformation with no reported count is
+    not parsed, whatever the count would have been.
+    """
 
     parsed: bool
-    problem_count: int = 0
+    problem_count: int | None = None
     diagnostic: str = ""
 
 

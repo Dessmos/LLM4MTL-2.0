@@ -138,7 +138,15 @@ class EtlAdapter:
         transformations: Sequence[Path],
         workspace: Workspace,
     ) -> dict[Path, ParseObservation]:
-        """Run the Epsilon parser driver and read its JSON report."""
+        """Run the Epsilon parser driver and read its JSON report.
+
+        Every observation leaves ``problem_count`` unset, which records it as
+        unmeasured rather than as zero. The driver does compute a per-file count
+        and writes it to its CSV, but its JSON report — the only thing read here
+        — carries pass/fail lists and totals, not per-file counts. Reporting 0
+        would state that Epsilon found no problems in files it may have rejected.
+        See ``engines/etl/parser/validate_etl_syntax.py``.
+        """
         if not transformations:
             return {}
 

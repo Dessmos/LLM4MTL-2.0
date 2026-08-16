@@ -172,7 +172,11 @@ class QvtoAdapter:
         return {
             path: ParseObservation(
                 parsed=completed.returncode == 0 and parsed.get(path.resolve()) == 0,
-                problem_count=parsed.get(path.resolve(), 0),
+                # No default: the probe prints one LLM4MTL_PARSE line per file it
+                # actually parsed, so a path missing from that output was never
+                # measured. Reporting 0 for it would claim the parser found no
+                # problems in a transformation it never reached.
+                problem_count=parsed.get(path.resolve()),
                 diagnostic=(
                     ""
                     if completed.returncode == 0 and parsed.get(path.resolve()) == 0

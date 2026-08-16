@@ -129,10 +129,14 @@ class AtlAdapter:
             )
             combined = f"{completed.stdout}\n{completed.stderr}"
             match = PARSE_RESULT.search(combined)
-            problem_count = int(match.group(2)) if match else -1
+            reported = int(match.group(2)) if match else None
             observations[transformation] = ParseObservation(
                 parsed=bool(match and match.group(1) == "OK" and completed.returncode == 0),
-                problem_count=max(0, problem_count),
+                # ATLParserMain prints `RESULT:FAIL:-1` when it could not parse
+                # the file at all, so a negative value is its own signal that no
+                # count exists — the same fact as a missing RESULT line. Only a
+                # non-negative value was actually measured.
+                problem_count=reported if reported is not None and reported >= 0 else None,
                 diagnostic="" if match and match.group(1) == "OK" else combined.strip()[-500:],
             )
         return observations

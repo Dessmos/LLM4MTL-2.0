@@ -32,13 +32,8 @@ def next_suite_id(strategy_dir: Path) -> str:
     return f"suite_{max_seen + 1:03d}"
 
 
-def write_suite(
-    target: ResponseTarget,
-    extracted: dict[str, str],
-    args: argparse.Namespace,
-    adapter: LanguageAdapter,
-) -> tuple[Path, ArtifactValidation]:
-    extracted, validation = adapter.render_suite_artifacts(target.task, extracted)
+def allocate_suite_dir(target: ResponseTarget, args: argparse.Namespace) -> Path:
+    """Claim the candidate directory for this response, without writing to it."""
     strategy_dir = (
         args.generated_tests_root.resolve()
         / target.task
@@ -54,6 +49,56 @@ def write_suite(
             f"Target suite already exists and is immutable: {suite_dir}. "
             "Choose a new --suite-id; --overwrite cannot replace scientific evidence."
         )
+    return suite_dir
+
+
+def write_failed_candidate(
+    target: ResponseTarget,
+    args: argparse.Namespace,
+    adapter: LanguageAdapter,
+    *,
+    reason_code: str,
+    violations: tuple[str, ...],
+) -> tuple[Path, ArtifactValidation]:
+    """Record a response whose artifacts could not be read, inventing nothing.
+
+    A response that fails extraction is still a generated test the experiment
+    asked for, so it has to stay countable: without a candidate directory it
+    would vanish from every stage after `extract`, and the invalid-test rate
+    would be computed over a population the weakest models had silently left.
+
+    The directory holds metadata only. No ``semantic_cases.json``, no models, no
+    harness — there is nothing to write them from, and a placeholder would be a
+    fabricated artifact. Because the recorded verdict is invalid, validation
+    refuses the suite before Maven, so this can never become a runtime failure.
+    """
+    validation = ArtifactValidation(
+        valid=False,
+        reason_code=reason_code,
+        violations=violations,
+    )
+    suite_dir = allocate_suite_dir(target, args)
+    if args.dry_run:
+        return suite_dir, validation
+
+    suite_dir.mkdir(parents=True, exist_ok=True)
+    metadata = build_metadata(target, suite_dir.name, {}, validation, adapter)
+    (suite_dir / "metadata.json").write_text(
+        json.dumps(metadata, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    return suite_dir, validation
+
+
+def write_suite(
+    target: ResponseTarget,
+    extracted: dict[str, str],
+    args: argparse.Namespace,
+    adapter: LanguageAdapter,
+) -> tuple[Path, ArtifactValidation]:
+    extracted, validation = adapter.render_suite_artifacts(target.task, extracted)
+    suite_dir = allocate_suite_dir(target, args)
+    suite_id = suite_dir.name
 
     if args.dry_run:
         return suite_dir, validation

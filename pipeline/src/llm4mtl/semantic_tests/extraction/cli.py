@@ -17,12 +17,13 @@ from llm4mtl.conventions import (
     default_responses_root,
     language_config,
 )
+from llm4mtl.domain import EXTRACTION_FAILED
 from llm4mtl.languages import REQUIRED_LANGUAGES, language_adapter
 from llm4mtl.languages.base import LanguageAdapter
 from llm4mtl.semantic_tests.extraction.discovery import discover_responses
 from llm4mtl.semantic_tests.extraction.models import ExtractionError, ResponseTarget
 from llm4mtl.semantic_tests.extraction.parser import extract_files
-from llm4mtl.semantic_tests.extraction.writer import write_suite
+from llm4mtl.semantic_tests.extraction.writer import write_failed_candidate, write_suite
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -123,12 +124,14 @@ def extract_one(
     try:
         extracted = extract_files(markdown)
     except ExtractionError as exc:
-        # A response whose artifacts cannot be identified is a failed
-        # extraction, not a reason to stop the run. No suite is written,
-        # because there is no specification to write one from.
-        return False, f"cannot extract artifacts from {target.response_path}: {exc}"
+        return _failed_candidate(target, args, adapter, str(exc))
     if not extracted:
-        return False, f"no extractable artifact blocks found in {target.response_path}"
+        return _failed_candidate(
+            target,
+            args,
+            adapter,
+            f"no fenced file block found in {target.response_path.name}",
+        )
 
     suite_dir, validation = write_suite(target, extracted, args, adapter)
     action = "would write" if args.dry_run else "wrote"
@@ -136,6 +139,30 @@ def extract_one(
         reason = "; ".join(validation.violations)
         return False, f"{action} {suite_dir} [INVALID: {validation.reason_code}] {reason}"
     return True, f"{action} {suite_dir}"
+
+
+def _failed_candidate(
+    target: ResponseTarget,
+    args: argparse.Namespace,
+    adapter: LanguageAdapter,
+    reason: str,
+) -> tuple[bool, str]:
+    """Persist an unreadable response as an invalid candidate and keep going.
+
+    The response stays countable in every stage that follows: it is selected
+    like any other candidate, refused at artifact validation, and therefore
+    never executed. Dropping it instead would shrink the invalid-test rate's
+    denominator by exactly the responses that deserve to be in it.
+    """
+    suite_dir, validation = write_failed_candidate(
+        target,
+        args,
+        adapter,
+        reason_code=EXTRACTION_FAILED,
+        violations=(reason,),
+    )
+    action = "would record" if args.dry_run else "recorded"
+    return False, f"{action} {suite_dir} [INVALID: {validation.reason_code}] {reason}"
 
 
 def main(argv: list[str] | None = None) -> int:

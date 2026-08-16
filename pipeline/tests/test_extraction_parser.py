@@ -9,12 +9,25 @@ answering RQ1 on the model's behalf.
 from __future__ import annotations
 
 import argparse
+import json
+import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
+from llm4mtl.domain import EXTRACTION_FAILED
+from llm4mtl.languages.etl.adapter import EtlAdapter
 from llm4mtl.semantic_tests.extraction.cli import extract_one
 from llm4mtl.semantic_tests.extraction.models import ExtractionError, ResponseTarget
 from llm4mtl.semantic_tests.extraction.parser import extract_files
+from llm4mtl.semantic_tests.suites.discovery import suite_from_path
+from llm4mtl.semantic_tests.validation import (
+    ARTIFACT_INVALID,
+    ValidationContext,
+    observe_suite,
+    reference_counts,
+    technical_counts,
+)
 
 CASES = '{"schemaVersion": 1, "tests": []}'
 
@@ -120,34 +133,107 @@ class KnownArtifactRoleTests(unittest.TestCase):
         self.assertEqual(["models/nested/input.model"], sorted(extracted))
 
 
-class ExtractionFailureIsReportedNotRaisedTests(unittest.TestCase):
-    def test_the_stage_records_a_failure_and_keeps_going(self) -> None:
-        import tempfile
+class ExtractionFailureStaysInTheFunnelTests(unittest.TestCase):
+    """A response that fails extraction must stay countable.
 
-        with tempfile.TemporaryDirectory() as temp_dir:
-            response = Path(temp_dir) / "Tree2Graph.md"
-            response.write_text(
-                "Here is the file: semantic_cases.json\n\n" + block("json"),
-                encoding="utf-8",
-            )
-            target = ResponseTarget(
-                response_path=response, llm="qwen", strategy="only_prompt", task="Tree2Graph"
-            )
-            args = argparse.Namespace(
-                generated_tests_root=Path(temp_dir) / "generated",
-                suite_id=None,
-                overwrite=False,
-                dry_run=False,
-            )
+    RQ1's invalid-test rate is computed over the generated tests the experiment
+    asked for. If a malformed response produced no candidate at all, it would
+    leave every stage after `extract`, and the weakest models would shrink the
+    denominator instead of scoring badly in it.
+    """
 
-            extracted, message = extract_one(target, args, adapter=None)
+    def setUp(self) -> None:
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        root = Path(self.temp.name)
+        self.generated_tests_root = root / "generated"
+        self.response = root / "Tree2Graph.md"
+        self.response.write_text(
+            "Here is the file: semantic_cases.json\n\n" + block("json"),
+            encoding="utf-8",
+        )
+        self.target = ResponseTarget(
+            response_path=self.response,
+            llm="qwen2-5-coder-7b",
+            strategy="only_prompt",
+            task="Tree2Graph",
+        )
+        self.args = argparse.Namespace(
+            generated_tests_root=self.generated_tests_root,
+            suite_id=None,
+            overwrite=False,
+            dry_run=False,
+        )
+        self.adapter = EtlAdapter()
 
-            self.assertFalse(extracted)
-            self.assertIn("cannot extract artifacts", message)
-            self.assertIn("does not name a file", message)
-            # No candidate directory is invented for a response that declared
-            # no readable specification.
-            self.assertFalse((Path(temp_dir) / "generated").exists())
+    def extract(self) -> tuple[bool, str]:
+        return extract_one(self.target, self.args, self.adapter)
+
+    def candidates(self) -> list[Path]:
+        return sorted(self.generated_tests_root.glob("*/candidates/*/*/suite_*"))
+
+    def test_selected_one_yields_one_persisted_invalid_candidate(self) -> None:
+        ok, message = self.extract()
+
+        self.assertFalse(ok)
+        self.assertIn(EXTRACTION_FAILED, message)
+
+        candidates = self.candidates()
+        self.assertEqual(1, len(candidates))
+        metadata = json.loads((candidates[0] / "metadata.json").read_text(encoding="utf-8"))
+        self.assertEqual("invalid", metadata["status"])
+        self.assertFalse(metadata["artifact_validation"]["valid"])
+        self.assertEqual(EXTRACTION_FAILED, metadata["artifact_validation"]["reason_code"])
+
+    def test_the_candidate_keeps_the_identity_of_the_response_it_came_from(self) -> None:
+        self.extract()
+        metadata = json.loads(
+            (self.candidates()[0] / "metadata.json").read_text(encoding="utf-8")
+        )
+
+        self.assertEqual("etl", metadata["language"])
+        self.assertEqual("Tree2Graph", metadata["task"])
+        self.assertEqual("qwen2-5-coder-7b", metadata["llm"])
+        self.assertEqual("only_prompt", metadata["strategy"])
+        self.assertTrue(metadata["raw_output_file"].endswith("Tree2Graph.md"))
+
+    def test_no_executable_artifact_is_fabricated(self) -> None:
+        self.extract()
+        suite = self.candidates()[0]
+
+        self.assertEqual(["metadata.json"], sorted(p.name for p in suite.iterdir()))
+        self.assertEqual([], metadata_free_files(suite))
+
+    def test_it_is_never_sent_to_execution_and_counts_as_invalid(self) -> None:
+        self.extract()
+        suite = suite_from_path(
+            self.candidates()[0], self.generated_tests_root.resolve(), "etl"
+        )
+        context = ValidationContext(adapter=self.adapter, workspace=None, timeout=1)
+
+        def must_not_run(*_args, **_kwargs):  # pragma: no cover - the point is it is unused
+            raise AssertionError("an unreadable response must never reach Maven")
+
+        with patch.object(self.adapter, "execute_suite", side_effect=must_not_run):
+            verdict = observe_suite(suite, context)
+
+        self.assertEqual(ARTIFACT_INVALID, verdict.status)
+        self.assertIn(EXTRACTION_FAILED, verdict.error_summary)
+
+        # One candidate selected, counted as invalid, none technically
+        # executable and none reference-validated.
+        technical = technical_counts([verdict], 1)
+        reference = reference_counts([verdict], 1)
+        self.assertEqual({"selected": 1, "invalid": 1, "passed": 0}, {k: technical[k] for k in ("selected", "invalid", "passed")})
+        self.assertEqual({"selected": 1, "validated": 0, "invalid": 0}, {k: reference[k] for k in ("selected", "validated", "invalid")})
+
+
+def metadata_free_files(suite: Path) -> list[str]:
+    return sorted(
+        str(item.relative_to(suite))
+        for item in suite.rglob("*")
+        if item.is_file() and item.name != "metadata.json"
+    )
 
 
 if __name__ == "__main__":

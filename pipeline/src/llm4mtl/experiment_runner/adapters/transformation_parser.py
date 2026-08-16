@@ -55,6 +55,13 @@ class TransformationParserAdapter:
         details.update(
             passed_transformations=[str(path) for path in passed],
             failed_transformations=[str(path) for path in failed],
+            # Every selected transformation appears, so a parser that reported no
+            # count for one is visible as `null` rather than absent. Serialized
+            # as JSON, that stays distinguishable from a measured 0 — which is
+            # what any errors-per-LOC figure has to divide by.
+            problem_counts={
+                str(path): observations[path].problem_count for path in transformations
+            },
             diagnostics={
                 str(path): observations[path].diagnostic
                 for path in failed

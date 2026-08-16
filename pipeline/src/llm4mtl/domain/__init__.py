@@ -14,6 +14,7 @@ from __future__ import annotations
 from llm4mtl.domain.artifacts import ArtifactRef
 from llm4mtl.domain.observations import (
     CONTRACT_VIOLATION,
+    EXTRACTION_FAILED,
     INVALID_SEMANTIC_CASES,
     MISSING_SEMANTIC_CASES,
     ArtifactValidation,
@@ -41,6 +42,7 @@ __all__ = [
     "ChangeKind",
     "ChangeOperation",
     "CONTRACT_VIOLATION",
+    "EXTRACTION_FAILED",
     "ElementRef",
     "ElementSpec",
     "Expectation",
