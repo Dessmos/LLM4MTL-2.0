@@ -47,7 +47,10 @@ class OutcomeStatus(str, Enum):
         transformation, the test, or neither should be refined is Source
         Diagnosis's job, from the evidence this outcome carries.
         """
-        return self not in {OutcomeStatus.INFRASTRUCTURE_FAILED, OutcomeStatus.TIMED_OUT}
+        return self not in {
+            OutcomeStatus.INFRASTRUCTURE_FAILED,
+            OutcomeStatus.TIMED_OUT,
+        }
 
 
 @dataclass(frozen=True)
@@ -73,7 +76,9 @@ class TransformationOutcome:
 
     def __post_init__(self) -> None:
         if self.status.is_success and not self.snapshots:
-            raise ValueError("a successful outcome must carry at least one model snapshot")
+            raise ValueError(
+                "a successful outcome must carry at least one model snapshot"
+            )
         if not self.status.is_success and self.snapshots:
             raise ValueError(
                 f"a {self.status.value} outcome cannot carry model snapshots"

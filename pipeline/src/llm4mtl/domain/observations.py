@@ -109,7 +109,11 @@ class SuiteExecutionObservation:
     @property
     def is_infrastructure_failure(self) -> bool:
         """The run says nothing about the suite because the harness itself broke."""
-        return self.failure_stage in {"timeout", "transformation_parse", "infrastructure"}
+        return self.failure_stage in {
+            "timeout",
+            "transformation_parse",
+            "infrastructure",
+        }
 
     def to_dict(self) -> dict[str, Any]:
         return {

@@ -23,8 +23,15 @@ class GeneratedSuite:
     suite_id: str
 
     def __post_init__(self) -> None:
-        for name in ("language", "task", "llm", "strategy", "suite_id"):
-            if not getattr(self, name):
+        identity_values = (
+            ("language", self.language),
+            ("task", self.task),
+            ("llm", self.llm),
+            ("strategy", self.strategy),
+            ("suite_id", self.suite_id),
+        )
+        for name, value in identity_values:
+            if not value:
                 raise ValueError(f"a generated suite needs a non-empty {name}")
 
     @property

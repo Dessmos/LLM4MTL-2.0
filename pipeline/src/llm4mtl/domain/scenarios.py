@@ -65,6 +65,19 @@ class ChangeKind(str, Enum):
     MOVE = "move"
 
 
+_CHANGE_KINDS_REQUIRING_FEATURE = frozenset(
+    {
+        ChangeKind.SET_FEATURE,
+        ChangeKind.ADD_TO_COLLECTION,
+        ChangeKind.REMOVE_FROM_COLLECTION,
+        ChangeKind.MOVE,
+    }
+)
+_CHANGE_KINDS_REQUIRING_VALUE = frozenset(
+    {ChangeKind.CREATE, ChangeKind.ADD_TO_COLLECTION}
+)
+
+
 @dataclass(frozen=True)
 class ModelSlot:
     """One named model a scenario reads, writes, or both."""
@@ -79,7 +92,8 @@ class ModelSlot:
             raise ValueError("a model slot needs a name")
         if self.role.is_readable and not self.artifact:
             raise ValueError(
-                f"model slot '{self.name}' is read by the scenario but declares no initial artifact"
+                f"model slot '{self.name}' is read by the scenario "
+                "but declares no initial artifact"
             )
 
 
@@ -110,17 +124,11 @@ class ChangeOperation:
     value: ElementSpec | ElementRef | str | int | float | bool | None = None
 
     def __post_init__(self) -> None:
-        needs_feature = {
-            ChangeKind.SET_FEATURE,
-            ChangeKind.ADD_TO_COLLECTION,
-            ChangeKind.REMOVE_FROM_COLLECTION,
-            ChangeKind.MOVE,
-        }
-        if self.kind in needs_feature and not self.feature:
+        if self.kind in _CHANGE_KINDS_REQUIRING_FEATURE and not self.feature:
             raise ValueError(f"{self.kind.value} needs the feature it changes")
         if self.kind is ChangeKind.DELETE and self.value is not None:
             raise ValueError("delete does not take a value")
-        if self.kind in {ChangeKind.CREATE, ChangeKind.ADD_TO_COLLECTION} and self.value is None:
+        if self.kind in _CHANGE_KINDS_REQUIRING_VALUE and self.value is None:
             raise ValueError(f"{self.kind.value} needs the element it adds")
 
 
@@ -155,6 +163,12 @@ class SemanticScenario:
     changes: tuple[ChangeOperation, ...] = ()
 
     def __post_init__(self) -> None:
+        self._validate_required_content()
+        declared_slot_names = {slot.name for slot in self.slots}
+        self._validate_slot_references(declared_slot_names)
+        self._validate_scenario_kind()
+
+    def _validate_required_content(self) -> None:
         if not self.name:
             raise ValueError("a scenario needs a name")
         if not self.slots:
@@ -162,27 +176,31 @@ class SemanticScenario:
         if not self.expectations:
             raise ValueError(f"scenario '{self.name}' asserts nothing")
 
-        slot_names = {slot.name for slot in self.slots}
-        if len(slot_names) != len(self.slots):
+    def _validate_slot_references(self, declared_slot_names: set[str]) -> None:
+        if len(declared_slot_names) != len(self.slots):
             raise ValueError(f"scenario '{self.name}' declares duplicate slot names")
         for expectation in self.expectations:
-            if expectation.slot not in slot_names:
+            if expectation.slot not in declared_slot_names:
                 raise ValueError(
-                    f"scenario '{self.name}' asserts on unknown slot '{expectation.slot}'"
+                    f"scenario '{self.name}' asserts on unknown slot "
+                    f"'{expectation.slot}'"
                 )
         for change in self.changes:
-            if change.target.slot not in slot_names:
+            if change.target.slot not in declared_slot_names:
                 raise ValueError(
-                    f"scenario '{self.name}' changes unknown slot '{change.target.slot}'"
+                    f"scenario '{self.name}' changes unknown slot "
+                    f"'{change.target.slot}'"
                 )
 
+    def _validate_scenario_kind(self) -> None:
         if self.kind is ScenarioKind.CHANGE_PROPAGATION and not self.changes:
             raise ValueError(
                 f"scenario '{self.name}' propagates change but declares none"
             )
         if self.kind is ScenarioKind.BATCH_TRANSFORMATION and self.changes:
             raise ValueError(
-                f"scenario '{self.name}' is a batch transformation and cannot declare changes"
+                f"scenario '{self.name}' is a batch transformation "
+                "and cannot declare changes"
             )
 
     def slot(self, name: str) -> ModelSlot:
@@ -206,4 +224,6 @@ class SemanticSuite:
             raise ValueError(f"suite '{self.suite_id}' contains no scenarios")
         names = [scenario.name for scenario in self.scenarios]
         if len(set(names)) != len(names):
-            raise ValueError(f"suite '{self.suite_id}' contains duplicate scenario names")
+            raise ValueError(
+                f"suite '{self.suite_id}' contains duplicate scenario names"
+            )
