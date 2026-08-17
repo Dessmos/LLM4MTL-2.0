@@ -88,16 +88,25 @@ def _declared_metamodels(spec: dict[str, Any]) -> list[str]:
 
 
 def _declared_top_level_metamodels(spec: dict[str, Any]) -> list[str]:
+    """Return identifiers from top-level metamodel declarations in input order."""
     raw: list[str] = []
     for item in spec.get("metamodels") or []:
-        if isinstance(item, dict):
-            for key in ("uri", "metamodelUri", "name"):
-                if item.get(key):
-                    raw.append(str(item[key]))
-                    break
-        elif isinstance(item, str) and item:
-            raw.append(Path(item).stem)
+        identifier = _top_level_metamodel_identifier(item)
+        if identifier is not None:
+            raw.append(identifier)
     return raw
+
+
+def _top_level_metamodel_identifier(item: object) -> str | None:
+    """Normalize one supported top-level metamodel declaration."""
+    if isinstance(item, dict):
+        for key in ("uri", "metamodelUri", "name"):
+            if item.get(key):
+                return str(item[key])
+        return None
+    if isinstance(item, str) and item:
+        return Path(item).stem
+    return None
 
 
 def _declared_model_uris(spec: dict[str, Any]) -> list[str]:
@@ -284,24 +293,43 @@ def _validate_assertion_types(
     violations: list[str],
     test_index: int,
 ) -> None:
+    """Append type violations for assertions whose models were matched."""
     for assertion_index, assertion in enumerate(assertions, start=1):
-        if not isinstance(assertion, dict):
-            continue
-        type_name = assertion.get("type")
-        model_name = assertion.get("model")
-        if not type_name or not model_name:
-            continue
-        contract_model = model_to_contract.get(str(model_name))
-        if contract_model is None:
-            # The model itself failed to map; that violation is already recorded.
-            continue
-        if contract_model.kind != "emf":
-            # plainXml assertions target XML element names, not metamodel types.
-            continue
-        if str(type_name) not in contract_model.available_types:
-            available = ", ".join(contract_model.available_types) or "<none>"
-            violations.append(
-                f"test #{test_index} assertion #{assertion_index}: type "
-                f"'{contract_model.runtime_name}!{type_name}' is not defined in "
-                f"metamodel '{contract_model.metamodel_uri}' (available: {available})"
-            )
+        violation = _assertion_type_violation(
+            assertion,
+            model_to_contract,
+            test_index,
+            assertion_index,
+        )
+        if violation is not None:
+            violations.append(violation)
+
+
+def _assertion_type_violation(
+    assertion: object,
+    model_to_contract: dict[str, ModelContract],
+    test_index: int,
+    assertion_index: int,
+) -> str | None:
+    """Return one assertion-type violation, or ``None`` when none applies."""
+    if not isinstance(assertion, dict):
+        return None
+    type_name = assertion.get("type")
+    model_name = assertion.get("model")
+    if not type_name or not model_name:
+        return None
+    contract_model = model_to_contract.get(str(model_name))
+    if contract_model is None:
+        # The model itself failed to map; that violation is already recorded.
+        return None
+    if contract_model.kind != "emf":
+        # plainXml assertions target XML element names, not metamodel types.
+        return None
+    if str(type_name) in contract_model.available_types:
+        return None
+    available = ", ".join(contract_model.available_types) or "<none>"
+    return (
+        f"test #{test_index} assertion #{assertion_index}: type "
+        f"'{contract_model.runtime_name}!{type_name}' is not defined in "
+        f"metamodel '{contract_model.metamodel_uri}' (available: {available})"
+    )

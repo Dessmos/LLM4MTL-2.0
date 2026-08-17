@@ -14,18 +14,7 @@ SMOKE_RESPONSE_SUFFIXES = (".qwen-smoke",)
 def discover_responses(args: argparse.Namespace) -> list[ResponseTarget]:
     """Discover response files selected by extraction CLI arguments."""
     if args.response:
-        if args.suite_id and len(args.response) != 1:
-            raise SystemExit("--suite-id can only be used with a single --response")
-        return [
-            response_target_from_path(
-                response_path=path.resolve(),
-                responses_root=args.responses_root.resolve(),
-                llm_override=args.llm,
-                strategy_override=args.strategy,
-                task_override=args.task,
-            )
-            for path in args.response
-        ]
+        return _explicit_response_targets(args)
 
     root = args.responses_root.resolve()
     pattern = f"*/**/{args.task}.md" if args.task else "*/*/*.md"
@@ -43,6 +32,24 @@ def discover_responses(args: argparse.Namespace) -> list[ResponseTarget]:
             task_override=args.task,
         )
         for path in responses
+    ]
+
+
+def _explicit_response_targets(
+    args: argparse.Namespace,
+) -> list[ResponseTarget]:
+    if args.suite_id and len(args.response) != 1:
+        raise SystemExit("--suite-id can only be used with a single --response")
+    responses_root = args.responses_root.resolve()
+    return [
+        response_target_from_path(
+            response_path=path.resolve(),
+            responses_root=responses_root,
+            llm_override=args.llm,
+            strategy_override=args.strategy,
+            task_override=args.task,
+        )
+        for path in args.response
     ]
 
 

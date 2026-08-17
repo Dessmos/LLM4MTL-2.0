@@ -43,6 +43,21 @@ FILE_TO_TEST = {
 }
 
 
+def _error_detail(output: str) -> str:
+    error_detail = ""
+    for line in output.splitlines():
+        line_stripped = line.strip()
+        if "Errors:" in line_stripped or "Failures:" in line_stripped:
+            if line_stripped not in ("Errors:", "Failures:"):
+                error_detail = line_stripped
+        elif ("expected:" in line_stripped or "Expected" in line_stripped
+              or "NotFound" in line_stripped or "RuntimeException" in line_stripped
+              or "ETL parse errors" in line_stripped):
+            return line_stripped
+
+    return error_detail
+
+
 def run_test(test_class: str) -> tuple[bool, str]:
     """Run a single Maven test class. Returns (passed, error_detail)."""
     cmd = ["mvn", "test", f"-Dtest={test_class}", "-pl", ".", "--batch-mode"]
@@ -57,20 +72,7 @@ def run_test(test_class: str) -> tuple[bool, str]:
         )
         if result.returncode == 0:
             return True, ""
-        # Extract error detail from output
-        output = result.stdout + result.stderr
-        error_detail = ""
-        for line in output.splitlines():
-            line_stripped = line.strip()
-            if "Errors:" in line_stripped or "Failures:" in line_stripped:
-                if line_stripped not in ("Errors:", "Failures:"):
-                    error_detail = line_stripped
-            elif ("expected:" in line_stripped or "Expected" in line_stripped
-                  or "NotFound" in line_stripped or "RuntimeException" in line_stripped
-                  or "ETL parse errors" in line_stripped):
-                error_detail = line_stripped
-                break
-        return False, error_detail
+        return False, _error_detail(result.stdout + result.stderr)
     except subprocess.TimeoutExpired:
         return False, "TIMEOUT"
     except Exception as e:

@@ -19,6 +19,9 @@ from llm4mtl.prompt_assembly.n8n_exports import (
     PROMPT_INPUT_NODE,
     PROVIDER_MODEL_IDS,
     STRATEGIES,
+    _drop_unwired_chat_models,
+    _normalize_node_entry_ids,
+    _rename_connection_node,
     synchronize_prompt_generation,
     synchronize_test_generation,
     synchronize_transformation_generation,
@@ -96,6 +99,82 @@ class ActivePathTests(unittest.TestCase):
 
 
 class N8nWorkflowTests(unittest.TestCase):
+    def test_node_entry_ids_preserve_holder_and_list_positions(self) -> None:
+        node = {
+            "name": "Save File Name!",
+            "parameters": {
+                "assignments": {
+                    "assignments": [
+                        {"id": "old-first"},
+                        {"value": "no id"},
+                        {"id": "old-third"},
+                    ]
+                },
+                "conditions": {"conditions": [{"id": "old-condition"}]},
+            },
+        }
+
+        _normalize_node_entry_ids(node)
+
+        assignments = node["parameters"]["assignments"]["assignments"]
+        conditions = node["parameters"]["conditions"]["conditions"]
+        self.assertEqual("save-file-name-assignments-1", assignments[0]["id"])
+        self.assertNotIn("id", assignments[1])
+        self.assertEqual("save-file-name-assignments-3", assignments[2]["id"])
+        self.assertEqual("save-file-name-conditions-1", conditions[0]["id"])
+
+    def test_only_unwired_chat_models_and_their_connections_are_removed(self) -> None:
+        chat_type = "@n8n/n8n-nodes-langchain.lmChatOpenAi"
+        payload = {
+            "nodes": [
+                {"name": "Wired model", "type": chat_type},
+                {"name": "Unwired model", "type": chat_type},
+                {"name": "Generate", "type": "n8n-nodes-base.set"},
+            ],
+            "connections": {
+                "Wired model": {
+                    "ai_languageModel": [[{"node": "Generate"}]],
+                },
+                "Unwired model": {"ai_languageModel": []},
+                "Generate": {"main": []},
+            },
+        }
+
+        result = _drop_unwired_chat_models(payload)
+
+        self.assertIs(payload, result)
+        self.assertEqual(
+            ["Wired model", "Generate"],
+            [node["name"] for node in result["nodes"]],
+        )
+        self.assertEqual(
+            {"Wired model", "Generate"},
+            set(result["connections"]),
+        )
+
+    def test_connection_renaming_updates_source_keys_and_nested_targets(self) -> None:
+        connections = {
+            "Old node": {
+                "main": [[{"node": "Old node", "type": "main", "index": 0}]]
+            },
+            "Unchanged": {"node": "Old node"},
+        }
+
+        renamed = _rename_connection_node(
+            connections,
+            "Old node",
+            "New node",
+        )
+
+        self.assertNotIn("Old node", renamed)
+        self.assertIn("New node", renamed)
+        self.assertEqual(
+            "New node",
+            renamed["New node"]["main"][0][0]["node"],
+        )
+        self.assertEqual("New node", renamed["Unchanged"]["node"])
+        self.assertIn("Old node", connections)
+
     def test_connections_reference_existing_nodes(self) -> None:
         for workflow in sorted(TARGET.workflows.rglob("*.json")):
             payload = json.loads(workflow.read_text(encoding="utf-8"))

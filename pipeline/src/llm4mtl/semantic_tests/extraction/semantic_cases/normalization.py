@@ -135,22 +135,19 @@ def normalize_metamodels(raw: Any) -> Any:
     """
     if not isinstance(raw, list):
         return raw
-    paths: list[Any] = []
-    for item in raw:
-        if isinstance(item, str):
-            paths.append(item)
-        elif isinstance(item, dict):
-            if item.get("path"):
-                paths.append(str(item["path"]))
-            elif item.get("uri"):
-                paths.append(f"metamodels/{item['uri']}.ecore")
-            elif item.get("name"):
-                paths.append(f"metamodels/{item['name']}.ecore")
-            else:
-                paths.append(item)
-        else:
-            paths.append(item)
-    return paths
+    return [_normalize_metamodel(item) for item in raw]
+
+
+def _normalize_metamodel(item: Any) -> Any:
+    if not isinstance(item, dict):
+        return item
+    if item.get("path"):
+        return str(item["path"])
+    if item.get("uri"):
+        return f"metamodels/{item['uri']}.ecore"
+    if item.get("name"):
+        return f"metamodels/{item['name']}.ecore"
+    return item
 
 
 def normalize_models(raw: Any) -> Any:

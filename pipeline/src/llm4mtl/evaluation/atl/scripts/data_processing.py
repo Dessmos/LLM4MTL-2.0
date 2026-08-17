@@ -210,37 +210,33 @@ def add_significance_markers(summary_df, results_df):
             key = (row['LLM'], row['strategy'], row['metric'])
             sig_dict[key] = True
     
-    # Add markers according to summary table column names
     summary_with_sig = summary_df.copy()
-    
-    # Process CHRF_Score
+    metric_columns = []
     if 'CHRF_Score' in summary_with_sig.columns:
-        summary_with_sig['CHRF_Score'] = summary_with_sig.apply(
-            lambda row: _add_sig_marker(row['CHRF_Score'], row['LLM'], row['Strategy'], 'CHRF_Score', sig_dict),
-            axis=1
-        )
-    
-    # Process errors_per_LOC
+        metric_columns.append(('CHRF_Score', 'CHRF_Score'))
     if 'errors_per_LOC' in summary_with_sig.columns:
-        summary_with_sig['errors_per_LOC'] = summary_with_sig.apply(
-            lambda row: _add_sig_marker(row['errors_per_LOC'], row['LLM'], row['Strategy'], 'errors_per_LOC', sig_dict),
-            axis=1
+        metric_columns.append(('errors_per_LOC', 'errors_per_LOC'))
+    metric_columns.extend(
+        (column, 'Parsed')
+        for column in summary_with_sig.columns
+        if 'Parsed' in column
+    )
+    metric_columns.extend(
+        (column, 'test_pass')
+        for column in summary_with_sig.columns
+        if 'test_pass' in column.lower()
+    )
+
+    for column, metric in metric_columns:
+        summary_with_sig[column] = summary_with_sig.apply(
+            lambda row: _add_sig_marker(
+                row[column],
+                row['LLM'],
+                row['Strategy'],
+                metric,
+                sig_dict,
+            ),
+            axis=1,
         )
-    
-    # Process Parsed-related columns
-    parsed_cols = [col for col in summary_with_sig.columns if 'Parsed' in col]
-    for col in parsed_cols:
-        summary_with_sig[col] = summary_with_sig.apply(
-            lambda row: _add_sig_marker(row[col], row['LLM'], row['Strategy'], 'Parsed', sig_dict),
-            axis=1
-        )
-    
-    # Process test_pass-related columns
-    test_pass_cols = [col for col in summary_with_sig.columns if 'test_pass' in col.lower()]
-    for col in test_pass_cols:
-        summary_with_sig[col] = summary_with_sig.apply(
-            lambda row: _add_sig_marker(row[col], row['LLM'], row['Strategy'], 'test_pass', sig_dict),
-            axis=1
-        )
-    
+
     return summary_with_sig

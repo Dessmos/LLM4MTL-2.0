@@ -15,6 +15,7 @@ import os
 import glob
 import csv
 from collections import defaultdict
+from collections.abc import Iterable
 
 # Optional dependencies
 try:
@@ -166,10 +167,10 @@ def generate_etl_parsed_rate_csv(output_csv='etl_parsed_rate.csv'):
     return output_csv
 
 
-def print_etl_parsed_rate_summary(csv_data):
-    """Print ETL parsed rate summary."""
+def _etl_parse_stats(
+    csv_data: Iterable[dict[str, object]],
+) -> defaultdict[tuple[object, object], dict[str, int]]:
     stats = defaultdict(lambda: {'total': 0, 'valid': 0, 'problems': 0})
-
     for row in csv_data:
         key = (row['LLM'], row['Strategy'])
         stats[key]['total'] += 1
@@ -177,6 +178,15 @@ def print_etl_parsed_rate_summary(csv_data):
             stats[key]['valid'] += 1
         if row['ProblemCount'] > 0:
             stats[key]['problems'] += row['ProblemCount']
+
+    return stats
+
+
+def print_etl_parsed_rate_summary(
+    csv_data: Iterable[dict[str, object]],
+) -> None:
+    """Print ETL parsed rate summary."""
+    stats = _etl_parse_stats(csv_data)
 
     print("\n" + "=" * 85)
     print("ETL PARSED RATE SUMMARY")

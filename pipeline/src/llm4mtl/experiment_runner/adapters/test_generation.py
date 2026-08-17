@@ -21,6 +21,7 @@ from llm4mtl.semantic_tests.suites.discovery import suite_from_path
 from llm4mtl.semantic_tests.technical_validation.suite import check_suite
 from llm4mtl.semantic_tests.validation import (
     ValidationContext,
+    SuiteVerdict,
     reference_counts,
     technical_counts,
     workspace_for,
@@ -174,22 +175,12 @@ class TestGenerationAdapter:
             )
 
         context = self.validation_context(config)
-        verdicts = []
-        for path in suite_paths:
-            suite = suite_from_path(
-                path,
-                self.generated_tests_root(config),
-                config.language,
-            )
-            verdict = (
-                # The immutable candidate plus this run's observation is the
-                # source of truth. Older copied validation exports are ignored
-                # and cannot gate the next stage.
-                validate_suite(suite, context)
-                if judge_as_oracle
-                else check_suite(suite, context)
-            )
-            verdicts.append(verdict)
+        verdicts = self._suite_verdicts(
+            suite_paths,
+            config,
+            context,
+            judge_as_oracle,
+        )
 
         counts = (
             reference_counts(verdicts, len(suite_paths))
@@ -210,6 +201,24 @@ class TestGenerationAdapter:
                 else "SKIPPED_ARTIFACT_INVALID"
             )
         return StageResult(name, "completed", counts, details, input_hash)
+
+    def _suite_verdicts(
+        self,
+        suite_paths: list[Path],
+        config: PipelineConfig,
+        context: ValidationContext,
+        judge_as_oracle: bool,
+    ) -> list[SuiteVerdict]:
+        """Run the selected validation gate over immutable suite candidates."""
+        validate = validate_suite if judge_as_oracle else check_suite
+        generated_tests_root = self.generated_tests_root(config)
+        return [
+            validate(
+                suite_from_path(path, generated_tests_root, config.language),
+                context,
+            )
+            for path in suite_paths
+        ]
 
     def validation_context(self, config: PipelineConfig) -> ValidationContext:
         if not config.engine_dir:

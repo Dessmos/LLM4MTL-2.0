@@ -21,6 +21,10 @@ from llm4mtl.transformation_execution.paths import (
 )
 from llm4mtl.transformation_execution.results import write_results
 from llm4mtl.transformation_execution.executor import validate_pair
+from llm4mtl.transformation_execution.models import (
+    TransformationValidationResult,
+    ValidationPair,
+)
 from llm4mtl.workspace import materialize_engine
 
 
@@ -103,15 +107,26 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Would validate {pair.transformation.path} with {pair.suite.path}")
         return 0
 
+    return _execute_pairs(args, pairs)
+
+
+def _execute_pairs(
+    args: argparse.Namespace,
+    pairs: list[ValidationPair],
+) -> int:
+    """Execute, archive, and report the already selected validation pairs."""
+
     engine_dir = materialize_engine(
         args.etl_test_dir,
         args.artifacts_root.resolve() / "workspaces",
         "etl",
     )
-    archived_results = []
+    archived_results: list[TransformationValidationResult] = []
     for pair in pairs:
         print(
-            f"Validating {pair.suite.task} | transformation={pair.transformation.llm}/{pair.transformation.strategy} "
+            f"Validating {pair.suite.task} | "
+            f"transformation={pair.transformation.llm}/"
+            f"{pair.transformation.strategy} "
             f"| suite={pair.suite.llm}/{pair.suite.strategy}/{pair.suite.suite_id}"
         )
         result = validate_pair(pair, engine_dir, args.timeout)

@@ -24,6 +24,7 @@ Output:
 - outputs/summary_with_sig.csv: Summary table with significance markers
 """
 
+from collections.abc import Iterable
 import os
 import sys
 import argparse
@@ -171,20 +172,17 @@ def _test_pass_result(merged, llm, strategy):
     return result
 
 
-def _pairing_counts(baseline_values, strategy_values):
-    a = b = c = d = 0
+def _pairing_counts(
+    baseline_values: Iterable[object], strategy_values: Iterable[object]
+) -> tuple[int, int, int, int]:
+    counts = [[0, 0], [0, 0]]
     for baseline, strategy in zip(baseline_values, strategy_values):
         baseline_bool = bool(baseline) if not pd.isna(baseline) else False
         strategy_bool = bool(strategy) if not pd.isna(strategy) else False
-        if baseline_bool and strategy_bool:
-            a += 1
-        elif baseline_bool and not strategy_bool:
-            b += 1
-        elif not baseline_bool and strategy_bool:
-            c += 1
-        else:
-            d += 1
-    return a, b, c, d
+        baseline_index = 0 if baseline_bool else 1
+        strategy_index = 0 if strategy_bool else 1
+        counts[baseline_index][strategy_index] += 1
+    return counts[0][0], counts[0][1], counts[1][0], counts[1][1]
 
 
 def generate_summary_table(df, summary_csv_path=None):

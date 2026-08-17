@@ -60,28 +60,7 @@ def _render_method(
         f'        BasicModelExtent input = loadInputModel("{escape_java(resource_path)}");',
         "        List<EObject> sourceRoots = new ArrayList<>(input.getContents());",
     ]
-    if len(targets) == 1:
-        variables[str(targets[0]["name"])] = "target0Roots"
-        lines.extend(
-            [
-                f'        BasicModelExtent output = executeTransformation("{escape_java(transformation)}", input);',
-                "        List<EObject> target0Roots = new ArrayList<>(output.getContents());",
-                f'        writeSnapshot("{escape_java(sanitize_method_name(str(test["name"])))}/{escape_java(str(targets[0]["name"]))}.xmi", target0Roots);',
-            ]
-        )
-    else:
-        lines.append(
-            f'        BasicModelExtent[] outputs = executeTransformation2Outputs("{escape_java(transformation)}", input);'
-        )
-        for index, target in enumerate(targets):
-            variable = f"target{index}Roots"
-            variables[str(target["name"])] = variable
-            lines.append(
-                f"        List<EObject> {variable} = new ArrayList<>(outputs[{index}].getContents());"
-            )
-            lines.append(
-                f'        writeSnapshot("{escape_java(sanitize_method_name(str(test["name"])))}/{escape_java(str(target["name"]))}.xmi", {variable});'
-            )
+    lines.extend(_render_outputs(targets, transformation, test, variables))
     lines.extend(
         [
             *render_assertions(test["assertions"], variables),
@@ -90,3 +69,39 @@ def _render_method(
         ]
     )
     return "\n".join(lines)
+
+
+def _render_outputs(
+    targets: list[dict[str, Any]],
+    transformation: str,
+    test: dict[str, Any],
+    variables: dict[str, str],
+) -> list[str]:
+    """Render target extents and register their assertion variables."""
+    escaped_transformation = escape_java(transformation)
+    test_name = escape_java(sanitize_method_name(str(test["name"])))
+    if len(targets) == 1:
+        target_name = escape_java(str(targets[0]["name"]))
+        variables[str(targets[0]["name"])] = "target0Roots"
+        return [
+            "        BasicModelExtent output = "
+            f'executeTransformation("{escaped_transformation}", input);',
+            "        List<EObject> target0Roots = new ArrayList<>(output.getContents());",
+            f'        writeSnapshot("{test_name}/{target_name}.xmi", target0Roots);',
+        ]
+
+    lines = [
+        "        BasicModelExtent[] outputs = "
+        f'executeTransformation2Outputs("{escaped_transformation}", input);'
+    ]
+    for index, target in enumerate(targets):
+        variable = f"target{index}Roots"
+        target_name = escape_java(str(target["name"]))
+        variables[str(target["name"])] = variable
+        lines.append(
+            f"        List<EObject> {variable} = new ArrayList<>(outputs[{index}].getContents());"
+        )
+        lines.append(
+            f'        writeSnapshot("{test_name}/{target_name}.xmi", {variable});'
+        )
+    return lines

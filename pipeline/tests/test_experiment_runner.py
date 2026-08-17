@@ -12,13 +12,24 @@ from llm4mtl.experiment_runner.cli import (
     config_from_args,
     emit_result,
     main,
+    validate_command_constraints,
 )
-from llm4mtl.experiment_runner.config import ConfigError, load_pipeline_config, parse_simple_yaml
+from llm4mtl.experiment_runner.config import (
+    ConfigError,
+    load_pipeline_config,
+    parse_simple_yaml,
+    validate_config,
+)
 from llm4mtl.experiment_runner.models import PipelineConfig, RunResult, StageResult
 from llm4mtl.experiment_runner.orchestrator import ExperimentOrchestrator
 from llm4mtl.experiment_runner.adapters.transformation_validation import TransformationValidationAdapter
 from llm4mtl.paths import LEGACY_PROJECT_ROOT, TARGET
-from llm4mtl.semantic_tests.failure_report import FailureReportError, ReportRequest
+from llm4mtl.semantic_tests.failure_report import (
+    DIFF_FIELDS,
+    FailureReportError,
+    ReportRequest,
+    _validate_difference,
+)
 
 
 REPO_ROOT = LEGACY_PROJECT_ROOT
@@ -47,6 +58,29 @@ class ConfigTests(unittest.TestCase):
         with self.assertRaisesRegex(ConfigError, "Unexpected indentation near: task"):
             parse_simple_yaml("language: etl\n  task: Tree2Graph\n")
 
+    def test_fallback_yaml_parser_supports_mapping_list_items(self) -> None:
+        payload = parse_simple_yaml(
+            "items:\n"
+            "  - name: first\n"
+            "    enabled: true\n"
+            "  - values:\n"
+            "      - one\n"
+        )
+
+        self.assertEqual(
+            [
+                {"name": "first", "enabled": True},
+                {"values": ["one"]},
+            ],
+            payload["items"],
+        )
+
+    def test_fallback_yaml_parser_preserves_empty_list_items(self) -> None:
+        payload = parse_simple_yaml("items:\n  -\nnext: value\n")
+
+        self.assertEqual([None], payload["items"])
+        self.assertEqual("value", payload["next"])
+
     def test_a_config_cannot_silently_default_to_etl(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             config_path = Path(temp_dir) / "missing-language.yaml"
@@ -54,6 +88,61 @@ class ConfigTests(unittest.TestCase):
 
             with self.assertRaises(ConfigError):
                 load_pipeline_config(config_path)
+
+    def test_config_validation_preserves_selection_before_stage_errors(self) -> None:
+        config = PipelineConfig(
+            language="etl",
+            tasks=["Tree2Graph"],
+            test_models=["unknown-model"],
+            start_stage="unknown-stage",
+        )
+
+        with self.assertRaisesRegex(ConfigError, "Unsupported model"):
+            validate_config(config)
+
+    def test_extract_command_constraint_error_order_is_preserved(self) -> None:
+        config = PipelineConfig(
+            language="etl",
+            command="tests.extract",
+            suite_id="suite_001",
+            responses=[],
+            all_tasks=True,
+        )
+
+        with self.assertRaisesRegex(
+            ConfigError,
+            "--suite-id requires exactly one --response",
+        ):
+            validate_command_constraints(config)
+
+    def test_explicit_suite_bypasses_suite_identity_requirements(self) -> None:
+        config = PipelineConfig(
+            language="etl",
+            command="tests.validate",
+            suite_id="suite_001",
+            suites=["suite/path"],
+        )
+
+        validate_command_constraints(config)
+
+
+class DifferenceValidationTests(unittest.TestCase):
+    def test_shape_errors_preserve_missing_then_unknown_order(self) -> None:
+        with self.assertRaisesRegex(
+            FailureReportError,
+            "missing fields:.*; unknown fields: unexpected",
+        ):
+            _validate_difference({"missing_elements": [], "unexpected": []})
+
+    def test_each_difference_field_must_remain_an_array(self) -> None:
+        difference = {field: [] for field in DIFF_FIELDS}
+        difference["wrong_types"] = "not-an-array"
+
+        with self.assertRaisesRegex(
+            FailureReportError,
+            "actual_vs_expected.wrong_types must be an array",
+        ):
+            _validate_difference(difference)
 
 
 class CliTests(unittest.TestCase):
@@ -282,6 +371,35 @@ class OrchestratorTests(unittest.TestCase):
         result = TransformationValidationAdapter(REPO_ROOT).semantic_validation(config, dry_run=True)
         self.assertEqual("skipped", result.status)
         self.assertEqual("SKIPPED_NO_PARSED_TRANSFORMATIONS", result.details["skip_reason"])
+
+    def test_semantic_dry_run_preserves_pairing_and_detail_keys(self) -> None:
+        config = PipelineConfig(language="etl", tasks=["Tree2Graph"])
+        adapter = TransformationValidationAdapter(REPO_ROOT)
+        suite = Path(
+            "/generated/Tree2Graph/candidates/gpt-5/grammar/suite_001"
+        )
+        transformation = Path("/generated/Tree2Graph.etl")
+
+        with patch.object(
+            adapter,
+            "select_validated_suites",
+            return_value=[suite],
+        ) as select_suites:
+            with patch.object(
+                adapter,
+                "select_transformations",
+                return_value=[transformation],
+            ):
+                result = adapter.semantic_validation(config, dry_run=True)
+
+        self.assertEqual("dry_run", result.status)
+        self.assertEqual(1, result.counts["execution_pairs"])
+        self.assertEqual(
+            [str(suite)],
+            result.details["suite_candidates_awaiting_reference_validation"],
+        )
+        self.assertNotIn("reference_validated_suites", result.details)
+        select_suites.assert_called_once_with(config, require_observation=False)
 
 
 if __name__ == "__main__":

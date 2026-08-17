@@ -43,7 +43,6 @@ def run_maven(command: list[str], cwd: Path, timeout: int) -> CommandResult:
 
 
 def summarize_error(output: str) -> str:
-    interesting = []
     patterns = (
         "COMPILATION ERROR",
         "Failed to execute goal",
@@ -55,6 +54,22 @@ def summarize_error(output: str) -> str:
         "cannot find symbol",
         "TIMEOUT",
     )
+    interesting = _interesting_error_lines(output, patterns)
+    if interesting:
+        return " | ".join(interesting)[:500]
+
+    stripped_output = output.strip()
+    if not stripped_output:
+        return ""
+    return stripped_output.splitlines()[-1][:500]
+
+
+def _interesting_error_lines(
+    output: str,
+    patterns: tuple[str, ...],
+) -> list[str]:
+    """Return at most the first three non-empty diagnostic lines."""
+    interesting: list[str] = []
     for line in output.splitlines():
         stripped = line.strip()
         if not stripped:
@@ -63,6 +78,4 @@ def summarize_error(output: str) -> str:
             interesting.append(stripped)
         if len(interesting) >= 3:
             break
-    if interesting:
-        return " | ".join(interesting)[:500]
-    return output.strip().splitlines()[-1][:500] if output.strip() else ""
+    return interesting

@@ -293,14 +293,8 @@ def has_pipeline_selection(args: argparse.Namespace) -> bool:
 
 def validate_command_constraints(config: PipelineConfig) -> None:
     if config.command == "tests.extract":
-        if config.suite_id and len(config.responses) != 1:
-            raise ConfigError(
-                "tests extract: --suite-id requires exactly one --response."
-            )
-        if config.all_tasks and config.responses:
-            raise ConfigError(
-                "tests extract: --all-tasks cannot be combined with --response."
-            )
+        _validate_extraction_command(config)
+        return
     if config.command == "tests.validate" and config.suite_id and not config.suites:
         require_suite_identity(config)
     if (
@@ -309,6 +303,17 @@ def validate_command_constraints(config: PipelineConfig) -> None:
         and not config.suites
     ):
         require_suite_identity(config)
+
+
+def _validate_extraction_command(config: PipelineConfig) -> None:
+    if config.suite_id and len(config.responses) != 1:
+        raise ConfigError(
+            "tests extract: --suite-id requires exactly one --response."
+        )
+    if config.all_tasks and config.responses:
+        raise ConfigError(
+            "tests extract: --all-tasks cannot be combined with --response."
+        )
 
 
 def require_suite_identity(config: PipelineConfig) -> None:

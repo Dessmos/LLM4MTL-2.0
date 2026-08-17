@@ -122,6 +122,12 @@ def validate_config(config: PipelineConfig, require_selection: bool = True) -> N
             "A run must fix exactly one task. Expand several or all tasks through "
             "an experiment matrix so each task receives its own run identity."
         )
+    _validate_selections(config)
+    _validate_stage_range(config)
+
+
+def _validate_selections(config: PipelineConfig) -> None:
+    """Validate model and strategy selections in their established order."""
     unknown_models = (
         set(config.test_models) | set(config.transformation_models)
     ) - ALLOWED_MODELS
@@ -135,6 +141,10 @@ def validate_config(config: PipelineConfig, require_selection: bool = True) -> N
             "Unsupported strategy/strategies: "
             f"{', '.join(sorted(unknown_strategies))}"
         )
+
+
+def _validate_stage_range(config: PipelineConfig) -> None:
+    """Validate the configured pipeline interval and its direction."""
     if config.start_stage not in PIPELINE_STAGES:
         raise ConfigError(f"Unknown start stage: {config.start_stage}")
     if config.stop_after not in PIPELINE_STAGES:
@@ -225,6 +235,24 @@ def _parse_yaml_list_item(
     if ":" not in item_text:
         container.append(parse_scalar(item_text))
         return index + 1
+
+    return _parse_yaml_mapping_list_item(
+        lines,
+        index,
+        indent,
+        container,
+        item_text,
+    )
+
+
+def _parse_yaml_mapping_list_item(
+    lines: list[_YamlLine],
+    index: int,
+    indent: int,
+    container: list[Any],
+    item_text: str,
+) -> int:
+    """Parse one list item that starts with a mapping entry."""
 
     key, value_text = split_key_value(item_text)
     item = {key: parse_scalar(value_text)} if value_text else {key: None}

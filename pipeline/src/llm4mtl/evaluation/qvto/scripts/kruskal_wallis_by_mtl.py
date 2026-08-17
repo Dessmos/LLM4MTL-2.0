@@ -253,7 +253,8 @@ def _kw_detail_row(kw_results, mtl, metric):
 
 
 # ── Console report ────────────────────────────────────────────────────────────
-def print_report(paper_table: pd.DataFrame):
+def print_report(paper_table: pd.DataFrame) -> None:
+    """Print the per-MTL Kruskal-Wallis table in its legacy console format."""
     model_labels = [MODEL_SHORT[m] for m in MODEL_ORDER]
     print("\n" + "=" * 90)
     print("KRUSKAL-WALLIS TEST: Comparing 3 LLM Models Within Each MTL")
@@ -263,18 +264,26 @@ def print_report(paper_table: pd.DataFrame):
 
     for mtl in paper_table["MTL"].unique():
         sub = paper_table[paper_table["MTL"] == mtl]
-        print(f"\n-- {mtl} " + "-" * 45)
-        print(f"  {'Metric':<20}", end="")
-        for lbl in model_labels:
-            print(f"  {lbl:>14}", end="")
-        print(f"  {'p-value':>10}  sig")
-        print("  " + "-" * 76)
-        for _, row in sub.iterrows():
-            print(f"  {row['Metric']:<20}", end="")
-            for lbl in model_labels:
-                v = row[lbl]
-                print(f"  {v:>14.4f}" if not pd.isna(v) else f"  {'N/A':>14}", end="")
-            print(f"  {str(row['p-value']):>10}  {row['sig']}")
+        _print_mtl_report(mtl, sub, model_labels)
+
+
+def _print_mtl_report(
+    mtl: object, rows: pd.DataFrame, model_labels: list[str]
+) -> None:
+    """Print one MTL section while preserving row and model-column order."""
+    print(f"\n-- {mtl} " + "-" * 45)
+    print(f"  {'Metric':<20}", end="")
+    for label in model_labels:
+        print(f"  {label:>14}", end="")
+    print(f"  {'p-value':>10}  sig")
+    print("  " + "-" * 76)
+    for _, row in rows.iterrows():
+        print(f"  {row['Metric']:<20}", end="")
+        for label in model_labels:
+            value = row[label]
+            formatted = f"{value:>14.4f}" if not pd.isna(value) else f"{'N/A':>14}"
+            print(f"  {formatted}", end="")
+        print(f"  {str(row['p-value']):>10}  {row['sig']}")
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────

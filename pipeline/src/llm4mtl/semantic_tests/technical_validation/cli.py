@@ -13,6 +13,7 @@ from llm4mtl.conventions import (
     default_references_root,
     default_results_root,
 )
+from llm4mtl.domain import GeneratedSuite
 from llm4mtl.languages import language_adapter
 from llm4mtl.semantic_tests.suites.discovery import discover_suites
 from llm4mtl.semantic_tests.technical_validation.results import write_results
@@ -104,6 +105,15 @@ def main(argv: list[str] | None = None) -> int:
         for suite in suites:
             print(f"Would check {suite.path}")
         return 0
+
+    return _execute_suites(args, suites)
+
+
+def _execute_suites(
+    args: argparse.Namespace,
+    suites: list[GeneratedSuite],
+) -> int:
+    """Execute technical validation and write its result rows."""
 
     engine_dir = materialize_engine(
         args.etl_test_dir,

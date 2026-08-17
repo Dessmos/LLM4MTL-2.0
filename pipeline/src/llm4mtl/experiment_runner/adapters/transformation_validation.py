@@ -42,6 +42,18 @@ from llm4mtl.transformation_execution.hashing import file_sha256
 DEFAULT_PAIR_TIMEOUT_SECONDS = 240
 
 
+def _matching_execution_pairs(
+    suites: list[Path],
+    transformations: list[Path],
+) -> list[tuple[Path, Path]]:
+    return [
+        (suite, transformation)
+        for suite in suites
+        for transformation in transformations
+        if suite.parts[-5] == transformation.stem
+    ]
+
+
 @dataclass(frozen=True)
 class _ObservedExecutionPair:
     """One generated-transformation execution and its recorded evidence."""
@@ -106,12 +118,7 @@ class TransformationValidationAdapter:
 
         suites = self.select_validated_suites(config, require_observation=not dry_run)
         transformations = self.select_transformations(config)
-        pairs = [
-            (suite, transformation)
-            for suite in suites
-            for transformation in transformations
-            if suite.parts[-5] == transformation.stem
-        ]
+        pairs = _matching_execution_pairs(suites, transformations)
         input_hash = hash_paths(suites + transformations)
         suite_detail_key = (
             "suite_candidates_awaiting_reference_validation"

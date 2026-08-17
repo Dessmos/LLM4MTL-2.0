@@ -469,7 +469,16 @@ def _evidence_bundle(
     would spend most of the prompt on provenance the LLM cannot use and on the
     same JSON document quoted twice.
     """
-    stack_traces = surefire_evidence["stack_traces"]
+    reference_observation = reference_result["observation"]
+    reference_assertions_passed = (
+        reference_observation["assertions_passed"]
+        if reference_observation is not None
+        else None
+    )
+    failure_summary, runtime_stack_traces = _failure_evidence(
+        failure,
+        surefire_evidence["stack_traces"],
+    )
     return {
         "original_task_description": task_description["content"],
         "relevant_source_and_target_metamodel_constraints": [
@@ -493,35 +502,47 @@ def _evidence_bundle(
         "syntax_status": syntax_check,
         "reference_transformation_result": {
             "status": reference_result["status"],
-            "assertions_passed": (
-                reference_result["observation"]["assertions_passed"]
-                if reference_result["observation"] is not None
-                else None
-            ),
+            "assertions_passed": reference_assertions_passed,
         },
         "generated_execution_summary": {
             "failure_stage": observation.get("failure_stage"),
             "assertions_evaluated": observation.get("assertions_evaluated"),
             "assertions_passed": observation.get("assertions_passed"),
             "error_summary": observation.get("error_summary"),
-            "failure_kind": failure["kind"] if failure else None,
-            "failure_type": failure["failure_type"] if failure else None,
-            "message": failure["message"] if failure else None,
-            "expected": failure["expected"] if failure else None,
-            "actual": failure["actual"] if failure else None,
+            **failure_summary,
         },
         "actual_target_model": [_cited(model) for model in actual_target_models],
         "structured_actual_vs_expected_difference": difference,
         # A stack trace is what identifies where a throw came from, so a runtime
         # failure keeps it. An assertion failure does not need it: its message
         # already carries the mismatch, and the trace is harness plumbing.
-        "stack_traces": (
-            stack_traces if failure and failure["kind"] == "runtime_error" else []
-        ),
+        "stack_traces": runtime_stack_traces,
         "maven_log_excerpt": _relevant_log_lines(
             test_case_result["execution"]["error"]["execution_log"]
         ),
     }
+
+
+def _failure_evidence(
+    failure: dict[str, Any] | None,
+    stack_traces: list[str],
+) -> tuple[dict[str, Any], list[str]]:
+    if not failure:
+        return {
+            "failure_kind": None,
+            "failure_type": None,
+            "message": None,
+            "expected": None,
+            "actual": None,
+        }, []
+    summary = {
+        "failure_kind": failure["kind"],
+        "failure_type": failure["failure_type"],
+        "message": failure["message"],
+        "expected": failure["expected"],
+        "actual": failure["actual"],
+    }
+    return summary, stack_traces if failure["kind"] == "runtime_error" else []
 
 
 def _relevant_log_lines(cited_log: dict[str, Any] | None) -> dict[str, Any] | None:
@@ -1428,14 +1449,7 @@ def _surefire_test_case(
 ) -> tuple[dict[str, Any], dict[str, str] | None, str]:
     failure = case.find("failure")
     error = case.find("error")
-    node = error if error is not None else failure
-    status = (
-        "error"
-        if error is not None
-        else "failed"
-        if failure is not None
-        else "passed"
-    )
+    status, node = _surefire_outcome(error, failure)
     message = str(node.get("message") or "") if node is not None else ""
     expected, actual = _assertion_outcome(message)
     test_case = {
@@ -1458,6 +1472,17 @@ def _surefire_test_case(
         "message": message,
     }
     return test_case, exception, (node.text or "").strip()
+
+
+def _surefire_outcome(
+    error: ET.Element | None,
+    failure: ET.Element | None,
+) -> tuple[str, ET.Element | None]:
+    if error is not None:
+        return "error", error
+    if failure is not None:
+        return "failed", failure
+    return "passed", None
 
 
 def _assertion_outcome(message: str) -> tuple[str | None, str | None]:
@@ -1638,19 +1663,15 @@ def _diagnosis_reason(
 
 
 def _validate_difference(value: object) -> dict[str, list[Any]] | None:
+    """Validate and normalize an optional model-level comparator difference."""
     if value is None:
         return None
     if not isinstance(value, dict):
         raise FailureReportError("actual_vs_expected must be an object or null")
-    missing = [field for field in DIFF_FIELDS if field not in value]
-    unknown = sorted(set(value) - set(DIFF_FIELDS))
-    if missing or unknown:
-        problems = []
-        if missing:
-            problems.append(f"missing fields: {', '.join(missing)}")
-        if unknown:
-            problems.append(f"unknown fields: {', '.join(unknown)}")
+    problems = _difference_shape_problems(value)
+    if problems:
         raise FailureReportError(f"invalid actual_vs_expected: {'; '.join(problems)}")
+
     normalized: dict[str, list[Any]] = {}
     for field in DIFF_FIELDS:
         entries = value[field]
@@ -1658,6 +1679,18 @@ def _validate_difference(value: object) -> dict[str, list[Any]] | None:
             raise FailureReportError(f"actual_vs_expected.{field} must be an array")
         normalized[field] = entries
     return normalized
+
+
+def _difference_shape_problems(value: dict[Any, Any]) -> list[str]:
+    """Return missing-field and unknown-field problems in contract order."""
+    missing = [field for field in DIFF_FIELDS if field not in value]
+    unknown = sorted(set(value) - set(DIFF_FIELDS))
+    problems: list[str] = []
+    if missing:
+        problems.append(f"missing fields: {', '.join(missing)}")
+    if unknown:
+        problems.append(f"unknown fields: {', '.join(unknown)}")
+    return problems
 
 
 def _read_object(path: Path, label: str) -> dict[str, Any]:

@@ -7,16 +7,8 @@ from pathlib import Path
 ETL_GLOB = '*.etl'
 
 
-def find_ground_truth_dir(repo_root):
-    """
-    Automatically find the ground truth directory containing .etl files
-    
-    Args:
-        repo_root: Repository root directory path
-        
-    Returns:
-        Ground truth directory path, or None if not found
-    """
+def find_ground_truth_dir(repo_root: str | Path) -> str | None:
+    """Find the first preferred or sufficiently populated ETL directory."""
     repo_path = Path(repo_root)
     
     # Possible ground truth directory patterns
@@ -29,20 +21,21 @@ def find_ground_truth_dir(repo_root):
     
     for pattern in possible_patterns:
         for atl_dir in repo_path.glob(pattern):
-            if atl_dir.is_dir():
-                # Check if it contains .etl files
-                atl_files = list(atl_dir.glob(ETL_GLOB))
-                if atl_files:
-                    return str(atl_dir)
+            if _contains_at_least(atl_dir, ETL_GLOB, 1):
+                return str(atl_dir)
     
     # If not found, try searching the entire repo for directories containing .etl files
     for atl_file in repo_path.rglob(ETL_GLOB):
         parent = atl_file.parent
-        # Check if parent directory looks like a ground truth directory (contains multiple .etl files)
-        if len(list(parent.glob(ETL_GLOB))) >= 5:  # At least 5 files to be considered a ground truth directory
+        if _contains_at_least(parent, ETL_GLOB, 5):
             return str(parent)
     
     return None
+
+
+def _contains_at_least(directory: Path, file_glob: str, minimum: int) -> bool:
+    """Return whether a directory directly contains the required file count."""
+    return directory.is_dir() and len(list(directory.glob(file_glob))) >= minimum
 
 
 def count_loc_atl(file_path):

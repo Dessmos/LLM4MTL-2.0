@@ -18,6 +18,9 @@ from llm4mtl.experiment_runner.adapters.transformation_validation import (
     TransformationValidationAdapter,
     execution_counts,
 )
+from llm4mtl.experiment_runner.adapters.test_generation import (
+    TestGenerationAdapter as GenerationAdapter,
+)
 from llm4mtl.experiment_runner.models import PipelineConfig, StageResult
 from llm4mtl.languages.etl.adapter import EtlAdapter
 from llm4mtl.semantic_tests.validation import (
@@ -90,6 +93,67 @@ class TechnicalStageCountTests(unittest.TestCase):
         result = StageResult("technical_validation", "completed", counts)
 
         self.assertEqual("TEST_SPEC_INVALID", outcome_code("technical-validation", result))
+
+
+class TestGenerationAdapterValidationTests(unittest.TestCase):
+    def test_each_gate_uses_its_validator_and_preserves_verdict_details(self) -> None:
+        suite_path = Path("/suite/Tree2Graph/candidates/gpt-5/few_shot/suite_001")
+        suite = GeneratedSuite(
+            "etl",
+            suite_path,
+            "Tree2Graph",
+            "gpt-5",
+            "few_shot",
+            "suite_001",
+        )
+        config = PipelineConfig(language="etl", tasks=["Tree2Graph"])
+        adapter = GenerationAdapter(Path("/repository"))
+        cases = (
+            (False, TECHNICALLY_EXECUTABLE, "technical_validation"),
+            (True, VALIDATED, "reference_validation"),
+        )
+
+        for judge_as_oracle, status, name in cases:
+            verdict = SuiteVerdict(suite, status)
+            with self.subTest(name=name):
+                with patch.object(
+                    adapter,
+                    "select_candidate_suites",
+                    return_value=[suite_path],
+                ):
+                    with patch.object(
+                        adapter,
+                        "validation_context",
+                        return_value=object(),
+                    ):
+                        with patch(
+                            "llm4mtl.experiment_runner.adapters.test_generation.suite_from_path",
+                            return_value=suite,
+                        ):
+                            with patch(
+                                "llm4mtl.experiment_runner.adapters.test_generation.validate_suite",
+                                return_value=verdict,
+                            ) as validate:
+                                with patch(
+                                    "llm4mtl.experiment_runner.adapters.test_generation.check_suite",
+                                    return_value=verdict,
+                                ) as check:
+                                    result = adapter._validate_suites(
+                                        name,
+                                        config,
+                                        dry_run=False,
+                                        judge_as_oracle=judge_as_oracle,
+                                    )
+
+                selected_validator = validate if judge_as_oracle else check
+                other_validator = check if judge_as_oracle else validate
+                selected_validator.assert_called_once()
+                other_validator.assert_not_called()
+                self.assertEqual("completed", result.status)
+                self.assertEqual(
+                    [{"suite": str(suite_path), "status": status}],
+                    result.details["verdicts"],
+                )
 
 
 class ObservationScopeTests(unittest.TestCase):

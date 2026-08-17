@@ -3,28 +3,34 @@
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Iterator
 from pathlib import Path
 
 from llm4mtl.experiment_runner.config import ConfigError
+
+
+def _path_hash_chunks(path: Path) -> Iterator[bytes]:
+    name = str(path).encode("utf-8")
+    yield len(name).to_bytes(8, "big")
+    yield name
+    if path.is_file():
+        yield path.read_bytes()
+        return
+    if not path.is_dir():
+        return
+
+    files = sorted(candidate for candidate in path.rglob("*") if candidate.is_file())
+    for child in files:
+        yield str(child.relative_to(path)).encode("utf-8")
+        yield child.read_bytes()
 
 
 def hash_paths(paths: list[Path]) -> str:
     """Hash selected files and directory contents in deterministic path order."""
     digest = hashlib.sha256()
     for path in sorted({item.resolve() for item in paths}):
-        name = str(path).encode("utf-8")
-        digest.update(len(name).to_bytes(8, "big"))
-        digest.update(name)
-        if path.is_file():
-            digest.update(path.read_bytes())
-        elif path.is_dir():
-            files = sorted(
-                candidate for candidate in path.rglob("*") if candidate.is_file()
-            )
-            for child in files:
-                relative = str(child.relative_to(path)).encode("utf-8")
-                digest.update(relative)
-                digest.update(child.read_bytes())
+        for chunk in _path_hash_chunks(path):
+            digest.update(chunk)
     return digest.hexdigest()
 
 

@@ -46,6 +46,39 @@ from llm4mtl.semantic_tests.extraction.semantic_cases import render_generated_su
 PARSER_TIMEOUT_SECONDS = 900
 
 
+def _failed_parse_observations(
+    transformations: Sequence[Path],
+    diagnostic: str,
+) -> dict[Path, ParseObservation]:
+    return {
+        path: ParseObservation(parsed=False, diagnostic=diagnostic)
+        for path in transformations
+    }
+
+
+def _completed_parse_observations(
+    transformations: Sequence[Path],
+    payload: dict[str, object],
+) -> dict[Path, ParseObservation]:
+    parsed_paths = {
+        Path(str(item)).resolve()
+        for item in payload.get("passed_transformations", [])
+    }
+    all_selected_passed = (
+        len(transformations) == int(payload.get("selected") or 0)
+        and len(transformations) == int(payload.get("passed") or 0)
+    )
+    diagnostic = json.dumps(payload, ensure_ascii=False)
+    observations: dict[Path, ParseObservation] = {}
+    for path in transformations:
+        parsed = all_selected_passed or path.resolve() in parsed_paths
+        observations[path] = ParseObservation(
+            parsed=parsed,
+            diagnostic="" if parsed else diagnostic,
+        )
+    return observations
+
+
 class EtlAdapter:
     """ETL: Epsilon transformations executed through the Maven/JUnit harness."""
 
@@ -170,10 +203,7 @@ class EtlAdapter:
         )
         if build.returncode != 0:
             diagnostic = f"{build.stdout}\n{build.stderr}".strip()[-500:]
-            return {
-                path: ParseObservation(parsed=False, diagnostic=diagnostic)
-                for path in transformations
-            }
+            return _failed_parse_observations(transformations, diagnostic)
         command = [sys.executable, str(parser_dir / "validate_etl_syntax.py")]
         for transformation in transformations:
             command.extend(("--transformation", str(transformation)))
@@ -197,31 +227,14 @@ class EtlAdapter:
         )
         payload = _last_json_object(completed.stdout)
         if payload.get("status") != "completed":
-            diagnostic = str(payload.get("error") or completed.stderr.strip() or "parser driver failed")
-            return {
-                path: ParseObservation(parsed=False, diagnostic=diagnostic)
-                for path in transformations
-            }
-
-        parsed_paths = {
-            Path(str(item)).resolve()
-            for item in payload.get("passed_transformations", [])
-        }
-        all_selected_passed = (
-            len(transformations) == int(payload.get("selected") or 0)
-            and len(transformations) == int(payload.get("passed") or 0)
-        )
-        return {
-            path: ParseObservation(
-                parsed=all_selected_passed or path.resolve() in parsed_paths,
-                diagnostic=(
-                    ""
-                    if all_selected_passed or path.resolve() in parsed_paths
-                    else json.dumps(payload, ensure_ascii=False)
-                ),
+            diagnostic = str(
+                payload.get("error")
+                or completed.stderr.strip()
+                or "parser driver failed"
             )
-            for path in transformations
-        }
+            return _failed_parse_observations(transformations, diagnostic)
+
+        return _completed_parse_observations(transformations, payload)
 
 def _last_json_object(stdout: str) -> dict[str, object]:
     """The driver prints its JSON report last; anything before it is noise."""

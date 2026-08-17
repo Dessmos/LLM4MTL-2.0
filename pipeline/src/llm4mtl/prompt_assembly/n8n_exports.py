@@ -534,13 +534,21 @@ def _normalize_node_entry_ids(node: dict[str, Any]) -> None:
     slug = re.sub(r"[^a-z0-9]+", "-", node["name"].lower()).strip("-")
     parameters = node.get("parameters", {})
     for holder in ("assignments", "conditions"):
-        entries = parameters.get(holder, {})
-        entries = entries.get(holder) if isinstance(entries, dict) else None
-        if not isinstance(entries, list):
-            continue
-        for index, entry in enumerate(entries, 1):
-            if isinstance(entry, dict) and "id" in entry:
-                entry["id"] = f"{slug}-{holder}-{index}"
+        _normalize_parameter_entry_ids(parameters, holder, slug)
+
+
+def _normalize_parameter_entry_ids(
+    parameters: dict[str, Any],
+    holder: str,
+    slug: str,
+) -> None:
+    entries = parameters.get(holder, {})
+    entries = entries.get(holder) if isinstance(entries, dict) else None
+    if not isinstance(entries, list):
+        return
+    for index, entry in enumerate(entries, 1):
+        if isinstance(entry, dict) and "id" in entry:
+            entry["id"] = f"{slug}-{holder}-{index}"
 
 
 def _drop_unwired_chat_models(payload: dict[str, Any]) -> dict[str, Any]:
@@ -553,21 +561,30 @@ def _drop_unwired_chat_models(payload: dict[str, Any]) -> dict[str, Any]:
     and they are the reason two languages' exports could not be diffed.
     """
     connections = payload.get("connections", {})
-    wired = {
-        name
-        for name, outputs in connections.items()
-        if any(targets for targets in outputs.get("ai_languageModel", []))
-    }
+    wired = _wired_chat_models(connections)
     payload["nodes"] = [
         node
         for node in payload["nodes"]
-        if not node["type"].startswith("@n8n/n8n-nodes-langchain.lmChat")
-        or node["name"] in wired
+        if _keep_workflow_node(node, wired)
     ]
     live = {node["name"] for node in payload["nodes"]}
     for name in [name for name in connections if name not in live]:
         connections.pop(name)
     return payload
+
+
+def _wired_chat_models(connections: dict[str, Any]) -> set[str]:
+    return {
+        name
+        for name, outputs in connections.items()
+        if any(targets for targets in outputs.get("ai_languageModel", []))
+    }
+
+
+def _keep_workflow_node(node: dict[str, Any], wired: set[str]) -> bool:
+    if not node["type"].startswith("@n8n/n8n-nodes-langchain.lmChat"):
+        return True
+    return node["name"] in wired
 
 
 def _transformation_system_message(language: str) -> str:
@@ -1088,18 +1105,26 @@ def _rename_connection_node(value: Any, old_name: str, new_name: str) -> Any:
             for item in value
         ]
     if isinstance(value, dict):
-        renamed: dict[str, Any] = {}
-        for key, nested in value.items():
-            renamed_key = new_name if key == old_name else key
-            renamed[renamed_key] = _rename_connection_node(
-                nested,
-                old_name,
-                new_name,
-            )
-        if renamed.get("node") == old_name:
-            renamed["node"] = new_name
-        return renamed
+        return _rename_connection_mapping(value, old_name, new_name)
     return value
+
+
+def _rename_connection_mapping(
+    value: dict[str, Any],
+    old_name: str,
+    new_name: str,
+) -> dict[str, Any]:
+    renamed: dict[str, Any] = {}
+    for key, nested in value.items():
+        renamed_key = new_name if key == old_name else key
+        renamed[renamed_key] = _rename_connection_node(
+            nested,
+            old_name,
+            new_name,
+        )
+    if renamed.get("node") == old_name:
+        renamed["node"] = new_name
+    return renamed
 
 
 def synchronize_exports() -> tuple[int, int, int]:

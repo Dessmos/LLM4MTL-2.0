@@ -165,6 +165,64 @@ class EtlAdapterContractTests(unittest.TestCase):
             self.assertNotIn("engines", results_file.parts)
             self.assertTrue(observation[transformation].parsed)
 
+    def test_parser_build_failure_is_reported_for_every_selection(self) -> None:
+        from llm4mtl.languages.base import Workspace
+
+        transformations = [Path("first.etl"), Path("second.etl")]
+        build = SimpleNamespace(
+            stdout="compile output",
+            stderr="compile failure",
+            returncode=1,
+        )
+        with patch(
+            "llm4mtl.languages.etl.adapter.materialize_parser",
+            return_value=Path("/parser"),
+        ):
+            with patch(
+                "llm4mtl.languages.etl.adapter.subprocess.run",
+                return_value=build,
+            ):
+                observations = self.adapter.parse_transformations(
+                    transformations,
+                    Workspace(Path("/engine"), Path("/observations")),
+                )
+
+        self.assertEqual(set(transformations), set(observations))
+        for observation in observations.values():
+            self.assertFalse(observation.parsed)
+            self.assertEqual(
+                "compile output\ncompile failure",
+                observation.diagnostic,
+            )
+
+    def test_parser_total_counts_can_mark_every_selection_as_passed(self) -> None:
+        from llm4mtl.languages.base import Workspace
+
+        transformations = [Path("first.etl"), Path("second.etl")]
+        build = SimpleNamespace(stdout="", stderr="", returncode=0)
+        completed = SimpleNamespace(
+            stdout='{"status":"completed","selected":2,"passed":2}\n',
+            stderr="",
+            returncode=0,
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            with patch(
+                "llm4mtl.languages.etl.adapter.materialize_parser",
+                return_value=root / "parser",
+            ):
+                with patch(
+                    "llm4mtl.languages.etl.adapter.subprocess.run",
+                    side_effect=[build, completed],
+                ):
+                    observations = self.adapter.parse_transformations(
+                        transformations,
+                        Workspace(root / "engine", root / "observations"),
+                    )
+
+        self.assertTrue(all(item.parsed for item in observations.values()))
+        self.assertTrue(all(not item.diagnostic for item in observations.values()))
+
     def test_execution_preserves_the_etl_maven_command_and_restores_injections(self) -> None:
         from llm4mtl.languages.base import Workspace
 

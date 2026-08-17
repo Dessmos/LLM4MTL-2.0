@@ -20,6 +20,9 @@ from llm4mtl.domain import INVALID_SEMANTIC_CASES
 from llm4mtl.semantic_tests.codegen.java import render_semantic_test
 from llm4mtl.semantic_tests.extraction.semantic_cases import render_generated_suite
 from llm4mtl.semantic_tests.extraction.semantic_cases.errors import SemanticCasesError
+from llm4mtl.semantic_tests.extraction.semantic_cases.normalization import (
+    normalize_metamodels,
+)
 from llm4mtl.semantic_tests.extraction.semantic_cases.parsing import parse_semantic_cases
 from llm4mtl.semantic_tests.semantic_spec import SEMANTIC_CASES_FILE
 
@@ -228,6 +231,29 @@ class RepresentationNormalizationStillAppliesTests(unittest.TestCase):
         spec = parse(raw)
 
         self.assertEqual(["Tree", "Graph"], [m["name"] for m in spec["tests"][0]["models"]])
+
+    def test_metamodel_path_precedence_and_passthrough_are_preserved(self) -> None:
+        malformed = {"unexpected": "shape"}
+        self.assertEqual(
+            [
+                "explicit.ecore",
+                "metamodels/ByUri.ecore",
+                "metamodels/ByName.ecore",
+                "already-a-path.ecore",
+                malformed,
+                7,
+            ],
+            normalize_metamodels(
+                [
+                    {"path": "explicit.ecore", "uri": "ignored"},
+                    {"uri": "ByUri", "name": "ignored"},
+                    {"name": "ByName"},
+                    "already-a-path.ecore",
+                    malformed,
+                    7,
+                ]
+            ),
+        )
 
 
 class NoUndefinedExpectedValuesTests(unittest.TestCase):

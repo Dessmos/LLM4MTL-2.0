@@ -92,49 +92,87 @@ def _render_object_collection_assertion(
 ) -> list[str]:
     match kind:
         case "collectionSize":
-            where = (
-                assertion.get("where")
-                if isinstance(assertion.get("where"), dict)
-                else {}
-            )
-            features = [str(feature) for feature in where]
-            expected_signature = (
-                object_signatures([where], features)[0] if features else ""
-            )
-            path = escape_java(str(assertion["path"]))
-            return [
-                f'        assertCollectionSize({model}, "{type_name}", {java_string_array(features)}, '
-                f'"{escape_java(expected_signature)}", "{path}", {int(assertion["expected"])}, "{message}");'
-            ]
-        case "objects":
-            features = [str(feature) for feature in assertion["features"]]
-            expected = object_signatures(assertion["expected"], features)
-            actual = (
-                f'signaturesOf({model}, "{type_name}", '
-                f"{java_string_array(features)})"
-            )
-            return _collection_assertion(
-                java_string_list(expected),
-                actual,
+            return _render_collection_size_assertion(
                 assertion,
+                model,
+                type_name,
+                message,
+            )
+        case "objects":
+            return _render_objects_assertion(
+                assertion,
+                model,
+                type_name,
                 message,
             )
         case _:
-            expected = [
-                f"{pair['source']}->{pair['target']}"
-                for pair in assertion["expected"]
-            ]
-            source = escape_java(str(assertion["source"]))
-            target = escape_java(str(assertion["target"]))
-            actual = (
-                f'referencePairs({model}, "{type_name}", "{source}", "{target}")'
-            )
-            return _collection_assertion(
-                java_string_list(expected),
-                actual,
+            return _render_reference_pairs_assertion(
                 assertion,
+                model,
+                type_name,
                 message,
             )
+
+
+def _render_collection_size_assertion(
+    assertion: dict[str, Any],
+    model: str,
+    type_name: str,
+    message: str,
+) -> list[str]:
+    where = (
+        assertion.get("where")
+        if isinstance(assertion.get("where"), dict)
+        else {}
+    )
+    features = [str(feature) for feature in where]
+    expected_signature = object_signatures([where], features)[0] if features else ""
+    path = escape_java(str(assertion["path"]))
+    return [
+        f'        assertCollectionSize({model}, "{type_name}", {java_string_array(features)}, '
+        f'"{escape_java(expected_signature)}", "{path}", {int(assertion["expected"])}, "{message}");'
+    ]
+
+
+def _render_objects_assertion(
+    assertion: dict[str, Any],
+    model: str,
+    type_name: str,
+    message: str,
+) -> list[str]:
+    features = [str(feature) for feature in assertion["features"]]
+    expected = object_signatures(assertion["expected"], features)
+    actual = (
+        f'signaturesOf({model}, "{type_name}", '
+        f"{java_string_array(features)})"
+    )
+    return _collection_assertion(
+        java_string_list(expected),
+        actual,
+        assertion,
+        message,
+    )
+
+
+def _render_reference_pairs_assertion(
+    assertion: dict[str, Any],
+    model: str,
+    type_name: str,
+    message: str,
+) -> list[str]:
+    expected = [
+        f"{pair['source']}->{pair['target']}"
+        for pair in assertion["expected"]
+    ]
+    source = escape_java(str(assertion["source"]))
+    target = escape_java(str(assertion["target"]))
+    actual = f'referencePairs({model}, "{type_name}", "{source}", "{target}")'
+    return _collection_assertion(
+        java_string_list(expected),
+        actual,
+        assertion,
+        message,
+    )
 
 
 def _collection_assertion(

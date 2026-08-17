@@ -135,31 +135,7 @@ def _render_change(
     kind = str(change["kind"])
     feature = escape_java(str(change.get("feature") or ""))
     value = change.get("value")
-    body: list[str]
-    if kind == "delete":
-        target_expression = _find_expression("view", uri, target)
-        body = [f"            EcoreUtil.delete({target_expression}, true);"]
-    elif kind == "set_feature":
-        target_expression = _find_expression("view", uri, target)
-        body = [
-            f'            setFeature({target_expression}, "{feature}", {_java_value(value, slot_uris, "view", uri)});'
-        ]
-    elif kind == "add_to_collection":
-        target_expression = _find_expression("view", uri, target)
-        body = [
-            f'            addToCollection({target_expression}, "{feature}", {_java_value(value, slot_uris, "view", uri)});'
-        ]
-    elif kind == "remove_from_collection":
-        target_expression = _find_expression("view", uri, target)
-        body = [
-            f'            removeFromCollection({target_expression}, "{feature}", {_java_value(value, slot_uris, "view", uri)});'
-        ]
-    elif kind == "move":
-        target_expression = _find_expression("view", uri, target)
-        body = [
-            f'            moveInto({target_expression}, "{feature}", {_java_value(value, slot_uris, "view", uri)});'
-        ]
-    elif kind == "create":
+    if kind == "create":
         body = [
             f"            EObject created{index} = {_java_value(value, slot_uris, 'view', uri)};",
         ]
@@ -170,10 +146,27 @@ def _render_change(
             )
         else:
             body.append(
-                f'            view.registerRoot(created{index}, URI.createFileURI(tempDir.resolve("created-{index}.xmi").toString()));'
+                f"            view.registerRoot(created{index}, "
+                "URI.createFileURI(tempDir.resolve("
+                f'"created-{index}.xmi").toString()));'
             )
+    elif kind == "delete":
+        target_expression = _find_expression("view", uri, target)
+        body = [f"            EcoreUtil.delete({target_expression}, true);"]
     else:
-        raise ValueError(f"unsupported Reactions change kind: {kind}")
+        operation = {
+            "set_feature": "setFeature",
+            "add_to_collection": "addToCollection",
+            "remove_from_collection": "removeFromCollection",
+            "move": "moveInto",
+        }.get(kind)
+        if operation is None:
+            raise ValueError(f"unsupported Reactions change kind: {kind}")
+        target_expression = _find_expression("view", uri, target)
+        rendered_value = _java_value(value, slot_uris, "view", uri)
+        body = [
+            f'            {operation}({target_expression}, "{feature}", {rendered_value});'
+        ]
     return [
         "        modify(vsum, view -> {",
         *body,
@@ -197,6 +190,15 @@ def _java_value(
         return f'"{escape_java(value)}"'
     if not isinstance(value, dict):
         raise ValueError(f"unsupported declarative change value: {value!r}")
+    return _java_object_value(value, slot_uris, view, default_uri)
+
+
+def _java_object_value(
+    value: dict[str, Any],
+    slot_uris: dict[str, str],
+    view: str,
+    default_uri: str,
+) -> str:
     if value.get("slot") or value.get("model"):
         slot = str(value.get("slot", value.get("model")))
         return _find_expression(view, slot_uris[slot], value)

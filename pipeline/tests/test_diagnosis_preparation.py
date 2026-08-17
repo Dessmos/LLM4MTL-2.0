@@ -18,16 +18,24 @@ import re
 import shutil
 import unittest
 import uuid
+import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any
 
 from llm4mtl.paths import REPO_ROOT, TARGET
 from llm4mtl.provenance import input_hashes
 from llm4mtl.semantic_tests.diagnosis_preparation import (
+    _index_counts,
+    _match_assertion,
     diagnosis_artifact_references,
     diagnosis_response_dir,
     prepare_after_execution_stage,
     prepare_execution_diagnosis,
+)
+from llm4mtl.semantic_tests.failure_report import FailureReportError
+from llm4mtl.semantic_tests.failure_report import (
+    _failure_evidence,
+    _surefire_test_case,
 )
 from llm4mtl.semantic_tests.execution_evidence import (
     STDOUT_FILENAME,
@@ -76,6 +84,82 @@ SEMANTIC_CASES: dict[str, Any] = {
 }
 
 
+class DiagnosisIndexCountTests(unittest.TestCase):
+    def test_prepared_report_counts_preserve_status_scope_and_eligibility(self) -> None:
+        pairs = [
+            {
+                "reports": [
+                    {
+                        "status": "created",
+                        "scope": "execution_pair",
+                        "eligible": True,
+                    },
+                    {"status": "refused", "eligible": False},
+                ]
+            },
+            {"reports": []},
+        ]
+
+        self.assertEqual(
+            {
+                "failed_pairs": 2,
+                "reports_created": 1,
+                "reports_refused": 1,
+                "pair_level_reports": 1,
+                "diagnosis_eligible": 1,
+                "pairs_without_reports": 1,
+            },
+            _index_counts(pairs),
+        )
+
+
+class SurefireTestCaseTests(unittest.TestCase):
+    def test_failure_evidence_keeps_missing_field_errors_and_trace_rules(self) -> None:
+        with self.assertRaises(KeyError):
+            _failure_evidence({"kind": "runtime_error"}, ["trace"])
+
+        summary, traces = _failure_evidence(None, ["trace"])
+        self.assertTrue(all(value is None for value in summary.values()))
+        self.assertEqual([], traces)
+
+    def test_error_precedes_failure_and_preserves_exception_evidence(self) -> None:
+        case = ET.fromstring(
+            '<testcase classname="Example" name="fails" time="0.2">'
+            '<failure type="AssertionError" message="failure">failure trace</failure>'
+            '<error type="RuntimeException" message="runtime">runtime trace</error>'
+            '</testcase>'
+        )
+
+        test_case, exception, trace = _surefire_test_case(
+            REPO_ROOT / "report.xml",
+            case,
+        )
+
+        self.assertEqual("error", test_case["status"])
+        self.assertEqual("RuntimeException", test_case["failure_type"])
+        self.assertEqual("runtime", test_case["message"])
+        self.assertEqual(
+            {"type": "RuntimeException", "message": "runtime"},
+            exception,
+        )
+        self.assertEqual("runtime trace", trace)
+
+    def test_passed_case_has_no_exception_or_trace(self) -> None:
+        case = ET.fromstring(
+            '<testcase classname="Example" name="passes" time="0.1" />'
+        )
+
+        test_case, exception, trace = _surefire_test_case(
+            REPO_ROOT / "report.xml",
+            case,
+        )
+
+        self.assertEqual("passed", test_case["status"])
+        self.assertIsNone(test_case["message"])
+        self.assertIsNone(exception)
+        self.assertEqual("", trace)
+
+
 EMPTY_SUREFIRE_XML = (
     '<?xml version="1.0" encoding="UTF-8"?>\n'
     '<testsuite name="GeneratedSemanticTest" tests="0" failures="0" errors="0"/>\n'
@@ -106,6 +190,45 @@ def _surefire_xml(message: str, element: str = "failure") -> str:
         "  </testcase>\n"
         "</testsuite>\n"
     )
+
+
+class AssertionMatchingTests(unittest.TestCase):
+    def test_explicit_assertion_id_is_selected_by_message_prefix(self) -> None:
+        semantic_cases = {
+            "tests": [
+                {
+                    "id": "case-1",
+                    "assertions": [
+                        {"id": "check-count", "message": "expected two nodes"},
+                    ],
+                }
+            ]
+        }
+
+        self.assertEqual(
+            "check-count",
+            _match_assertion(
+                semantic_cases,
+                "case-1",
+                "expected two nodes ==> expected: <2> but was: <1>",
+            ),
+        )
+
+    def test_ambiguous_rendered_messages_are_refused(self) -> None:
+        semantic_cases = {
+            "tests": [
+                {
+                    "id": "case-1",
+                    "assertions": [
+                        {"id": "first", "message": "same message"},
+                        {"id": "second", "message": "same message"},
+                    ],
+                }
+            ]
+        }
+
+        with self.assertRaisesRegex(FailureReportError, "found 2"):
+            _match_assertion(semantic_cases, "case-1", "same message: detail")
 
 
 class DiagnosisPreparationTests(unittest.TestCase):

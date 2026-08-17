@@ -630,20 +630,27 @@ def _match_assertion(
     if not isinstance(assertions, list):
         raise FailureReportError(f"semantic case {test_case_id!r} has no assertions")
 
-    stripped = message.strip()
-    matching: list[str] = []
-    for index, assertion in enumerate(assertions, start=1):
-        if not isinstance(assertion, dict):
-            continue
-        rendered = _rendered_assertion_message(assertion)
-        if rendered and stripped.startswith(rendered):
-            matching.append(str(assertion.get("id") or f"assertion-{index:03d}"))
+    matching = _matching_assertion_ids(assertions, message.strip())
     if len(matching) != 1:
         raise FailureReportError(
             f"expected exactly one assertion of {test_case_id!r} matching the "
             f"recorded failure message, found {len(matching)}"
         )
     return matching[0]
+
+
+def _matching_assertion_ids(
+    assertions: list[Any], stripped_message: str
+) -> list[str]:
+    """Return assertion IDs whose rendered messages match the recorded prefix."""
+    matching: list[str] = []
+    for index, assertion in enumerate(assertions, start=1):
+        if not isinstance(assertion, dict):
+            continue
+        rendered = _rendered_assertion_message(assertion)
+        if rendered and stripped_message.startswith(rendered):
+            matching.append(str(assertion.get("id") or f"assertion-{index:03d}"))
+    return matching
 
 
 def _rendered_assertion_message(assertion: dict[str, Any]) -> str:
@@ -771,18 +778,36 @@ def _index_counts(pairs: list[dict[str, Any]]) -> dict[str, int]:
     existence here cannot move a semantic result.
     """
     reports = [report for pair in pairs for report in pair["reports"]]
-    created = [report for report in reports if report["status"] == "created"]
+    report_counts = _prepared_report_counts(reports)
     return {
         "failed_pairs": len(pairs),
+        "reports_created": report_counts["reports_created"],
+        "reports_refused": report_counts["reports_refused"],
+        "pair_level_reports": report_counts["pair_level_reports"],
+        "diagnosis_eligible": report_counts["diagnosis_eligible"],
+        "pairs_without_reports": sum(1 for pair in pairs if not pair["reports"]),
+    }
+
+
+def _prepared_report_counts(reports: list[dict[str, Any]]) -> dict[str, int]:
+    created: list[dict[str, Any]] = []
+    refused_count = 0
+    eligible_count = 0
+    for report in reports:
+        if report["status"] == "created":
+            created.append(report)
+        elif report["status"] == "refused":
+            refused_count += 1
+        if report.get("eligible"):
+            eligible_count += 1
+
+    return {
         "reports_created": len(created),
-        "reports_refused": sum(
-            1 for report in reports if report["status"] == "refused"
-        ),
+        "reports_refused": refused_count,
         "pair_level_reports": sum(
             1 for report in created if report.get("scope") == "execution_pair"
         ),
-        "diagnosis_eligible": sum(1 for report in reports if report.get("eligible")),
-        "pairs_without_reports": sum(1 for pair in pairs if not pair["reports"]),
+        "diagnosis_eligible": eligible_count,
     }
 
 
