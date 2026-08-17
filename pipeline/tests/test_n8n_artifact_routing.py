@@ -155,8 +155,18 @@ class N8nArtifactRoutingTests(unittest.TestCase):
         build_code = nodes[build_node]["parameters"]["jsCode"]
         for derived in ("artifact_directory", "request_path", "raw_response_path", "result_path"):
             self.assertIn(f"{derived}:", build_code)
-        directory = nodes["Create Diagnosis Artifact Directory"]["parameters"]["command"]
-        self.assertIn(f"$('{build_node}').first().json.artifact_directory", directory)
+        # Writing a file creates its parent directories, so the diagnosis needs
+        # no shell step to prepare them. Execute Command is unavailable in a
+        # default n8n container, where it imports as an unrecognized node and
+        # takes its neighbours' connections down with it.
+        self.assertNotIn(
+            "n8n-nodes-base.executeCommand",
+            {node["type"] for node in document["nodes"]},
+        )
+        self.assertEqual(
+            "Convert Diagnosis Request to File",
+            document["connections"][build_node]["main"][0][0]["node"],
+        )
         for writer, derived in (
             ("Write Diagnosis Request", "request_path"),
             ("Write Raw Diagnosis Response", "raw_response_path"),

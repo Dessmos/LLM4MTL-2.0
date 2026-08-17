@@ -86,32 +86,6 @@
     },
     {
       "parameters": {
-        "command": "=mkdir -p {{ $('Build Diagnosis Request Artifact').first().json.artifact_directory }}"
-      },
-      "id": "e1000000-0000-4000-8000-000000000025",
-      "name": "Create Diagnosis Artifact Directory",
-      "type": "n8n-nodes-base.executeCommand",
-      "typeVersion": 1,
-      "position": [
-        500,
-        0
-      ]
-    },
-    {
-      "parameters": {
-        "jsCode": "return [{ json: $('Build Diagnosis Request Artifact').first().json }];"
-      },
-      "id": "e1000000-0000-4000-8000-000000000026",
-      "name": "Restore Diagnosis Request Context",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        700,
-        0
-      ]
-    },
-    {
-      "parameters": {
         "operation": "toText",
         "sourceProperty": "diagnosis_request_text",
         "binaryPropertyName": "data",
@@ -404,9 +378,7 @@
     "Read Diagnosis Prompt": {"main": [[{"node": "Extract Diagnosis Prompt", "type": "main", "index": 0}]]},
     "Extract Diagnosis Prompt": {"main": [[{"node": "Assemble Diagnosis Bundle", "type": "main", "index": 0}]]},
     "Assemble Diagnosis Bundle": {"main": [[{"node": "Build Diagnosis Request Artifact", "type": "main", "index": 0}]]},
-    "Build Diagnosis Request Artifact": {"main": [[{"node": "Create Diagnosis Artifact Directory", "type": "main", "index": 0}]]},
-    "Create Diagnosis Artifact Directory": {"main": [[{"node": "Restore Diagnosis Request Context", "type": "main", "index": 0}]]},
-    "Restore Diagnosis Request Context": {"main": [[{"node": "Convert Diagnosis Request to File", "type": "main", "index": 0}]]},
+    "Build Diagnosis Request Artifact": {"main": [[{"node": "Convert Diagnosis Request to File", "type": "main", "index": 0}]]},
     "Convert Diagnosis Request to File": {"main": [[{"node": "Write Diagnosis Request", "type": "main", "index": 0}]]},
     "Write Diagnosis Request": {"main": [[{"node": "Call Diagnosis LLM", "type": "main", "index": 0}]]},
     "Call Diagnosis LLM": {"main": [[{"node": "Diagnose with OpenAI", "type": "main", "index": 0}], [{"node": "Diagnose with Anthropic", "type": "main", "index": 0}], [{"node": "Diagnose with Google", "type": "main", "index": 0}]]},
