@@ -18,10 +18,15 @@ from llm4mtl.domain import ArtifactValidation
 from llm4mtl.languages.base import LanguageAdapter
 from llm4mtl.run_store.identity import resolve_contained_dir
 from llm4mtl.semantic_tests.extraction.models import ResponseTarget
-from llm4mtl.semantic_tests.extraction.parser import java_files, model_files, semantic_case_files
+from llm4mtl.semantic_tests.extraction.parser import (
+    java_files,
+    model_files,
+    semantic_case_files,
+)
 
 
 def next_suite_id(strategy_dir: Path) -> str:
+    """Return the next deterministic candidate id below ``strategy_dir``."""
     max_seen = 0
     for child in strategy_dir.iterdir() if strategy_dir.exists() else []:
         if not child.is_dir():
@@ -96,6 +101,7 @@ def write_suite(
     args: argparse.Namespace,
     adapter: LanguageAdapter,
 ) -> tuple[Path, ArtifactValidation]:
+    """Render and persist one immutable generated-suite candidate."""
     extracted, validation = adapter.render_suite_artifacts(target.task, extracted)
     suite_dir = allocate_suite_dir(target, args)
     suite_id = suite_dir.name
@@ -124,6 +130,7 @@ def build_metadata(
     validation: ArtifactValidation,
     adapter: LanguageAdapter,
 ) -> dict[str, object]:
+    """Build provenance and artifact metadata for one candidate suite."""
     config = language_config(adapter.language_id)
     # The reviewed, frozen prompt is the one both generators actually consumed.
     # This used to name a pre-v5 per-model prompt directory that no longer
@@ -144,8 +151,14 @@ def build_metadata(
         "strategy": target.strategy,
         "suite_id": suite_id,
         "generated_at": datetime.now(timezone.utc).isoformat(),
-        "prompt_file": relative_or_absolute(prompt_path) if prompt_path.exists() else None,
-        "workflow_file": relative_or_absolute(workflow_path) if workflow_path.exists() else None,
+        "prompt_file": (
+            relative_or_absolute(prompt_path) if prompt_path.exists() else None
+        ),
+        "workflow_file": (
+            relative_or_absolute(workflow_path)
+            if workflow_path.exists()
+            else None
+        ),
         "raw_output_file": relative_or_absolute(target.response_path),
         "status": "candidate" if validation.valid else "invalid",
         "artifact_validation": validation.as_metadata(),

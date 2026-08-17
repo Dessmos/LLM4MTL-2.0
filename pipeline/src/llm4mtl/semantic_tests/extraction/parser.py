@@ -48,14 +48,20 @@ MODELS_DIRECTORY = "models"
 
 
 def parse_fenced_blocks(markdown: str) -> list[Block]:
+    """Return fenced blocks in their source order."""
     pattern = re.compile(r"```([^\n`]*)\n(.*?)```", re.DOTALL)
     return [
-        Block(info=match.group(1).strip(), content=clean_content(match.group(2)), start=match.start())
+        Block(
+            info=match.group(1).strip(),
+            content=clean_content(match.group(2)),
+            start=match.start(),
+        )
         for match in pattern.finditer(markdown)
     ]
 
 
 def clean_content(text: str) -> str:
+    """Normalize a block to one trailing newline."""
     return text.rstrip() + "\n"
 
 
@@ -110,7 +116,8 @@ def canonical_generated_path(declared: str, *, block_index: int) -> str:
     path = Path(cleaned)
     if path.is_absolute() or ".." in path.parts:
         raise ExtractionError(
-            f"block #{block_index} declares {declared!r}, which escapes the suite directory"
+            f"block #{block_index} declares {declared!r}, which escapes the "
+            "suite directory"
         )
 
     suffix = path.suffix.lower()
@@ -135,12 +142,19 @@ def canonical_generated_path(declared: str, *, block_index: int) -> str:
 
 
 def java_files(extracted: dict[str, str]) -> list[str]:
+    """Return generated Java artifact paths in deterministic order."""
     return sorted(path for path in extracted if path.endswith(".java"))
 
 
 def model_files(extracted: dict[str, str]) -> list[str]:
-    return sorted(path for path in extracted if path.endswith((".model", ".xmi", ".xml")))
+    """Return generated model artifact paths in deterministic order."""
+    return sorted(
+        path
+        for path in extracted
+        if path.endswith((".model", ".xmi", ".xml"))
+    )
 
 
 def semantic_case_files(extracted: dict[str, str]) -> list[str]:
+    """Return semantic-case JSON artifact paths in deterministic order."""
     return sorted(path for path in extracted if path.endswith(".json"))

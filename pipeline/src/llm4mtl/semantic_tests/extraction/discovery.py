@@ -12,6 +12,7 @@ SMOKE_RESPONSE_SUFFIXES = (".qwen-smoke",)
 
 
 def discover_responses(args: argparse.Namespace) -> list[ResponseTarget]:
+    """Discover response files selected by extraction CLI arguments."""
     if args.response:
         if args.suite_id and len(args.response) != 1:
             raise SystemExit("--suite-id can only be used with a single --response")
@@ -29,7 +30,9 @@ def discover_responses(args: argparse.Namespace) -> list[ResponseTarget]:
     root = args.responses_root.resolve()
     pattern = f"*/**/{args.task}.md" if args.task else "*/*/*.md"
     responses = sorted(
-        path for path in root.glob(pattern) if path.is_file() and not path.name.startswith(".")
+        path
+        for path in root.glob(pattern)
+        if path.is_file() and not path.name.startswith(".")
     )
     return [
         response_target_from_path(
@@ -50,9 +53,12 @@ def response_target_from_path(
     strategy_override: str | None,
     task_override: str | None,
 ) -> ResponseTarget:
+    """Resolve response identity from its path and explicit overrides."""
     task = task_override or task_name_from_response(response_path)
     if task_override and task_name_from_response(response_path) != task_override:
-        raise SystemExit(f"Expected response file named {task_override}.md: {response_path}")
+        raise SystemExit(
+            f"Expected response file named {task_override}.md: {response_path}"
+        )
 
     llm = llm_override
     strategy = strategy_override
@@ -81,6 +87,7 @@ def response_target_from_path(
 
 
 def task_name_from_response(response_path: Path) -> str:
+    """Return the task name encoded by a response filename."""
     stem = response_path.stem
     for suffix in SMOKE_RESPONSE_SUFFIXES:
         if stem.endswith(suffix):

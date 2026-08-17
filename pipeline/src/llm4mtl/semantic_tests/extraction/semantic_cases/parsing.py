@@ -6,11 +6,23 @@ import json
 from typing import Any
 
 from llm4mtl.artifact_schemas import ArtifactSchemaError, validate_artifact
+from llm4mtl.semantic_tests.semantic_spec import SEMANTIC_CASES_FILE
 
 from .errors import SemanticCasesError
 from .legacy_adapter import is_legacy_tree2graph_spec, normalize_legacy_tree2graph_spec
 from .normalization import normalize_schema_variants
-from llm4mtl.semantic_tests.semantic_spec import SEMANTIC_CASES_FILE
+
+SUPPORTED_ASSERTION_KINDS = frozenset(
+    {
+        "collectionSize",
+        "count",
+        "featureValues",
+        "objects",
+        "pathValues",
+        "referencePairs",
+        "treePaths",
+    }
+)
 
 
 def parse_semantic_cases(
@@ -43,7 +55,9 @@ def parse_semantic_cases(
 def validate_semantic_cases(spec: dict[str, Any], target_task: str) -> None:
     tests = spec.get("tests")
     if not isinstance(tests, list) or not tests:
-        raise SemanticCasesError(f"{SEMANTIC_CASES_FILE} must contain a non-empty tests array")
+        raise SemanticCasesError(
+            f"{SEMANTIC_CASES_FILE} must contain a non-empty tests array"
+        )
 
     if "transformation" in spec and not isinstance(spec["transformation"], str):
         raise SemanticCasesError("transformation must be a string")
@@ -58,7 +72,9 @@ def validate_semantic_cases(spec: dict[str, Any], target_task: str) -> None:
 
 def _validate_semantic_test(test: Any, spec: dict[str, Any], index: int) -> None:
     if not isinstance(test, dict):
-        raise SemanticCasesError(f"{SEMANTIC_CASES_FILE} test #{index} must be an object")
+        raise SemanticCasesError(
+            f"{SEMANTIC_CASES_FILE} test #{index} must be an object"
+        )
     if not test.get("name"):
         raise SemanticCasesError(f"{SEMANTIC_CASES_FILE} test #{index} is missing name")
     # Read raw rather than through `effective_models`, which copies each entry
@@ -66,7 +82,9 @@ def _validate_semantic_test(test: Any, spec: dict[str, Any], index: int) -> None
     # specification, not an unhandled coercion error from the extractor.
     models = test["models"] if "models" in test else spec.get("models", [])
     if not isinstance(models, list) or not models:
-        raise SemanticCasesError(f"{SEMANTIC_CASES_FILE} test #{index} must define models")
+        raise SemanticCasesError(
+            f"{SEMANTIC_CASES_FILE} test #{index} must define models"
+        )
     validate_models(models, index)
     assertions = test.get("assertions")
     if not isinstance(assertions, list) or not assertions:
@@ -83,9 +101,13 @@ def validate_models(models: list[dict[str, Any]], test_index: int) -> None:
 
 def _validate_model(model: Any, test_index: int, model_index: int) -> None:
     if not isinstance(model, dict):
-        raise SemanticCasesError(f"test #{test_index} model #{model_index} must be an object")
+        raise SemanticCasesError(
+            f"test #{test_index} model #{model_index} must be an object"
+        )
     if not model.get("name"):
-        raise SemanticCasesError(f"test #{test_index} model #{model_index} is missing name")
+        raise SemanticCasesError(
+            f"test #{test_index} model #{model_index} is missing name"
+        )
     kind = model.get("kind", "emf")
     if kind not in {"emf", "plainXml"}:
         raise SemanticCasesError(
@@ -106,7 +128,11 @@ def _validate_model(model: Any, test_index: int, model_index: int) -> None:
         )
 
 
-def validate_assertions(assertions: list[dict[str, Any]], model_names: set[str], test_index: int) -> None:
+def validate_assertions(
+    assertions: list[dict[str, Any]],
+    model_names: set[str],
+    test_index: int,
+) -> None:
     for assertion_index, assertion in enumerate(assertions, start=1):
         _validate_assertion(assertion, model_names, test_index, assertion_index)
 
@@ -122,13 +148,15 @@ def _validate_assertion(
             f"test #{test_index} assertion #{assertion_index} must be an object"
         )
     kind = assertion.get("kind")
-    if kind not in {"count", "featureValues", "objects", "referencePairs", "pathValues", "treePaths", "collectionSize"}:
+    if kind not in SUPPORTED_ASSERTION_KINDS:
         raise SemanticCasesError(
-            f"test #{test_index} assertion #{assertion_index} has unsupported kind: {kind}"
+            f"test #{test_index} assertion #{assertion_index} "
+            f"has unsupported kind: {kind}"
         )
     if assertion.get("model") not in model_names:
         raise SemanticCasesError(
-            f"test #{test_index} assertion #{assertion_index} references an unknown model"
+            f"test #{test_index} assertion #{assertion_index} "
+            "references an unknown model"
         )
     if not assertion.get("type"):
         raise SemanticCasesError(
@@ -190,14 +218,17 @@ def _validate_collection_size_assertion(
         not assertion.get("path") or not isinstance(assertion.get("expected"), int)
     ):
         raise SemanticCasesError(
-            f"test #{test_index} collectionSize assertion #{assertion_index} is incomplete"
+            f"test #{test_index} collectionSize assertion #{assertion_index} "
+            "is incomplete"
         )
 
 
 def _validate_objects_assertion(
     assertion: dict[str, Any], test_index: int, assertion_index: int
 ) -> None:
-    if not isinstance(assertion.get("features"), list) or not isinstance(assertion.get("expected"), list):
+    if not isinstance(assertion.get("features"), list) or not isinstance(
+        assertion.get("expected"), list
+    ):
         raise SemanticCasesError(
             f"test #{test_index} objects assertion #{assertion_index} is incomplete"
         )
@@ -207,9 +238,14 @@ def _validate_objects_assertion(
 def _validate_reference_pairs_assertion(
     assertion: dict[str, Any], test_index: int, assertion_index: int
 ) -> None:
-    if not assertion.get("source") or not assertion.get("target") or not isinstance(assertion.get("expected"), list):
+    if (
+        not assertion.get("source")
+        or not assertion.get("target")
+        or not isinstance(assertion.get("expected"), list)
+    ):
         raise SemanticCasesError(
-            f"test #{test_index} referencePairs assertion #{assertion_index} is incomplete"
+            f"test #{test_index} referencePairs assertion #{assertion_index} "
+            "is incomplete"
         )
     validate_reference_pair_expectations(assertion, test_index, assertion_index)
 

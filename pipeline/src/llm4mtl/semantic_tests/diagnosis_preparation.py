@@ -171,14 +171,21 @@ def _first_diagnosable_report(index: dict[str, Any]) -> str | None:
         if not isinstance(reports, list):
             continue
         for report in reports:
-            if not isinstance(report, dict):
-                continue
-            if report.get("status") != "created" or report.get("eligible") is not True:
+            if not _is_diagnosable_report(report):
                 continue
             reference = report.get("report")
             if isinstance(reference, str):
                 return reference
     return None
+
+
+def _is_diagnosable_report(report: object) -> bool:
+    """Return whether an index entry names a created, eligible report."""
+    return (
+        isinstance(report, dict)
+        and report.get("status") == "created"
+        and report.get("eligible") is True
+    )
 
 
 def _record_preparation_error(
@@ -329,7 +336,9 @@ def _prepare_pair(
     }
     observation_path = _optional_path(pair.get("evidence"))
     if observation_path is None or not observation_path.is_file():
-        entry["skipped"].append(_skip("no_recorded_observation", str(pair.get("evidence"))))
+        entry["skipped"].append(
+            _skip("no_recorded_observation", str(pair.get("evidence")))
+        )
         return entry
     if syntax_evidence is None:
         entry["skipped"].append(
@@ -641,7 +650,10 @@ def _rendered_assertion_message(assertion: dict[str, Any]) -> str:
         return explicit
     if not all(field in assertion for field in ("kind", "model", "type")):
         return ""
-    return f"{assertion['kind']} assertion for {assertion['model']}::{assertion['type']}"
+    return (
+        f"{assertion['kind']} assertion for "
+        f"{assertion['model']}::{assertion['type']}"
+    )
 
 
 def _actual_target_models(observation_path: Path, test_method: str) -> list[Path]:
@@ -755,7 +767,9 @@ def _index_counts(pairs: list[dict[str, Any]]) -> dict[str, int]:
     return {
         "failed_pairs": len(pairs),
         "reports_created": len(created),
-        "reports_refused": sum(1 for report in reports if report["status"] == "refused"),
+        "reports_refused": sum(
+            1 for report in reports if report["status"] == "refused"
+        ),
         "pair_level_reports": sum(
             1 for report in created if report.get("scope") == "execution_pair"
         ),

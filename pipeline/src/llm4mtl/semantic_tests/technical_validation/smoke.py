@@ -13,7 +13,12 @@ JUNIT_TEST_ANNOTATION = re.compile(
 
 
 def junit_test_method_counts(java_paths: list[Path]) -> dict[Path, int]:
+    """Count JUnit 5 test annotations in each rendered Java source file."""
     return {
-        java_path: len(JUNIT_TEST_ANNOTATION.findall(java_path.read_text(encoding="utf-8")))
+        java_path: len(
+            JUNIT_TEST_ANNOTATION.findall(
+                java_path.read_text(encoding="utf-8")
+            )
+        )
         for java_path in java_paths
     }

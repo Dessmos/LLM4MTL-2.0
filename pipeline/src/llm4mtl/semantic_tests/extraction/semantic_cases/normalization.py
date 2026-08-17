@@ -90,7 +90,11 @@ def normalize_schema_variants(
     return normalized
 
 
-def normalize_transformation(raw: Any, target_task: str, extension: str = ".etl") -> Any:
+def normalize_transformation(
+    raw: Any,
+    target_task: str,
+    extension: str = ".etl",
+) -> Any:
     """Canonicalize a transformation path. Anything else is passed through.
 
     A non-string is returned unchanged so validation can report the actual
@@ -108,6 +112,7 @@ def normalize_transformation_path(
     target_task: str,
     extension: str = ".etl",
 ) -> str:
+    """Canonicalize a non-empty transformation path and its extension."""
     if not extension.startswith("."):
         extension = f".{extension}"
     normalized = path.replace("\\", "/").lstrip("/")
@@ -157,4 +162,7 @@ def normalize_models(raw: Any) -> Any:
     """
     if not isinstance(raw, list):
         return raw
-    return [dict(model) if isinstance(model, dict) else model for model in raw]
+    return [
+        dict(model) if isinstance(model, dict) else model
+        for model in raw
+    ]

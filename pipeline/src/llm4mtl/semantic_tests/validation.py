@@ -57,7 +57,10 @@ class SuiteVerdict:
 
     @property
     def is_technically_executable(self) -> bool:
-        return self.observation is not None and self.observation.is_technically_executable
+        return (
+            self.observation is not None
+            and self.observation.is_technically_executable
+        )
 
     @property
     def is_judged_as_oracle(self) -> bool:
@@ -67,7 +70,9 @@ class SuiteVerdict:
     def failure_stage(self) -> str:
         if self.observation is not None:
             return self.observation.failure_stage
-        return "artifact_validation" if self.status == ARTIFACT_INVALID else "infrastructure"
+        if self.status == ARTIFACT_INVALID:
+            return "artifact_validation"
+        return "infrastructure"
 
 
 def observe_suite(suite: GeneratedSuite, context: ValidationContext) -> SuiteVerdict:
@@ -78,7 +83,11 @@ def observe_suite(suite: GeneratedSuite, context: ValidationContext) -> SuiteVer
     """
     validation = context.adapter.validate_suite_artifacts(suite)
     if not validation.valid:
-        return SuiteVerdict(suite, ARTIFACT_INVALID, error_summary="; ".join(validation.violations))
+        return SuiteVerdict(
+            suite,
+            ARTIFACT_INVALID,
+            error_summary="; ".join(validation.violations),
+        )
 
     reference = context.adapter.reference_transformation(suite.task)
     if not reference.is_file():
@@ -88,6 +97,21 @@ def observe_suite(suite: GeneratedSuite, context: ValidationContext) -> SuiteVer
             error_summary=f"Reference transformation not found: {reference}",
         )
 
+    observation = _reference_observation(suite, reference, context)
+    return SuiteVerdict(
+        suite,
+        _technical_status(observation),
+        observation=observation,
+        error_summary=observation.error_summary,
+    )
+
+
+def _reference_observation(
+    suite: GeneratedSuite,
+    reference: Path,
+    context: ValidationContext,
+) -> SuiteExecutionObservation:
+    """Return the recorded reference observation, executing once if absent."""
     observations_root = context.workspace.observations_dir
     # The second read happens while holding the per-suite lock. Without it,
     # technical and reference stage calls can both observe a miss and execute
@@ -103,13 +127,7 @@ def observe_suite(suite: GeneratedSuite, context: ValidationContext) -> SuiteVer
             record_observation(
                 observations_root, suite, reference, observation, evidence=evidence
             )
-
-    return SuiteVerdict(
-        suite,
-        _technical_status(observation),
-        observation=observation,
-        error_summary=observation.error_summary,
-    )
+    return observation
 
 
 def judge_oracle(verdict: SuiteVerdict) -> SuiteVerdict:
@@ -127,7 +145,9 @@ def judge_oracle(verdict: SuiteVerdict) -> SuiteVerdict:
 def _technical_status(observation: SuiteExecutionObservation) -> str:
     if observation.is_technically_executable:
         return TECHNICALLY_EXECUTABLE
-    return INFRASTRUCTURE_ERROR if observation.is_infrastructure_failure else NOT_EXECUTABLE
+    if observation.is_infrastructure_failure:
+        return INFRASTRUCTURE_ERROR
+    return NOT_EXECUTABLE
 
 
 def technical_counts(verdicts: list[SuiteVerdict], selected: int) -> dict[str, int]:
@@ -140,7 +160,8 @@ def technical_counts(verdicts: list[SuiteVerdict], selected: int) -> dict[str, i
     compile_failed = sum(
         1
         for verdict in verdicts
-        if verdict.status == NOT_EXECUTABLE and verdict.failure_stage == "java_compilation"
+        if verdict.status == NOT_EXECUTABLE
+        and verdict.failure_stage == "java_compilation"
     )
     return {
         "selected": selected,
@@ -154,7 +175,7 @@ def technical_counts(verdicts: list[SuiteVerdict], selected: int) -> dict[str, i
 
 
 def reference_counts(verdicts: list[SuiteVerdict], selected: int) -> dict[str, int]:
-    """Stage counts for oracle validity. Unexecutable suites are unjudged, not invalid."""
+    """Count oracle verdicts without treating unexecutable suites as invalid."""
     tally = Counter(verdict.status for verdict in verdicts)
     unjudged = tally[NOT_EXECUTABLE] + tally[ARTIFACT_INVALID]
     return {
@@ -167,4 +188,8 @@ def reference_counts(verdicts: list[SuiteVerdict], selected: int) -> dict[str, i
 
 
 def workspace_for(engine_dir: Path, observations_dir: Path) -> Workspace:
-    return Workspace(engine_dir=engine_dir.resolve(), observations_dir=observations_dir.resolve())
+    """Resolve a validation workspace independently of the process directory."""
+    return Workspace(
+        engine_dir=engine_dir.resolve(),
+        observations_dir=observations_dir.resolve(),
+    )

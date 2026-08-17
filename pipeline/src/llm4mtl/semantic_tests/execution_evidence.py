@@ -172,7 +172,11 @@ def archived_execution_evidence(observation_path: Path) -> ArchivedEvidence:
     stdout = directory / STDOUT_FILENAME
     return ArchivedEvidence(
         directory=directory,
-        surefire_reports=tuple(sorted(reports.glob("TEST-*.xml"))) if reports.is_dir() else (),
+        surefire_reports=(
+            tuple(sorted(reports.glob("TEST-*.xml")))
+            if reports.is_dir()
+            else ()
+        ),
         execution_log=stdout if stdout.is_file() else None,
     )
 

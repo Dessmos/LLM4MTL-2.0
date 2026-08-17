@@ -7,15 +7,28 @@ from pathlib import Path
 
 
 def java_destination(test_project_dir: Path, fqcn: str) -> Path:
+    """Return the source path for a fully qualified Java class name."""
     parts = fqcn.split(".")
     class_name = parts[-1] + ".java"
     package_parts = parts[:-1]
-    return test_project_dir / "src" / "test" / "java" / Path(*package_parts) / class_name
+    return (
+        test_project_dir
+        / "src"
+        / "test"
+        / "java"
+        / Path(*package_parts)
+        / class_name
+    )
 
 
 def infer_fqcn(java_path: Path) -> str:
+    """Read the declared fully qualified class name from a Java source file."""
     content = java_path.read_text(encoding="utf-8")
-    package_match = re.search(r"^\s*package\s+([A-Za-z_][\w.]*)\s*;", content, re.MULTILINE)
+    package_match = re.search(
+        r"^\s*package\s+([A-Za-z_][\w.]*)\s*;",
+        content,
+        re.MULTILINE,
+    )
     class_match = re.search(
         r"\b(?:public\s+)?(?:class|interface|enum)\s+([A-Za-z_]\w*)\b",
         content,
@@ -29,5 +42,6 @@ def infer_fqcn(java_path: Path) -> str:
 
 
 def slug(value: str) -> str:
+    """Return a lowercase Java-safe identifier fragment."""
     slugged = re.sub(r"[^A-Za-z0-9]+", "_", value).strip("_").lower()
     return slugged or "task"

@@ -40,13 +40,24 @@ EXPECTATION_KINDS = {
     "objects": "objects",
     "referencePairs": "reference_pairs",
 }
+MODEL_ROLES = {
+    "source": ModelRole.INPUT,
+    "target": ModelRole.OUTPUT,
+    "inout": ModelRole.INOUT,
+}
 
 
 class ScenarioMappingError(ValueError):
     """Raised when a generated suite cannot be expressed in the shared contract."""
 
 
-def suite_from_spec(spec: dict[str, Any], *, suite_id: str, language: str, task: str) -> SemanticSuite:
+def suite_from_spec(
+    spec: dict[str, Any],
+    *,
+    suite_id: str,
+    language: str,
+    task: str,
+) -> SemanticSuite:
     """Build the shared representation of one generated suite."""
     try:
         scenarios = tuple(_scenario(spec, test) for test in spec.get("tests", []))
@@ -66,7 +77,9 @@ def _scenario(spec: dict[str, Any], test: dict[str, Any]) -> SemanticScenario:
         name=str(test["name"]),
         kind=ScenarioKind(raw_kind),
         slots=tuple(_slot(model) for model in models),
-        expectations=tuple(_expectation(assertion) for assertion in test.get("assertions", [])),
+        expectations=tuple(
+            _expectation(assertion) for assertion in test.get("assertions", [])
+        ),
         changes=tuple(_change(change) for change in test.get("changes", [])),
     )
 
@@ -75,11 +88,7 @@ def _slot(model: dict[str, Any]) -> ModelSlot:
     role = str(model.get("role") or ("source" if model.get("path") else "target"))
     return ModelSlot(
         name=str(model["name"]),
-        role={
-            "source": ModelRole.INPUT,
-            "target": ModelRole.OUTPUT,
-            "inout": ModelRole.INOUT,
-        }[role],
+        role=MODEL_ROLES[role],
         metamodel=str(model.get("metamodelUri") or model["name"]),
         artifact=str(model["path"]) if model.get("path") else None,
     )
@@ -97,7 +106,9 @@ def _change(raw: dict[str, Any]) -> ChangeOperation:
     )
 
 
-def _change_value(raw: Any) -> ElementSpec | ElementRef | str | int | float | bool | None:
+def _change_value(
+    raw: Any,
+) -> ElementSpec | ElementRef | str | int | float | bool | None:
     if not isinstance(raw, dict):
         return raw
     if raw.get("slot") or raw.get("model"):
@@ -105,7 +116,11 @@ def _change_value(raw: Any) -> ElementSpec | ElementRef | str | int | float | bo
     if raw.get("type"):
         return ElementSpec(
             type_name=str(raw["type"]),
-            features=raw.get("features") if isinstance(raw.get("features"), dict) else {},
+            features=(
+                raw.get("features")
+                if isinstance(raw.get("features"), dict)
+                else {}
+            ),
         )
     raise ValueError("a structured change value must describe an element or reference")
 

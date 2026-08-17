@@ -9,6 +9,7 @@ from llm4mtl.domain import GeneratedSuite
 
 
 def discover_suites(args: argparse.Namespace, language: str) -> list[GeneratedSuite]:
+    """Discover candidate suites selected by validation CLI arguments."""
     if args.suite:
         return [
             suite_from_path(
@@ -20,7 +21,11 @@ def discover_suites(args: argparse.Namespace, language: str) -> list[GeneratedSu
         ]
 
     root = args.generated_tests_root.resolve()
-    task_dirs = [root / args.task] if args.task else sorted(path for path in root.iterdir() if path.is_dir())
+    task_dirs = (
+        [root / args.task]
+        if args.task
+        else sorted(path for path in root.iterdir() if path.is_dir())
+    )
     suites: list[GeneratedSuite] = []
     for task_dir in task_dirs:
         candidates = task_dir / "candidates"
@@ -37,6 +42,7 @@ def suite_from_path(
     generated_tests_root: Path,
     language: str,
 ) -> GeneratedSuite:
+    """Build a suite identity from its candidate-directory path."""
     try:
         rel = path.relative_to(generated_tests_root)
     except ValueError:

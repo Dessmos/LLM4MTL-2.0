@@ -23,6 +23,7 @@ from __future__ import annotations
 import fcntl
 import re
 from contextlib import contextmanager
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterator, Literal
 
@@ -59,6 +60,15 @@ TransformationRole = Literal[
     "reference_transformation",
     "generated_transformation",
 ]
+
+
+@dataclass(frozen=True)
+class _ConsoleTestCounts:
+    """Test totals parsed from Maven's last Surefire summary line."""
+
+    tests: int
+    failures: int
+    errors: int
 
 
 def classify_maven_run(
@@ -128,11 +138,18 @@ def _classify_from_reports(
         timed_out=False,
         maven_exit_code=result.exit_code,
         failure_stage="" if assertions_passed else "assertion_failure",
-        error_summary="" if assertions_passed else (reports.first_failure or summarize_error(result.output)),
+        error_summary=(
+            ""
+            if assertions_passed
+            else reports.first_failure or summarize_error(result.output)
+        ),
     )
 
 
-def _classify_from_console(result: CommandResult, did_compile: bool) -> SuiteExecutionObservation:
+def _classify_from_console(
+    result: CommandResult,
+    did_compile: bool,
+) -> SuiteExecutionObservation:
     """Fallback when no Surefire report exists: only coarse phases are knowable."""
     if transformation_parse_failed(result.output):
         return _phase_failure(result, "transformation_parse", compiled=True)
@@ -140,27 +157,27 @@ def _classify_from_console(result: CommandResult, did_compile: bool) -> SuiteExe
         return _phase_failure(result, "test_discovery", compiled=did_compile)
 
     counts = _console_test_counts(result.output)
-    if counts is None or counts[0] == 0:
+    if counts is None or counts.tests == 0:
         # No XML, and no "Tests run: N" line saying a test ran. An exit code of
         # 0 in that state is not evidence of a passing suite: it is what
         # `-Dsurefire.failIfNoSpecifiedTests=false` produces when the selector
         # matched nothing, and treating it as success would validate a suite
         # that never executed.
         return _phase_failure(result, "test_discovery", compiled=True)
-    if counts[2] > 0:
+    if counts.errors > 0:
         # Console summaries distinguish JUnit errors from assertion failures but
         # do not identify which harness phase threw. Without XML, naming a phase
         # would invent evidence.
         return _phase_failure(
             result, UNCLASSIFIED_RUNTIME, compiled=True, tests_discovered=True
         )
-    if result.exit_code != 0 and counts[1] == 0:
+    if result.exit_code != 0 and counts.failures == 0:
         return _phase_failure(
             result, UNCLASSIFIED_RUNTIME, compiled=True, tests_discovered=True
         )
 
     assertions_passed = (
-        result.exit_code == 0 and counts[1] == 0 and counts[2] == 0
+        result.exit_code == 0 and counts.failures == 0 and counts.errors == 0
     )
     return SuiteExecutionObservation(
         compiled=True,
@@ -182,12 +199,16 @@ SUREFIRE_SUMMARY = re.compile(
 )
 
 
-def _console_test_counts(output: str) -> tuple[int, int, int] | None:
+def _console_test_counts(output: str) -> _ConsoleTestCounts | None:
     matches = list(SUREFIRE_SUMMARY.finditer(output))
     if not matches:
         return None
     tests, failures, errors = matches[-1].groups()
-    return int(tests), int(failures), int(errors)
+    return _ConsoleTestCounts(
+        tests=int(tests),
+        failures=int(failures),
+        errors=int(errors),
+    )
 
 
 def _phase_failure(
@@ -232,8 +253,7 @@ def execute_suite_against(
     while the workspace lock is still held, because the next execution's
     ``mvn clean`` deletes the reports this one produced.
     """
-    java_paths = sorted(suite.path.glob("*.java"))
-    model_paths = sorted(path for path in (suite.path / "models").rglob("*") if path.is_file())
+    java_paths, model_paths = _suite_artifact_paths(suite)
 
     # A run can receive concurrent stage requests. The run-local workspace keeps
     # separate runs apart; this lock keeps two executions within the same run
@@ -246,12 +266,7 @@ def execute_suite_against(
                 _transformation_destination(test_project_dir, suite.task),
             )
             inject_suite(suite, java_paths, model_paths, test_project_dir, injection)
-            selector = ",".join(infer_fqcn(path) for path in java_paths)
-            command = ["mvn", "clean", "test", f"-Dtest={selector}"]
-            if observations_root is not None:
-                command.append(
-                    f"-Dllm4mtl.observations.dir={snapshot_dir(observations_root, suite)}"
-                )
+            command = _maven_command(java_paths, observations_root, suite)
             result = run_maven(command, cwd=test_project_dir, timeout=timeout)
             # `mvn clean` wipes target/ first, so these reports describe this run only.
             reports_root = test_project_dir / "target" / "surefire-reports"
@@ -261,6 +276,31 @@ def execute_suite_against(
             injection.restore()
 
     return classify_maven_run(result, reports), evidence
+
+
+def _suite_artifact_paths(suite: GeneratedSuite) -> tuple[list[Path], list[Path]]:
+    """Return deterministic Java and model input paths for ``suite``."""
+    java_paths = sorted(suite.path.glob("*.java"))
+    model_paths = sorted(
+        path
+        for path in (suite.path / "models").rglob("*")
+        if path.is_file()
+    )
+    return java_paths, model_paths
+
+
+def _maven_command(
+    java_paths: list[Path],
+    observations_root: Path | None,
+    suite: GeneratedSuite,
+) -> list[str]:
+    """Build the Maven command for one suite execution."""
+    selector = ",".join(infer_fqcn(path) for path in java_paths)
+    command = ["mvn", "clean", "test", f"-Dtest={selector}"]
+    if observations_root is not None:
+        observations_dir = snapshot_dir(observations_root, suite)
+        command.append(f"-Dllm4mtl.observations.dir={observations_dir}")
+    return command
 
 
 @contextmanager
@@ -276,7 +316,9 @@ def execution_workspace_lock(test_project_dir: Path) -> Iterator[None]:
 
 
 def _transformation_destination(test_project_dir: Path, task: str) -> Path:
-    from llm4mtl.semantic_tests.reference_validation.reference import transformation_destination
+    from llm4mtl.semantic_tests.reference_validation.reference import (
+        transformation_destination,
+    )
 
     return transformation_destination(test_project_dir, task)
 
@@ -388,7 +430,8 @@ def read_observation(
         return None
     payload = read_json(path)
     validate_artifact("suite-execution", payload)
-    if any(payload.get(name) != value for name, value in _suite_identity(suite).items()):
+    expected_identity = _suite_identity(suite)
+    if any(payload.get(name) != value for name, value in expected_identity.items()):
         return None
     if payload.get("inputs") != _input_identity(
         suite,

@@ -127,6 +127,35 @@ EXECUTION_LOG_EXCERPT_CHARS = 8000
 MAVEN_BUNDLE_LINES = 40
 GENERATED_EXECUTION_LABEL = "generated execution"
 
+CASE_REQUEST_FIELDS = frozenset(
+    {
+        "actual_target_models",
+        "actual_vs_expected",
+        "assertion_id",
+        "attempt",
+        "execution_evidence",
+        "execution_log",
+        "generated_execution",
+        "reference_execution",
+        "run_manifest",
+        "surefire_reports",
+        "syntax_evidence",
+        "test_case_id",
+    }
+)
+PAIR_REQUEST_FIELDS = frozenset(
+    {
+        "attempt",
+        "execution_evidence",
+        "execution_log",
+        "generated_execution",
+        "reference_execution",
+        "run_manifest",
+        "surefire_reports",
+        "syntax_evidence",
+    }
+)
+
 
 class FailureReportError(ValueError):
     """Raised when recorded evidence cannot form a trustworthy report."""
@@ -152,44 +181,24 @@ class ReportRequest:
     @classmethod
     def from_payload(cls, payload: object) -> ReportRequest:
         """Validate the request boundary and resolve every supplied path."""
-        if not isinstance(payload, dict):
-            raise FailureReportError("request must be one JSON object")
-        allowed_fields = {
-            "run_manifest",
-            "syntax_evidence",
-            "execution_evidence",
-            "generated_execution",
-            "reference_execution",
-            "test_case_id",
-            "assertion_id",
-            "attempt",
-            "actual_target_models",
-            "surefire_reports",
-            "execution_log",
-            "actual_vs_expected",
-        }
-        unknown_fields = sorted(set(payload) - allowed_fields)
-        if unknown_fields:
-            raise FailureReportError(
-                f"request contains unknown fields: {', '.join(unknown_fields)}"
-            )
+        request_payload = _request_payload(payload, CASE_REQUEST_FIELDS)
 
-        test_case_id = _required_string(payload, "test_case_id")
+        test_case_id = _required_string(request_payload, "test_case_id")
         # Null is the honest value for a runtime throw: the harness never
         # reached an assertion, so naming one would attribute the failure to a
         # check that did not run.
         assertion_id = (
             None
-            if payload.get("assertion_id") is None
-            else _required_string(payload, "assertion_id")
+            if request_payload.get("assertion_id") is None
+            else _required_string(request_payload, "assertion_id")
         )
-        attempt = payload.get("attempt")
-        if not isinstance(attempt, int) or isinstance(attempt, bool) or attempt < 1:
-            raise FailureReportError("attempt must be a positive integer")
+        attempt = _positive_attempt(request_payload)
 
-        actual_vs_expected = _validate_difference(payload.get("actual_vs_expected"))
+        actual_vs_expected = _validate_difference(
+            request_payload.get("actual_vs_expected")
+        )
         generated_execution = _input_path(
-            payload.get("generated_execution"), "generated_execution"
+            request_payload.get("generated_execution"), "generated_execution"
         )
         # The workspace those reports were produced in is wiped by the next
         # `mvn clean`, so a request that named them there would break as soon as
@@ -201,35 +210,43 @@ class ReportRequest:
         # path nor an archived execution is refused rather than producing a
         # report whose runtime evidence is silently empty.
         archived = archived_execution_evidence(generated_execution)
-        if "surefire_reports" not in payload and archived.directory is None:
+        if "surefire_reports" not in request_payload and archived.directory is None:
             raise FailureReportError(
                 "surefire_reports must be an array of paths, or the generated "
                 "execution must have archived execution evidence beside it"
             )
         return cls(
-            run_manifest=_input_path(payload.get("run_manifest"), "run_manifest"),
-            syntax_evidence=_input_path(payload.get("syntax_evidence"), "syntax_evidence"),
+            run_manifest=_input_path(
+                request_payload.get("run_manifest"), "run_manifest"
+            ),
+            syntax_evidence=_input_path(
+                request_payload.get("syntax_evidence"), "syntax_evidence"
+            ),
             execution_evidence=_input_path(
-                payload.get("execution_evidence"), "execution_evidence"
+                request_payload.get("execution_evidence"), "execution_evidence"
             ),
             generated_execution=generated_execution,
             reference_execution=_optional_input_path(
-                payload.get("reference_execution"), "reference_execution"
+                request_payload.get("reference_execution"), "reference_execution"
             ),
             test_case_id=test_case_id,
             assertion_id=assertion_id,
             attempt=attempt,
             actual_target_models=_input_paths(
-                payload.get("actual_target_models"), "actual_target_models"
+                request_payload.get("actual_target_models"), "actual_target_models"
             ),
             surefire_reports=(
-                _input_paths(payload["surefire_reports"], "surefire_reports")
-                if "surefire_reports" in payload
+                _input_paths(
+                    request_payload["surefire_reports"], "surefire_reports"
+                )
+                if "surefire_reports" in request_payload
                 else archived.surefire_reports
             ),
             execution_log=(
-                _optional_input_path(payload.get("execution_log"), "execution_log")
-                if "execution_log" in payload
+                _optional_input_path(
+                    request_payload.get("execution_log"), "execution_log"
+                )
+                if "execution_log" in request_payload
                 else archived.execution_log
             ),
             actual_vs_expected=actual_vs_expected,
@@ -337,7 +354,11 @@ def build_failure_report(request: ReportRequest) -> dict[str, Any]:
         observed_failure_evidence=observed_failure_evidence,
     )
     is_diagnosis_eligible = diagnosis_reason == "parser_passed_and_semantic_test_failed"
-    if is_diagnosis_eligible and failure is not None and failure["kind"] == "assertion_failure":
+    if (
+        is_diagnosis_eligible
+        and failure is not None
+        and failure["kind"] == "assertion_failure"
+    ):
         # Only an assertion failure claims to be about one assertion, so only it
         # has to prove that the selected assertion is the one that lost.
         _require_concrete_assertion_failure(test_case, assertion, surefire_evidence)
@@ -542,8 +563,9 @@ def write_failure_report(request: ReportRequest, output: Path) -> dict[str, Any]
     try:
         write_json_once(resolved_output, report)
     except FileExistsError as exc:
+        repository_output = _repository_path(resolved_output)
         raise FailureReportError(
-            f"report already exists and is immutable: {_repository_path(resolved_output)}"
+            f"report already exists and is immutable: {repository_output}"
         ) from exc
     return report
 
@@ -570,50 +592,41 @@ class PairReportRequest:
 
     @classmethod
     def from_payload(cls, payload: object) -> PairReportRequest:
-        if not isinstance(payload, dict):
-            raise FailureReportError("request must be one JSON object")
-        allowed_fields = {
-            "run_manifest",
-            "syntax_evidence",
-            "execution_evidence",
-            "generated_execution",
-            "reference_execution",
-            "attempt",
-            "surefire_reports",
-            "execution_log",
-        }
-        unknown_fields = sorted(set(payload) - allowed_fields)
-        if unknown_fields:
-            raise FailureReportError(
-                f"request contains unknown fields: {', '.join(unknown_fields)}"
-            )
-        attempt = payload.get("attempt")
-        if not isinstance(attempt, int) or isinstance(attempt, bool) or attempt < 1:
-            raise FailureReportError("attempt must be a positive integer")
+        """Validate the pair-level request and resolve every supplied path."""
+        request_payload = _request_payload(payload, PAIR_REQUEST_FIELDS)
+        attempt = _positive_attempt(request_payload)
 
         generated_execution = _input_path(
-            payload.get("generated_execution"), "generated_execution"
+            request_payload.get("generated_execution"), "generated_execution"
         )
         archived = archived_execution_evidence(generated_execution)
         return cls(
-            run_manifest=_input_path(payload.get("run_manifest"), "run_manifest"),
-            syntax_evidence=_input_path(payload.get("syntax_evidence"), "syntax_evidence"),
+            run_manifest=_input_path(
+                request_payload.get("run_manifest"), "run_manifest"
+            ),
+            syntax_evidence=_input_path(
+                request_payload.get("syntax_evidence"), "syntax_evidence"
+            ),
             execution_evidence=_input_path(
-                payload.get("execution_evidence"), "execution_evidence"
+                request_payload.get("execution_evidence"), "execution_evidence"
             ),
             generated_execution=generated_execution,
             reference_execution=_optional_input_path(
-                payload.get("reference_execution"), "reference_execution"
+                request_payload.get("reference_execution"), "reference_execution"
             ),
             attempt=attempt,
             surefire_reports=(
-                _input_paths(payload["surefire_reports"], "surefire_reports")
-                if "surefire_reports" in payload
+                _input_paths(
+                    request_payload["surefire_reports"], "surefire_reports"
+                )
+                if "surefire_reports" in request_payload
                 else archived.surefire_reports
             ),
             execution_log=(
-                _optional_input_path(payload.get("execution_log"), "execution_log")
-                if "execution_log" in payload
+                _optional_input_path(
+                    request_payload.get("execution_log"), "execution_log"
+                )
+                if "execution_log" in request_payload
                 else archived.execution_log
             ),
         )
@@ -993,8 +1006,9 @@ def write_pair_failure_report(
     try:
         write_json_once(resolved_output, report)
     except FileExistsError as exc:
+        repository_output = _repository_path(resolved_output)
         raise FailureReportError(
-            f"report already exists and is immutable: {_repository_path(resolved_output)}"
+            f"report already exists and is immutable: {repository_output}"
         ) from exc
     return report
 
@@ -1066,7 +1080,9 @@ def _generated_inputs(execution: dict[str, Any]) -> tuple[Path, Path]:
     suite = inputs.get("suite")
     transformation = inputs.get("transformation")
     if not isinstance(suite, dict) or suite.get("role") != "generated_suite":
-        raise FailureReportError("generated execution does not identify a generated suite")
+        raise FailureReportError(
+            "generated execution does not identify a generated suite"
+        )
     if (
         not isinstance(transformation, dict)
         or transformation.get("role") != "generated_transformation"
@@ -1089,7 +1105,9 @@ def _verify_recorded_hashes(
     actual_suite_hash = directory_sha256(suite_dir)
     actual_transformation_hash = file_sha256(transformation_path)
     if recorded_suite_hash != actual_suite_hash:
-        raise FailureReportError("generated suite no longer matches its recorded sha256")
+        raise FailureReportError(
+            "generated suite no longer matches its recorded sha256"
+        )
     if recorded_transformation_hash != actual_transformation_hash:
         raise FailureReportError(
             "generated transformation no longer matches its recorded sha256"
@@ -1140,7 +1158,9 @@ def _execution_stage_evidence(
     pair_suite = _input_path(pair.get("suite"), "pair suite", require_file=False)
     pair_transformation = _input_path(pair.get("transformation"), "pair transformation")
     if pair_suite != suite_dir or pair_transformation != transformation_path:
-        raise FailureReportError("execution pair inputs disagree with recorded observation")
+        raise FailureReportError(
+            "execution pair inputs disagree with recorded observation"
+        )
     assertions_passed = _observation(
         generated_execution, GENERATED_EXECUTION_LABEL
     )["assertions_passed"]
@@ -1217,7 +1237,9 @@ def _syntax_check(evidence: dict[str, Any], transformation: Path) -> dict[str, A
     passed = _resolved_path_set(details.get("passed_transformations", []))
     failed = _resolved_path_set(details.get("failed_transformations", []))
     if target in passed and target in failed:
-        raise FailureReportError("transformation is both passed and failed in syntax evidence")
+        raise FailureReportError(
+            "transformation is both passed and failed in syntax evidence"
+        )
     if target not in passed and target not in failed:
         raise FailureReportError("transformation is absent from syntax evidence")
 
@@ -1286,7 +1308,9 @@ def _task_description(
         .get("task_prompt")
     )
     if recorded_hash is not None and artifact["sha256"] != recorded_hash:
-        raise FailureReportError("task description no longer matches manifest provenance")
+        raise FailureReportError(
+            "task description no longer matches manifest provenance"
+        )
     return artifact
 
 
@@ -1465,7 +1489,9 @@ def _recorded_failure_view(surefire_evidence: dict[str, Any]) -> dict[str, Any] 
     failure = failures[0]
     return {
         "kind": (
-            "assertion_failure" if failure.get("status") == "failed" else "runtime_error"
+            "assertion_failure"
+            if failure.get("status") == "failed"
+            else "runtime_error"
         ),
         "report": failure.get("report"),
         "test_class": failure.get("test_class"),
@@ -1511,7 +1537,10 @@ def _require_concrete_assertion_failure(
         )
     recorded_failure = "\n".join(
         [
-            *(str(exception.get("message", "")) for exception in surefire_evidence["exceptions"]),
+            *(
+                str(exception.get("message", ""))
+                for exception in surefire_evidence["exceptions"]
+            ),
             *(str(trace) for trace in surefire_evidence["stack_traces"]),
         ]
     )
@@ -1655,7 +1684,9 @@ def _text_artifact(path: Path) -> dict[str, Any]:
     try:
         content = path.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError) as exc:
-        raise FailureReportError(f"cannot read UTF-8 evidence file {path}: {exc}") from exc
+        raise FailureReportError(
+            f"cannot read UTF-8 evidence file {path}: {exc}"
+        ) from exc
     return {
         "path": _repository_path(path),
         "sha256": file_sha256(path),
@@ -1679,7 +1710,9 @@ def _suite_artifact_path(suite_dir: Path, raw_path: object, label: str) -> Path:
     try:
         candidate.relative_to(suite_dir.resolve())
     except ValueError as exc:
-        raise FailureReportError(f"{label} escapes the generated suite: {raw_path}") from exc
+        raise FailureReportError(
+            f"{label} escapes the generated suite: {raw_path}"
+        ) from exc
     if not candidate.is_file():
         raise FailureReportError(f"{label} does not exist: {raw_path}")
     return candidate
@@ -1702,7 +1735,9 @@ def _input_path(
     try:
         resolved.relative_to(REPO_ROOT.resolve())
     except ValueError as exc:
-        raise FailureReportError(f"{label} escapes the repository: {candidate}") from exc
+        raise FailureReportError(
+            f"{label} escapes the repository: {candidate}"
+        ) from exc
     if require_file and not resolved.is_file():
         raise FailureReportError(f"{label} is not a file: {candidate}")
     if not require_file and not resolved.is_dir():
@@ -1717,7 +1752,10 @@ def _optional_input_path(value: object, label: str) -> Path | None:
 def _input_paths(value: object, label: str) -> tuple[Path, ...]:
     if not isinstance(value, list):
         raise FailureReportError(f"{label} must be an array of paths")
-    return tuple(_input_path(path, f"{label}[{index}]") for index, path in enumerate(value))
+    return tuple(
+        _input_path(path, f"{label}[{index}]")
+        for index, path in enumerate(value)
+    )
 
 
 def _output_path(value: Path) -> Path:
@@ -1735,6 +1773,29 @@ def _repository_path(path: Path) -> str:
         return path.resolve().relative_to(REPO_ROOT.resolve()).as_posix()
     except ValueError as exc:
         raise FailureReportError(f"path escapes the repository: {path}") from exc
+
+
+def _request_payload(
+    payload: object,
+    allowed_fields: frozenset[str],
+) -> dict[str, Any]:
+    """Validate the common JSON-object boundary for report requests."""
+    if not isinstance(payload, dict):
+        raise FailureReportError("request must be one JSON object")
+    unknown_fields = sorted(set(payload) - allowed_fields)
+    if unknown_fields:
+        raise FailureReportError(
+            f"request contains unknown fields: {', '.join(unknown_fields)}"
+        )
+    return payload
+
+
+def _positive_attempt(payload: dict[str, Any]) -> int:
+    """Return a validated one-based execution-attempt number."""
+    attempt = payload.get("attempt")
+    if not isinstance(attempt, int) or isinstance(attempt, bool) or attempt < 1:
+        raise FailureReportError("attempt must be a positive integer")
+    return attempt
 
 
 def _required_string(payload: dict[str, Any], field: str) -> str:

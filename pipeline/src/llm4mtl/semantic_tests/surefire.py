@@ -7,7 +7,8 @@ generated test could not run", and Maven's console output does not carry it:
 both print as ``Tests run: N, Failures: F, Errors: E``.
 
 Every marker below was taken from a real report, never guessed. The original
-set came from the ETL harness (see ``pipeline/tests/fixtures/surefire/phase-probe.xml``);
+set came from the ETL harness (see
+``pipeline/tests/fixtures/surefire/phase-probe.xml``);
 the per-engine markers were read off the recorded observations of the
 2026-07-30/31 ATL, QVT-O, and Reactions runs under ``artifacts/work/runs/``.
 
