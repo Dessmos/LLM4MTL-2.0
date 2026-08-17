@@ -85,6 +85,41 @@ class DiscoveryTests(unittest.TestCase):
 
             self.assertEqual([], selected)
 
+    def test_discovery_filters_each_identity_axis(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            suites_root = root / "generated_tests" / "etl"
+            for task, llm, strategy in (
+                ("Tree2Graph", "gpt-5", "few_shot"),
+                ("Tree2Graph", "claude-sonnet-4", "grammar"),
+                ("OO2DB", "gpt-5", "few_shot"),
+            ):
+                (
+                    suites_root
+                    / task
+                    / "candidates"
+                    / llm
+                    / strategy
+                    / "suite_001"
+                ).mkdir(parents=True)
+
+            with patch(
+                "llm4mtl.semantic_tests.suite_execution.read_observation",
+                return_value=REFERENCE_VALID,
+            ):
+                suites = discover_validated_suites(
+                    suites_root,
+                    root / "run-observations",
+                    task="Tree2Graph",
+                    llm="gpt-5",
+                    strategy="few_shot",
+                )
+
+            self.assertEqual(1, len(suites))
+            self.assertEqual("Tree2Graph", suites[0].task)
+            self.assertEqual("gpt-5", suites[0].llm)
+            self.assertEqual("few_shot", suites[0].strategy)
+
 
 class ArtifactTests(unittest.TestCase):
     def test_failed_result_is_archived_with_repair_payload(self) -> None:

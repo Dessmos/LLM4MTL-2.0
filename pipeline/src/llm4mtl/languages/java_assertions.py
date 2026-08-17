@@ -37,56 +37,104 @@ def _render_assertion(
             or f"{kind} assertion for {assertion['model']}::{assertion['type']}"
         )
     )
-    if kind == "count":
-        return [
-            f'        assertEquals({int(assertion["expected"])}, allOfType({model}, "{type_name}").size(), "{message}");'
-        ]
+    match kind:
+        case "count":
+            return [
+                f'        assertEquals({int(assertion["expected"])}, allOfType({model}, "{type_name}").size(), "{message}");'
+            ]
+        case "featureValues" | "pathValues" | "treePaths":
+            return _render_path_collection_assertion(
+                assertion,
+                model,
+                kind,
+                type_name,
+                message,
+            )
+        case "collectionSize" | "objects" | "referencePairs":
+            return _render_object_collection_assertion(
+                assertion,
+                model,
+                kind,
+                type_name,
+                message,
+            )
+        case _:
+            raise ValueError(f"unsupported assertion kind: {kind}")
+
+
+def _render_path_collection_assertion(
+    assertion: dict[str, Any],
+    model: str,
+    kind: str,
+    type_name: str,
+    message: str,
+) -> list[str]:
+    expected = java_string_list([str(value) for value in assertion["expected"]])
     if kind in {"featureValues", "pathValues"}:
         path_key = "feature" if kind == "featureValues" else "path"
         path = escape_java(str(assertion[path_key]))
-        expected = java_string_list([str(value) for value in assertion["expected"]])
         actual = f'pathValues({model}, "{type_name}", "{path}")'
-        return _collection_assertion(expected, actual, assertion, message)
-    if kind == "treePaths":
-        expected = java_string_list([str(value) for value in assertion["expected"]])
+    else:
         label = escape_java(str(assertion.get("labelFeature") or "label"))
-        children = escape_java(str(assertion.get("childrenFeature") or "children"))
+        children = escape_java(
+            str(assertion.get("childrenFeature") or "children")
+        )
         actual = f'treePaths({model}, "{type_name}", "{label}", "{children}")'
-        return _collection_assertion(expected, actual, assertion, message)
-    if kind == "collectionSize":
-        where = assertion.get("where") if isinstance(assertion.get("where"), dict) else {}
-        features = [str(feature) for feature in where]
-        expected_signature = object_signatures([where], features)[0] if features else ""
-        path = escape_java(str(assertion["path"]))
-        return [
-            f'        assertCollectionSize({model}, "{type_name}", {java_string_array(features)}, '
-            f'"{escape_java(expected_signature)}", "{path}", {int(assertion["expected"])}, "{message}");'
-        ]
-    if kind == "objects":
-        features = [str(feature) for feature in assertion["features"]]
-        expected = object_signatures(assertion["expected"], features)
-        actual = f'signaturesOf({model}, "{type_name}", {java_string_array(features)})'
-        return _collection_assertion(
-            java_string_list(expected),
-            actual,
-            assertion,
-            message,
-        )
-    if kind == "referencePairs":
-        expected = [
-            f"{pair['source']}->{pair['target']}"
-            for pair in assertion["expected"]
-        ]
-        source = escape_java(str(assertion["source"]))
-        target = escape_java(str(assertion["target"]))
-        actual = f'referencePairs({model}, "{type_name}", "{source}", "{target}")'
-        return _collection_assertion(
-            java_string_list(expected),
-            actual,
-            assertion,
-            message,
-        )
-    raise ValueError(f"unsupported assertion kind: {kind}")
+    return _collection_assertion(expected, actual, assertion, message)
+
+
+def _render_object_collection_assertion(
+    assertion: dict[str, Any],
+    model: str,
+    kind: str,
+    type_name: str,
+    message: str,
+) -> list[str]:
+    match kind:
+        case "collectionSize":
+            where = (
+                assertion.get("where")
+                if isinstance(assertion.get("where"), dict)
+                else {}
+            )
+            features = [str(feature) for feature in where]
+            expected_signature = (
+                object_signatures([where], features)[0] if features else ""
+            )
+            path = escape_java(str(assertion["path"]))
+            return [
+                f'        assertCollectionSize({model}, "{type_name}", {java_string_array(features)}, '
+                f'"{escape_java(expected_signature)}", "{path}", {int(assertion["expected"])}, "{message}");'
+            ]
+        case "objects":
+            features = [str(feature) for feature in assertion["features"]]
+            expected = object_signatures(assertion["expected"], features)
+            actual = (
+                f'signaturesOf({model}, "{type_name}", '
+                f"{java_string_array(features)})"
+            )
+            return _collection_assertion(
+                java_string_list(expected),
+                actual,
+                assertion,
+                message,
+            )
+        case _:
+            expected = [
+                f"{pair['source']}->{pair['target']}"
+                for pair in assertion["expected"]
+            ]
+            source = escape_java(str(assertion["source"]))
+            target = escape_java(str(assertion["target"]))
+            actual = (
+                f'referencePairs({model}, "{type_name}", "{source}", "{target}")'
+            )
+            return _collection_assertion(
+                java_string_list(expected),
+                actual,
+                assertion,
+                message,
+            )
 
 
 def _collection_assertion(

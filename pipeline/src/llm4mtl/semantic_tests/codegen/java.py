@@ -168,34 +168,86 @@ def render_assertion(assertion: dict[str, Any], model_vars: dict[str, str]) -> l
     type_name = escape_java(str(assertion["type"]))
     message = escape_java(str(assertion.get("message") or f"{kind} assertion for {assertion['model']}::{assertion['type']}"))
 
-    if kind == "count":
-        return [
-            f'        assertEquals({int(assertion["expected"])}, allOfType({model_var}, "{type_name}").size(), "{message}");'
-        ]
-    if kind in {"featureValues", "pathValues"}:
-        expected = java_string_list([str(value) for value in assertion["expected"]])
-        path_key = "feature" if kind == "featureValues" else "path"
-        path = escape_java(str(assertion[path_key]))
-        actual = f'pathValues({model_var}, "{type_name}", "{path}")'
-        return render_count_assertion(expected, actual, assertion, message)
-    if kind in {"treePaths", "referencePairs"}:
-        return _render_relationship_assertion(
-            assertion, model_var, type_name, message
-        )
+    # The former set-membership dispatch raised TypeError for malformed,
+    # unhashable kinds. Keep that exception behavior even though validated
+    # semantic-case documents always provide a string.
+    if kind != "count":
+        hash(kind)
+
+    match kind:
+        case "count":
+            return [
+                f'        assertEquals({int(assertion["expected"])}, allOfType({model_var}, "{type_name}").size(), "{message}");'
+            ]
+        case "featureValues" | "pathValues":
+            return _render_path_assertion(
+                assertion,
+                model_var,
+                kind,
+                type_name,
+                message,
+            )
+        case "treePaths" | "referencePairs":
+            return _render_relationship_assertion(
+                assertion, model_var, type_name, message
+            )
+        case "collectionSize" | "objects":
+            return _render_object_assertion(
+                assertion,
+                model_var,
+                kind,
+                type_name,
+                message,
+            )
+        case _:
+            raise AssertionError(f"Unsupported assertion kind: {kind}")
+
+
+def _render_path_assertion(
+    assertion: dict[str, Any],
+    model_var: str,
+    kind: str,
+    type_name: str,
+    message: str,
+) -> list[str]:
+    expected = java_string_list([str(value) for value in assertion["expected"]])
+    path_key = "feature" if kind == "featureValues" else "path"
+    path = escape_java(str(assertion[path_key]))
+    actual = f'pathValues({model_var}, "{type_name}", "{path}")'
+    return render_count_assertion(expected, actual, assertion, message)
+
+
+def _render_object_assertion(
+    assertion: dict[str, Any],
+    model_var: str,
+    kind: str,
+    type_name: str,
+    message: str,
+) -> list[str]:
     if kind == "collectionSize":
-        where = assertion.get("where") if isinstance(assertion.get("where"), dict) else {}
+        where = (
+            assertion.get("where")
+            if isinstance(assertion.get("where"), dict)
+            else {}
+        )
         features = list(where) if where else []
-        expected_signature = object_signatures([where], features)[0] if features else ""
+        expected_signature = (
+            object_signatures([where], features)[0] if features else ""
+        )
         path = escape_java(str(assertion["path"]))
         return [
-            f'        assertCollectionSize({model_var}, "{type_name}", {java_string_array(features)}, "{escape_java(expected_signature)}", "{path}", {int(assertion["expected"])}, "{message}");'
+            f'        assertCollectionSize({model_var}, "{type_name}", {java_string_array(features)}, '
+            f'"{escape_java(expected_signature)}", "{path}", {int(assertion["expected"])}, "{message}");'
         ]
-    if kind == "objects":
-        features = [str(feature) for feature in assertion["features"]]
-        expected = object_signatures(assertion["expected"], features)
-        actual = f'signaturesOf({model_var}, "{type_name}", {java_string_array(features)})'
-        return render_count_assertion(java_string_list(expected), actual, assertion, message)
-    raise AssertionError(f"Unsupported assertion kind: {kind}")
+    features = [str(feature) for feature in assertion["features"]]
+    expected = object_signatures(assertion["expected"], features)
+    actual = (
+        f'signaturesOf({model_var}, "{type_name}", '
+        f"{java_string_array(features)})"
+    )
+    return render_count_assertion(
+        java_string_list(expected), actual, assertion, message
+    )
 
 
 def _render_relationship_assertion(

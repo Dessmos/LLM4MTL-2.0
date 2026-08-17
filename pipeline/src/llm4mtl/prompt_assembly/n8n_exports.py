@@ -736,8 +736,52 @@ def _wire_output_contract(
         connections.pop(name, None)
     _remove_connection_targets(connections, set(CONTRACT_NODES))
 
+    payload["nodes"] += _output_contract_nodes(
+        language,
+        response_path,
+        is_qwen,
+    )
+
+    connections[LOOP_OVER_ITEMS_NODE]["main"][1].append(
+        {"node": READ_OUTPUT_CONTRACT_NODE, "type": "main", "index": 0}
+    )
+    connections[READ_OUTPUT_CONTRACT_NODE] = {
+        "main": [[
+            {"node": EXTRACT_CONTRACT_TEXT_NODE, "type": "main", "index": 0}
+        ]]
+    }
+    connections[EXTRACT_CONTRACT_TEXT_NODE] = {
+        "main": [[
+            {"node": merge_name, "type": "main", "index": merge_input}
+        ]]
+    }
+    connections[merge_name] = {
+        "main": [[{"node": ASSEMBLE_PROMPT_NODE, "type": "main", "index": 0}]]
+    }
+    connections[ASSEMBLE_PROMPT_NODE] = {
+        "main": [[
+            {"node": consumer, "type": "main", "index": 0},
+            {"node": CONVERT_PROMPT_TO_FILE_NODE, "type": "main", "index": 0},
+        ]]
+    }
+    connections[CONVERT_PROMPT_TO_FILE_NODE] = {
+        "main": [[
+            {"node": WRITE_PROMPT_NODE, "type": "main", "index": 0}
+        ]]
+    }
+    for node in payload["nodes"]:
+        if node["name"] == merge_name:
+            node["parameters"]["numberInputs"] = merge_input + 1
+    return payload
+
+
+def _output_contract_nodes(
+    language: str,
+    response_path: str,
+    is_qwen: bool,
+) -> list[dict[str, Any]]:
     offset = 0 if is_qwen else 1
-    payload["nodes"] += [
+    return [
         {
             "parameters": {
                 "fileSelector": (
@@ -815,38 +859,6 @@ def _wire_output_contract(
             "position": [1632 if offset else 656, -448],
         },
     ]
-
-    connections[LOOP_OVER_ITEMS_NODE]["main"][1].append(
-        {"node": READ_OUTPUT_CONTRACT_NODE, "type": "main", "index": 0}
-    )
-    connections[READ_OUTPUT_CONTRACT_NODE] = {
-        "main": [[
-            {"node": EXTRACT_CONTRACT_TEXT_NODE, "type": "main", "index": 0}
-        ]]
-    }
-    connections[EXTRACT_CONTRACT_TEXT_NODE] = {
-        "main": [[
-            {"node": merge_name, "type": "main", "index": merge_input}
-        ]]
-    }
-    connections[merge_name] = {
-        "main": [[{"node": ASSEMBLE_PROMPT_NODE, "type": "main", "index": 0}]]
-    }
-    connections[ASSEMBLE_PROMPT_NODE] = {
-        "main": [[
-            {"node": consumer, "type": "main", "index": 0},
-            {"node": CONVERT_PROMPT_TO_FILE_NODE, "type": "main", "index": 0},
-        ]]
-    }
-    connections[CONVERT_PROMPT_TO_FILE_NODE] = {
-        "main": [[
-            {"node": WRITE_PROMPT_NODE, "type": "main", "index": 0}
-        ]]
-    }
-    for node in payload["nodes"]:
-        if node["name"] == merge_name:
-            node["parameters"]["numberInputs"] = merge_input + 1
-    return payload
 
 
 def _remove_connection_targets(
@@ -1093,28 +1105,55 @@ def _rename_connection_node(value: Any, old_name: str, new_name: str) -> Any:
 def synchronize_exports() -> tuple[int, int, int]:
     prompt_count = 0
     test_count = 0
-    transformation_count = 0
     for language, config in sorted(LANGUAGE_CONFIGS.items()):
         root = n8n_workflows_root(config)
-        for path in sorted((root / "prompt_generation").glob("*.json")):
-            payload = json.loads(path.read_text(encoding="utf-8"))
-            _write_json(
-                path,
-                synchronize_prompt_generation(
-                    payload,
-                    language,
-                    _model_from_filename(path),
-                ),
-            )
-            prompt_count += 1
-        for path in sorted((root / "test_generation").glob("*.json")):
-            payload = json.loads(path.read_text(encoding="utf-8"))
-            _write_json(
-                path,
-                synchronize_test_generation(payload, language),
-            )
-            test_count += 1
+        language_prompt_count, language_test_count = _synchronize_test_workflows(
+            root,
+            language,
+        )
+        prompt_count += language_prompt_count
+        test_count += language_test_count
+
     transformation_root = TARGET.workflows / "transformations" / "workflows"
+    prompt_count += _synchronize_transformation_prompt_workflows(
+        transformation_root
+    )
+    transformation_count = _synchronize_transformation_workflows(
+        transformation_root
+    )
+    transformation_count += _synchronize_reactions_matrix(transformation_root)
+    return prompt_count, test_count, transformation_count
+
+
+def _synchronize_test_workflows(root: Path, language: str) -> tuple[int, int]:
+    prompt_count = 0
+    for path in sorted((root / "prompt_generation").glob("*.json")):
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        _write_json(
+            path,
+            synchronize_prompt_generation(
+                payload,
+                language,
+                _model_from_filename(path),
+            ),
+        )
+        prompt_count += 1
+
+    test_count = 0
+    for path in sorted((root / "test_generation").glob("*.json")):
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        _write_json(
+            path,
+            synchronize_test_generation(payload, language),
+        )
+        test_count += 1
+    return prompt_count, test_count
+
+
+def _synchronize_transformation_prompt_workflows(
+    transformation_root: Path,
+) -> int:
+    prompt_count = 0
     for path in sorted(transformation_root.rglob("Prompt_generation*.json")):
         payload = json.loads(path.read_text(encoding="utf-8"))
         node_names = {node.get("name") for node in payload.get("nodes", [])}
@@ -1130,6 +1169,11 @@ def synchronize_exports() -> tuple[int, int, int]:
             ),
         )
         prompt_count += 1
+    return prompt_count
+
+
+def _synchronize_transformation_workflows(transformation_root: Path) -> int:
+    transformation_count = 0
     for path in sorted(transformation_root.rglob("Prompting*.json")):
         payload = json.loads(path.read_text(encoding="utf-8"))
         node_names = {node.get("name") for node in payload.get("nodes", [])}
@@ -1141,6 +1185,10 @@ def synchronize_exports() -> tuple[int, int, int]:
             synchronize_transformation_generation(payload, language),
         )
         transformation_count += 1
+    return transformation_count
+
+
+def _synchronize_reactions_matrix(transformation_root: Path) -> int:
     reactions_matrix = (
         transformation_root
         / "updated_reactions_workflow"
@@ -1153,8 +1201,8 @@ def synchronize_exports() -> tuple[int, int, int]:
             reactions_matrix,
             synchronize_reactions_matrix(payload),
         )
-        transformation_count += 1
-    return prompt_count, test_count, transformation_count
+        return 1
+    return 0
 
 
 def _language_from_workflow_path(path: Path) -> str:

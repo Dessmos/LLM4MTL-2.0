@@ -13,7 +13,7 @@ from llm4mtl.experiment_runner.config import (
     load_resolved_config,
     validate_config,
 )
-from llm4mtl.experiment_runner.models import PipelineConfig, RunResult
+from llm4mtl.experiment_runner.models import PipelineConfig, RunResult, StageResult
 from llm4mtl.experiment_runner.orchestrator import ExperimentOrchestrator
 from llm4mtl.semantic_tests.failure_report import FailureReportError
 
@@ -372,30 +372,34 @@ def emit_result(result: RunResult, output_format: str) -> None:
     print(f"Run: {result.run_id}")
     print(f"Status: {result.status}")
     for stage in result.stages:
-        counts = " ".join(f"{key}={value}" for key, value in stage.counts.items())
-        print(f"{stage.name}: {stage.status} {counts}".rstrip())
-        if stage.status == "dry_run" and stage.name == "transformation_validation":
-            print(
-                "Candidate suites awaiting reference validation: "
-                f"{stage.counts.get('selected_suites', 0)}"
-            )
-            print(
-                "Selected transformations: "
-                f"{stage.counts.get('selected_transformations', 0)}"
-            )
-            print(
-                "Potential execution pairs: "
-                f"{stage.counts.get('execution_pairs', 0)}"
-            )
-            for pair in stage.details.get("pairs", []):
-                print(pair)
-        results_file = stage.details.get("results_file")
-        if results_file:
-            print(f"Results: {results_file}")
-        for artifact in stage.details.get("artifacts", []):
-            print(f"{artifact['status']}: {artifact['path']}")
+        _emit_stage_result(stage)
     if result.run_dir:
         print(f"Run metadata: {result.run_dir}")
+
+
+def _emit_stage_result(stage: StageResult) -> None:
+    counts = " ".join(f"{key}={value}" for key, value in stage.counts.items())
+    print(f"{stage.name}: {stage.status} {counts}".rstrip())
+    if stage.status == "dry_run" and stage.name == "transformation_validation":
+        print(
+            "Candidate suites awaiting reference validation: "
+            f"{stage.counts.get('selected_suites', 0)}"
+        )
+        print(
+            "Selected transformations: "
+            f"{stage.counts.get('selected_transformations', 0)}"
+        )
+        print(
+            "Potential execution pairs: "
+            f"{stage.counts.get('execution_pairs', 0)}"
+        )
+        for pair in stage.details.get("pairs", []):
+            print(pair)
+    results_file = stage.details.get("results_file")
+    if results_file:
+        print(f"Results: {results_file}")
+    for artifact in stage.details.get("artifacts", []):
+        print(f"{artifact['status']}: {artifact['path']}")
 
 
 def emit_failure_report_result(

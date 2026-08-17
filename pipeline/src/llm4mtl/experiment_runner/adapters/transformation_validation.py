@@ -27,7 +27,7 @@ from llm4mtl.domain import (
 from llm4mtl.experiment_runner.adapters.base import fixed_selection, hash_paths
 from llm4mtl.experiment_runner.config import ConfigError
 from llm4mtl.experiment_runner.models import PipelineConfig, StageResult
-from llm4mtl.languages import language_adapter
+from llm4mtl.languages import LanguageAdapter, language_adapter
 from llm4mtl.semantic_tests.suite_execution import (
     GENERATED_TRANSFORMATION_ROLE,
     observation_lock,
@@ -233,28 +233,7 @@ class TransformationValidationAdapter:
         require_observation: bool = True,
     ) -> list[Path]:
         """Suites reference-validated by this run, never by a copied directory."""
-        if config.suites:
-            candidates = sorted(
-                Path(path).resolve()
-                for path in config.suites
-                if Path(path).is_dir() and "candidates" in Path(path).parts
-            )
-        else:
-            tasks = set(config.tasks)
-            models = fixed_selection("test-generation model", config.test_models)
-            strategies = fixed_selection("strategy", config.test_strategies)
-            candidates = sorted(
-                path.resolve()
-                for path in self.validated_tests_root(config).glob(
-                    "*/candidates/*/*/suite_*"
-                )
-                if path.is_dir()
-                and path.parts[-3] in models
-                and path.parts[-2] in strategies
-                and (config.all_tasks or path.parts[-5] in tasks)
-                and (not config.suite_id or path.name == config.suite_id)
-            )
-
+        candidates = self._select_candidate_suites(config)
         if not require_observation:
             # A dry-run plans the candidates that can become eligible after the
             # earlier reference stage; it does not claim they already passed.
@@ -264,24 +243,82 @@ class TransformationValidationAdapter:
         observations_root = self._observations_root(config)
         validated: list[Path] = []
         for path in candidates:
-            suite = suite_from_path(
+            if self._has_valid_reference_observation(
                 path,
-                self.validated_tests_root(config),
-                config.language,
-            )
-            reference = adapter.reference_transformation(suite.task)
-            observation = read_observation(
+                config,
+                adapter,
                 observations_root,
-                suite,
-                reference,
-            )
-            if (
-                observation is not None
-                and observation.is_technically_executable
-                and observation.assertions_passed
             ):
                 validated.append(path)
         return validated
+
+    def _select_candidate_suites(self, config: PipelineConfig) -> list[Path]:
+        if config.suites:
+            candidates: list[Path] = []
+            for suite_path in config.suites:
+                path = Path(suite_path)
+                if path.is_dir() and "candidates" in path.parts:
+                    candidates.append(path.resolve())
+            return sorted(candidates)
+
+        tasks = set(config.tasks)
+        models = fixed_selection("test-generation model", config.test_models)
+        strategies = fixed_selection("strategy", config.test_strategies)
+        return sorted(
+            path.resolve()
+            for path in self.validated_tests_root(config).glob(
+                "*/candidates/*/*/suite_*"
+            )
+            if self._matches_suite_selection(
+                path,
+                config,
+                tasks,
+                models,
+                strategies,
+            )
+        )
+
+    @staticmethod
+    def _matches_suite_selection(
+        path: Path,
+        config: PipelineConfig,
+        tasks: set[str],
+        models: set[str],
+        strategies: set[str],
+    ) -> bool:
+        if not path.is_dir():
+            return False
+        if path.parts[-3] not in models or path.parts[-2] not in strategies:
+            return False
+        if not config.all_tasks and path.parts[-5] not in tasks:
+            return False
+        if config.suite_id and path.name != config.suite_id:
+            return False
+        return True
+
+    def _has_valid_reference_observation(
+        self,
+        path: Path,
+        config: PipelineConfig,
+        adapter: LanguageAdapter,
+        observations_root: Path,
+    ) -> bool:
+        suite = suite_from_path(
+            path,
+            self.validated_tests_root(config),
+            config.language,
+        )
+        reference = adapter.reference_transformation(suite.task)
+        observation = read_observation(
+            observations_root,
+            suite,
+            reference,
+        )
+        return bool(
+            observation is not None
+            and observation.is_technically_executable
+            and observation.assertions_passed
+        )
 
     @staticmethod
     def _observations_root(config: PipelineConfig) -> Path:

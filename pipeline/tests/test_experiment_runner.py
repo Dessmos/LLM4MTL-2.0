@@ -7,9 +7,14 @@ from contextlib import redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 
-from llm4mtl.experiment_runner.cli import build_parser, config_from_args, main
+from llm4mtl.experiment_runner.cli import (
+    build_parser,
+    config_from_args,
+    emit_result,
+    main,
+)
 from llm4mtl.experiment_runner.config import ConfigError, load_pipeline_config, parse_simple_yaml
-from llm4mtl.experiment_runner.models import PipelineConfig
+from llm4mtl.experiment_runner.models import PipelineConfig, RunResult, StageResult
 from llm4mtl.experiment_runner.orchestrator import ExperimentOrchestrator
 from llm4mtl.experiment_runner.adapters.transformation_validation import TransformationValidationAdapter
 from llm4mtl.paths import LEGACY_PROJECT_ROOT, TARGET
@@ -48,6 +53,52 @@ class ConfigTests(unittest.TestCase):
 
 
 class CliTests(unittest.TestCase):
+    def test_text_result_output_preserves_stage_detail_order(self) -> None:
+        result = RunResult(
+            run_id="dry-test",
+            status="dry_run",
+            command="pipeline.run",
+            run_dir="artifacts/work/runs/dry-test",
+            stages=[
+                StageResult(
+                    name="transformation_validation",
+                    status="dry_run",
+                    counts={
+                        "selected_suites": 2,
+                        "selected_transformations": 1,
+                        "execution_pairs": 2,
+                    },
+                    details={
+                        "pairs": ["pair-one", "pair-two"],
+                        "results_file": "artifacts/work/results.json",
+                        "artifacts": [
+                            {"status": "candidate", "path": "suite-001"}
+                        ],
+                    },
+                )
+            ],
+        )
+        stdout = io.StringIO()
+
+        with redirect_stdout(stdout):
+            emit_result(result, "text")
+
+        self.assertEqual(
+            "Run: dry-test\n"
+            "Status: dry_run\n"
+            "transformation_validation: dry_run selected_suites=2 "
+            "selected_transformations=1 execution_pairs=2\n"
+            "Candidate suites awaiting reference validation: 2\n"
+            "Selected transformations: 1\n"
+            "Potential execution pairs: 2\n"
+            "pair-one\n"
+            "pair-two\n"
+            "Results: artifacts/work/results.json\n"
+            "candidate: suite-001\n"
+            "Run metadata: artifacts/work/runs/dry-test\n",
+            stdout.getvalue(),
+        )
+
     def test_a_direct_command_requires_an_explicit_language(self) -> None:
         with self.assertRaises(SystemExit):
             build_parser().parse_args(

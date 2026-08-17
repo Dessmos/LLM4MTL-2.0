@@ -170,6 +170,35 @@ class ObservationScopeTests(unittest.TestCase):
             ):
                 self.assertEqual([], adapter.select_validated_suites(config))
 
+    def test_dry_run_selects_candidates_without_requiring_run_observations(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            suite_path = (
+                Path(temp_dir)
+                / "Tree2Graph"
+                / "candidates"
+                / "gpt-5"
+                / "few_shot"
+                / "suite_001"
+            )
+            suite_path.mkdir(parents=True)
+            config = PipelineConfig(
+                language="etl",
+                tasks=["Tree2Graph"],
+                suites=[str(suite_path)],
+            )
+            adapter = TransformationValidationAdapter(Path(temp_dir))
+
+            with patch(
+                "llm4mtl.experiment_runner.adapters.transformation_validation.read_observation"
+            ) as read_observation_mock:
+                selected = adapter.select_validated_suites(
+                    config,
+                    require_observation=False,
+                )
+
+            self.assertEqual([suite_path.resolve()], selected)
+            read_observation_mock.assert_not_called()
+
 
 class TransformationExecutionCountTests(unittest.TestCase):
     def unclassified_observation(self, **overrides: object) -> SuiteExecutionObservation:

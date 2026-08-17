@@ -20,11 +20,6 @@ def discover_validated_suites(
     strategy: str | None = None,
 ) -> list[ValidatedSuite]:
     """Candidates whose reference-valid observation belongs to this run."""
-    # Deferred to break the language adapter -> suite execution -> legacy
-    # transformation facade import cycle.
-    from llm4mtl.languages import language_adapter
-    from llm4mtl.semantic_tests.suite_execution import read_observation
-
     root = root.resolve()
     paths = (
         [path.resolve() for path in explicit]
@@ -35,24 +30,32 @@ def discover_validated_suites(
     selected = [
         suite
         for suite in suites
-        if (not task or suite.task == task)
-        and (not llm or suite.llm == llm)
-        and (not strategy or suite.strategy == strategy)
+        if _matches_identity(suite, task, llm, strategy)
     ]
+    return _reference_validated_suites(selected, observations_root)
+
+
+def _reference_validated_suites(
+    suites: list[ValidatedSuite],
+    observations_root: Path,
+) -> list[ValidatedSuite]:
+    # Deferred to break the language adapter -> suite execution -> legacy
+    # transformation facade import cycle.
+    from llm4mtl.languages import language_adapter
+    from llm4mtl.semantic_tests.suite_execution import read_observation
+
     adapter = language_adapter("etl")
-    return [
-        suite
-        for suite in selected
-        if (
-            observation := read_observation(
-                observations_root.resolve(),
-                suite.as_candidate(),
-                adapter.reference_transformation(suite.task),
-            )
+    resolved_observations_root = observations_root.resolve()
+    validated = []
+    for suite in suites:
+        observation = read_observation(
+            resolved_observations_root,
+            suite.as_candidate(),
+            adapter.reference_transformation(suite.task),
         )
-        is not None
-        and observation.is_reference_valid
-    ]
+        if observation is not None and observation.is_reference_valid:
+            validated.append(suite)
+    return validated
 
 
 def candidate_suite_from_path(path: Path, root: Path) -> ValidatedSuite:
@@ -91,10 +94,21 @@ def discover_transformations(
     return [
         transformation
         for transformation in transformations
-        if (not task or transformation.task == task)
-        and (not llm or transformation.llm == llm)
-        and (not strategy or transformation.strategy == strategy)
+        if _matches_identity(transformation, task, llm, strategy)
     ]
+
+
+def _matches_identity(
+    candidate: ValidatedSuite | GeneratedTransformation,
+    task: str | None,
+    llm: str | None,
+    strategy: str | None,
+) -> bool:
+    return (
+        (not task or candidate.task == task)
+        and (not llm or candidate.llm == llm)
+        and (not strategy or candidate.strategy == strategy)
+    )
 
 
 def generated_transformation_from_path(path: Path, root: Path) -> GeneratedTransformation:
