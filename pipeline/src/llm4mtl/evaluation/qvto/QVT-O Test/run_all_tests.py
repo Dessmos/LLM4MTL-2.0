@@ -136,6 +136,31 @@ def write_summary_csv(results):
     print(f"\nPass rate summary written to: {SUMMARY_CSV}")
 
 
+def evaluate_row(row):
+    model = row["model"]
+    strategy = row["strategy"]
+    file_name = row["file"]
+    parse_success = row["parse_success"].strip().lower() == "true"
+    file_base = file_name.replace(".qvto", "")
+    if file_base not in FILE_TO_TEST:
+        print("    -> False (no test class mapping)")
+        return "False"
+    if not parse_success:
+        print("    -> False (parser failed)")
+        return "False"
+    if not copy_qvto(model, strategy, file_name):
+        print("    -> False (QVTO file not found)")
+        return "False"
+
+    test_class = FILE_TO_TEST[file_base]
+    print(f"    Running test: {test_class} ...")
+    passed, error_detail = run_test(test_class)
+    test_pass = "True" if passed else "False"
+    print(f"    -> {test_pass}" + (f" ({error_detail})" if error_detail else ""))
+    restore_qvto(file_name)
+    return test_pass
+
+
 def main():
     # Read input CSV
     with open(INPUT_CSV, "r", newline="", encoding="utf-8") as f:
@@ -153,29 +178,10 @@ def main():
         strategy = row["strategy"]
         file_name = row["file"]            # e.g. "Constructors.qvto"
         parse_success = row["parse_success"].strip().lower() == "true"
-        file_base = file_name.replace(".qvto", "")
 
         print(f"[{i+1}/{total}] {model} | {strategy} | {file_name} | parse_success={parse_success}")
 
-        # Determine test_pass
-        if file_base not in FILE_TO_TEST:
-            test_pass = "False"
-            print(f"    -> False (no test class mapping)")
-        elif not parse_success:
-            test_pass = "False"
-            print(f"    -> False (parser failed)")
-        else:
-            # parse_success=true and test class exists: copy QVTO and run the test
-            if not copy_qvto(model, strategy, file_name):
-                test_pass = "False"
-                print(f"    -> False (QVTO file not found)")
-            else:
-                test_class = FILE_TO_TEST[file_base]
-                print(f"    Running test: {test_class} ...")
-                passed, error_detail = run_test(test_class)
-                test_pass = "True" if passed else "False"
-                print(f"    -> {test_pass}" + (f" ({error_detail})" if error_detail else ""))
-                restore_qvto(file_name)
+        test_pass = evaluate_row(row)
 
         result_row = dict(row)
         result_row["test_pass"] = test_pass

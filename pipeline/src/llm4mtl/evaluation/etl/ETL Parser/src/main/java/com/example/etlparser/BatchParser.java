@@ -27,53 +27,59 @@ public class BatchParser {
 
         for (String model : MODELS) {
             for (String strategy : STRATEGIES) {
-                Path dir = resourcesDir.resolve(model).resolve(strategy);
-                if (!Files.isDirectory(dir)) {
-                    System.err.println("Directory not found: " + dir);
-                    continue;
-                }
-
-                List<Path> etlFiles;
-                try (Stream<Path> stream = Files.list(dir)) {
-                    etlFiles = stream.filter(p -> p.toString().endsWith(".etl")).sorted().toList();
-                }
-
-                for (Path etlFile : etlFiles) {
-                    EtlParser parser = new EtlParser();
-                    boolean parsed = false;
-                    try {
-                        parsed = parser.parse(etlFile.toAbsolutePath().toString());
-                    } catch (Exception e) {
-                        // parse failed entirely
-                    }
-
-                    List<ParseProblem> problems = parser.getParseProblems();
-                    long errors = parser.getErrorCount();
-                    long warnings = parser.getWarningCount();
-
-                    StringBuilder details = new StringBuilder();
-                    for (ParseProblem p : problems) {
-                        if (details.length() > 0) details.append(" | ");
-                        String severity = p.getSeverity() == ParseProblem.ERROR ? "ERROR" : "WARNING";
-                        details.append("[").append(severity).append("] line ")
-                               .append(p.getLine()).append(":").append(p.getColumn())
-                               .append(" - ").append(p.getReason());
-                    }
-
-                    String filename = etlFile.getFileName().toString();
-                    String detailStr = "\"" + details.toString().replace("\"", "\"\"") + "\"";
-
-                    System.out.println(String.join(",",
-                            model,
-                            strategy,
-                            filename,
-                            String.valueOf(parsed),
-                            String.valueOf(problems.size()),
-                            String.valueOf(errors),
-                            String.valueOf(warnings),
-                            detailStr));
-                }
+                parseDirectory(resourcesDir, model, strategy);
             }
         }
+    }
+
+    private static void parseDirectory(Path resourcesDir, String model, String strategy) throws Exception {
+        Path dir = resourcesDir.resolve(model).resolve(strategy);
+        if (!Files.isDirectory(dir)) {
+            System.err.println("Directory not found: " + dir);
+            return;
+        }
+
+        List<Path> etlFiles;
+        try (Stream<Path> stream = Files.list(dir)) {
+            etlFiles = stream.filter(p -> p.toString().endsWith(".etl")).sorted().toList();
+        }
+        for (Path etlFile : etlFiles) {
+            parseFile(model, strategy, etlFile);
+        }
+    }
+
+    private static void parseFile(String model, String strategy, Path etlFile) {
+        EtlParser parser = new EtlParser();
+        boolean parsed = false;
+        try {
+            parsed = parser.parse(etlFile.toAbsolutePath().toString());
+        } catch (Exception e) {
+            // parse failed entirely
+        }
+
+        List<ParseProblem> problems = parser.getParseProblems();
+        String details = problemDetails(problems);
+        String detailStr = "\"" + details.replace("\"", "\"\"") + "\"";
+        System.out.println(String.join(",",
+                model,
+                strategy,
+                etlFile.getFileName().toString(),
+                String.valueOf(parsed),
+                String.valueOf(problems.size()),
+                String.valueOf(parser.getErrorCount()),
+                String.valueOf(parser.getWarningCount()),
+                detailStr));
+    }
+
+    private static String problemDetails(List<ParseProblem> problems) {
+        StringBuilder details = new StringBuilder();
+        for (ParseProblem problem : problems) {
+            if (details.length() > 0) details.append(" | ");
+            String severity = problem.getSeverity() == ParseProblem.ERROR ? "ERROR" : "WARNING";
+            details.append("[").append(severity).append("] line ")
+                    .append(problem.getLine()).append(":").append(problem.getColumn())
+                    .append(" - ").append(problem.getReason());
+        }
+        return details.toString();
     }
 }

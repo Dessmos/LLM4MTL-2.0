@@ -4,6 +4,8 @@ File utilities for finding ground truth files and counting LOC.
 
 from pathlib import Path
 
+ATL_GLOB = '*.atl'
+
 
 def find_ground_truth_dir(repo_root):
     """
@@ -28,15 +30,15 @@ def find_ground_truth_dir(repo_root):
         for atl_dir in repo_path.glob(pattern):
             if atl_dir.is_dir():
                 # Check if it contains .atl files
-                atl_files = list(atl_dir.glob('*.atl'))
+                atl_files = list(atl_dir.glob(ATL_GLOB))
                 if atl_files:
                     return str(atl_dir)
     
     # If not found, try searching the entire repo for directories containing .atl files
-    for atl_file in repo_path.rglob('*.atl'):
+    for atl_file in repo_path.rglob(ATL_GLOB):
         parent = atl_file.parent
         # Check if parent directory looks like a ground truth directory (contains multiple .atl files)
-        if len(list(parent.glob('*.atl'))) >= 5:  # At least 5 files to be considered a ground truth directory
+        if len(list(parent.glob(ATL_GLOB))) >= 5:  # At least 5 files to be considered a ground truth directory
             return str(parent)
     
     return None
@@ -86,7 +88,7 @@ def build_file_to_loc_mapping(gt_dir):
     gt_path = Path(gt_dir)
     file_to_loc = {}
     
-    for atl_file in gt_path.glob('*.atl'):
+    for atl_file in gt_path.glob(ATL_GLOB):
         file_name = atl_file.stem  # Without extension
         loc = count_loc_atl(atl_file)
         if loc > 0:
@@ -121,4 +123,3 @@ def match_file_to_ground_truth(file_name, file_to_loc):
             return file_to_loc[base_name]
     
     return None
-

@@ -29,7 +29,10 @@ from llm4mtl.stage_service.api_models import (
 app = FastAPI(title="LLM4MTL stage service", version="0.1.0")
 _orchestrator = ExperimentOrchestrator()
 
-
+BAD_REQUEST_RESPONSE = {"description": "Malformed or escaping identifier"}
+NOT_FOUND_RESPONSE = {"description": "Requested run, stage, or result not found"}
+CONFLICT_RESPONSE = {"description": "Run state conflicts with the request"}
+UNPROCESSABLE_RESPONSE = {"description": "Request violates a task or run contract"}
 def _runs_root():
     return TARGET.runs
 
@@ -55,7 +58,10 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-@app.post("/prompt-inputs/resolve")
+@app.post(
+    "/prompt-inputs/resolve",
+    responses={422: UNPROCESSABLE_RESPONSE},
+)
 def resolve_prompt_inputs(request: PromptInputsRequest) -> dict[str, Any]:
     """Return only the exact LLM inputs selected by the task contract."""
     try:
@@ -64,7 +70,15 @@ def resolve_prompt_inputs(request: PromptInputsRequest) -> dict[str, Any]:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
-@app.post("/runs", response_model=RunCreateResponse)
+@app.post(
+    "/runs",
+    response_model=RunCreateResponse,
+    responses={
+        400: BAD_REQUEST_RESPONSE,
+        409: CONFLICT_RESPONSE,
+        422: UNPROCESSABLE_RESPONSE,
+    },
+)
 def create_run(request: RunCreateRequest) -> RunCreateResponse:
     if request.task == "all":
         raise HTTPException(
@@ -131,7 +145,14 @@ def _selection(manifest_value: Any) -> list[str]:
     return []
 
 
-@app.post("/runs/{run_id}/stages/{stage}")
+@app.post(
+    "/runs/{run_id}/stages/{stage}",
+    responses={
+        400: BAD_REQUEST_RESPONSE,
+        404: NOT_FOUND_RESPONSE,
+        409: CONFLICT_RESPONSE,
+    },
+)
 def run_stage(run_id: str, stage: str, request: StageRunRequest) -> dict[str, Any]:
     if stage not in STAGE_DISPATCH:
         raise HTTPException(status_code=404, detail=f"unknown stage: {stage}")
@@ -175,7 +196,13 @@ def run_stage(run_id: str, stage: str, request: StageRunRequest) -> dict[str, An
     return payload
 
 
-@app.get("/runs/{run_id}/stages/{stage}")
+@app.get(
+    "/runs/{run_id}/stages/{stage}",
+    responses={
+        400: BAD_REQUEST_RESPONSE,
+        404: NOT_FOUND_RESPONSE,
+    },
+)
 def get_stage(run_id: str, stage: str) -> dict[str, Any]:
     paths = _open_run(run_id)
     latest = run_store.read_latest(paths, stage)
@@ -184,13 +211,25 @@ def get_stage(run_id: str, stage: str) -> dict[str, Any]:
     return latest
 
 
-@app.get("/runs/{run_id}")
+@app.get(
+    "/runs/{run_id}",
+    responses={
+        400: BAD_REQUEST_RESPONSE,
+        404: NOT_FOUND_RESPONSE,
+    },
+)
 def get_run(run_id: str) -> dict[str, Any]:
     paths, manifest = _require_manifest(run_id)
     return {"run_id": run_id, "manifest": manifest, "stages": run_store.list_stages(paths)}
 
 
-@app.post("/runs/{run_id}/diagnoses")
+@app.post(
+    "/runs/{run_id}/diagnoses",
+    responses={
+        400: BAD_REQUEST_RESPONSE,
+        404: NOT_FOUND_RESPONSE,
+    },
+)
 def record_diagnosis(run_id: str, request: DiagnosisRecordRequest) -> dict[str, Any]:
     """Persist the normalized n8n diagnosis through Python's artifact layer."""
     paths, _ = _require_manifest(run_id)

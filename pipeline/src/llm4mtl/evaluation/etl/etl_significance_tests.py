@@ -359,7 +359,7 @@ for metric, label, kind, higher_better in METRICS_STAR:
 pd.DataFrame(pvalue_rows).to_csv(output_dir / "significance_pvalues.csv", index=False)
 
 print(f"\nCSV results saved to: {output_dir}")
-print(f"  etl_star_tests.csv       — star (*) p-values per LLM × strategy")
-print(f"  etl_underline_tests.csv  — underline p-values per strategy (across LLMs)")
-print(f"  etl_summary_with_sig.csv — mean values with significance flags")
-print(f"  significance_pvalues.csv — unified p-value table")
+print("  etl_star_tests.csv       — star (*) p-values per LLM × strategy")
+print("  etl_underline_tests.csv  — underline p-values per strategy (across LLMs)")
+print("  etl_summary_with_sig.csv — mean values with significance flags")
+print("  significance_pvalues.csv — unified p-value table")

@@ -13,7 +13,7 @@ count as success in every downstream metric.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Callable
 
 from llm4mtl.experiment_runner.models import StageResult
 
@@ -89,6 +89,50 @@ def stage_status(stage: str, result: StageResult) -> str:
     return "failed" if result.domain_failures > 0 else "passed"
 
 
+def _extract_outcome(counts: dict[str, int]) -> str:
+    return "EXTRACTED" if counts.get("failed", 0) == 0 else "TEST_SPEC_INVALID"
+
+
+def _syntax_outcome(counts: dict[str, int]) -> str:
+    return "SYNTAX_VALID" if counts.get("failed", 0) == 0 else "SYNTAX_INVALID"
+
+
+def _technical_outcome(counts: dict[str, int]) -> str:
+    # Vocabulary fixed by docs/n8n-python-contract.md: the distinction is
+    # compile failure versus execution failure, while an unusable artifact
+    # reuses the test-spec code that already means "regenerate the test".
+    if counts.get("compile_failed", 0) > 0:
+        return "TECH_COMPILE_FAILED"
+    if counts.get("failed", 0) > 0:
+        return "TECH_EXEC_FAILED"
+    return "TEST_SPEC_INVALID" if counts.get("invalid", 0) > 0 else "TECH_VALID"
+
+
+def _reference_outcome(counts: dict[str, int]) -> str:
+    return (
+        "REFERENCE_VALIDATED"
+        if counts.get("invalid", 0) == 0
+        else "REFERENCE_VALIDATION_FAILED"
+    )
+
+
+def _execution_outcome(counts: dict[str, int]) -> str:
+    return (
+        "SEMANTIC_PASSED"
+        if counts.get("failed", 0) == 0
+        else "SEMANTIC_EXECUTION_FAILED"
+    )
+
+
+OUTCOME_CODE_RESOLVERS: dict[str, Callable[[dict[str, int]], str]] = {
+    "extract": _extract_outcome,
+    "syntax-validation": _syntax_outcome,
+    "technical-validation": _technical_outcome,
+    "reference-validation": _reference_outcome,
+    "execution": _execution_outcome,
+}
+
+
 def outcome_code(stage: str, result: StageResult) -> str:
     """Domain outcome_code for a stage. ``infrastructure_error`` is orthogonal."""
     status = stage_status(stage, result)
@@ -99,26 +143,8 @@ def outcome_code(stage: str, result: StageResult) -> str:
         if isinstance(recorded_reason, str) and recorded_reason:
             return recorded_reason
         return DEFAULT_SKIP_OUTCOME_CODES.get(stage, "SKIPPED")
-    counts = result.counts
-    if stage == "extract":
-        return "EXTRACTED" if counts.get("failed", 0) == 0 else "TEST_SPEC_INVALID"
-    if stage == "syntax-validation":
-        return "SYNTAX_VALID" if counts.get("failed", 0) == 0 else "SYNTAX_INVALID"
-    if stage == "technical-validation":
-        # Vocabulary fixed by docs/n8n-python-contract.md: n8n routes on these
-        # codes, so the distinction they carry is compile failure vs execution
-        # failure, and an unusable artifact reuses the test-spec code that
-        # already means "regenerate the test".
-        if counts.get("compile_failed", 0) > 0:
-            return "TECH_COMPILE_FAILED"
-        if counts.get("failed", 0) > 0:
-            return "TECH_EXEC_FAILED"
-        return "TEST_SPEC_INVALID" if counts.get("invalid", 0) > 0 else "TECH_VALID"
-    if stage == "reference-validation":
-        return "REFERENCE_VALIDATED" if counts.get("invalid", 0) == 0 else "REFERENCE_VALIDATION_FAILED"
-    if stage == "execution":
-        return "SEMANTIC_PASSED" if counts.get("failed", 0) == 0 else "SEMANTIC_EXECUTION_FAILED"
-    return "UNKNOWN"
+    resolver = OUTCOME_CODE_RESOLVERS.get(stage)
+    return resolver(result.counts) if resolver is not None else "UNKNOWN"
 
 
 def _artifacts(result: StageResult) -> dict[str, str]:

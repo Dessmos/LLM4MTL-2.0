@@ -49,6 +49,21 @@ class StageServiceTests(unittest.TestCase):
         self.assertEqual("etl", fetched.json()["manifest"]["language"])
         self.assertEqual("svc-1", fetched.json()["manifest"]["run_id"])
 
+    def test_openapi_documents_explicit_http_errors(self) -> None:
+        paths = self.client.get("/openapi.json").json()["paths"]
+        expected = {
+            ("/prompt-inputs/resolve", "post"): {"422"},
+            ("/runs", "post"): {"400", "409", "422"},
+            ("/runs/{run_id}/stages/{stage}", "post"): {"400", "404", "409"},
+            ("/runs/{run_id}/stages/{stage}", "get"): {"400", "404"},
+            ("/runs/{run_id}", "get"): {"400", "404"},
+            ("/runs/{run_id}/diagnoses", "post"): {"400", "404"},
+        }
+        for (path, method), status_codes in expected.items():
+            with self.subTest(path=path, method=method):
+                documented = set(paths[path][method]["responses"])
+                self.assertTrue(status_codes <= documented)
+
     def test_prompt_inputs_are_resolved_through_the_task_contract(self) -> None:
         response = self.client.post(
             "/prompt-inputs/resolve",

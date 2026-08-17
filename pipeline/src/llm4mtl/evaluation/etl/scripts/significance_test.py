@@ -55,138 +55,109 @@ def run_significance_tests(df, baseline_strategy='only_prompt', strategies_to_te
         strategies_to_test = ['few_shot', 'grammar', 'few_shots_AND_grammar']
     
     results = []
-    
     for llm in df['LLM'].unique():
-        print(f"  Processing LLM: {llm}")
-        df_llm = df[df['LLM'] == llm]
-        
-        # Get baseline data
-        baseline_df = df_llm[df_llm['Strategy'] == baseline_strategy].copy()
-        if len(baseline_df) == 0:
-            print(f"    Warning: {llm} has no baseline data, skipping")
-            continue
-        
-        for strategy in strategies_to_test:
-            strategy_df = df_llm[df_llm['Strategy'] == strategy].copy()
-            if len(strategy_df) == 0:
-                continue
-            
-            # Pair by File
-            merged = pd.merge(
-                baseline_df[['File', 'CHRF_Score', 'Parsed', 'test_pass', 'errors_per_LOC']],
-                strategy_df[['File', 'CHRF_Score', 'Parsed', 'test_pass', 'errors_per_LOC']],
-                on='File',
-                suffixes=('_baseline', '_strategy')
-            )
-            
-            if len(merged) == 0:
-                continue
-            
-            # Continuous metric: CHRF_Score
-            baseline_chrf = merged['CHRF_Score_baseline'].values
-            strategy_chrf = merged['CHRF_Score_strategy'].values
-            p_chrf, n_chrf, reason_chrf = perform_wilcoxon_test(baseline_chrf, strategy_chrf)
-            results.append({
-                'LLM': llm,
-                'metric': 'CHRF_Score',
-                'baseline': baseline_strategy,
-                'strategy': strategy,
-                'n_pairs': n_chrf,
-                'test': 'Wilcoxon',
-                'p_value': p_chrf,
-                'significant': p_chrf < 0.05 if not pd.isna(p_chrf) else False,
-                'reason': reason_chrf if reason_chrf else ''
-            })
-            
-            # Continuous metric: errors_per_LOC
-            baseline_errors = merged['errors_per_LOC_baseline'].values
-            strategy_errors = merged['errors_per_LOC_strategy'].values
-            p_errors, n_errors, reason_errors = perform_wilcoxon_test(baseline_errors, strategy_errors)
-            results.append({
-                'LLM': llm,
-                'metric': 'errors_per_LOC',
-                'baseline': baseline_strategy,
-                'strategy': strategy,
-                'n_pairs': n_errors,
-                'test': 'Wilcoxon',
-                'p_value': p_errors,
-                'significant': p_errors < 0.05 if not pd.isna(p_errors) else False,
-                'reason': reason_errors if reason_errors else ''
-            })
-            
-            # Binary metric: Parsed
-            baseline_parsed = merged['Parsed_baseline'].values
-            strategy_parsed = merged['Parsed_strategy'].values
-            p_parsed, n_parsed, reason_parsed = perform_mcnemar_test(baseline_parsed, strategy_parsed)
-            results.append({
-                'LLM': llm,
-                'metric': 'Parsed',
-                'baseline': baseline_strategy,
-                'strategy': strategy,
-                'n_pairs': n_parsed,
-                'test': 'McNemar',
-                'p_value': p_parsed,
-                'significant': p_parsed < 0.05 if not pd.isna(p_parsed) else False,
-                'reason': reason_parsed if reason_parsed else ''
-            })
-            
-            # Binary metric: test_pass
-            baseline_test = merged['test_pass_baseline'].values
-            strategy_test = merged['test_pass_strategy'].values
-            
-            # Debug info: print pairing matrix
-            print(f"\n    [{llm} vs {strategy}] test_pass pairing matrix:")
-            print(f"      Paired files: {len(merged)}")
-            
-            # Check for NaN values
-            valid_mask = ~(pd.isna(baseline_test) | pd.isna(strategy_test))
-            n_valid = valid_mask.sum()
-            print(f"      Valid paired samples: {n_valid}/{len(merged)}")
-            
-            if n_valid > 0:
-                baseline_test_valid = baseline_test[valid_mask]
-                strategy_test_valid = strategy_test[valid_mask]
-                
-                # Build 2x2 matrix for display
-                a = b = c = d = 0
-                for bl, st in zip(baseline_test_valid, strategy_test_valid):
-                    bl_bool = bool(bl) if not pd.isna(bl) else False
-                    st_bool = bool(st) if not pd.isna(st) else False
-                    if bl_bool and st_bool:
-                        a += 1
-                    elif bl_bool and not st_bool:
-                        b += 1
-                    elif not bl_bool and st_bool:
-                        c += 1
-                    else:
-                        d += 1
-                
-                print(f"      Pairing matrix (baseline x strategy):")
-                print(f"        [True, True] = {a}")
-                print(f"        [True, False] = {b}")
-                print(f"        [False, True] = {c}")
-                print(f"        [False, False] = {d}")
-                print(f"        Discordant pairs (b+c) = {b + c}")
-                
-                p_test, n_test, reason_test = perform_mcnemar_test(baseline_test_valid, strategy_test_valid)
-                p_value_str = f"{p_test:.6f}" if not pd.isna(p_test) else "NaN"
-                print(f"      McNemar p_value = {p_value_str}")
-            else:
-                p_test, n_test, reason_test = (np.nan, 0, "All values are NaN")
-                print(f"      Skipping McNemar test (no valid pairs)")
-            results.append({
-                'LLM': llm,
-                'metric': 'test_pass',
-                'baseline': baseline_strategy,
-                'strategy': strategy,
-                'n_pairs': n_test,
-                'test': 'McNemar',
-                'p_value': p_test,
-                'significant': p_test < 0.05 if not pd.isna(p_test) else False,
-                'reason': reason_test if reason_test else ''
-            })
-    
+        results.extend(
+            _run_llm_tests(df, llm, baseline_strategy, strategies_to_test)
+        )
     return pd.DataFrame(results)
+
+
+def _run_llm_tests(df, llm, baseline_strategy, strategies_to_test):
+    print(f"  Processing LLM: {llm}")
+    df_llm = df[df['LLM'] == llm]
+    baseline_df = df_llm[df_llm['Strategy'] == baseline_strategy].copy()
+    if len(baseline_df) == 0:
+        print(f"    Warning: {llm} has no baseline data, skipping")
+        return []
+    results = []
+    for strategy in strategies_to_test:
+        results.extend(
+            _run_strategy_tests(
+                df_llm, baseline_df, llm, baseline_strategy, strategy
+            )
+        )
+    return results
+
+
+def _run_strategy_tests(df_llm, baseline_df, llm, baseline_strategy, strategy):
+    strategy_df = df_llm[df_llm['Strategy'] == strategy].copy()
+    if len(strategy_df) == 0:
+        return []
+    columns = ['File', 'CHRF_Score', 'Parsed', 'test_pass', 'errors_per_LOC']
+    merged = pd.merge(
+        baseline_df[columns], strategy_df[columns], on='File',
+        suffixes=('_baseline', '_strategy'),
+    )
+    if len(merged) == 0:
+        return []
+    results = [
+        _paired_metric_result(merged, llm, baseline_strategy, strategy, 'CHRF_Score', 'Wilcoxon', perform_wilcoxon_test),
+        _paired_metric_result(merged, llm, baseline_strategy, strategy, 'errors_per_LOC', 'Wilcoxon', perform_wilcoxon_test),
+        _paired_metric_result(merged, llm, baseline_strategy, strategy, 'Parsed', 'McNemar', perform_mcnemar_test),
+    ]
+    p_value, n_pairs, reason = _test_pass_result(merged, llm, strategy)
+    results.append(_result_record(llm, 'test_pass', baseline_strategy, strategy, n_pairs, 'McNemar', p_value, reason))
+    return results
+
+
+def _paired_metric_result(merged, llm, baseline_strategy, strategy, metric, test_name, test_function):
+    p_value, n_pairs, reason = test_function(
+        merged[f'{metric}_baseline'].values,
+        merged[f'{metric}_strategy'].values,
+    )
+    return _result_record(llm, metric, baseline_strategy, strategy, n_pairs, test_name, p_value, reason)
+
+
+def _result_record(llm, metric, baseline_strategy, strategy, n_pairs, test_name, p_value, reason):
+    return {
+        'LLM': llm, 'metric': metric, 'baseline': baseline_strategy,
+        'strategy': strategy, 'n_pairs': n_pairs, 'test': test_name,
+        'p_value': p_value,
+        'significant': p_value < 0.05 if not pd.isna(p_value) else False,
+        'reason': reason if reason else '',
+    }
+
+
+def _test_pass_result(merged, llm, strategy):
+    baseline_test = merged['test_pass_baseline'].values
+    strategy_test = merged['test_pass_strategy'].values
+    print(f"\n    [{llm} vs {strategy}] test_pass pairing matrix:")
+    print(f"      Paired files: {len(merged)}")
+    valid_mask = ~(pd.isna(baseline_test) | pd.isna(strategy_test))
+    n_valid = valid_mask.sum()
+    print(f"      Valid paired samples: {n_valid}/{len(merged)}")
+    if n_valid == 0:
+        print("      Skipping McNemar test (no valid pairs)")
+        return np.nan, 0, "All values are NaN"
+    baseline_valid = baseline_test[valid_mask]
+    strategy_valid = strategy_test[valid_mask]
+    a, b, c, d = _pairing_counts(baseline_valid, strategy_valid)
+    print("      Pairing matrix (baseline x strategy):")
+    print(f"        [True, True] = {a}")
+    print(f"        [True, False] = {b}")
+    print(f"        [False, True] = {c}")
+    print(f"        [False, False] = {d}")
+    print(f"        Discordant pairs (b+c) = {b + c}")
+    result = perform_mcnemar_test(baseline_valid, strategy_valid)
+    p_value_str = f"{result[0]:.6f}" if not pd.isna(result[0]) else "NaN"
+    print(f"      McNemar p_value = {p_value_str}")
+    return result
+
+
+def _pairing_counts(baseline_values, strategy_values):
+    a = b = c = d = 0
+    for baseline, strategy in zip(baseline_values, strategy_values):
+        baseline_bool = bool(baseline) if not pd.isna(baseline) else False
+        strategy_bool = bool(strategy) if not pd.isna(strategy) else False
+        if baseline_bool and strategy_bool:
+            a += 1
+        elif baseline_bool and not strategy_bool:
+            b += 1
+        elif not baseline_bool and strategy_bool:
+            c += 1
+        else:
+            d += 1
+    return a, b, c, d
 
 
 def generate_summary_table(df, summary_csv_path=None):

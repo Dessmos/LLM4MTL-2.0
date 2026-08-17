@@ -15,6 +15,8 @@ from llm4mtl.semantic_tests.codegen.java_rendering import (
 from llm4mtl.semantic_tests.semantic_spec import default_transformation, effective_models
 from llm4mtl.semantic_tests.suites.java import slug
 
+ALL_OF_TYPE_LOOP = "        for (Object object : allOfType(model, typeName)) {"
+
 
 def render_semantic_test(class_name: str, spec: dict[str, Any], task: str) -> str:
     methods = [render_test_method(spec, test, task) for test in spec["tests"]]
@@ -170,22 +172,16 @@ def render_assertion(assertion: dict[str, Any], model_vars: dict[str, str]) -> l
         return [
             f'        assertEquals({int(assertion["expected"])}, allOfType({model_var}, "{type_name}").size(), "{message}");'
         ]
-    if kind == "featureValues":
+    if kind in {"featureValues", "pathValues"}:
         expected = java_string_list([str(value) for value in assertion["expected"]])
-        feature = escape_java(str(assertion["feature"]))
-        actual = f'pathValues({model_var}, "{type_name}", "{feature}")'
-        return render_count_assertion(expected, actual, assertion, message)
-    if kind == "pathValues":
-        expected = java_string_list([str(value) for value in assertion["expected"]])
-        path = escape_java(str(assertion["path"]))
+        path_key = "feature" if kind == "featureValues" else "path"
+        path = escape_java(str(assertion[path_key]))
         actual = f'pathValues({model_var}, "{type_name}", "{path}")'
         return render_count_assertion(expected, actual, assertion, message)
-    if kind == "treePaths":
-        expected = java_string_list([str(value) for value in assertion["expected"]])
-        label_feature = escape_java(str(assertion.get("labelFeature") or "label"))
-        children_feature = escape_java(str(assertion.get("childrenFeature") or "children"))
-        actual = f'treePaths({model_var}, "{type_name}", "{label_feature}", "{children_feature}")'
-        return render_count_assertion(expected, actual, assertion, message)
+    if kind in {"treePaths", "referencePairs"}:
+        return _render_relationship_assertion(
+            assertion, model_var, type_name, message
+        )
     if kind == "collectionSize":
         where = assertion.get("where") if isinstance(assertion.get("where"), dict) else {}
         features = list(where) if where else []
@@ -199,13 +195,28 @@ def render_assertion(assertion: dict[str, Any], model_vars: dict[str, str]) -> l
         expected = object_signatures(assertion["expected"], features)
         actual = f'signaturesOf({model_var}, "{type_name}", {java_string_array(features)})'
         return render_count_assertion(java_string_list(expected), actual, assertion, message)
-    if kind == "referencePairs":
-        expected = [f"{pair['source']}->{pair['target']}" for pair in assertion["expected"]]
-        source = escape_java(str(assertion["source"]))
-        target = escape_java(str(assertion["target"]))
-        actual = f'referencePairs({model_var}, "{type_name}", "{source}", "{target}")'
-        return render_count_assertion(java_string_list(expected), actual, assertion, message)
     raise AssertionError(f"Unsupported assertion kind: {kind}")
+
+
+def _render_relationship_assertion(
+    assertion: dict[str, Any], model_var: str, type_name: str, message: str
+) -> list[str]:
+    if assertion["kind"] == "treePaths":
+        expected = java_string_list([str(value) for value in assertion["expected"]])
+        label_feature = escape_java(str(assertion.get("labelFeature") or "label"))
+        children_feature = escape_java(str(assertion.get("childrenFeature") or "children"))
+        actual = f'treePaths({model_var}, "{type_name}", "{label_feature}", "{children_feature}")'
+        return render_count_assertion(expected, actual, assertion, message)
+
+    expected = [
+        f"{pair['source']}->{pair['target']}" for pair in assertion["expected"]
+    ]
+    source = escape_java(str(assertion["source"]))
+    target = escape_java(str(assertion["target"]))
+    actual = f'referencePairs({model_var}, "{type_name}", "{source}", "{target}")'
+    return render_count_assertion(
+        java_string_list(expected), actual, assertion, message
+    )
 
 
 def render_count_assertion(expected: str, actual: str, assertion: dict[str, Any], message: str) -> list[str]:
@@ -238,7 +249,7 @@ def java_helpers() -> list[str]:
         "",
         "    private List<String> pathValues(IModel model, String typeName, String path) throws Exception {",
         "        List<String> values = new ArrayList<>();",
-        "        for (Object object : allOfType(model, typeName)) {",
+        ALL_OF_TYPE_LOOP,
         "            for (Object value : pathValuesFrom(object, path)) {",
         "                values.add(stringValue(value));",
         "            }",
@@ -248,7 +259,7 @@ def java_helpers() -> list[str]:
         "",
         "    private List<String> referencePairs(IModel model, String typeName, String sourcePath, String targetPath) throws Exception {",
         "        List<String> pairs = new ArrayList<>();",
-        "        for (Object object : allOfType(model, typeName)) {",
+        ALL_OF_TYPE_LOOP,
         "            List<Object> sources = pathValuesFrom(object, sourcePath);",
         "            List<Object> targets = pathValuesFrom(object, targetPath);",
         "            for (Object source : sources) {",
@@ -262,7 +273,7 @@ def java_helpers() -> list[str]:
         "",
         "    private List<String> treePaths(IModel model, String typeName, String labelFeature, String childrenFeature) throws Exception {",
         "        List<String> paths = new ArrayList<>();",
-        "        for (Object object : allOfType(model, typeName)) {",
+        ALL_OF_TYPE_LOOP,
         "            if (object instanceof EObject && ((EObject) object).eContainer() == null) {",
         "                collectTreePaths(object, \"\", labelFeature, childrenFeature, paths);",
         "            }",
@@ -280,7 +291,7 @@ def java_helpers() -> list[str]:
         "",
         "    private List<String> signaturesOf(IModel model, String typeName, String[] features) throws Exception {",
         "        List<String> signatures = new ArrayList<>();",
-        "        for (Object object : allOfType(model, typeName)) {",
+        ALL_OF_TYPE_LOOP,
         "            List<String> parts = new ArrayList<>();",
         "            for (String feature : features) {",
         "                parts.add(feature + \"=\" + stringValue(pathValue(object, feature)));",
@@ -292,7 +303,7 @@ def java_helpers() -> list[str]:
         "",
         "    private void assertCollectionSize(IModel model, String typeName, String[] features, String expectedSignature, String path, int expectedSize, String message) throws Exception {",
         "        boolean matched = false;",
-        "        for (Object object : allOfType(model, typeName)) {",
+        ALL_OF_TYPE_LOOP,
         "            if (expectedSignature.equals(signatureOf(object, features))) {",
         "                matched = true;",
         "                assertEquals(expectedSize, pathValuesFrom(object, path).size(), message);",

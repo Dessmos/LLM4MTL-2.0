@@ -36,6 +36,15 @@ from llm4mtl.workspace import materialize_engine
 
 
 StageCallable = Callable[[PipelineConfig, bool], StageResult]
+WORKSPACE_STAGES = {
+    "technical_validation",
+    "reference_validation",
+    "transformation_validation",
+}
+
+
+def _stages_require_workspace(stages: list[tuple[str, StageCallable]]) -> bool:
+    return any(name in WORKSPACE_STAGES for name, _ in stages)
 
 
 class ExperimentOrchestrator:
@@ -118,28 +127,9 @@ class ExperimentOrchestrator:
             results = [self.plan_stage(name, callback, config, config_hash) for name, callback in stages]
             return RunResult(run_id, "dry_run", config.command, results)
 
-        if run_exists:
-            # Identity is checked before any write or workspace materialization.
-            # A rejected resume must leave every byte of the existing run intact.
-            reject_identity_drift(run_store.read_manifest(paths) or {}, identity, run_id)
+        self._initialize_run(paths, identity, run_id, run_exists)
 
-        if run_exists:
-            run_store.append_event(paths, "run_resumed")
-        else:
-            # Claim the immutable identity before creating any secondary run
-            # artifact. Concurrent creators cannot materialize workspaces under
-            # an identity they did not win.
-            run_store.create_run(self.runs_root, run_id, identity)
-
-        if any(
-            name
-            in {
-                "technical_validation",
-                "reference_validation",
-                "transformation_validation",
-            }
-            for name, _ in stages
-        ):
+        if _stages_require_workspace(stages):
             # Execution always uses a run-local engine copy. `keep_workspace`
             # controls retention policy only; it must never decide whether runs
             # are isolated from the shared harness.
@@ -147,50 +137,13 @@ class ExperimentOrchestrator:
         if not run_exists:
             write_json(run_dir / "config.resolved.yaml", config.to_dict())
 
-        results: list[StageResult] = []
-        for name, callback in stages:
-            plan = self.plan_stage(name, callback, config, config_hash)
-            resumed = self.resume_stage(previous.get(name), plan, config)
-            if resumed:
-                results.append(resumed)
-                self.apply_stage_outputs(name, resumed, config)
-                stage_id = contract_stage_id(name)
-                run_store.append_event(
-                    paths,
-                    "stage_skipped_resume",
-                    stage=stage_id,
-                    status=stage_status(stage_id, resumed),
-                )
-                continue
-            if plan.status == "error":
-                plan.config_hash = config_hash
-                results.append(plan)
-                self._record_stage(paths, plan)
-                if config.fail_fast:
-                    break
-                continue
-
-            try:
-                result = callback(config, False)
-            except Exception as exc:
-                result = StageResult(
-                    name,
-                    "infrastructure_error",
-                    {"infrastructure_errors": 1},
-                    {"error": f"{type(exc).__name__}: {exc}"},
-                    input_hash=plan.input_hash,
-                    exit_code=1,
-                )
-            result.config_hash = config_hash
-            if not result.input_hash:
-                result.input_hash = plan.input_hash
-            results.append(result)
-            self.apply_stage_outputs(name, result, config)
-            self._record_stage(paths, result)
-            if config.fail_fast and (
-                result.status in {"error", "infrastructure_error"} or result.domain_failures
-            ):
-                break
+        results = self._run_stages(
+            stages,
+            config,
+            config_hash,
+            previous,
+            paths,
+        )
 
         status = run_status(results)
         run_result = RunResult(run_id, status, config.command, results, str(run_dir.relative_to(REPO_ROOT)))
@@ -198,6 +151,95 @@ class ExperimentOrchestrator:
         self.write_log(run_dir, run_result)
         run_store.append_event(paths, "run_finished", run_status=status)
         return run_result
+
+    def _initialize_run(
+        self,
+        paths: run_store.RunPaths,
+        identity: dict[str, object],
+        run_id: str,
+        run_exists: bool,
+    ) -> None:
+        if run_exists:
+            # Identity is checked before any write or workspace materialization.
+            # A rejected resume must leave every byte of the existing run intact.
+            reject_identity_drift(run_store.read_manifest(paths) or {}, identity, run_id)
+            run_store.append_event(paths, "run_resumed")
+            return
+        # Claim the immutable identity before creating any secondary run
+        # artifact. Concurrent creators cannot materialize workspaces under an
+        # identity they did not win.
+        run_store.create_run(self.runs_root, run_id, identity)
+
+    def _run_stages(
+        self,
+        stages: list[tuple[str, StageCallable]],
+        config: PipelineConfig,
+        config_hash: str,
+        previous: dict[str, dict[str, object]],
+        paths: run_store.RunPaths,
+    ) -> list[StageResult]:
+        results: list[StageResult] = []
+        for name, callback in stages:
+            result, should_stop = self._run_stage(
+                name,
+                callback,
+                config,
+                config_hash,
+                previous.get(name),
+                paths,
+            )
+            results.append(result)
+            if should_stop:
+                break
+        return results
+
+    def _run_stage(
+        self,
+        name: str,
+        callback: StageCallable,
+        config: PipelineConfig,
+        config_hash: str,
+        previous: dict[str, object] | None,
+        paths: run_store.RunPaths,
+    ) -> tuple[StageResult, bool]:
+        plan = self.plan_stage(name, callback, config, config_hash)
+        resumed = self.resume_stage(previous, plan, config)
+        if resumed:
+            self.apply_stage_outputs(name, resumed, config)
+            stage_id = contract_stage_id(name)
+            run_store.append_event(
+                paths,
+                "stage_skipped_resume",
+                stage=stage_id,
+                status=stage_status(stage_id, resumed),
+            )
+            return resumed, False
+        if plan.status == "error":
+            plan.config_hash = config_hash
+            self._record_stage(paths, plan)
+            return plan, config.fail_fast
+
+        try:
+            result = callback(config, False)
+        except Exception as exc:
+            result = StageResult(
+                name,
+                "infrastructure_error",
+                {"infrastructure_errors": 1},
+                {"error": f"{type(exc).__name__}: {exc}"},
+                input_hash=plan.input_hash,
+                exit_code=1,
+            )
+        result.config_hash = config_hash
+        if not result.input_hash:
+            result.input_hash = plan.input_hash
+        self.apply_stage_outputs(name, result, config)
+        self._record_stage(paths, result)
+        should_stop = config.fail_fast and (
+            result.status in {"error", "infrastructure_error"}
+            or bool(result.domain_failures)
+        )
+        return result, should_stop
 
     def _record_stage(self, paths: run_store.RunPaths, result: StageResult) -> None:
         """Record one stage outcome in the run-centric store (immutable attempt + latest).
@@ -235,6 +277,34 @@ class ExperimentOrchestrator:
             config.transformation_selection_locked = True
 
     def stage_sequence(self, config: PipelineConfig) -> list[tuple[str, StageCallable]]:
+        standalone = self._standalone_stage_sequence(config)
+        if standalone is not None:
+            return standalone
+
+        stage_map: dict[str, tuple[str, StageCallable]] = {
+            "extract": ("extraction", self.tests.extract),
+            "technical": ("technical_validation", self.tests.technical_validation),
+            "reference": ("reference_validation", self.tests.reference_validation),
+            "parsing": ("transformation_parsing", self.parser.parse),
+            "semantic": ("transformation_validation", self.transformations.semantic_validation),
+        }
+        enabled = {
+            "technical": config.technical_validation,
+            "reference": config.reference_validation,
+            "parsing": config.transformation_parsing,
+            "semantic": config.semantic_validation,
+        }
+        start = PIPELINE_STAGES.index(config.start_stage)
+        stop = PIPELINE_STAGES.index(config.stop_after)
+        return [
+            stage_map[stage]
+            for stage in PIPELINE_STAGES[start : stop + 1]
+            if enabled.get(stage, True)
+        ]
+
+    def _standalone_stage_sequence(
+        self, config: PipelineConfig
+    ) -> list[tuple[str, StageCallable]] | None:
         if config.command == "tests.extract":
             return [("extraction", self.tests.extract)]
         if config.command == "tests.validate":
@@ -250,28 +320,7 @@ class ExperimentOrchestrator:
             return [("transformation_parsing", self.parser.parse)]
         if config.command == "transformations.validate":
             return [("transformation_validation", self.transformations.semantic_validation)]
-
-        stage_map: dict[str, tuple[str, StageCallable]] = {
-            "extract": ("extraction", self.tests.extract),
-            "technical": ("technical_validation", self.tests.technical_validation),
-            "reference": ("reference_validation", self.tests.reference_validation),
-            "parsing": ("transformation_parsing", self.parser.parse),
-            "semantic": ("transformation_validation", self.transformations.semantic_validation),
-        }
-        start = PIPELINE_STAGES.index(config.start_stage)
-        stop = PIPELINE_STAGES.index(config.stop_after)
-        selected = []
-        for stage in PIPELINE_STAGES[start : stop + 1]:
-            if stage == "technical" and not config.technical_validation:
-                continue
-            if stage == "reference" and not config.reference_validation:
-                continue
-            if stage == "parsing" and not config.transformation_parsing:
-                continue
-            if stage == "semantic" and not config.semantic_validation:
-                continue
-            selected.append(stage_map[stage])
-        return selected
+        return None
 
     def plan_stage(
         self,

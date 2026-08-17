@@ -134,6 +134,30 @@ def write_summary_csv(results):
     print(f"\nPass rate summary written to: {SUMMARY_CSV}")
 
 
+def evaluate_row(row):
+    llm = row["LLM"]
+    strategy = row["Strategy"]
+    file_name = row["File"]
+    parsed = row["Parsed"].strip() == "True"
+    if file_name not in FILE_TO_TEST:
+        print("    -> False (no test class mapping)")
+        return "False"
+    if not parsed:
+        print("    -> False (parser failed)")
+        return "False"
+    if not copy_etl(llm, strategy, file_name):
+        print("    -> False (ETL file not found)")
+        return "False"
+
+    test_class = FILE_TO_TEST[file_name]
+    print(f"    Running test: {test_class} ...")
+    passed, error_detail = run_test(test_class)
+    test_pass = "True" if passed else "False"
+    print(f"    -> {test_pass}" + (f" ({error_detail})" if error_detail else ""))
+    restore_etl(file_name)
+    return test_pass
+
+
 def main():
     # Read input CSV
     with open(INPUT_CSV, "r", newline="", encoding="utf-8") as f:
@@ -154,25 +178,7 @@ def main():
 
         print(f"[{i+1}/{total}] {llm} | {strategy} | {file_name} | Parsed={parsed}")
 
-        # Determine test_pass
-        if file_name not in FILE_TO_TEST:
-            test_pass = "False"
-            print(f"    -> False (no test class mapping)")
-        elif not parsed:
-            test_pass = "False"
-            print(f"    -> False (parser failed)")
-        else:
-            # Parsed=True and test class exists: copy ETL and run the test
-            if not copy_etl(llm, strategy, file_name):
-                test_pass = "False"
-                print(f"    -> False (ETL file not found)")
-            else:
-                test_class = FILE_TO_TEST[file_name]
-                print(f"    Running test: {test_class} ...")
-                passed, error_detail = run_test(test_class)
-                test_pass = "True" if passed else "False"
-                print(f"    -> {test_pass}" + (f" ({error_detail})" if error_detail else ""))
-                restore_etl(file_name)
+        test_pass = evaluate_row(row)
 
         result_row = dict(row)
         result_row["test_pass"] = test_pass

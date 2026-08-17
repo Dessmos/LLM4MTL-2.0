@@ -37,6 +37,22 @@ STRATEGIES = (
     "few_shots_AND_grammar",
 )
 RESPONSE_IDENTITY = re.compile(r"/responses/([^/]+)/([^/]+)/")
+READ_MODEL_FILES_NODE = "Read model files"
+EXTRACT_MODEL_TEXT_NODE = "Extract text from model files"
+READ_REFERENCE_FILE_NODE = "Read reference file"
+SAVE_REACTION_NAME_NODE = "Save reaction name"
+SAVE_FILE_NAME_NODE = "Save file name"
+GENERATE_PROMPT_NODE = "Generate Prompt from Input"
+WRITE_PROMPT_NODE = "Write prompt to disk"
+READ_PROMPT_FILES_NODE = "Read prompt files"
+GENERATE_CODE_NODE = "(Re-)Generate code"
+MERGE_PROMPT_INPUTS_NODE = "Merge prompt and exact inputs"
+LOOP_OVER_ITEMS_NODE = "Loop Over Items"
+CONVERT_PROMPT_FILE_NODE = "Convert prompt to file"
+READ_OUTPUT_CONTRACT_NODE = "Read output contract"
+EXTRACT_CONTRACT_TEXT_NODE = "Extract text from contract"
+ASSEMBLE_PROMPT_NODE = "Assemble prompt"
+CONVERT_PROMPT_TO_FILE_NODE = "Convert prompt to File"
 
 
 @dataclass(frozen=True)
@@ -104,8 +120,8 @@ PROMPT_INPUT_NODE = "Resolve exact task inputs"
 OBSOLETE_INPUT_NODES = {
     PROMPT_INPUT_NODE,
     "Extract text from reference file",
-    "Read model files",
-    "Extract text from model files",
+    READ_MODEL_FILES_NODE,
+    EXTRACT_MODEL_TEXT_NODE,
     "Summarize",
     "Summarize models",
     "Read Grammar",
@@ -123,18 +139,18 @@ def synchronize_prompt_generation(
     payload = _normalize_workflow_shape(payload)
     inputs = INPUTS[language]
     nodes = {node["name"]: node for node in payload["nodes"]}
-    nodes["Read reference file"]["parameters"]["fileSelector"] = (
+    nodes[READ_REFERENCE_FILE_NODE]["parameters"]["fileSelector"] = (
         "=/data/benchmark/tasks/"
         f"{language}/references/*.{inputs.reference_extension}"
     )
     save_name = (
-        "Save reaction name"
-        if "Save reaction name" in nodes
-        else "Save file name"
+        SAVE_REACTION_NAME_NODE
+        if SAVE_REACTION_NAME_NODE in nodes
+        else SAVE_FILE_NAME_NODE
     )
 
-    if "Generate Prompt from Input" in nodes:
-        generation = nodes["Generate Prompt from Input"]
+    if GENERATE_PROMPT_NODE in nodes:
+        generation = nodes[GENERATE_PROMPT_NODE]
         generation["parameters"]["text"] = _cloud_prompt_request(language)
         generation["parameters"]["messages"]["messageValues"] = [
             {"message": _prompt_generation_system_message(language)}
@@ -142,20 +158,20 @@ def synchronize_prompt_generation(
         old_write_name = (
             "Write draft prompt to disk"
             if "Write draft prompt to disk" in nodes
-            else "Write prompt to disk"
+            else WRITE_PROMPT_NODE
         )
         write_node = nodes[old_write_name]
-        write_node["name"] = "Write prompt to disk"
-        if old_write_name != "Write prompt to disk":
+        write_node["name"] = WRITE_PROMPT_NODE
+        if old_write_name != WRITE_PROMPT_NODE:
             payload["connections"] = _rename_connection_node(
                 payload["connections"],
                 old_write_name,
-                "Write prompt to disk",
+                WRITE_PROMPT_NODE,
             )
     else:
         generation = nodes["Generate Prompt with local Qwen"]
         generation["parameters"]["jsonBody"] = _qwen_prompt_request(language)
-        write_node = nodes["Write prompt to disk"]
+        write_node = nodes[WRITE_PROMPT_NODE]
         payload["name"] = payload["name"].replace(
             "qwen2.5-coder-7b_smoke",
             "qwen2-5-coder-7b",
@@ -194,7 +210,7 @@ def synchronize_test_generation(
     _response_identity(payload)
     nodes = {node["name"]: node for node in payload["nodes"]}
     is_qwen = "Read Qwen prompt files" in nodes
-    prompt_node_name = "Read Qwen prompt files" if is_qwen else "Read prompt files"
+    prompt_node_name = "Read Qwen prompt files" if is_qwen else READ_PROMPT_FILES_NODE
     nodes[prompt_node_name]["parameters"]["fileSelector"] = (
         f"=/data/task_prompts/{language}/*.txt"
     )
@@ -220,7 +236,7 @@ def synchronize_test_generation(
     payload = _replace_language_wide_models(
         payload,
         language=language,
-        save_name="Save task name" if is_qwen else "Save file name",
+        save_name="Save task name" if is_qwen else SAVE_FILE_NAME_NODE,
         merge_name=merge_name,
         merge_input=2 if is_qwen else 1,
     )
@@ -245,22 +261,22 @@ def synchronize_transformation_generation(
     """Make transformation generation use the shared prompt and exact models."""
     payload = _normalize_workflow_shape(payload)
     nodes = {node["name"]: node for node in payload["nodes"]}
-    if "Read prompt files" not in nodes or "(Re-)Generate code" not in nodes:
+    if READ_PROMPT_FILES_NODE not in nodes or GENERATE_CODE_NODE not in nodes:
         raise ValueError("not a supported transformation-generation workflow")
 
-    nodes["Read prompt files"]["parameters"]["fileSelector"] = (
+    nodes[READ_PROMPT_FILES_NODE]["parameters"]["fileSelector"] = (
         f"=/data/task_prompts/{language}/*.txt"
     )
     _scope_helper_methods(nodes, language)
-    generation = nodes["(Re-)Generate code"]
+    generation = nodes[GENERATE_CODE_NODE]
     generation["parameters"]["text"] = _transformation_request()
     generation["parameters"].setdefault("messages", {})["messageValues"] = [
         {"message": _transformation_system_message(language)}
     ]
     save_name = (
-        "Save file name"
-        if "Save file name" in nodes
-        else "Save reaction name"
+        SAVE_FILE_NAME_NODE
+        if SAVE_FILE_NAME_NODE in nodes
+        else SAVE_REACTION_NAME_NODE
     )
     return _replace_language_wide_models(
         payload,
@@ -277,7 +293,7 @@ def synchronize_reactions_matrix(
     """Use exact task inputs in the multi-model Reactions matrix workflow."""
     payload = _normalize_workflow_shape(payload)
     nodes = {node["name"]: node for node in payload["nodes"]}
-    nodes["Read prompt files"]["parameters"]["fileSelector"] = (
+    nodes[READ_PROMPT_FILES_NODE]["parameters"]["fileSelector"] = (
         "=/data/task_prompts/reactions/*.txt"
     )
     _scope_helper_methods(nodes, "reactions")
@@ -290,11 +306,11 @@ def synchronize_reactions_matrix(
         generation["parameters"]["text"] = _transformation_request()
 
     obsolete = {
-        "Read model files",
-        "Extract text from model files",
+        READ_MODEL_FILES_NODE,
+        EXTRACT_MODEL_TEXT_NODE,
         "Summarize",
         PROMPT_INPUT_NODE,
-        "Merge prompt and exact inputs",
+        MERGE_PROMPT_INPUTS_NODE,
     }
     payload["nodes"] = [
         node for node in payload["nodes"] if node["name"] not in obsolete
@@ -309,7 +325,7 @@ def synchronize_reactions_matrix(
                 "options": {},
             },
             "id": "merge-prompt-and-exact-inputs-reactions",
-            "name": "Merge prompt and exact inputs",
+            "name": MERGE_PROMPT_INPUTS_NODE,
             "type": "n8n-nodes-base.merge",
             "typeVersion": 3.2,
             "position": [-176, 784],
@@ -339,7 +355,7 @@ def synchronize_reactions_matrix(
     connections["Extract text from grammar"]["main"][0][0]["index"] = 1
     connections["Extract text from helper methods"]["main"][0][0]["index"] = 2
 
-    connections["Save reaction name"] = {
+    connections[SAVE_REACTION_NAME_NODE] = {
         "main": [[
             {
                 "node": "Extract text from prompt file",
@@ -356,7 +372,7 @@ def synchronize_reactions_matrix(
     connections["Extract text from prompt file"] = {
         "main": [[
             {
-                "node": "Merge prompt and exact inputs",
+                "node": MERGE_PROMPT_INPUTS_NODE,
                 "type": "main",
                 "index": 0,
             }
@@ -365,13 +381,13 @@ def synchronize_reactions_matrix(
     connections[PROMPT_INPUT_NODE] = {
         "main": [[
             {
-                "node": "Merge prompt and exact inputs",
+                "node": MERGE_PROMPT_INPUTS_NODE,
                 "type": "main",
                 "index": 1,
             }
         ]]
     }
-    connections["Merge prompt and exact inputs"] = {
+    connections[MERGE_PROMPT_INPUTS_NODE] = {
         "main": [[
             {"node": "If gpt-5", "type": "main", "index": 0},
             {"node": "If gemini-2.5-pro", "type": "main", "index": 0},
@@ -417,12 +433,12 @@ def _prompt_generation_connections(
 ) -> dict[str, Any]:
     connections: dict[str, Any] = {
         trigger_name: {
-            "main": [[{"node": "Read reference file", "type": "main", "index": 0}]]
+            "main": [[{"node": READ_REFERENCE_FILE_NODE, "type": "main", "index": 0}]]
         },
-        "Read reference file": {
-            "main": [[{"node": "Loop Over Items", "type": "main", "index": 0}]]
+        READ_REFERENCE_FILE_NODE: {
+            "main": [[{"node": LOOP_OVER_ITEMS_NODE, "type": "main", "index": 0}]]
         },
-        "Loop Over Items": {
+        LOOP_OVER_ITEMS_NODE: {
             "main": [
                 [],
                 [
@@ -446,11 +462,11 @@ def _prompt_generation_connections(
             "main": [[{"node": "Extract Qwen prompt text", "type": "main", "index": 0}]]
         }
         connections["Extract Qwen prompt text"] = {
-            "main": [[{"node": "Convert prompt to file", "type": "main", "index": 0}]]
+            "main": [[{"node": CONVERT_PROMPT_FILE_NODE, "type": "main", "index": 0}]]
         }
     else:
         connections[generation_name] = {
-            "main": [[{"node": "Convert prompt to file", "type": "main", "index": 0}]]
+            "main": [[{"node": CONVERT_PROMPT_FILE_NODE, "type": "main", "index": 0}]]
         }
         for source_name, source_connections in old_connections.items():
             language_model = source_connections.get("ai_languageModel")
@@ -461,11 +477,11 @@ def _prompt_generation_connections(
                 connections[source_name] = {
                     "ai_languageModel": language_model
                 }
-    connections["Convert prompt to file"] = {
-        "main": [[{"node": "Write prompt to disk", "type": "main", "index": 0}]]
+    connections[CONVERT_PROMPT_FILE_NODE] = {
+        "main": [[{"node": WRITE_PROMPT_NODE, "type": "main", "index": 0}]]
     }
-    connections["Write prompt to disk"] = {
-        "main": [[{"node": "Loop Over Items", "type": "main", "index": 0}]]
+    connections[WRITE_PROMPT_NODE] = {
+        "main": [[{"node": LOOP_OVER_ITEMS_NODE, "type": "main", "index": 0}]]
     }
     return connections
 
@@ -499,24 +515,32 @@ def _normalize_workflow_shape(payload: dict[str, Any]) -> dict[str, Any]:
     workflows and see only the intended differences.
     """
     for node in payload["nodes"]:
-        if node["type"] == "n8n-nodes-base.manualTrigger" and node["name"] != TRIGGER_NODE:
-            payload["connections"] = _rename_connection_node(
-                payload["connections"],
-                node["name"],
-                TRIGGER_NODE,
-            )
-            node["name"] = TRIGGER_NODE
-        slug = re.sub(r"[^a-z0-9]+", "-", node["name"].lower()).strip("-")
-        parameters = node.get("parameters", {})
-        for holder in ("assignments", "conditions"):
-            entries = parameters.get(holder, {})
-            entries = entries.get(holder) if isinstance(entries, dict) else None
-            if not isinstance(entries, list):
-                continue
-            for index, entry in enumerate(entries, 1):
-                if isinstance(entry, dict) and "id" in entry:
-                    entry["id"] = f"{slug}-{holder}-{index}"
+        _normalize_node_shape(payload, node)
     return _pin_provider_model_ids(_drop_unwired_chat_models(payload))
+
+
+def _normalize_node_shape(payload: dict[str, Any], node: dict[str, Any]) -> None:
+    if node["type"] == "n8n-nodes-base.manualTrigger" and node["name"] != TRIGGER_NODE:
+        payload["connections"] = _rename_connection_node(
+            payload["connections"],
+            node["name"],
+            TRIGGER_NODE,
+        )
+        node["name"] = TRIGGER_NODE
+    _normalize_node_entry_ids(node)
+
+
+def _normalize_node_entry_ids(node: dict[str, Any]) -> None:
+    slug = re.sub(r"[^a-z0-9]+", "-", node["name"].lower()).strip("-")
+    parameters = node.get("parameters", {})
+    for holder in ("assignments", "conditions"):
+        entries = parameters.get(holder, {})
+        entries = entries.get(holder) if isinstance(entries, dict) else None
+        if not isinstance(entries, list):
+            continue
+        for index, entry in enumerate(entries, 1):
+            if isinstance(entry, dict) and "id" in entry:
+                entry["id"] = f"{slug}-{holder}-{index}"
 
 
 def _drop_unwired_chat_models(payload: dict[str, Any]) -> dict[str, Any]:
@@ -632,8 +656,8 @@ def _replace_language_wide_models(
     merge_input: int,
 ) -> dict[str, Any]:
     obsolete = {
-        "Read model files",
-        "Extract text from model files",
+        READ_MODEL_FILES_NODE,
+        EXTRACT_MODEL_TEXT_NODE,
         "Summarize",
         "Summarize models",
     }
@@ -669,11 +693,11 @@ def _replace_language_wide_models(
 
 
 CONTRACT_NODES = (
-    "Read output contract",
-    "Extract text from contract",
-    "Assemble prompt",
-    "Convert prompt to File",
-    "Write prompt to disk",
+    READ_OUTPUT_CONTRACT_NODE,
+    EXTRACT_CONTRACT_TEXT_NODE,
+    ASSEMBLE_PROMPT_NODE,
+    CONVERT_PROMPT_TO_FILE_NODE,
+    WRITE_PROMPT_NODE,
 )
 
 
@@ -722,7 +746,7 @@ def _wire_output_contract(
                 "options": {},
             },
             "id": f"read-output-contract-{language}",
-            "name": "Read output contract",
+            "name": READ_OUTPUT_CONTRACT_NODE,
             "type": "n8n-nodes-base.readWriteFile",
             "typeVersion": 1,
             "position": [448 if offset else -512, -160 if offset else 96],
@@ -734,7 +758,7 @@ def _wire_output_contract(
                 "options": {},
             },
             "id": f"extract-text-from-contract-{language}",
-            "name": "Extract text from contract",
+            "name": EXTRACT_CONTRACT_TEXT_NODE,
             "type": "n8n-nodes-base.extractFromFile",
             "typeVersion": 1,
             "position": [736 if offset else -288, -160 if offset else 96],
@@ -759,7 +783,7 @@ def _wire_output_contract(
                 "options": {},
             },
             "id": "assemble-prompt",
-            "name": "Assemble prompt",
+            "name": ASSEMBLE_PROMPT_NODE,
             "type": "n8n-nodes-base.set",
             "typeVersion": 3.4,
             "position": [1232 if offset else 208, -288],
@@ -772,7 +796,7 @@ def _wire_output_contract(
                 "options": {},
             },
             "id": "convert-prompt-to-file",
-            "name": "Convert prompt to File",
+            "name": CONVERT_PROMPT_TO_FILE_NODE,
             "type": "n8n-nodes-base.convertToFile",
             "typeVersion": 1.1,
             "position": [1440 if offset else 432, -448],
@@ -785,38 +809,38 @@ def _wire_output_contract(
                 "options": {},
             },
             "id": "write-prompt-to-disk",
-            "name": "Write prompt to disk",
+            "name": WRITE_PROMPT_NODE,
             "type": "n8n-nodes-base.readWriteFile",
             "typeVersion": 1,
             "position": [1632 if offset else 656, -448],
         },
     ]
 
-    connections["Loop Over Items"]["main"][1].append(
-        {"node": "Read output contract", "type": "main", "index": 0}
+    connections[LOOP_OVER_ITEMS_NODE]["main"][1].append(
+        {"node": READ_OUTPUT_CONTRACT_NODE, "type": "main", "index": 0}
     )
-    connections["Read output contract"] = {
+    connections[READ_OUTPUT_CONTRACT_NODE] = {
         "main": [[
-            {"node": "Extract text from contract", "type": "main", "index": 0}
+            {"node": EXTRACT_CONTRACT_TEXT_NODE, "type": "main", "index": 0}
         ]]
     }
-    connections["Extract text from contract"] = {
+    connections[EXTRACT_CONTRACT_TEXT_NODE] = {
         "main": [[
             {"node": merge_name, "type": "main", "index": merge_input}
         ]]
     }
     connections[merge_name] = {
-        "main": [[{"node": "Assemble prompt", "type": "main", "index": 0}]]
+        "main": [[{"node": ASSEMBLE_PROMPT_NODE, "type": "main", "index": 0}]]
     }
-    connections["Assemble prompt"] = {
+    connections[ASSEMBLE_PROMPT_NODE] = {
         "main": [[
             {"node": consumer, "type": "main", "index": 0},
-            {"node": "Convert prompt to File", "type": "main", "index": 0},
+            {"node": CONVERT_PROMPT_TO_FILE_NODE, "type": "main", "index": 0},
         ]]
     }
-    connections["Convert prompt to File"] = {
+    connections[CONVERT_PROMPT_TO_FILE_NODE] = {
         "main": [[
-            {"node": "Write prompt to disk", "type": "main", "index": 0}
+            {"node": WRITE_PROMPT_NODE, "type": "main", "index": 0}
         ]]
     }
     for node in payload["nodes"]:
@@ -1094,7 +1118,7 @@ def synchronize_exports() -> tuple[int, int, int]:
     for path in sorted(transformation_root.rglob("Prompt_generation*.json")):
         payload = json.loads(path.read_text(encoding="utf-8"))
         node_names = {node.get("name") for node in payload.get("nodes", [])}
-        if "Generate Prompt from Input" not in node_names:
+        if GENERATE_PROMPT_NODE not in node_names:
             continue
         language = _language_from_workflow_path(path)
         _write_json(
@@ -1109,7 +1133,7 @@ def synchronize_exports() -> tuple[int, int, int]:
     for path in sorted(transformation_root.rglob("Prompting*.json")):
         payload = json.loads(path.read_text(encoding="utf-8"))
         node_names = {node.get("name") for node in payload.get("nodes", [])}
-        if "(Re-)Generate code" not in node_names:
+        if GENERATE_CODE_NODE not in node_names:
             continue
         language = _transformation_language(payload)
         _write_json(
@@ -1148,7 +1172,7 @@ def _language_from_workflow_path(path: Path) -> str:
 
 def _transformation_language(payload: dict[str, Any]) -> str:
     nodes = {node["name"]: node for node in payload["nodes"]}
-    selector = nodes["Read prompt files"]["parameters"]["fileSelector"]
+    selector = nodes[READ_PROMPT_FILES_NODE]["parameters"]["fileSelector"]
     match = re.search(
         r"/(?:transformation_generation|task_prompts)/(etl|atl|qvto|reactions)/",
         selector,

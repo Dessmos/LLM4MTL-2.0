@@ -119,40 +119,35 @@ def run_kruskal_wallis(df: pd.DataFrame) -> pd.DataFrame:
     for mtl in sorted(df["file"].unique()):
         df_mtl = df[df["file"] == mtl]
         for metric in METRICS:
-            groups = []
-            models_used = []
-            for model in MODEL_ORDER:
-                vals = df_mtl[df_mtl["model"] == model][metric].dropna().values
-                if len(vals) > 0:
-                    groups.append(vals)
-                    models_used.append(model)
-
-            if len(groups) < 2:
-                records.append(dict(file=mtl, metric=metric,
-                                    H=np.nan, p_value=np.nan,
-                                    n_groups=len(groups),
-                                    reason="fewer than 2 non-empty groups"))
-                continue
-
-            all_vals = np.concatenate(groups)
-            if len(np.unique(all_vals)) == 1:
-                records.append(dict(file=mtl, metric=metric,
-                                    H=0.0, p_value=np.nan,
-                                    n_groups=len(groups),
-                                    reason="all values identical"))
-                continue
-
-            try:
-                H, p = kruskal(*groups)
-                records.append(dict(file=mtl, metric=metric,
-                                    H=round(H, 4), p_value=round(p, 6),
-                                    n_groups=len(groups), reason=""))
-            except Exception as exc:
-                records.append(dict(file=mtl, metric=metric,
-                                    H=np.nan, p_value=np.nan,
-                                    n_groups=len(groups), reason=str(exc)))
+            records.append(_kruskal_record(df_mtl, mtl, metric))
 
     return pd.DataFrame(records)
+
+
+def _kruskal_record(df_mtl: pd.DataFrame, mtl: str, metric: str) -> dict:
+    groups = _model_groups(df_mtl, metric)
+    if len(groups) < 2:
+        return dict(file=mtl, metric=metric, H=np.nan, p_value=np.nan,
+                    n_groups=len(groups), reason="fewer than 2 non-empty groups")
+    if len(np.unique(np.concatenate(groups))) == 1:
+        return dict(file=mtl, metric=metric, H=0.0, p_value=np.nan,
+                    n_groups=len(groups), reason="all values identical")
+    try:
+        h_value, p_value = kruskal(*groups)
+        return dict(file=mtl, metric=metric, H=round(h_value, 4),
+                    p_value=round(p_value, 6), n_groups=len(groups), reason="")
+    except Exception as exc:
+        return dict(file=mtl, metric=metric, H=np.nan, p_value=np.nan,
+                    n_groups=len(groups), reason=str(exc))
+
+
+def _model_groups(df_mtl: pd.DataFrame, metric: str) -> list:
+    groups = []
+    for model in MODEL_ORDER:
+        values = df_mtl[df_mtl["model"] == model][metric].dropna().values
+        if len(values) > 0:
+            groups.append(values)
+    return groups
 
 
 # ── Output builders ───────────────────────────────────────────────────────────
@@ -180,22 +175,29 @@ def build_paper_style_table(df: pd.DataFrame, kw_results: pd.DataFrame) -> pd.Da
     for mtl in sorted(df["file"].unique()):
         df_mtl = df[df["file"] == mtl]
         for metric in METRICS:
-            row = {"MTL": Path(mtl).stem, "Metric": METRIC_LABELS[metric]}
-            for model in MODEL_ORDER:
-                label = MODEL_SHORT[model]
-                vals = df_mtl[df_mtl["model"] == model][metric].dropna().values
-                row[label] = round(float(np.mean(vals)), 4) if len(vals) > 0 else np.nan
-
-            kw_r = kw_results[
-                (kw_results["file"] == mtl) & (kw_results["metric"] == metric)
-            ]
-            p = kw_r["p_value"].values[0] if len(kw_r) > 0 else np.nan
-            row["p-value"] = round(float(p), 6) if not pd.isna(p) else "n/a"
-            row["sig"] = "*" if (not pd.isna(p) and p < 0.05) else ""
-            rows.append(row)
+            rows.append(_paper_row(df_mtl, kw_results, mtl, metric))
 
     model_labels = [MODEL_SHORT[m] for m in MODEL_ORDER]
     return pd.DataFrame(rows, columns=["MTL", "Metric"] + model_labels + ["p-value", "sig"])
+
+
+def _paper_row(df_mtl, kw_results, mtl, metric):
+    row = {"MTL": Path(mtl).stem, "Metric": METRIC_LABELS[metric]}
+    for model in MODEL_ORDER:
+        label = MODEL_SHORT[model]
+        values = df_mtl[df_mtl["model"] == model][metric].dropna().values
+        row[label] = round(float(np.mean(values)), 4) if len(values) > 0 else np.nan
+    p_value = _kw_p_value(kw_results, mtl, metric)
+    row["p-value"] = round(float(p_value), 6) if not pd.isna(p_value) else "n/a"
+    row["sig"] = "*" if (not pd.isna(p_value) and p_value < 0.05) else ""
+    return row
+
+
+def _kw_p_value(kw_results, mtl, metric):
+    matching = kw_results[
+        (kw_results["file"] == mtl) & (kw_results["metric"] == metric)
+    ]
+    return matching["p_value"].values[0] if len(matching) > 0 else np.nan
 
 
 def build_detailed_table(df: pd.DataFrame, kw_results: pd.DataFrame) -> pd.DataFrame:
@@ -207,40 +209,47 @@ def build_detailed_table(df: pd.DataFrame, kw_results: pd.DataFrame) -> pd.DataF
     for mtl in sorted(df["file"].unique()):
         df_mtl = df[df["file"] == mtl]
         for metric in METRICS:
-            for model in MODEL_ORDER:
-                df_m = df_mtl[df_mtl["model"] == model]
-                row = {
-                    "file":   mtl,
-                    "metric": METRIC_LABELS[metric],
-                    "model":  MODEL_SHORT[model],
-                }
-                for strat in STRATEGY_ORDER:
-                    vals = df_m[df_m["strategy"] == strat][metric].dropna().values
-                    row[strat] = round(float(vals[0]), 4) if len(vals) == 1 else np.nan
-                row["mean_across_strategies"] = round(
-                    float(df_m[metric].dropna().mean()), 4
-                ) if len(df_m[metric].dropna()) > 0 else np.nan
-                rows.append(row)
-
-            # KW p-value row
-            kw_r = kw_results[
-                (kw_results["file"] == mtl) & (kw_results["metric"] == metric)
-            ]
-            p = kw_r["p_value"].values[0] if len(kw_r) > 0 else np.nan
-            p_str = round(float(p), 6) if not pd.isna(p) else "n/a"
-            sig_str = "*" if (not pd.isna(p) and p < 0.05) else ""
-            prow = {
-                "file":   mtl,
-                "metric": METRIC_LABELS[metric],
-                "model":  "KW p-value",
-                "only_prompt": p_str, "few_shot": sig_str,
-                "grammar": "", "few_shot_AND_grammar": "",
-                "mean_across_strategies": "",
-            }
-            rows.append(prow)
+            rows.extend(_model_detail_rows(df_mtl, mtl, metric))
+            rows.append(_kw_detail_row(kw_results, mtl, metric))
 
     return pd.DataFrame(rows,
         columns=["file", "metric", "model"] + STRATEGY_ORDER + ["mean_across_strategies"])
+
+
+def _model_detail_rows(df_mtl, mtl, metric):
+    rows = []
+    for model in MODEL_ORDER:
+        df_model = df_mtl[df_mtl["model"] == model]
+        row = {
+            "file": mtl,
+            "metric": METRIC_LABELS[metric],
+            "model": MODEL_SHORT[model],
+        }
+        for strategy in STRATEGY_ORDER:
+            values = df_model[df_model["strategy"] == strategy][metric].dropna().values
+            row[strategy] = round(float(values[0]), 4) if len(values) == 1 else np.nan
+        model_values = df_model[metric].dropna()
+        row["mean_across_strategies"] = (
+            round(float(model_values.mean()), 4) if len(model_values) > 0 else np.nan
+        )
+        rows.append(row)
+    return rows
+
+
+def _kw_detail_row(kw_results, mtl, metric):
+    p_value = _kw_p_value(kw_results, mtl, metric)
+    p_string = round(float(p_value), 6) if not pd.isna(p_value) else "n/a"
+    sig_string = "*" if (not pd.isna(p_value) and p_value < 0.05) else ""
+    return {
+        "file": mtl,
+        "metric": METRIC_LABELS[metric],
+        "model": "KW p-value",
+        "only_prompt": p_string,
+        "few_shot": sig_string,
+        "grammar": "",
+        "few_shot_AND_grammar": "",
+        "mean_across_strategies": "",
+    }
 
 
 # ── Console report ────────────────────────────────────────────────────────────

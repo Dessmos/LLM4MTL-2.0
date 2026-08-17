@@ -129,71 +129,89 @@ def validate_config(config: PipelineConfig, require_selection: bool = True) -> N
 
 def parse_simple_yaml(text: str) -> dict[str, Any]:
     """Parse the mapping/list/scalar YAML subset used by experiment configs."""
+    lines = _simple_yaml_lines(text)
+    if not lines:
+        return {}
+    result, index = _parse_yaml_block(lines, 0, lines[0][0])
+    if index != len(lines) or not isinstance(result, dict):
+        raise ConfigError("Unsupported YAML structure.")
+    return result
 
+
+def _simple_yaml_lines(text: str) -> list[tuple[int, str]]:
     lines: list[tuple[int, str]] = []
     for raw in text.splitlines():
         stripped = raw.strip()
         if not stripped or stripped.startswith("#"):
             continue
         indent = len(raw) - len(raw.lstrip(" "))
-        lines.append((indent, raw.strip()))
+        lines.append((indent, stripped))
+    return lines
 
-    def parse_block(index: int, indent: int) -> tuple[Any, int]:
-        is_list = lines[index][1].startswith("- ") or lines[index][1] == "-"
-        container: Any = [] if is_list else {}
-        while index < len(lines):
-            current_indent, content = lines[index]
-            if current_indent < indent:
+
+def _parse_yaml_block(
+    lines: list[tuple[int, str]], index: int, indent: int
+) -> tuple[Any, int]:
+    is_list = lines[index][1].startswith("- ") or lines[index][1] == "-"
+    container: Any = [] if is_list else {}
+    while index < len(lines):
+        current_indent, content = lines[index]
+        if current_indent < indent:
+            break
+        if current_indent > indent:
+            raise ConfigError(f"Unexpected indentation near: {content}")
+        if is_list:
+            if not content.startswith("-"):
                 break
-            if current_indent > indent:
-                raise ConfigError(f"Unexpected indentation near: {content}")
-            if is_list:
-                if not content.startswith("-"):
-                    break
-                item_text = content[1:].strip()
-                if not item_text:
-                    if index + 1 >= len(lines) or lines[index + 1][0] <= indent:
-                        container.append(None)
-                        index += 1
-                    else:
-                        item, index = parse_block(index + 1, lines[index + 1][0])
-                        container.append(item)
-                    continue
-                if ":" in item_text:
-                    key, value_text = split_key_value(item_text)
-                    item = {key: parse_scalar(value_text)} if value_text else {key: None}
-                    index += 1
-                    if index < len(lines) and lines[index][0] > indent:
-                        child, index = parse_block(index, lines[index][0])
-                        if value_text:
-                            if isinstance(child, dict):
-                                item.update(child)
-                        else:
-                            item[key] = child
-                    container.append(item)
-                else:
-                    container.append(parse_scalar(item_text))
-                    index += 1
-            else:
-                if content.startswith("-"):
-                    break
-                key, value_text = split_key_value(content)
-                index += 1
-                if value_text:
-                    container[key] = parse_scalar(value_text)
-                elif index < len(lines) and lines[index][0] > indent:
-                    child, index = parse_block(index, lines[index][0])
-                    container[key] = child
-                else:
-                    container[key] = {}
-        return container, index
+            index = _parse_yaml_list_item(lines, index, indent, container)
+            continue
+        if content.startswith("-"):
+            break
+        index = _parse_yaml_mapping_item(lines, index, indent, container)
+    return container, index
 
-    if not lines:
-        return {}
-    result, index = parse_block(0, lines[0][0])
-    if index != len(lines) or not isinstance(result, dict):
-        raise ConfigError("Unsupported YAML structure.")
-    return result
+
+def _parse_yaml_list_item(
+    lines: list[tuple[int, str]], index: int, indent: int, container: list[Any]
+) -> int:
+    item_text = lines[index][1][1:].strip()
+    if not item_text:
+        if index + 1 >= len(lines) or lines[index + 1][0] <= indent:
+            container.append(None)
+            return index + 1
+        item, next_index = _parse_yaml_block(lines, index + 1, lines[index + 1][0])
+        container.append(item)
+        return next_index
+    if ":" not in item_text:
+        container.append(parse_scalar(item_text))
+        return index + 1
+
+    key, value_text = split_key_value(item_text)
+    item = {key: parse_scalar(value_text)} if value_text else {key: None}
+    index += 1
+    if index < len(lines) and lines[index][0] > indent:
+        child, index = _parse_yaml_block(lines, index, lines[index][0])
+        if value_text and isinstance(child, dict):
+            item.update(child)
+        elif not value_text:
+            item[key] = child
+    container.append(item)
+    return index
+
+
+def _parse_yaml_mapping_item(
+    lines: list[tuple[int, str]], index: int, indent: int, container: dict[str, Any]
+) -> int:
+    key, value_text = split_key_value(lines[index][1])
+    index += 1
+    if value_text:
+        container[key] = parse_scalar(value_text)
+    elif index < len(lines) and lines[index][0] > indent:
+        child, index = _parse_yaml_block(lines, index, lines[index][0])
+        container[key] = child
+    else:
+        container[key] = {}
+    return index
 
 
 def split_key_value(text: str) -> tuple[str, str]:

@@ -125,6 +125,7 @@ EXECUTION_LOG_EXCERPT_CHARS = 8000
 # The diagnosis prompt gets less than the report keeps: only the lines Maven
 # itself marked, and only the last of those.
 MAVEN_BUNDLE_LINES = 40
+GENERATED_EXECUTION_LABEL = "generated execution"
 
 
 class FailureReportError(ValueError):
@@ -245,7 +246,7 @@ def build_failure_report(request: ReportRequest) -> dict[str, Any]:
     manifest = _read_object(request.run_manifest, "run manifest")
     identity = _identity(manifest, request.attempt)
     generated_execution = _read_execution(
-        request.generated_execution, identity, "generated execution"
+        request.generated_execution, identity, GENERATED_EXECUTION_LABEL
     )
     suite_dir, transformation_path = _generated_inputs(generated_execution)
     _verify_recorded_hashes(generated_execution, suite_dir, transformation_path)
@@ -267,7 +268,7 @@ def build_failure_report(request: ReportRequest) -> dict[str, Any]:
         _read_object(request.syntax_evidence, "syntax evidence"),
         transformation_path,
     )
-    observation = _observation(generated_execution, "generated execution")
+    observation = _observation(generated_execution, GENERATED_EXECUTION_LABEL)
     semantic_status = _semantic_status(observation)
 
     task_description = _task_description(identity, manifest)
@@ -636,7 +637,7 @@ def build_pair_failure_report(request: PairReportRequest) -> dict[str, Any]:
     manifest = _read_object(request.run_manifest, "run manifest")
     identity = _identity(manifest, request.attempt)
     generated_execution = _read_execution(
-        request.generated_execution, identity, "generated execution"
+        request.generated_execution, identity, GENERATED_EXECUTION_LABEL
     )
     suite_dir, transformation_path = _generated_inputs(generated_execution)
     _verify_recorded_hashes(generated_execution, suite_dir, transformation_path)
@@ -653,7 +654,7 @@ def build_pair_failure_report(request: PairReportRequest) -> dict[str, Any]:
         _read_object(request.syntax_evidence, "syntax evidence"),
         transformation_path,
     )
-    observation = _observation(generated_execution, "generated execution")
+    observation = _observation(generated_execution, GENERATED_EXECUTION_LABEL)
     reference_result = _reference_result(request.reference_execution, identity)
     surefire = _pair_surefire_evidence(request.surefire_reports)
     execution_log = (
@@ -843,32 +844,11 @@ def _pair_surefire_evidence(report_paths: Sequence[Path]) -> dict[str, Any]:
         except (ET.ParseError, OSError):
             continue
         reports.append(_repository_path(path))
-        for case in root.iter("testcase"):
-            error = case.find("error")
-            node = error if error is not None else case.find("failure")
-            if node is None:
-                continue
-            test_failures.append(
-                {
-                    "test_class": case.get("classname"),
-                    "test_method": case.get("name"),
-                    "status": "error" if error is not None else "failed",
-                }
-            )
-        for node in [*root.findall("error"), *root.findall("failure")]:
-            exceptions.append(
-                {
-                    "type": str(node.get("type") or node.tag),
-                    "message": str(node.get("message") or ""),
-                }
-            )
-            trace = (node.text or "").strip()
-            if trace:
-                stack_traces.append(trace)
-        for stream in root.findall("system-err"):
-            text = (stream.text or "").strip()
-            if text:
-                system_err.append(text[-SYSTEM_ERR_EXCERPT_CHARS:])
+        test_failures.extend(_pair_test_failures(root))
+        report_exceptions, report_traces = _suite_failures(root)
+        exceptions.extend(report_exceptions)
+        stack_traces.extend(report_traces)
+        system_err.extend(_system_err_excerpts(root))
     return {
         "test_failures": test_failures,
         "exceptions": exceptions,
@@ -878,6 +858,50 @@ def _pair_surefire_evidence(report_paths: Sequence[Path]) -> dict[str, Any]:
         "failure_type": exceptions[0]["type"] if exceptions else None,
         "message": exceptions[0]["message"] if exceptions else "",
     }
+
+
+def _pair_test_failures(root: ET.Element) -> list[dict[str, Any]]:
+    failures: list[dict[str, Any]] = []
+    for case in root.iter("testcase"):
+        error = case.find("error")
+        node = error if error is not None else case.find("failure")
+        if node is None:
+            continue
+        failures.append(
+            {
+                "test_class": case.get("classname"),
+                "test_method": case.get("name"),
+                "status": "error" if error is not None else "failed",
+            }
+        )
+    return failures
+
+
+def _suite_failures(
+    root: ET.Element,
+) -> tuple[list[dict[str, str]], list[str]]:
+    exceptions: list[dict[str, str]] = []
+    stack_traces: list[str] = []
+    for node in [*root.findall("error"), *root.findall("failure")]:
+        exceptions.append(
+            {
+                "type": str(node.get("type") or node.tag),
+                "message": str(node.get("message") or ""),
+            }
+        )
+        trace = (node.text or "").strip()
+        if trace:
+            stack_traces.append(trace)
+    return exceptions, stack_traces
+
+
+def _system_err_excerpts(root: ET.Element) -> list[str]:
+    excerpts: list[str] = []
+    for stream in root.findall("system-err"):
+        text = (stream.text or "").strip()
+        if text:
+            excerpts.append(text[-SYSTEM_ERR_EXCERPT_CHARS:])
+    return excerpts
 
 
 def _pair_evidence_bundle(
@@ -1118,7 +1142,7 @@ def _execution_stage_evidence(
     if pair_suite != suite_dir or pair_transformation != transformation_path:
         raise FailureReportError("execution pair inputs disagree with recorded observation")
     assertions_passed = _observation(
-        generated_execution, "generated execution"
+        generated_execution, GENERATED_EXECUTION_LABEL
     )["assertions_passed"]
     if pair.get("assertions_passed") is not assertions_passed:
         raise FailureReportError(
@@ -1197,23 +1221,28 @@ def _syntax_check(evidence: dict[str, Any], transformation: Path) -> dict[str, A
     if target not in passed and target not in failed:
         raise FailureReportError("transformation is absent from syntax evidence")
 
-    diagnostics = details.get("diagnostics", {})
-    selected_diagnostics: object = []
-    if isinstance(diagnostics, dict):
-        for raw_path, diagnostic in diagnostics.items():
-            try:
-                candidate = _input_path(raw_path, "diagnostic path")
-            except FailureReportError:
-                continue
-            if candidate == target:
-                selected_diagnostics = diagnostic
-                break
-    elif target in failed:
-        selected_diagnostics = diagnostics
+    selected_diagnostics = _selected_syntax_diagnostics(
+        details.get("diagnostics", {}), target, target in failed
+    )
     return {
         "status": "passed" if target in passed else "failed",
         "parser_diagnostics": _diagnostic_list(selected_diagnostics),
     }
+
+
+def _selected_syntax_diagnostics(
+    diagnostics: object, target: Path, target_failed: bool
+) -> object:
+    if not isinstance(diagnostics, dict):
+        return diagnostics if target_failed else []
+    for raw_path, diagnostic in diagnostics.items():
+        try:
+            candidate = _input_path(raw_path, "diagnostic path")
+        except FailureReportError:
+            continue
+        if candidate == target:
+            return diagnostic
+    return []
 
 
 def _semantic_status(observation: dict[str, Any]) -> str:
@@ -1342,47 +1371,54 @@ def _surefire_evidence(
         for case in root.iter("testcase"):
             if case.get("name") != method_name:
                 continue
-            failure = case.find("failure")
-            error = case.find("error")
-            node = error if error is not None else failure
-            status = (
-                "error"
-                if error is not None
-                else "failed"
-                if failure is not None
-                else "passed"
-            )
-            message = str(node.get("message") or "") if node is not None else ""
-            expected, actual = _assertion_outcome(message)
-            test_cases.append(
-                {
-                    "report": _repository_path(path),
-                    "test_class": case.get("classname"),
-                    "test_method": case.get("name"),
-                    "duration_seconds": case.get("time"),
-                    "status": status,
-                    "failure_type": (
-                        str(node.get("type") or node.tag) if node is not None else None
-                    ),
-                    "message": message or None,
-                    "expected": expected,
-                    "actual": actual,
-                }
-            )
-            if node is not None:
-                exception = {
-                    "type": str(node.get("type") or node.tag),
-                    "message": message,
-                }
+            test_case, exception, trace = _surefire_test_case(path, case)
+            test_cases.append(test_case)
+            if exception is not None:
                 exceptions.append(exception)
-                trace = (node.text or "").strip()
-                if trace:
-                    stack_traces.append(trace)
+            if trace:
+                stack_traces.append(trace)
     return {
         "test_cases": test_cases,
         "exceptions": exceptions,
         "stack_traces": stack_traces,
     }
+
+
+def _surefire_test_case(
+    path: Path, case: ET.Element
+) -> tuple[dict[str, Any], dict[str, str] | None, str]:
+    failure = case.find("failure")
+    error = case.find("error")
+    node = error if error is not None else failure
+    status = (
+        "error"
+        if error is not None
+        else "failed"
+        if failure is not None
+        else "passed"
+    )
+    message = str(node.get("message") or "") if node is not None else ""
+    expected, actual = _assertion_outcome(message)
+    test_case = {
+        "report": _repository_path(path),
+        "test_class": case.get("classname"),
+        "test_method": case.get("name"),
+        "duration_seconds": case.get("time"),
+        "status": status,
+        "failure_type": (
+            str(node.get("type") or node.tag) if node is not None else None
+        ),
+        "message": message or None,
+        "expected": expected,
+        "actual": actual,
+    }
+    if node is None:
+        return test_case, None, ""
+    exception = {
+        "type": str(node.get("type") or node.tag),
+        "message": message,
+    }
+    return test_case, exception, (node.text or "").strip()
 
 
 def _assertion_outcome(message: str) -> tuple[str | None, str | None]:

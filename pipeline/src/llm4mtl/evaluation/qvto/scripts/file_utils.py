@@ -4,6 +4,9 @@ File utilities for finding ground truth files and counting LOC.
 
 from pathlib import Path
 
+ATL_GLOB = '*.atl'
+QVTO_GLOB = '*.qvto'
+
 
 def find_ground_truth_dir(repo_root):
     """
@@ -27,25 +30,34 @@ def find_ground_truth_dir(repo_root):
 
     for pattern in possible_patterns:
         for gt_dir in repo_path.glob(pattern):
-            if gt_dir.is_dir():
-                # Check if it contains .atl or .qvto files
-                atl_files = list(gt_dir.glob('*.atl'))
-                qvto_files = list(gt_dir.glob('*.qvto'))
-                if atl_files or qvto_files:
-                    return str(gt_dir)
+            if _contains_transformations(gt_dir):
+                return str(gt_dir)
 
     # If not found, try searching for directories containing multiple .atl files
-    for atl_file in repo_path.rglob('*.atl'):
-        parent = atl_file.parent
-        if len(list(parent.glob('*.atl'))) >= 5:
-            return str(parent)
+    atl_dir = _directory_with_multiple_files(repo_path, ATL_GLOB)
+    if atl_dir is not None:
+        return str(atl_dir)
 
     # Try searching for directories containing multiple .qvto files
-    for qvto_file in repo_path.rglob('*.qvto'):
-        parent = qvto_file.parent
-        if len(list(parent.glob('*.qvto'))) >= 5:
-            return str(parent)
+    qvto_dir = _directory_with_multiple_files(repo_path, QVTO_GLOB)
+    if qvto_dir is not None:
+        return str(qvto_dir)
 
+    return None
+
+
+def _contains_transformations(directory):
+    return (
+        directory.is_dir()
+        and (list(directory.glob(ATL_GLOB)) or list(directory.glob(QVTO_GLOB)))
+    )
+
+
+def _directory_with_multiple_files(repo_path, file_glob):
+    for transformation in repo_path.rglob(file_glob):
+        parent = transformation.parent
+        if len(list(parent.glob(file_glob))) >= 5:
+            return parent
     return None
 
 
@@ -93,7 +105,7 @@ def build_file_to_loc_mapping(gt_dir):
     gt_path = Path(gt_dir)
     file_to_loc = {}
 
-    for gt_file in list(gt_path.glob('*.atl')) + list(gt_path.glob('*.qvto')):
+    for gt_file in list(gt_path.glob(ATL_GLOB)) + list(gt_path.glob(QVTO_GLOB)):
         file_name = gt_file.stem  # Without extension
         loc = count_loc(gt_file)
         if loc > 0:
@@ -133,4 +145,3 @@ def match_file_to_ground_truth(file_name, file_to_loc):
             return file_to_loc[base_name]
 
     return None
-

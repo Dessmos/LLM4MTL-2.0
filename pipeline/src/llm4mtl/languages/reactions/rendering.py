@@ -21,6 +21,10 @@ from llm4mtl.semantic_tests.codegen.java_rendering import (
 from llm4mtl.semantic_tests.semantic_spec import effective_models
 from llm4mtl.semantic_tests.suites.java import slug
 
+FEATURE_LOOKUP_LINE = (
+    "        EStructuralFeature feature = object.eClass().getEStructuralFeature(name);"
+)
+
 
 def render_reactions_test(class_name: str, spec: dict[str, Any], task: str) -> str:
     reaction_name = task[:1].lower() + task[1:]
@@ -310,20 +314,20 @@ def _reactions_helpers() -> list[str]:
         "    }",
         "",
         "    private void setFeature(EObject object, String name, Object value) {",
-        "        EStructuralFeature feature = object.eClass().getEStructuralFeature(name);",
+        FEATURE_LOOKUP_LINE,
         "        if (feature == null) throw new IllegalArgumentException(\"Feature not found: \" + object.eClass().getName() + \".\" + name);",
         "        object.eSet(feature, coerce(feature, value));",
         "    }",
         "",
         "    @SuppressWarnings(\"unchecked\")",
         "    private void addToCollection(EObject object, String name, Object value) {",
-        "        EStructuralFeature feature = object.eClass().getEStructuralFeature(name);",
+        FEATURE_LOOKUP_LINE,
         "        ((Collection<Object>) object.eGet(feature)).add(coerce(feature, value));",
         "    }",
         "",
         "    @SuppressWarnings(\"unchecked\")",
         "    private void removeFromCollection(EObject object, String name, Object value) {",
-        "        EStructuralFeature feature = object.eClass().getEStructuralFeature(name);",
+        FEATURE_LOOKUP_LINE,
         "        ((Collection<Object>) object.eGet(feature)).remove(coerce(feature, value));",
         "    }",
         "",

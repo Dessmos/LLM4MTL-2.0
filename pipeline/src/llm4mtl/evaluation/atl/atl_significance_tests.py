@@ -323,7 +323,7 @@ for r in star_rows:
 pd.DataFrame(pvalue_rows).to_csv(output_dir / "significance_pvalues.csv", index=False)
 
 print(f"\nCSV results saved to: {output_dir}")
-print(f"  atl_star_tests.csv       — star (*) p-values per LLM x strategy")
-print(f"  atl_underline_tests.csv  — underline p-values per strategy (across LLMs)")
-print(f"  atl_summary_with_sig.csv — mean values with significance flags")
-print(f"  significance_pvalues.csv — unified p-value table")
+print("  atl_star_tests.csv       — star (*) p-values per LLM x strategy")
+print("  atl_underline_tests.csv  — underline p-values per strategy (across LLMs)")
+print("  atl_summary_with_sig.csv — mean values with significance flags")
+print("  significance_pvalues.csv — unified p-value table")

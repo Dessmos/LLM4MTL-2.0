@@ -56,8 +56,11 @@ ETL_TYPE = re.compile(r"\b([A-Za-z_]\w*)!\s*`?([A-Za-z_][\w:-]*)`?")
 ETL_TRANSFORM = re.compile(
     r"\btransform\b[^:\n]*:\s*([A-Za-z_]\w*)!\s*`?([A-Za-z_][\w:-]*)`?"
 )
-ETL_TO = re.compile(r"\bto\b(?P<body>.*?)(?:\{|\n\s*\n)", re.DOTALL)
+ETL_TO = re.compile(
+    r"\bto\b(?P<body>.*?)(?:\{|\n[^\S\r\n]*\r?\n)", re.DOTALL
+)
 ETL_DECLARED_TYPE = re.compile(r":\s*([A-Za-z_]\w*)!\s*`?([A-Za-z_][\w:-]*)`?")
+ECORE_GLOB = "*.ecore"
 ETL_NEW = re.compile(r"\bnew\s+([A-Za-z_]\w*)!\s*`?([A-Za-z_][\w:-]*)`?")
 
 ATL_ECORE_OVERRIDES = {
@@ -233,7 +236,7 @@ def _etl_roles(source: str) -> dict[str, set[str]]:
 
 def _etl_ecores() -> list[EcoreInfo]:
     root = TARGET.benchmark / "metamodels/additional_models/ETL_model"
-    return [load_ecore(path) for path in sorted(root.glob("*.ecore"))]
+    return [load_ecore(path) for path in sorted(root.glob(ECORE_GLOB))]
 
 
 def _resolve_etl_ecore(
@@ -338,7 +341,7 @@ def resolve_atl_ecore(alias: str) -> EcoreInfo:
         return load_ecore(root / override, preferred_package=alias)
     candidates = [
         path
-        for path in root.glob("*.ecore")
+        for path in root.glob(ECORE_GLOB)
         if path.stem.lower() == alias.lower()
     ]
     if len(candidates) != 1:
@@ -357,7 +360,7 @@ def resolve_qvto_ecore(uri: str) -> EcoreInfo:
     root = TARGET.benchmark / "metamodels/additional_models/QVT-O_model"
     candidates = [
         ecore
-        for ecore in (load_ecore(path) for path in sorted(root.glob("*.ecore")))
+        for ecore in (load_ecore(path) for path in sorted(root.glob(ECORE_GLOB)))
         if ecore.ns_uri == uri
     ]
     if len(candidates) != 1:

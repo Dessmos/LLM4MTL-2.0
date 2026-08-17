@@ -12,6 +12,8 @@ from llm4mtl.experiment_runner.models import PipelineConfig, RunResult
 from llm4mtl.experiment_runner.orchestrator import ExperimentOrchestrator
 from llm4mtl.semantic_tests.failure_report import FailureReportError
 
+PIPELINE_RUN_COMMAND = "pipeline.run"
+
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="llm4mtl")
@@ -152,22 +154,9 @@ def add_execution(parser: argparse.ArgumentParser, defaults_none: bool = False) 
 
 def config_from_args(args: argparse.Namespace) -> PipelineConfig:
     command = f"{args.domain}.{args.action}"
-    if command == "pipeline.run" and args.config:
-        reject_config_selector_overrides(args)
-        config = load_pipeline_config(args.config)
-        apply_execution_overrides(config, args)
-        config.command = command
-        validate_config(config)
-        return config
-    if command == "pipeline.run" and args.resume and args.run_id and not has_pipeline_selection(args):
-        from llm4mtl.paths import TARGET
-
-        resolved = TARGET.runs / args.run_id / "config.resolved.yaml"
-        config = load_resolved_config(resolved)
-        apply_execution_overrides(config, args)
-        config.command = command
-        validate_config(config)
-        return config
+    loaded_config = _load_pipeline_config_from_args(args, command)
+    if loaded_config is not None:
+        return loaded_config
 
     config = PipelineConfig(
         language=args.language,
@@ -200,6 +189,30 @@ def config_from_args(args: argparse.Namespace) -> PipelineConfig:
     return config
 
 
+def _load_pipeline_config_from_args(
+    args: argparse.Namespace, command: str
+) -> PipelineConfig | None:
+    if command != PIPELINE_RUN_COMMAND:
+        return None
+    if args.config:
+        reject_config_selector_overrides(args)
+        config = load_pipeline_config(args.config)
+        apply_execution_overrides(config, args)
+        config.command = command
+        validate_config(config)
+        return config
+    if args.resume and args.run_id and not has_pipeline_selection(args):
+        from llm4mtl.paths import TARGET
+
+        resolved = TARGET.runs / args.run_id / "config.resolved.yaml"
+        config = load_resolved_config(resolved)
+        apply_execution_overrides(config, args)
+        config.command = command
+        validate_config(config)
+        return config
+    return None
+
+
 def has_pipeline_selection(args: argparse.Namespace) -> bool:
     return any(
         (
@@ -223,7 +236,7 @@ def validate_command_constraints(config: PipelineConfig) -> None:
             raise ConfigError("tests extract: --all-tasks cannot be combined with --response.")
     if config.command == "tests.validate" and config.suite_id and not config.suites:
         require_suite_identity(config)
-    if config.command in {"transformations.validate", "pipeline.run"} and config.suite_id and not config.suites:
+    if config.command in {"transformations.validate", PIPELINE_RUN_COMMAND} and config.suite_id and not config.suites:
         require_suite_identity(config)
 
 

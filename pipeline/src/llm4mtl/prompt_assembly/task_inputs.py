@@ -107,70 +107,16 @@ def resolve_task_inputs(language: str, task: str) -> ResolvedTaskInputs:
             f"task contract not found for {language_key}/{task}"
         )
 
-    try:
-        contract = json.loads(contract_path.read_text(encoding="utf-8"))
-        validate_artifact("contract", contract)
-    except (json.JSONDecodeError, ArtifactSchemaError) as exc:
-        raise TaskInputResolutionError(
-            f"invalid task contract for {language_key}/{task}: {exc}"
-        ) from exc
-
-    if contract.get("task") != task:
-        raise TaskInputResolutionError(
-            f"task contract identity mismatch: expected {task!r}, "
-            f"found {contract.get('task')!r}"
-        )
-    # Every contract records its own language, so this check applies to every
-    # language rather than being skipped for whichever ones omitted the field.
-    recorded_language = contract.get("language")
-    if recorded_language != language_key:
-        raise TaskInputResolutionError(
-            f"task contract language mismatch: expected {language_key!r}, "
-            f"found {recorded_language!r}"
-        )
+    contract = _load_task_contract(contract_path, language_key, task)
+    _validate_contract_identity(contract, language_key, task)
 
     reference_path = _protected_path(
         contract.get("reference"),
         field="reference",
         required_root=TARGET.benchmark / "tasks" / language_key / "references",
     )
-    expected_transformation = contract.get("transformation")
-    if reference_path.name != expected_transformation:
-        raise TaskInputResolutionError(
-            "contract reference does not match its transformation: "
-            f"{reference_path.name!r} != {expected_transformation!r}"
-        )
-
-    # The contract records the hash of the reference it was derived from. An
-    # edited reference therefore invalidates its contract loudly here, instead
-    # of the prompt quietly describing metamodels the reference no longer uses.
-    recorded_hash = contract.get("sourceHash")
-    actual_hash = file_sha256(reference_path)
-    if recorded_hash != actual_hash:
-        raise TaskInputResolutionError(
-            f"task contract is stale for {language_key}/{task}: "
-            f"reference hash {actual_hash} does not match recorded "
-            f"{recorded_hash}. Rebuild it with "
-            "python -m llm4mtl.task_contracts.build_language_task_contracts "
-            f"--language {language_key}"
-        )
-
-    metamodel_paths: list[Path] = []
-    metamodel_uris: list[str] = []
-    for model in contract["models"]:
-        recorded_uri = model.get("metamodelUri")
-        if recorded_uri and recorded_uri not in metamodel_uris:
-            metamodel_uris.append(str(recorded_uri))
-        recorded_path = model.get("metamodelFile")
-        if recorded_path is None:
-            continue
-        metamodel_path = _protected_path(
-            recorded_path,
-            field=f"models[{model['runtimeName']}].metamodelFile",
-            required_root=TARGET.benchmark / "metamodels",
-        )
-        if metamodel_path not in metamodel_paths:
-            metamodel_paths.append(metamodel_path)
+    _validate_reference_identity(contract, reference_path, language_key, task)
+    metamodel_paths, metamodel_uris = _contract_metamodels(contract)
 
     grammar_path = (
         TARGET.prompt_assets
@@ -193,6 +139,83 @@ def resolve_task_inputs(language: str, task: str) -> ResolvedTaskInputs:
         metamodel_uris=tuple(metamodel_uris),
         grammar=_read_input(grammar_path),
     )
+
+
+def _load_task_contract(
+    contract_path: Path, language: str, task: str
+) -> dict[str, Any]:
+    try:
+        contract = json.loads(contract_path.read_text(encoding="utf-8"))
+        validate_artifact("contract", contract)
+    except (json.JSONDecodeError, ArtifactSchemaError) as exc:
+        raise TaskInputResolutionError(
+            f"invalid task contract for {language}/{task}: {exc}"
+        ) from exc
+    return contract
+
+
+def _validate_contract_identity(
+    contract: dict[str, Any], language: str, task: str
+) -> None:
+    if contract.get("task") != task:
+        raise TaskInputResolutionError(
+            f"task contract identity mismatch: expected {task!r}, "
+            f"found {contract.get('task')!r}"
+        )
+    # Every contract records its own language, so this check applies to every
+    # language rather than being skipped for whichever ones omitted the field.
+    recorded_language = contract.get("language")
+    if recorded_language != language:
+        raise TaskInputResolutionError(
+            f"task contract language mismatch: expected {language!r}, "
+            f"found {recorded_language!r}"
+        )
+
+
+def _validate_reference_identity(
+    contract: dict[str, Any], reference_path: Path, language: str, task: str
+) -> None:
+    expected_transformation = contract.get("transformation")
+    if reference_path.name != expected_transformation:
+        raise TaskInputResolutionError(
+            "contract reference does not match its transformation: "
+            f"{reference_path.name!r} != {expected_transformation!r}"
+        )
+
+    # The contract records the hash of the reference it was derived from. An
+    # edited reference therefore invalidates its contract loudly here.
+    recorded_hash = contract.get("sourceHash")
+    actual_hash = file_sha256(reference_path)
+    if recorded_hash != actual_hash:
+        raise TaskInputResolutionError(
+            f"task contract is stale for {language}/{task}: "
+            f"reference hash {actual_hash} does not match recorded "
+            f"{recorded_hash}. Rebuild it with "
+            "python -m llm4mtl.task_contracts.build_language_task_contracts "
+            f"--language {language}"
+        )
+
+
+def _contract_metamodels(
+    contract: dict[str, Any],
+) -> tuple[list[Path], list[str]]:
+    metamodel_paths: list[Path] = []
+    metamodel_uris: list[str] = []
+    for model in contract["models"]:
+        recorded_uri = model.get("metamodelUri")
+        if recorded_uri and recorded_uri not in metamodel_uris:
+            metamodel_uris.append(str(recorded_uri))
+        recorded_path = model.get("metamodelFile")
+        if recorded_path is None:
+            continue
+        metamodel_path = _protected_path(
+            recorded_path,
+            field=f"models[{model['runtimeName']}].metamodelFile",
+            required_root=TARGET.benchmark / "metamodels",
+        )
+        if metamodel_path not in metamodel_paths:
+            metamodel_paths.append(metamodel_path)
+    return metamodel_paths, metamodel_uris
 
 
 def _protected_path(

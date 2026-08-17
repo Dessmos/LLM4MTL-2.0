@@ -82,6 +82,12 @@ def _check_declared_metamodels(
 
 def _declared_metamodels(spec: dict[str, Any]) -> list[str]:
     """Identifiers the LLM used to name metamodels, in stable de-duped order."""
+    raw = _declared_top_level_metamodels(spec)
+    raw.extend(_declared_model_uris(spec))
+    return _stable_unique_identifiers(raw)
+
+
+def _declared_top_level_metamodels(spec: dict[str, Any]) -> list[str]:
     raw: list[str] = []
     for item in spec.get("metamodels") or []:
         if isinstance(item, dict):
@@ -91,11 +97,19 @@ def _declared_metamodels(spec: dict[str, Any]) -> list[str]:
                     break
         elif isinstance(item, str) and item:
             raw.append(Path(item).stem)
+    return raw
+
+
+def _declared_model_uris(spec: dict[str, Any]) -> list[str]:
+    raw: list[str] = []
     for test in spec.get("tests", []):
         for model in test.get("models") or []:
             if isinstance(model, dict) and model.get("metamodelUri"):
                 raw.append(str(model["metamodelUri"]))
+    return raw
 
+
+def _stable_unique_identifiers(raw: list[str]) -> list[str]:
     seen: set[str] = set()
     unique: list[str] = []
     for identifier in raw:
@@ -142,30 +156,56 @@ def _match_model(
 
     # Multiple models share this role (e.g. OO2DB). Disambiguate deterministically.
     name_key = str(model.get("name") or "").lower()
-    for candidate in candidates:
-        if name_key and candidate.runtime_name.lower() == name_key:
-            return candidate
+    name_match = _runtime_name_match(candidates, name_key)
+    if name_match is not None:
+        return name_match
 
     llm_uri = str(model.get("metamodelUri") or "").lower()
-    uri_matches = [
-        candidate
-        for candidate in candidates
-        if llm_uri and (candidate.metamodel_uri or "").lower() == llm_uri
-    ]
+    uri_matches = _uri_matches(candidates, llm_uri)
     if len(uri_matches) == 1:
         return uri_matches[0]
 
     wanted = asserted_types.get(str(model.get("name")), set())
-    if wanted:
-        best = max(candidates, key=lambda candidate: len(wanted & set(candidate.available_types)))
-        if wanted & set(best.available_types):
-            return best
+    type_match = _asserted_type_match(candidates, wanted)
+    if type_match is not None:
+        return type_match
 
     violations.append(
         f"test #{test_index}: cannot map {role} model '{model.get('name')}' to a "
         f"unique contract model for '{contract.task}'"
     )
     return None
+
+
+def _runtime_name_match(
+    candidates: list[ModelContract], name_key: str
+) -> ModelContract | None:
+    for candidate in candidates:
+        if name_key and candidate.runtime_name.lower() == name_key:
+            return candidate
+    return None
+
+
+def _uri_matches(
+    candidates: list[ModelContract], llm_uri: str
+) -> list[ModelContract]:
+    return [
+        candidate
+        for candidate in candidates
+        if llm_uri and (candidate.metamodel_uri or "").lower() == llm_uri
+    ]
+
+
+def _asserted_type_match(
+    candidates: list[ModelContract], wanted: set[str]
+) -> ModelContract | None:
+    if not wanted:
+        return None
+    best = max(
+        candidates,
+        key=lambda candidate: len(wanted & set(candidate.available_types)),
+    )
+    return best if wanted & set(best.available_types) else None
 
 
 def _apply_binding(

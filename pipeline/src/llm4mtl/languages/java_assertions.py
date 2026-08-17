@@ -11,6 +11,8 @@ from llm4mtl.semantic_tests.codegen.java_rendering import (
     java_string_list,
 )
 
+ALL_OF_TYPE_LOOP = "        for (EObject object : allOfType(roots, typeName)) {"
+
 
 def render_assertions(
     assertions: list[dict[str, Any]],
@@ -155,7 +157,7 @@ def helpers() -> list[str]:
         "",
         "    private List<String> pathValues(List<EObject> roots, String typeName, String path) {",
         "        List<String> values = new ArrayList<>();",
-        "        for (EObject object : allOfType(roots, typeName)) {",
+        ALL_OF_TYPE_LOOP,
         "            for (Object value : pathValuesFrom(object, path)) values.add(stringValue(value));",
         "        }",
         "        return values;",
@@ -163,7 +165,7 @@ def helpers() -> list[str]:
         "",
         "    private List<String> referencePairs(List<EObject> roots, String typeName, String sourcePath, String targetPath) {",
         "        List<String> pairs = new ArrayList<>();",
-        "        for (EObject object : allOfType(roots, typeName)) {",
+        ALL_OF_TYPE_LOOP,
         "            for (Object source : pathValuesFrom(object, sourcePath)) {",
         "                for (Object target : pathValuesFrom(object, targetPath)) {",
         "                    pairs.add(stringValue(source) + \"->\" + stringValue(target));",
@@ -175,7 +177,7 @@ def helpers() -> list[str]:
         "",
         "    private List<String> treePaths(List<EObject> roots, String typeName, String labelFeature, String childrenFeature) {",
         "        List<String> paths = new ArrayList<>();",
-        "        for (EObject object : allOfType(roots, typeName)) {",
+        ALL_OF_TYPE_LOOP,
         "            if (object.eContainer() == null) collectTreePaths(object, \"\", labelFeature, childrenFeature, paths);",
         "        }",
         "        return paths;",
@@ -197,7 +199,7 @@ def helpers() -> list[str]:
         "",
         "    private void assertCollectionSize(List<EObject> roots, String typeName, String[] features, String expectedSignature, String path, int expectedSize, String message) {",
         "        boolean matched = false;",
-        "        for (EObject object : allOfType(roots, typeName)) {",
+        ALL_OF_TYPE_LOOP,
         "            if (expectedSignature.equals(signatureOf(object, features))) {",
         "                matched = true;",
         "                assertEquals(expectedSize, pathValuesFrom(object, path).size(), message);",

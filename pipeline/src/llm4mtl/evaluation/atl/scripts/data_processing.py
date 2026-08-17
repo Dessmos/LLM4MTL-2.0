@@ -39,7 +39,7 @@ def convert_to_bool(val):
     # Try to convert to boolean
     try:
         return bool(val)
-    except:
+    except (TypeError, ValueError):
         return np.nan
 
 
@@ -60,6 +60,74 @@ def convert_parsed_to_bool(val):
     if isinstance(val, str):
         return val.strip().lower() in ['true', '1', 'yes']
     return bool(val)
+
+
+def _merge_test_pass_file(df, test_file):
+    test_df = pd.read_csv(test_file)
+    required = {'test_pass', 'LLM', 'Strategy', 'File'}
+    if not required.issubset(test_df.columns):
+        return None
+    test_pass_df = test_df[['LLM', 'Strategy', 'File', 'test_pass']].copy()
+    merged = df.merge(
+        test_pass_df,
+        on=['LLM', 'Strategy', 'File'],
+        how='left',
+        suffixes=('', '_merged'),
+    )
+    if 'test_pass_merged' in merged.columns:
+        merged['test_pass'] = merged['test_pass_merged']
+        merged = merged.drop(columns=['test_pass_merged'])
+    return merged
+
+
+def _prepare_test_pass(df, raw_csv_path):
+    if 'test_pass' in df.columns:
+        df['test_pass'] = df['test_pass'].apply(convert_to_bool)
+        print(f"test_pass data type: {df['test_pass'].dtype}")
+        print(f"test_pass non-null count: {df['test_pass'].notna().sum()}/{len(df)}")
+        print(f"test_pass=True count: {(df['test_pass'] == True).sum()}")
+        print(f"test_pass=False count: {(df['test_pass'] == False).sum()}")
+        return df
+
+    print("Warning: CSV file missing test_pass column, trying to find from other locations...")
+    repo_root = Path(raw_csv_path).resolve().parent.parent
+    possible_test_files = [
+        repo_root / 'ATL_Tests_New' / 'atl_test_results.csv',
+        repo_root / 'ATLParser' / 'atl_test_results.csv',
+    ]
+    test_pass_merged = False
+    for test_file in possible_test_files:
+        if not test_file.exists():
+            continue
+        print(f"  Trying to merge test_pass data from {test_file}...")
+        try:
+            merged = _merge_test_pass_file(df, test_file)
+        except Exception as e:
+            print(f"  Cannot read from {test_file}: {e}")
+            continue
+        if merged is None:
+            continue
+        df = merged
+        print(f"  Successfully merged {df['test_pass'].notna().sum()} test_pass records")
+        test_pass_merged = True
+        break
+    if not test_pass_merged:
+        print("  No file containing test_pass found, setting to NaN")
+        df['test_pass'] = np.nan
+    return df
+
+
+def _raise_for_unmatched_files(df, file_to_loc):
+    unmatched_files = df[df['reference_LOC'].isna()]['File'].unique()
+    if len(unmatched_files) == 0:
+        return
+    print("\nError: The following Files cannot be matched to ground truth files:")
+    for file_name in sorted(unmatched_files):
+        print(f"  - {file_name}")
+    print("\nAvailable ground truth files:")
+    for file_name in sorted(file_to_loc.keys()):
+        print(f"  - {file_name}")
+    raise ValueError("Some Files cannot be matched to ground truth files")
 
 
 def load_and_prepare_data(raw_csv_path, gt_dir=None):
@@ -86,45 +154,7 @@ def load_and_prepare_data(raw_csv_path, gt_dir=None):
     if missing_cols:
         raise ValueError(f"CSV file missing required columns: {missing_cols}")
     
-    # Check test_pass column, try to merge from other files if missing or set to NaN
-    if 'test_pass' not in df.columns:
-        print("Warning: CSV file missing test_pass column, trying to find from other locations...")
-        # Try to find from ATL_Tests_New directory
-        repo_root = Path(raw_csv_path).resolve().parent.parent
-        possible_test_files = [
-            repo_root / 'ATL_Tests_New' / 'atl_test_results.csv',
-            repo_root / 'ATLParser' / 'atl_test_results.csv',
-        ]
-        
-        test_pass_merged = False
-        for test_file in possible_test_files:
-            if test_file.exists():
-                print(f"  Trying to merge test_pass data from {test_file}...")
-                try:
-                    test_df = pd.read_csv(test_file)
-                    if 'test_pass' in test_df.columns and 'LLM' in test_df.columns and 'Strategy' in test_df.columns and 'File' in test_df.columns:
-                        # Merge test_pass data
-                        test_pass_df = test_df[['LLM', 'Strategy', 'File', 'test_pass']].copy()
-                        df = df.merge(test_pass_df, on=['LLM', 'Strategy', 'File'], how='left', suffixes=('', '_merged'))
-                        if 'test_pass_merged' in df.columns:
-                            df['test_pass'] = df['test_pass_merged']
-                            df = df.drop(columns=['test_pass_merged'])
-                        print(f"  Successfully merged {df['test_pass'].notna().sum()} test_pass records")
-                        test_pass_merged = True
-                        break
-                except Exception as e:
-                    print(f"  Cannot read from {test_file}: {e}")
-                    continue
-        
-        if not test_pass_merged:
-            print("  No file containing test_pass found, setting to NaN")
-            df['test_pass'] = np.nan
-    else:
-        df['test_pass'] = df['test_pass'].apply(convert_to_bool)
-        print(f"test_pass data type: {df['test_pass'].dtype}")
-        print(f"test_pass non-null count: {df['test_pass'].notna().sum()}/{len(df)}")
-        print(f"test_pass=True count: {(df['test_pass'] == True).sum()}")
-        print(f"test_pass=False count: {(df['test_pass'] == False).sum()}")
+    df = _prepare_test_pass(df, raw_csv_path)
     
     # Convert Parsed to boolean
     df['Parsed'] = df['Parsed'].apply(convert_parsed_to_bool)
@@ -145,21 +175,21 @@ def load_and_prepare_data(raw_csv_path, gt_dir=None):
     # Match reference_LOC for each File
     df['reference_LOC'] = df['File'].apply(lambda x: match_file_to_ground_truth(x, file_to_loc))
     
-    # Check for unmatched Files
-    unmatched_files = df[df['reference_LOC'].isna()]['File'].unique()
-    if len(unmatched_files) > 0:
-        print(f"\nError: The following Files cannot be matched to ground truth files:")
-        for f in sorted(unmatched_files):
-            print(f"  - {f}")
-        print(f"\nAvailable ground truth files:")
-        for f in sorted(file_to_loc.keys()):
-            print(f"  - {f}")
-        raise ValueError("Some Files cannot be matched to ground truth files")
+    _raise_for_unmatched_files(df, file_to_loc)
     
     # Calculate errors_per_LOC
     df['errors_per_LOC'] = df['ProblemCount'] / df['reference_LOC']
     
     return df, gt_dir
+
+
+def _add_sig_marker(value, llm, strategy, metric, sig_dict):
+    if pd.isna(value):
+        return value
+    key = (llm, strategy, metric)
+    if sig_dict.get(key, False):
+        return f"{value:.3f}*" if isinstance(value, float) else f"{value}*"
+    return f"{value:.3f}" if isinstance(value, float) else str(value)
 
 
 def add_significance_markers(summary_df, results_df):
@@ -180,29 +210,20 @@ def add_significance_markers(summary_df, results_df):
             key = (row['LLM'], row['strategy'], row['metric'])
             sig_dict[key] = True
     
-    # Add significance marker function
-    def add_sig_marker(value, llm, strategy, metric):
-        if pd.isna(value):
-            return value
-        key = (llm, strategy, metric)
-        if sig_dict.get(key, False):
-            return f"{value:.3f}*" if isinstance(value, float) else f"{value}*"
-        return f"{value:.3f}" if isinstance(value, float) else str(value)
-    
     # Add markers according to summary table column names
     summary_with_sig = summary_df.copy()
     
     # Process CHRF_Score
     if 'CHRF_Score' in summary_with_sig.columns:
         summary_with_sig['CHRF_Score'] = summary_with_sig.apply(
-            lambda row: add_sig_marker(row['CHRF_Score'], row['LLM'], row['Strategy'], 'CHRF_Score'),
+            lambda row: _add_sig_marker(row['CHRF_Score'], row['LLM'], row['Strategy'], 'CHRF_Score', sig_dict),
             axis=1
         )
     
     # Process errors_per_LOC
     if 'errors_per_LOC' in summary_with_sig.columns:
         summary_with_sig['errors_per_LOC'] = summary_with_sig.apply(
-            lambda row: add_sig_marker(row['errors_per_LOC'], row['LLM'], row['Strategy'], 'errors_per_LOC'),
+            lambda row: _add_sig_marker(row['errors_per_LOC'], row['LLM'], row['Strategy'], 'errors_per_LOC', sig_dict),
             axis=1
         )
     
@@ -210,7 +231,7 @@ def add_significance_markers(summary_df, results_df):
     parsed_cols = [col for col in summary_with_sig.columns if 'Parsed' in col]
     for col in parsed_cols:
         summary_with_sig[col] = summary_with_sig.apply(
-            lambda row: add_sig_marker(row[col], row['LLM'], row['Strategy'], 'Parsed'),
+            lambda row: _add_sig_marker(row[col], row['LLM'], row['Strategy'], 'Parsed', sig_dict),
             axis=1
         )
     
@@ -218,9 +239,8 @@ def add_significance_markers(summary_df, results_df):
     test_pass_cols = [col for col in summary_with_sig.columns if 'test_pass' in col.lower()]
     for col in test_pass_cols:
         summary_with_sig[col] = summary_with_sig.apply(
-            lambda row: add_sig_marker(row[col], row['LLM'], row['Strategy'], 'test_pass'),
+            lambda row: _add_sig_marker(row[col], row['LLM'], row['Strategy'], 'test_pass', sig_dict),
             axis=1
         )
     
     return summary_with_sig
-

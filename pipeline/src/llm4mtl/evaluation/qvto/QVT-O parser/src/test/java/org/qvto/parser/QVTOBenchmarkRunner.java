@@ -145,8 +145,8 @@ public class QVTOBenchmarkRunner {
         hypothesis = hypothesis.strip();
         reference = reference.strip();
 
-        if (hypothesis.isEmpty() && reference.isEmpty()) return 1.0;
-        if (hypothesis.isEmpty() || reference.isEmpty()) return 0.0;
+        Double emptyInputScore = emptyInputChrF(hypothesis, reference);
+        if (emptyInputScore != null) return emptyInputScore;
 
         double totalPrecision = 0;
         double totalRecall = 0;
@@ -184,6 +184,12 @@ public class QVTOBenchmarkRunner {
 
         double betaSq = CHRF_BETA * CHRF_BETA;
         return (1 + betaSq) * avgPrecision * avgRecall / (betaSq * avgPrecision + avgRecall);
+    }
+
+    private static Double emptyInputChrF(String hypothesis, String reference) {
+        if (hypothesis.isEmpty() && reference.isEmpty()) return 1.0;
+        if (hypothesis.isEmpty() || reference.isEmpty()) return 0.0;
+        return null;
     }
 
     static Map<String, Integer> extractCharNgrams(String text, int n) {

@@ -30,6 +30,7 @@ STRATEGY_MAP = {
 }
 
 LLM_ORDER = ["gpt-5", "gemini-2-5-pro", "claude-sonnet-4"]
+SIGNIFICANT_MARKER = "*** YES ***"
 
 
 # ── Helper: Friedman test ─────────────────────────────────────────────────────
@@ -113,7 +114,7 @@ for strat_key, strat_label in STRATEGY_MAP.items():
         means[llm] = sub[sub["LLM"] == llm]["ErrorsPerLineOfCode"].mean()
 
     p = friedman_p(parsed_df, strat_key, "ErrorsPerLineOfCode")
-    sig = "*** YES ***" if (not np.isnan(p) and p < 0.05) else "no"
+    sig = SIGNIFICANT_MARKER if (not np.isnan(p) and p < 0.05) else "no"
     print(f"{strat_label:<25} {means['gpt-5']:>10.4f} {means['gemini-2-5-pro']:>10.4f} "
           f"{means['claude-sonnet-4']:>10.4f}  {p:>10.4f}  {sig}")
 
@@ -140,7 +141,7 @@ for strat_key, strat_label in STRATEGY_MAP.items():
         means[llm] = sub[sub["LLM"] == llm]["Score"].mean()
 
     p = friedman_p(chrf_df, strat_key, "Score", task_col="File")
-    sig = "*** YES ***" if (not np.isnan(p) and p < 0.05) else "no"
+    sig = SIGNIFICANT_MARKER if (not np.isnan(p) and p < 0.05) else "no"
     print(f"{strat_label:<25} {means['gpt-5']:>10.4f} {means['gemini-2-5-pro']:>10.4f} "
           f"{means['claude-sonnet-4']:>10.4f}  {p:>10.4f}  {sig}")
 
@@ -164,7 +165,7 @@ for strat_key, strat_label in STRATEGY_MAP.items():
         rates[llm] = sub[sub["LLM"] == llm]["ParsedBin"].mean()
 
     p = cochran_p(parsed_df2, strat_key, "ParsedBin")
-    sig = "*** YES ***" if (not np.isnan(p) and p < 0.05) else "no"
+    sig = SIGNIFICANT_MARKER if (not np.isnan(p) and p < 0.05) else "no"
     print(f"{strat_label:<25} {rates['gpt-5']:>10.4f} {rates['gemini-2-5-pro']:>10.4f} "
           f"{rates['claude-sonnet-4']:>10.4f}  {p:>10.4f}  {sig}")
 
@@ -202,7 +203,7 @@ for strat_key, strat_label in STRATEGY_MAP.items():
     else:
         p = cochran_q_p(pivot.values)
 
-    sig = "*** YES ***" if (not np.isnan(p) and p < 0.05) else "no"
+    sig = SIGNIFICANT_MARKER if (not np.isnan(p) and p < 0.05) else "no"
     print(f"{strat_label:<25} {rates.get('gpt-5', float('nan')):>10.4f} "
           f"{rates.get('gemini-2-5-pro', float('nan')):>10.4f} "
           f"{rates.get('claude-sonnet-4', float('nan')):>10.4f}  {p:>10.4f}  {sig}")

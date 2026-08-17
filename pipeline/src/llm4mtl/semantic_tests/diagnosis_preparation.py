@@ -433,20 +433,24 @@ def _recorded_failures(reports: tuple[Path, ...]) -> list[SurefireFailure]:
             # file itself stays archived; nothing is inferred from its absence.
             continue
         for case in root.iter("testcase"):
-            error = case.find("error")
-            node = error if error is not None else case.find("failure")
-            if node is None:
-                continue
-            failures.append(
-                SurefireFailure(
-                    report=path,
-                    kind="runtime_error" if error is not None else "assertion_failure",
-                    test_class=str(case.get("classname") or ""),
-                    test_method=str(case.get("name") or ""),
-                    message=str(node.get("message") or ""),
-                )
-            )
+            failure = _recorded_failure(path, case)
+            if failure is not None:
+                failures.append(failure)
     return failures
+
+
+def _recorded_failure(path: Path, case: ET.Element) -> SurefireFailure | None:
+    error = case.find("error")
+    node = error if error is not None else case.find("failure")
+    if node is None:
+        return None
+    return SurefireFailure(
+        report=path,
+        kind="runtime_error" if error is not None else "assertion_failure",
+        test_class=str(case.get("classname") or ""),
+        test_method=str(case.get("name") or ""),
+        message=str(node.get("message") or ""),
+    )
 
 
 def _match_test_case(semantic_cases: dict[str, Any], test_method: str) -> str:
