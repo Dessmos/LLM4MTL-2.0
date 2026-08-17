@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -31,11 +32,18 @@ def run_payload(**overrides: object) -> dict[str, object]:
 class StageServiceTests(unittest.TestCase):
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
+        self._diagnoses = Path(self._tmp.name).parent / f"{Path(self._tmp.name).name}-diagnoses"
         patcher = patch(
             "llm4mtl.stage_service.app._runs_root", return_value=Path(self._tmp.name)
         )
         patcher.start()
         self.addCleanup(patcher.stop)
+        diagnoses_patcher = patch(
+            "llm4mtl.stage_service.app._diagnoses_root", return_value=self._diagnoses
+        )
+        diagnoses_patcher.start()
+        self.addCleanup(diagnoses_patcher.stop)
+        self.addCleanup(lambda: shutil.rmtree(self._diagnoses, ignore_errors=True))
         self.addCleanup(self._tmp.cleanup)
         self.client = TestClient(app)
 
@@ -279,23 +287,22 @@ class StageServiceTests(unittest.TestCase):
 
         self.assertEqual(200, first.status_code)
         self.assertEqual(1, first.json()["attempt"])
+        # The verdict is what downstream work consumes, so it is stored in its
+        # own area keyed by the run, not among that run's working state.
         self.assertEqual(
-            "responses/failure-diagnosis/attempt-001/diagnosis.json",
+            "svc-diagnosis/attempt-001/diagnosis.json",
             first.json()["artifact"],
         )
         self.assertEqual("gpt-5", first.json()["model"])
         self.assertEqual(2, second.json()["attempt"])
 
-        artifact = (
-            Path(self._tmp.name)
-            / "svc-diagnosis"
-            / "responses"
-            / "failure-diagnosis"
-            / "attempt-001"
-            / "diagnosis.json"
-        )
+        artifact = self._diagnoses.joinpath(first.json()["artifact"])
         self.assertTrue(artifact.is_file())
         self.assertEqual("openai", read_json(artifact)["provider"])
+        # A consumer never has to open the run directory to find it.
+        self.assertFalse(
+            (Path(self._tmp.name) / "svc-diagnosis" / "responses" / "failure-diagnosis").exists()
+        )
 
     def _failing_execution(self, run_id: str, index: dict[str, object]):
         """Drive one failing execution stage with a prepared diagnosis index."""

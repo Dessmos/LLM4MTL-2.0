@@ -25,6 +25,7 @@ from llm4mtl.paths import REPO_ROOT, TARGET
 from llm4mtl.provenance import input_hashes
 from llm4mtl.semantic_tests.diagnosis_preparation import (
     diagnosis_artifact_references,
+    diagnosis_response_dir,
     prepare_after_execution_stage,
     prepare_execution_diagnosis,
 )
@@ -415,6 +416,50 @@ class DiagnosisPreparationTests(unittest.TestCase):
         references = diagnosis_artifact_references(self.run_dir, index)
         self.assertEqual(entry["report"], references["failure_report_path"])
         self.assertIn("failure_report_index", references)
+
+    def test_a_diagnosable_attempt_gets_its_trace_directory(self) -> None:
+        """The place a diagnosis records itself is prepared before it runs.
+
+        The n8n write node cannot create the path it writes to, and the `mkdir`
+        alternative needs a node a default n8n container does not ship. So the
+        per-attempt directory is made here, where the attempt number is known,
+        and the workflow only has to name files inside it.
+        """
+        self._complete_failing_run()
+        self._write_snapshot()
+
+        directory = diagnosis_response_dir(self.run_dir, 1)
+        self.assertFalse(directory.exists())
+
+        prepare_execution_diagnosis(self.run_dir, 1)
+
+        self.assertTrue(directory.is_dir())
+        self.assertEqual(
+            ("responses", "source-diagnosis", "execution-attempt-001"),
+            directory.relative_to(self.run_dir).parts,
+        )
+
+        # Re-reading a prepared attempt must leave it in place, so a run whose
+        # evidence predates this can still be diagnosed.
+        shutil.rmtree(directory)
+        prepare_execution_diagnosis(self.run_dir, 1)
+        self.assertTrue(directory.is_dir())
+
+    def test_an_attempt_with_nothing_diagnosable_gets_no_trace_directory(self) -> None:
+        """An empty directory would claim a diagnosis was possible when none was."""
+        self._complete_failing_run()
+        self._write_snapshot()
+        self._write_observation(
+            root=self.run_dir / "observations",
+            role="reference_transformation",
+            assertions_passed=False,
+            failure_stage="assertion_failure",
+        )
+
+        index = prepare_execution_diagnosis(self.run_dir, 1)
+
+        self.assertEqual(0, index["counts"]["diagnosis_eligible"])
+        self.assertFalse(diagnosis_response_dir(self.run_dir, 1).exists())
 
     def test_an_ineligible_report_is_never_selected_for_diagnosis(self) -> None:
         """Eligibility stays the gate that selection honours.

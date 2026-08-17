@@ -224,13 +224,15 @@ Content-Type: application/json
 }
 ```
 
-The service validates the payload, records:
+The service validates the payload and records the verdict outside the run, in
+the area consumers read:
 
 ```text
-responses/failure-diagnosis/attempt-NNN/diagnosis.json
+artifacts/work/diagnoses/<run-id>/attempt-NNN/diagnosis.json
 ```
 
-and appends `diagnosis_recorded`. Unknown fields and invalid classifications
+The returned `artifact` is that path relative to `artifacts/work/diagnoses/`.
+The service then appends `diagnosis_recorded` to the run's own journal. Unknown fields and invalid classifications
 return `422`.
 
 ## Persistence and concurrency

@@ -75,5 +75,3 @@ class RunPaths:
     def response_attempt_dir(self, operation: str, attempt: int) -> Path:
         return self.response_operation_dir(operation) / f"attempt-{attempt:03d}"
 
-    def diagnosis_response(self, attempt: int) -> Path:
-        return self.response_attempt_dir("failure-diagnosis", attempt) / "diagnosis.json"

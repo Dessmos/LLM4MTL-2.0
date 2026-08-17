@@ -209,8 +209,8 @@ artifacts/work/runs/<run-id>/
 ├── observations/
 ├── workspaces/
 ├── responses/
-│   └── failure-diagnosis/
-│       └── attempt-NNN/diagnosis.json
+│   └── source-diagnosis/
+│       └── execution-attempt-NNN/       # what a diagnosis was asked and answered
 └── stages/
     └── <contract-stage>/
         └── attempts/
@@ -218,6 +218,20 @@ artifacts/work/runs/<run-id>/
                 ├── result.json
                 └── evidence.json
 ```
+
+A run directory holds the state of one run: its workspaces, its logs, and the
+evidence its stages recorded. Results other work consumes do not live there,
+because handing a consumer a run means telling them which parts to ignore. The
+failure diagnosis is such a result — refinement routes on it, reporting counts
+it, analysis reads it across runs — so it is stored in its own area, keyed by
+the run that produced it and carrying no run state:
+
+```text
+artifacts/work/diagnoses/<run-id>/attempt-NNN/diagnosis.json
+```
+
+The run keeps no copy and no pointer; `events.jsonl` still records that a
+`diagnosis_recorded` event happened, and the run id is what links the two.
 
 Invariants:
 

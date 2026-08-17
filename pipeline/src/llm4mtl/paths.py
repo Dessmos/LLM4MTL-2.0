@@ -181,6 +181,22 @@ class TargetLayout:
         return self.artifacts_work / "runs"
 
     @property
+    def diagnoses(self) -> Path:
+        """Failure diagnoses, kept out of the runs that produced them.
+
+        A run directory is working state — workspaces, locks, the build log, the
+        evidence a stage happened to record. A diagnosis is a result other work
+        consumes: refinement routes on it, reporting counts it, analysis reads it
+        across runs. Handing that to a consumer meant handing them the whole run
+        and telling them which parts to ignore, so it lives in its own area,
+        keyed by the run that produced it.
+        """
+        return self.artifacts_work / "diagnoses"
+
+    def run_diagnoses_dir(self, run_id: str) -> Path:
+        return self.diagnoses / run_id
+
+    @property
     def artifact_experiments(self) -> Path:
         return self.artifacts_work / "experiments"
 

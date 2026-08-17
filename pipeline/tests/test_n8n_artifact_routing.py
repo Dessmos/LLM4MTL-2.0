@@ -155,6 +155,27 @@ class N8nArtifactRoutingTests(unittest.TestCase):
         build_code = nodes[build_node]["parameters"]["jsCode"]
         for derived in ("artifact_directory", "request_path", "raw_response_path", "result_path"):
             self.assertIn(f"{derived}:", build_code)
+
+        # The directory the workflow writes into is the one the stage service
+        # prepares, so the two must name it identically. Below it the n8n
+        # execution id names files, never a further directory the write node
+        # would have to create.
+        from llm4mtl.semantic_tests.diagnosis_preparation import diagnosis_response_dir
+
+        prepared = diagnosis_response_dir(Path("/run"), 1).as_posix()
+        self.assertTrue(prepared.endswith("responses/source-diagnosis/execution-attempt-001"))
+        self.assertIn(
+            "/responses/source-diagnosis/execution-attempt-${executionAttempt}`",
+            build_code,
+        )
+        self.assertIn("const artifactPrefix = `${artifactDirectory}/n8n-execution-", build_code)
+        for derived, suffix in (
+            ("request_path", "__diagnosis_request.json"),
+            ("raw_response_path", "__diagnosis_raw_response.txt"),
+            ("result_path", "__diagnosis_result.json"),
+        ):
+            self.assertIn(f"{derived}: `${{artifactPrefix}}{suffix}`", build_code)
+        self.assertNotIn("n8n-execution-${executionId}`;", build_code.split("artifactPrefix")[0])
         # Writing a file creates its parent directories, so the diagnosis needs
         # no shell step to prepare them. Execute Command is unavailable in a
         # default n8n container, where it imports as an unrecognized node and

@@ -53,6 +53,8 @@ from llm4mtl.serialization.json_io import read_json, write_json_once
 SCHEMA_VERSION = "1.0"
 INDEX_FILENAME = "index.json"
 REPORTS_DIRNAME = "reports"
+RESPONSES_DIRNAME = "responses"
+SOURCE_DIAGNOSIS_DIRNAME = "source-diagnosis"
 EXECUTION_STAGE = "execution"
 SYNTAX_STAGE = "syntax-validation"
 SAFE_NAME = re.compile(r"[^A-Za-z0-9._-]+")
@@ -214,7 +216,12 @@ def prepare_execution_diagnosis(run_dir: Path, attempt: int) -> dict[str, Any]:
     paths = RunPaths(root=Path(run_dir).resolve())
     index_path = _diagnosis_dir(paths, attempt) / INDEX_FILENAME
     if index_path.is_file():
-        return read_json(index_path)
+        existing = read_json(index_path)
+        # Idempotent: a re-read must still leave the trace directory in place,
+        # so a run whose evidence was prepared before this existed can be
+        # diagnosed without re-deriving it.
+        _ensure_diagnosis_response_dir(paths, attempt, existing)
+        return existing
 
     evidence_path = paths.stage_attempt_evidence(EXECUTION_STAGE, attempt)
     if not evidence_path.is_file():
@@ -249,7 +256,44 @@ def prepare_execution_diagnosis(run_dir: Path, attempt: int) -> dict[str, Any]:
         "pairs": pairs,
     }
     write_json_once(index_path, index)
+    _ensure_diagnosis_response_dir(paths, attempt, index)
     return index
+
+
+def diagnosis_response_dir(run_dir: Path, attempt: int) -> Path:
+    """Where a diagnosis of this execution attempt records what it was asked.
+
+    The trace a diagnosis leaves — the exact request, the raw answer, the
+    validated verdict — belongs to the attempt that produced the evidence, so it
+    is grouped by attempt and named by the n8n execution that wrote it. The
+    directory is prepared here rather than by the workflow because the node that
+    writes a file cannot create the path to it, and shelling out to `mkdir` ties
+    the workflow to a node that a default n8n container does not ship.
+    """
+    return (
+        Path(run_dir)
+        / RESPONSES_DIRNAME
+        / SOURCE_DIAGNOSIS_DIRNAME
+        / f"execution-attempt-{attempt:03d}"
+    )
+
+
+def _ensure_diagnosis_response_dir(
+    paths: RunPaths, attempt: int, index: dict[str, Any]
+) -> None:
+    """Create the trace directory only for an attempt that can be diagnosed.
+
+    An attempt with nothing diagnosable gets no directory: an empty one would
+    claim a diagnosis was possible and none was.
+    """
+    if int(index.get("counts", {}).get("diagnosis_eligible", 0)) <= 0:
+        return
+    try:
+        diagnosis_response_dir(paths.root, attempt).mkdir(parents=True, exist_ok=True)
+    except OSError:
+        # Preparation must not fail because the trace directory could not be
+        # made; the workflow reports that far more precisely than a stage can.
+        return
 
 
 def _failed_pairs(evidence: dict[str, Any]) -> Iterator[dict[str, Any]]:

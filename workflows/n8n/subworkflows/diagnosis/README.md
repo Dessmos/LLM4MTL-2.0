@@ -80,17 +80,26 @@ execution so an n8n retry cannot overwrite the earlier evidence:
 artifacts/work/runs/<run-id>/
   responses/source-diagnosis/
     execution-attempt-NNN/
-      n8n-execution-<id>/
-        diagnosis_request.json
-        diagnosis_raw_response.txt
-        diagnosis_result.json
+      n8n-execution-<id>__diagnosis_request.json
+      n8n-execution-<id>__diagnosis_raw_response.txt
+      n8n-execution-<id>__diagnosis_result.json
 ```
+
+The `execution-attempt-NNN` directory is created by the stage service when it
+prepares the evidence, not by the workflow: a write node cannot create the path
+it writes to, and the `mkdir` alternative needs the Execute Command node, which
+a default n8n container does not ship. The n8n execution id therefore names the
+files instead of a further directory level, which is what keeps an n8n retry
+from overwriting the earlier trace.
 
 The workflow also maps the verdict to the existing schema-validated canonical
 diagnosis artifact. The parent workflow owns all routing from `classification`.
-Each canonical diagnosis attempt is stored as:
+The verdict is a result other work consumes, so the stage service stores it
+outside the run rather than among that run's state:
 
 ```text
-artifacts/work/runs/<run-id>/
-  responses/failure-diagnosis/attempt-NNN/diagnosis.json
+artifacts/work/diagnoses/<run-id>/attempt-NNN/diagnosis.json
 ```
+
+Only the trace above stays in the run. Nothing in the run points at the verdict;
+the run id is the link.

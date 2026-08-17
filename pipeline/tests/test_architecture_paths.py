@@ -79,6 +79,21 @@ class ActivePathTests(unittest.TestCase):
         )
         self.assertEqual(TARGET.workflows / "tests", MIGRATION_MAP["n8n/tests"][1])
 
+    def test_results_consumers_read_are_not_kept_inside_a_run(self) -> None:
+        """A run holds state; what other work consumes lives beside it.
+
+        Reaching into a run directory for a result means knowing which of its
+        parts are workspaces, locks, and logs. The diagnosis area exists so a
+        consumer needs the run id and nothing else.
+        """
+        self.assertEqual(TARGET.artifacts_work / "diagnoses", TARGET.diagnoses)
+        self.assertEqual(TARGET.diagnoses / "run-1", TARGET.run_diagnoses_dir("run-1"))
+        self.assertNotEqual(TARGET.runs, TARGET.diagnoses)
+        self.assertFalse(
+            TARGET.diagnoses.is_relative_to(TARGET.runs),
+            "a result consumers read must not sit inside the run's own state",
+        )
+
 
 class N8nWorkflowTests(unittest.TestCase):
     def test_connections_reference_existing_nodes(self) -> None:

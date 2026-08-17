@@ -40,6 +40,10 @@ def _runs_root():
     return TARGET.runs
 
 
+def _diagnoses_root():
+    return TARGET.diagnoses
+
+
 def _open_run(run_id: str) -> run_store.RunPaths:
     """Open a run, translating a malformed or escaping id into a 400."""
     try:
@@ -246,7 +250,7 @@ def record_diagnosis(run_id: str, request: DiagnosisRecordRequest) -> dict[str, 
     paths, _ = _require_manifest(run_id)
 
     diagnosis = request.model_dump(mode="json", exclude_none=True)
-    attempt, artifact = run_store.record_diagnosis(paths, diagnosis)
+    attempt, artifact = run_store.record_diagnosis(paths, diagnosis, _diagnoses_root())
     run_store.append_event(
         paths,
         "diagnosis_recorded",

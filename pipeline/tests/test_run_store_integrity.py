@@ -123,7 +123,12 @@ class AttemptAtomicityTests(unittest.TestCase):
 
             with ThreadPoolExecutor(max_workers=8) as pool:
                 results = list(
-                    pool.map(lambda _: run_store.record_diagnosis(paths, diagnosis), range(8))
+                    pool.map(
+                        lambda _: run_store.record_diagnosis(
+                            paths, diagnosis, Path(temp_dir) / "diagnoses"
+                        ),
+                        range(8),
+                    )
                 )
 
             self.assertEqual(8, len({attempt for attempt, _ in results}))
@@ -173,6 +178,7 @@ class PersistedSchemaTests(unittest.TestCase):
                         "model": "gpt-5",
                         "created_at": "not-a-date",
                     },
+                    Path(temp_dir) / "diagnoses",
                 )
 
     def test_every_persisted_artifact_of_a_run_validates(self) -> None:

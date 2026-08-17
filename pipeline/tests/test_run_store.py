@@ -95,24 +95,25 @@ class ResponseAttemptTests(unittest.TestCase):
                 "created_at": "2026-07-29T12:00:00Z",
             }
 
-            first, first_artifact = run_store.record_diagnosis(paths, diagnosis)
+            # A diagnosis is a result other work consumes, so it is stored
+            # outside the run's own state and keyed by the run that produced it.
+            diagnoses_root = Path(temp_dir) / "diagnoses"
+            first, first_artifact = run_store.record_diagnosis(
+                paths, diagnosis, diagnoses_root
+            )
             second, second_artifact = run_store.record_diagnosis(
-                paths, {**diagnosis, "classification": "TEST_DEFECT"}
+                paths, {**diagnosis, "classification": "TEST_DEFECT"}, diagnoses_root
             )
 
             self.assertEqual((1, 2), (first, second))
-            self.assertEqual(
-                "responses/failure-diagnosis/attempt-001/diagnosis.json",
-                first_artifact,
-            )
-            self.assertEqual(
-                "responses/failure-diagnosis/attempt-002/diagnosis.json",
-                second_artifact,
-            )
+            self.assertEqual("run_001/attempt-001/diagnosis.json", first_artifact)
+            self.assertEqual("run_001/attempt-002/diagnosis.json", second_artifact)
             self.assertEqual(
                 "AMBIGUOUS",
-                read_json(paths.diagnosis_response(1))["classification"],
+                read_json(diagnoses_root / first_artifact)["classification"],
             )
+            # Nothing about the diagnosis is left behind in the run.
+            self.assertFalse((paths.responses_dir / "failure-diagnosis").exists())
 
 
 class EventLogTests(unittest.TestCase):
