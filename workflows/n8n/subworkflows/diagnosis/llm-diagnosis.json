@@ -9,9 +9,9 @@
       "typeVersion": 1.1,
       "position": [-1440, 0]
     },
-    {
+        {
       "parameters": {
-        "jsCode": "const input = $input.first().json;\nconst component = /^[A-Za-z0-9._-]+$/;\nif (input.outcome_code !== 'SEMANTIC_EXECUTION_FAILED') throw new Error('Diagnosis requires SEMANTIC_EXECUTION_FAILED');\nif (typeof input.run_id !== 'string' || !component.test(input.run_id)) throw new Error('run_id must be one safe path component');\nif (!Number.isInteger(input.execution_attempt) || input.execution_attempt < 1) throw new Error('execution_attempt must be a positive integer');\nif (!['openai', 'anthropic', 'google'].includes(input.diagnosis_provider)) throw new Error('diagnosis_provider must be openai, anthropic, or google');\nif (typeof input.failure_report_path !== 'string') throw new Error('failure_report_path is required');\nconst reportPath = input.failure_report_path.replace(/\\\\/g, '/');\nconst runPrefix = `artifacts/work/runs/${input.run_id}/`;\nif (!reportPath.startsWith(runPrefix) || reportPath.includes('..') || reportPath.includes(',')) throw new Error('failure_report_path must identify this run under artifacts/work');\nreturn [{ json: {\n  run_id: input.run_id, execution_attempt: input.execution_attempt, provider: input.diagnosis_provider,\n  failure_report_path: `/data/artifacts/${reportPath.slice('artifacts/work/'.length)}`,\n  evidence_ref: reportPath.slice(runPrefix.length),\n  system_prompt_path: '/data/diagnosis_prompts/semantic_failure_diagnosis.md'\n} }];"
+        "jsCode": "const input = $input.first().json;\nconst component = /^[A-Za-z0-9._-]+$/;\nconst defaultModels = { openai: 'gpt-5', anthropic: 'claude-sonnet-4-20250514', google: 'models/gemini-2.5-pro' };\nif (input.outcome_code !== 'SEMANTIC_EXECUTION_FAILED') throw new Error('Diagnosis requires SEMANTIC_EXECUTION_FAILED');\nif (typeof input.run_id !== 'string' || !component.test(input.run_id)) throw new Error('run_id must be one safe path component');\nif (!Number.isInteger(input.execution_attempt) || input.execution_attempt < 1) throw new Error('execution_attempt must be a positive integer');\nif (!['openai', 'anthropic', 'google'].includes(input.diagnosis_provider)) throw new Error('diagnosis_provider must be openai, anthropic, or google');\nif (input.model !== undefined && (typeof input.model !== 'string' || !input.model.trim())) throw new Error('model must be a non-empty string when supplied');\nif (typeof input.failure_report_path !== 'string') throw new Error('failure_report_path is required');\nconst reportPath = input.failure_report_path.replace(/\\\\/g, '/');\nconst runPrefix = `artifacts/work/runs/${input.run_id}/`;\nif (!reportPath.startsWith(runPrefix) || reportPath.includes('..') || reportPath.includes(',')) throw new Error('failure_report_path must identify this run under artifacts/work');\nreturn [{ json: {\n  run_id: input.run_id, execution_attempt: input.execution_attempt, provider: input.diagnosis_provider,\n  model: typeof input.model === 'string' ? input.model.trim() : defaultModels[input.diagnosis_provider],\n  failure_report_path: `/data/artifacts/${reportPath.slice('artifacts/work/'.length)}`,\n  evidence_ref: reportPath.slice(runPrefix.length),\n  system_prompt_path: '/data/diagnosis_prompts/semantic_failure_diagnosis.md'\n} }];"
       },
       "id": "e1000000-0000-4000-8000-000000000002",
       "name": "Validate Input",
@@ -19,7 +19,7 @@
       "typeVersion": 2,
       "position": [-1220, 0]
     },
-    {
+        {
       "parameters": {"fileSelector": "={{ $json.failure_report_path }}", "options": {}},
       "id": "e1000000-0000-4000-8000-000000000003",
       "name": "Read Failure Report",
@@ -27,7 +27,7 @@
       "typeVersion": 1,
       "position": [-1000, 0]
     },
-    {
+        {
       "parameters": {"operation": "text", "destinationKey": "failure_report_text", "options": {}},
       "id": "e1000000-0000-4000-8000-000000000004",
       "name": "Extract Failure Report",
@@ -35,9 +35,9 @@
       "typeVersion": 1,
       "position": [-780, 0]
     },
-    {
+        {
       "parameters": {
-        "jsCode": "const context = $('Validate Input').first().json;\nlet report;\ntry { report = JSON.parse($input.first().json.failure_report_text); } catch (error) { throw new Error(`Invalid failure report JSON: ${error.message}`); }\nif (report.report_type !== 'semantic_test_case_failure') throw new Error('Unexpected failure report type');\nif (report.identity.run_id !== context.run_id || report.identity.attempt !== context.execution_attempt) throw new Error('Failure report identity does not match the requested run and attempt');\nif (report.test_case_result.syntax_check.status !== 'passed' || report.test_case_result.semantic_status !== 'failed') throw new Error('Diagnosis requires parser passed and semantic test failed');\nif (report.source_diagnosis.eligible !== true || report.source_diagnosis.reason !== 'parser_passed_and_semantic_test_failed') throw new Error('Failure report is not eligible for source diagnosis');\nconst bundle = report.source_diagnosis.evidence_bundle;\nif (!bundle || Array.isArray(bundle) || typeof bundle !== 'object') throw new Error('Failure report has no evidence bundle');\nconst required = ['original_task_description', 'relevant_source_and_target_metamodel_constraints', 'generated_transformation', 'failing_test_case_or_assertion', 'input_model', 'expected_output_or_properties', 'actual_target_model', 'structured_actual_vs_expected_difference', 'execution_error_or_log', 'reference_transformation_result'];\nif (JSON.stringify(Object.keys(bundle).sort()) !== JSON.stringify([...required].sort())) throw new Error(`Evidence bundle must contain exactly: ${required.join(', ')}`);\nconst failing = bundle.failing_test_case_or_assertion;\nif (typeof failing.test_case_id !== 'string' || !failing.test_case_id || typeof failing.assertion_id !== 'string' || !failing.assertion_id) throw new Error('Evidence bundle must identify one test case and assertion');\nif (failing.test_case_id !== report.test_case_result.test_case_id || failing.assertion_id !== report.test_case_result.assertion_id) throw new Error('Evidence bundle selectors disagree with the failure report');\nconst difference = bundle.structured_actual_vs_expected_difference;\nconst differenceFields = ['missing_elements', 'extra_elements', 'wrong_types', 'wrong_attributes', 'reference_mismatches'];\nif (difference.available !== true || differenceFields.some((field) => !Array.isArray(difference[field]))) throw new Error('Evidence bundle requires a complete structured actual-vs-expected difference');\nreturn [{ json: { ...context, test_case_id: failing.test_case_id, assertion_id: failing.assertion_id, evidence_bundle: bundle } }];"
+        "jsCode": "const context = $('Validate Input').first().json;\nlet report;\ntry { report = JSON.parse($input.first().json.failure_report_text); } catch (error) { throw new Error(`Invalid failure report JSON: ${error.message}`); }\nif (report.report_type !== 'semantic_test_case_failure') throw new Error('Unexpected failure report type');\nif (report.identity.run_id !== context.run_id || report.identity.attempt !== context.execution_attempt) throw new Error('Failure report identity does not match the requested run and attempt');\nif (report.test_case_result.syntax_check.status !== 'passed' || report.test_case_result.semantic_status !== 'failed') throw new Error('Diagnosis requires parser passed and semantic test failed');\nif (report.source_diagnosis.eligible !== true || report.source_diagnosis.reason !== 'parser_passed_and_semantic_test_failed') throw new Error('Failure report is not eligible for source diagnosis');\nconst bundle = report.source_diagnosis.evidence_bundle;\nif (!bundle || Array.isArray(bundle) || typeof bundle !== 'object') throw new Error('Failure report has no evidence bundle');\nconst required = ['original_task_description', 'relevant_source_and_target_metamodel_constraints', 'generated_transformation', 'failing_test_case_or_assertion', 'input_model', 'expected_output_or_properties', 'actual_target_model', 'structured_actual_vs_expected_difference', 'generated_execution_summary', 'reference_transformation_result'];\n// Presence, not an exact key set. The report carries further evidence than a\n// diagnosis reads - changes, syntax_status, stack_traces, maven_log_excerpt -\n// and Source Diagnosis must not stop working because the report grew a field.\n// Tested with `in` rather than truthiness: an assertion failure legitimately\n// carries an empty stack_traces array and a null maven_log_excerpt.\nconst missing = required.filter((field) => !(field in bundle));\nif (missing.length > 0) throw new Error(`Evidence bundle is missing: ${missing.join(', ')}`);\nconst failing = bundle.failing_test_case_or_assertion;\nif (typeof failing.test_case_id !== 'string' || !failing.test_case_id || typeof failing.assertion_id !== 'string' || !failing.assertion_id) throw new Error('Evidence bundle must identify one test case and assertion');\nif (failing.test_case_id !== report.test_case_result.test_case_id || failing.assertion_id !== report.test_case_result.assertion_id) throw new Error('Evidence bundle selectors disagree with the failure report');\nconst difference = bundle.structured_actual_vs_expected_difference;\nconst differenceFields = ['missing_elements', 'extra_elements', 'wrong_types', 'wrong_attributes', 'reference_mismatches'];\n// The object stays mandatory, but an unavailable difference is a legitimate\n// shape: no comparator produces the model-level diff yet, so requiring it\n// would reject every real report. What must not happen is a diff that claims\n// to be available while carrying nothing, so the fields are checked only then.\nif (!difference || typeof difference !== 'object' || Array.isArray(difference)) throw new Error('Evidence bundle requires a structured actual-vs-expected difference object');\nif (typeof difference.available !== 'boolean') throw new Error('The structured actual-vs-expected difference must state whether it is available');\nif (difference.available === true && differenceFields.some((field) => !Array.isArray(difference[field]))) throw new Error('An available structured actual-vs-expected difference must be complete');\nreturn [{ json: { ...context, test_case_id: failing.test_case_id, assertion_id: failing.assertion_id, evidence_bundle: bundle } }];"
       },
       "id": "e1000000-0000-4000-8000-000000000005",
       "name": "Validate Evidence Bundle",
@@ -45,7 +45,7 @@
       "typeVersion": 2,
       "position": [-560, 0]
     },
-    {
+        {
       "parameters": {"fileSelector": "={{ $json.system_prompt_path }}", "options": {}},
       "id": "e1000000-0000-4000-8000-000000000006",
       "name": "Read Diagnosis Prompt",
@@ -53,7 +53,7 @@
       "typeVersion": 1,
       "position": [-340, 0]
     },
-    {
+        {
       "parameters": {"operation": "text", "destinationKey": "system_prompt", "options": {}},
       "id": "e1000000-0000-4000-8000-000000000007",
       "name": "Extract Diagnosis Prompt",
@@ -61,7 +61,7 @@
       "typeVersion": 1,
       "position": [-120, 0]
     },
-    {
+        {
       "parameters": {
         "jsCode": "const context = $('Validate Evidence Bundle').first().json;\nconst systemPrompt = $input.first().json.system_prompt;\nif (typeof systemPrompt !== 'string' || !systemPrompt.trim()) throw new Error('Diagnosis prompt is empty');\nreturn [{ json: { ...context, system_prompt: systemPrompt.trim(), user_prompt: JSON.stringify(context.evidence_bundle, null, 2) } }];"
       },
@@ -73,11 +73,151 @@
     },
     {
       "parameters": {
+        "jsCode": "const context = $('Assemble Diagnosis Bundle').first().json;\nconst executionId = String($execution.id).replace(/[^A-Za-z0-9._-]+/g, '-');\nconst executionAttempt = String(context.execution_attempt).padStart(3, '0');\nconst artifactDirectory = `/data/artifacts/runs/${context.run_id}/responses/source-diagnosis/execution-attempt-${executionAttempt}/n8n-execution-${executionId}`;\nconst request = {\n  schema_version: '1.0',\n  run_id: context.run_id,\n  execution_attempt: context.execution_attempt,\n  provider: context.provider,\n  model: context.model,\n  temperature: 0,\n  test_case_id: context.test_case_id,\n  assertion_id: context.assertion_id,\n  evidence_ref: context.evidence_ref,\n  messages: [\n    { role: 'system', content: context.system_prompt },\n    { role: 'user', content: context.user_prompt },\n  ],\n};\n// Every artifact path this diagnosis writes is derived here, once. The write\n// nodes read them back by name: a Convert to File node hands on binary data\n// with an empty json, so a path rebuilt from $json downstream would resolve\n// its run id and attempt to undefined and miss the directory just created.\nreturn [{ json: {\n  ...context,\n  artifact_directory: artifactDirectory,\n  request_path: `${artifactDirectory}/diagnosis_request.json`,\n  raw_response_path: `${artifactDirectory}/diagnosis_raw_response.txt`,\n  result_path: `${artifactDirectory}/diagnosis_result.json`,\n  n8n_execution_id: executionId,\n  diagnosis_request_text: JSON.stringify(request, null, 2),\n} }];"
+      },
+      "id": "e1000000-0000-4000-8000-000000000024",
+      "name": "Build Diagnosis Request Artifact",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        300,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "command": "=mkdir -p {{ $('Build Diagnosis Request Artifact').first().json.artifact_directory }}"
+      },
+      "id": "e1000000-0000-4000-8000-000000000025",
+      "name": "Create Diagnosis Artifact Directory",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        500,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: $('Build Diagnosis Request Artifact').first().json }];"
+      },
+      "id": "e1000000-0000-4000-8000-000000000026",
+      "name": "Restore Diagnosis Request Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        700,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "toText",
+        "sourceProperty": "diagnosis_request_text",
+        "binaryPropertyName": "data",
+        "options": {}
+      },
+      "id": "e1000000-0000-4000-8000-000000000027",
+      "name": "Convert Diagnosis Request to File",
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        900,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "write",
+        "fileName": "={{ $('Build Diagnosis Request Artifact').first().json.request_path }}",
+        "dataPropertyName": "data",
+        "options": {}
+      },
+      "id": "e1000000-0000-4000-8000-000000000028",
+      "name": "Write Diagnosis Request",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        0
+      ]
+    },
+    {
+      "parameters": {
         "rules": {
           "values": [
-            {"conditions": {"options": {"caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 2}, "conditions": [{"id": "provider-openai", "leftValue": "={{ $json.provider }}", "rightValue": "openai", "operator": {"type": "string", "operation": "equals"}}], "combinator": "and"}, "renameOutput": true, "outputKey": "OpenAI"},
-            {"conditions": {"options": {"caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 2}, "conditions": [{"id": "provider-anthropic", "leftValue": "={{ $json.provider }}", "rightValue": "anthropic", "operator": {"type": "string", "operation": "equals"}}], "combinator": "and"}, "renameOutput": true, "outputKey": "Anthropic"},
-            {"conditions": {"options": {"caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 2}, "conditions": [{"id": "provider-google", "leftValue": "={{ $json.provider }}", "rightValue": "google", "operator": {"type": "string", "operation": "equals"}}], "combinator": "and"}, "renameOutput": true, "outputKey": "Google"}
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "provider-openai",
+                    "leftValue": "={{ $('Build Diagnosis Request Artifact').first().json.provider }}",
+                    "rightValue": "openai",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "OpenAI"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "provider-anthropic",
+                    "leftValue": "={{ $('Build Diagnosis Request Artifact').first().json.provider }}",
+                    "rightValue": "anthropic",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Anthropic"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "provider-google",
+                    "leftValue": "={{ $('Build Diagnosis Request Artifact').first().json.provider }}",
+                    "rightValue": "google",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Google"
+            }
           ]
         },
         "options": {}
@@ -86,93 +226,173 @@
       "name": "Call Diagnosis LLM",
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3.2,
-      "position": [320, 0]
+      "position": [
+        1320,
+        0
+      ]
     },
-    {
+        {
       "parameters": {"promptType": "define", "text": "={{ $('Assemble Diagnosis Bundle').item.json.user_prompt }}", "messages": {"messageValues": [{"message": "={{ $('Assemble Diagnosis Bundle').item.json.system_prompt }}"}]}, "batching": {}},
       "id": "e1000000-0000-4000-8000-000000000015",
       "name": "Diagnose with OpenAI",
       "type": "@n8n/n8n-nodes-langchain.chainLlm",
       "typeVersion": 1.7,
-      "position": [560, -240]
+      "position": [1540, -400]
     },
-    {
+        {
       "parameters": {"model": {"__rl": true, "value": "gpt-5", "mode": "list", "cachedResultName": "gpt-5"}, "options": {"temperature": 0, "timeout": 600000}},
       "id": "e1000000-0000-4000-8000-000000000016",
       "name": "OpenAI Diagnosis Model",
       "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
       "typeVersion": 1.2,
-      "position": [560, -40],
+      "position": [1540, -200],
       "credentials": {"openAiApi": {"id": "8mtpdiKzgoTWwPSM", "name": "OpenAi account"}}
     },
-    {
+        {
       "parameters": {"promptType": "define", "text": "={{ $('Assemble Diagnosis Bundle').item.json.user_prompt }}", "messages": {"messageValues": [{"message": "={{ $('Assemble Diagnosis Bundle').item.json.system_prompt }}"}]}, "batching": {}},
       "id": "e1000000-0000-4000-8000-000000000017",
       "name": "Diagnose with Anthropic",
       "type": "@n8n/n8n-nodes-langchain.chainLlm",
       "typeVersion": 1.7,
-      "position": [560, 0]
+      "position": [1540, 0]
     },
-    {
+        {
       "parameters": {"model": {"__rl": true, "value": "claude-sonnet-4-20250514", "mode": "list", "cachedResultName": "Claude Sonnet 4"}, "options": {"temperature": 0}},
       "id": "e1000000-0000-4000-8000-000000000018",
       "name": "Anthropic Diagnosis Model",
       "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
       "typeVersion": 1.3,
-      "position": [560, 200],
+      "position": [1540, 200],
       "credentials": {"anthropicApi": {"id": "R9d6pMqZ8LzipdDW", "name": "Anthropic account"}}
     },
-    {
+        {
       "parameters": {"promptType": "define", "text": "={{ $('Assemble Diagnosis Bundle').item.json.user_prompt }}", "messages": {"messageValues": [{"message": "={{ $('Assemble Diagnosis Bundle').item.json.system_prompt }}"}]}, "batching": {}},
       "id": "e1000000-0000-4000-8000-000000000019",
       "name": "Diagnose with Google",
       "type": "@n8n/n8n-nodes-langchain.chainLlm",
       "typeVersion": 1.7,
-      "position": [560, 240]
+      "position": [1540, 400]
     },
-    {
+        {
       "parameters": {"modelName": "models/gemini-2.5-pro", "options": {"temperature": 0}},
       "id": "e1000000-0000-4000-8000-000000000020",
       "name": "Google Diagnosis Model",
       "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
       "typeVersion": 1,
-      "position": [560, 440],
+      "position": [1540, 600],
       "credentials": {"googlePalmApi": {"id": "nUZ88X2Akoz1dXpt", "name": "Google Gemini(PaLM) Api account"}}
     },
     {
       "parameters": {
-        "jsCode": "const source = $input.first().json;\nconst context = $('Assemble Diagnosis Bundle').first().json;\nif (typeof source.text !== 'string' || !source.text.trim()) throw new Error('Diagnosis LLM returned no text');\nlet parsed;\ntry { parsed = JSON.parse(source.text.trim()); } catch (error) { throw new Error(`Diagnosis LLM returned invalid JSON: ${error.message}`); }\nif (!parsed || Array.isArray(parsed) || typeof parsed !== 'object') throw new Error('Diagnosis response must be one JSON object');\nconst required = ['classification', 'confidence', 'reasoning_summary', 'evidence', 'test_case_id'];\nif (JSON.stringify(Object.keys(parsed).sort()) !== JSON.stringify([...required].sort())) throw new Error(`Diagnosis response must contain exactly: ${required.join(', ')}`);\nif (parsed.test_case_id !== context.test_case_id) throw new Error('Diagnosis test_case_id does not match the failing case');\nif (!['transformation_defect', 'test_defect', 'ambiguous'].includes(parsed.classification)) throw new Error('Invalid diagnosis classification');\nif (!['low', 'medium', 'high'].includes(parsed.confidence)) throw new Error('Invalid diagnosis confidence');\nif (typeof parsed.reasoning_summary !== 'string' || !parsed.reasoning_summary.trim() || parsed.reasoning_summary.length > 1000) throw new Error('reasoning_summary must be 1-1000 characters');\nif (!Array.isArray(parsed.evidence) || parsed.evidence.length < 1 || parsed.evidence.length > 8 || parsed.evidence.some((entry) => typeof entry !== 'string' || !entry.trim() || entry.length > 1000)) throw new Error('evidence must contain 1-8 concise strings');\nconst persistedClassification = { transformation_defect: 'TRANSFORMATION_DEFECT', test_defect: 'TEST_DEFECT', ambiguous: 'AMBIGUOUS' }[parsed.classification];\nconst model = { openai: 'gpt-5', anthropic: 'claude-sonnet-4-20250514', google: 'models/gemini-2.5-pro' }[context.provider];\nconst evidence = parsed.evidence.map((entry) => entry.trim());\nreturn [{ json: {\n  schema_version: '1.0', persisted_classification: persistedClassification, evidence_ref: context.evidence_ref,\n  rationale: `${parsed.reasoning_summary.trim()} Evidence: ${evidence.join(' | ')}`, provider: context.provider, model,\n  created_at: new Date().toISOString(), run_id: context.run_id, classification: parsed.classification,\n  confidence: parsed.confidence, reasoning_summary: parsed.reasoning_summary.trim(), evidence, test_case_id: parsed.test_case_id\n} }];"
+        "jsCode": "const source = $input.first().json;\nconst context = $('Build Diagnosis Request Artifact').first().json;\nconst rawResponseText = typeof source.text === 'string' ? source.text : JSON.stringify(source, null, 2);\nreturn [{ json: {\n  ...context,\n  llm_response: source,\n  diagnosis_raw_response_text: rawResponseText,\n} }];"
+      },
+      "id": "e1000000-0000-4000-8000-000000000029",
+      "name": "Capture Raw Diagnosis Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1760,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "toText",
+        "sourceProperty": "diagnosis_raw_response_text",
+        "binaryPropertyName": "data",
+        "options": {}
+      },
+      "id": "e1000000-0000-4000-8000-000000000030",
+      "name": "Convert Raw Diagnosis Response to File",
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        1980,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "write",
+        "fileName": "={{ $('Build Diagnosis Request Artifact').first().json.raw_response_path }}",
+        "dataPropertyName": "data",
+        "options": {}
+      },
+      "id": "e1000000-0000-4000-8000-000000000031",
+      "name": "Write Raw Diagnosis Response",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        2200,
+        0
+      ]
+    },
+        {
+      "parameters": {
+        "jsCode": "const captured = $('Capture Raw Diagnosis Response').first().json;\nconst source = captured.llm_response;\nconst context = $('Build Diagnosis Request Artifact').first().json;\nif (typeof source.text !== 'string' || !source.text.trim()) throw new Error('Diagnosis LLM returned no text');\nlet parsed;\ntry { parsed = JSON.parse(source.text.trim()); } catch (error) { throw new Error(`Diagnosis LLM returned invalid JSON: ${error.message}`); }\nif (!parsed || Array.isArray(parsed) || typeof parsed !== 'object') throw new Error('Diagnosis response must be one JSON object');\nconst required = ['classification', 'confidence', 'reasoning_summary', 'evidence', 'test_case_id', 'assertion_id'];\nif (JSON.stringify(Object.keys(parsed).sort()) !== JSON.stringify([...required].sort())) throw new Error(`Diagnosis response must contain exactly: ${required.join(', ')}`);\nif (parsed.test_case_id !== context.test_case_id) throw new Error('Diagnosis test_case_id does not match the failing case');\nif (parsed.assertion_id !== context.assertion_id) throw new Error('Diagnosis assertion_id does not match the failing assertion');\nif (!['transformation_defect', 'test_defect', 'ambiguous'].includes(parsed.classification)) throw new Error('Invalid diagnosis classification');\nif (!['low', 'medium', 'high'].includes(parsed.confidence)) throw new Error('Invalid diagnosis confidence');\nif (typeof parsed.reasoning_summary !== 'string' || !parsed.reasoning_summary.trim() || parsed.reasoning_summary.length > 1000) throw new Error('reasoning_summary must be 1-1000 characters');\nif (!Array.isArray(parsed.evidence) || parsed.evidence.length < 1 || parsed.evidence.length > 8 || parsed.evidence.some((entry) => typeof entry !== 'string' || !entry.trim() || entry.length > 1000)) throw new Error('evidence must contain 1-8 concise strings');\nconst persistedClassification = { transformation_defect: 'TRANSFORMATION_DEFECT', test_defect: 'TEST_DEFECT', ambiguous: 'AMBIGUOUS' }[parsed.classification];\nconst evidence = parsed.evidence.map((entry) => entry.trim());\nconst createdAt = new Date().toISOString();\nconst rationale = `${parsed.reasoning_summary.trim()} Evidence: ${evidence.join(' | ')}`;\nconst diagnosisResult = {\n  schema_version: '1.0',\n  run_id: context.run_id,\n  execution_attempt: context.execution_attempt,\n  classification: parsed.classification,\n  persisted_classification: persistedClassification,\n  confidence: parsed.confidence,\n  reasoning_summary: parsed.reasoning_summary.trim(),\n  evidence,\n  test_case_id: parsed.test_case_id,\n  assertion_id: parsed.assertion_id,\n  evidence_ref: context.evidence_ref,\n  provider: context.provider,\n  model: context.model,\n  created_at: createdAt,\n};\nreturn [{ json: {\n  ...diagnosisResult,\n  artifact_directory: context.artifact_directory,\n  n8n_execution_id: context.n8n_execution_id,\n  rationale,\n  diagnosis_result_text: JSON.stringify(diagnosisResult, null, 2),\n} }];"
       },
       "id": "e1000000-0000-4000-8000-000000000021",
       "name": "Attach Diagnosis Provenance",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [800, 0]
+      "position": [2420, 0]
     },
     {
       "parameters": {
+        "operation": "toText",
+        "sourceProperty": "diagnosis_result_text",
+        "binaryPropertyName": "data",
+        "options": {}
+      },
+      "id": "e1000000-0000-4000-8000-000000000032",
+      "name": "Convert Diagnosis Result to File",
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        2640,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "write",
+        "fileName": "={{ $('Build Diagnosis Request Artifact').first().json.result_path }}",
+        "dataPropertyName": "data",
+        "options": {}
+      },
+      "id": "e1000000-0000-4000-8000-000000000033",
+      "name": "Write Diagnosis Result",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        2860,
+        0
+      ]
+    },
+        {
+      "parameters": {
         "method": "POST",
-        "url": "=http://stage-service:8129/runs/{{ $json.run_id }}/diagnoses",
+        "url": "=http://stage-service:8129/runs/{{ $('Attach Diagnosis Provenance').first().json.run_id }}/diagnoses",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ { schema_version: $json.schema_version, classification: $json.persisted_classification, evidence_ref: $json.evidence_ref, rationale: $json.rationale, provider: $json.provider, model: $json.model, created_at: $json.created_at } }}",
+        "jsonBody": "={{ { schema_version: $('Attach Diagnosis Provenance').first().json.schema_version, classification: $('Attach Diagnosis Provenance').first().json.persisted_classification, evidence_ref: $('Attach Diagnosis Provenance').first().json.evidence_ref, rationale: $('Attach Diagnosis Provenance').first().json.rationale, provider: $('Attach Diagnosis Provenance').first().json.provider, model: $('Attach Diagnosis Provenance').first().json.model, created_at: $('Attach Diagnosis Provenance').first().json.created_at } }}",
         "options": {}
       },
       "id": "e1000000-0000-4000-8000-000000000022",
       "name": "Persist Diagnosis Artifact",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1020, 0]
+      "position": [3080, 0]
     },
-    {
+        {
       "parameters": {
-        "jsCode": "const verdict = $('Attach Diagnosis Provenance').first().json;\nreturn [{ json: { classification: verdict.classification, confidence: verdict.confidence, reasoning_summary: verdict.reasoning_summary, evidence: verdict.evidence, test_case_id: verdict.test_case_id } }];"
+        "jsCode": "const verdict = $('Attach Diagnosis Provenance').first().json;\nreturn [{ json: { classification: verdict.classification, confidence: verdict.confidence, reasoning_summary: verdict.reasoning_summary, evidence: verdict.evidence, test_case_id: verdict.test_case_id, assertion_id: verdict.assertion_id } }];"
       },
       "id": "e1000000-0000-4000-8000-000000000023",
       "name": "Return Verdict",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1240, 0]
+      "position": [3300, 0]
     }
   ],
   "connections": {
@@ -183,15 +403,25 @@
     "Validate Evidence Bundle": {"main": [[{"node": "Read Diagnosis Prompt", "type": "main", "index": 0}]]},
     "Read Diagnosis Prompt": {"main": [[{"node": "Extract Diagnosis Prompt", "type": "main", "index": 0}]]},
     "Extract Diagnosis Prompt": {"main": [[{"node": "Assemble Diagnosis Bundle", "type": "main", "index": 0}]]},
-    "Assemble Diagnosis Bundle": {"main": [[{"node": "Call Diagnosis LLM", "type": "main", "index": 0}]]},
+    "Assemble Diagnosis Bundle": {"main": [[{"node": "Build Diagnosis Request Artifact", "type": "main", "index": 0}]]},
+    "Build Diagnosis Request Artifact": {"main": [[{"node": "Create Diagnosis Artifact Directory", "type": "main", "index": 0}]]},
+    "Create Diagnosis Artifact Directory": {"main": [[{"node": "Restore Diagnosis Request Context", "type": "main", "index": 0}]]},
+    "Restore Diagnosis Request Context": {"main": [[{"node": "Convert Diagnosis Request to File", "type": "main", "index": 0}]]},
+    "Convert Diagnosis Request to File": {"main": [[{"node": "Write Diagnosis Request", "type": "main", "index": 0}]]},
+    "Write Diagnosis Request": {"main": [[{"node": "Call Diagnosis LLM", "type": "main", "index": 0}]]},
     "Call Diagnosis LLM": {"main": [[{"node": "Diagnose with OpenAI", "type": "main", "index": 0}], [{"node": "Diagnose with Anthropic", "type": "main", "index": 0}], [{"node": "Diagnose with Google", "type": "main", "index": 0}]]},
     "OpenAI Diagnosis Model": {"ai_languageModel": [[{"node": "Diagnose with OpenAI", "type": "ai_languageModel", "index": 0}]]},
     "Anthropic Diagnosis Model": {"ai_languageModel": [[{"node": "Diagnose with Anthropic", "type": "ai_languageModel", "index": 0}]]},
     "Google Diagnosis Model": {"ai_languageModel": [[{"node": "Diagnose with Google", "type": "ai_languageModel", "index": 0}]]},
-    "Diagnose with OpenAI": {"main": [[{"node": "Attach Diagnosis Provenance", "type": "main", "index": 0}]]},
-    "Diagnose with Anthropic": {"main": [[{"node": "Attach Diagnosis Provenance", "type": "main", "index": 0}]]},
-    "Diagnose with Google": {"main": [[{"node": "Attach Diagnosis Provenance", "type": "main", "index": 0}]]},
-    "Attach Diagnosis Provenance": {"main": [[{"node": "Persist Diagnosis Artifact", "type": "main", "index": 0}]]},
+    "Diagnose with OpenAI": {"main": [[{"node": "Capture Raw Diagnosis Response", "type": "main", "index": 0}]]},
+    "Diagnose with Anthropic": {"main": [[{"node": "Capture Raw Diagnosis Response", "type": "main", "index": 0}]]},
+    "Diagnose with Google": {"main": [[{"node": "Capture Raw Diagnosis Response", "type": "main", "index": 0}]]},
+    "Capture Raw Diagnosis Response": {"main": [[{"node": "Convert Raw Diagnosis Response to File", "type": "main", "index": 0}]]},
+    "Convert Raw Diagnosis Response to File": {"main": [[{"node": "Write Raw Diagnosis Response", "type": "main", "index": 0}]]},
+    "Write Raw Diagnosis Response": {"main": [[{"node": "Attach Diagnosis Provenance", "type": "main", "index": 0}]]},
+    "Attach Diagnosis Provenance": {"main": [[{"node": "Convert Diagnosis Result to File", "type": "main", "index": 0}]]},
+    "Convert Diagnosis Result to File": {"main": [[{"node": "Write Diagnosis Result", "type": "main", "index": 0}]]},
+    "Write Diagnosis Result": {"main": [[{"node": "Persist Diagnosis Artifact", "type": "main", "index": 0}]]},
     "Persist Diagnosis Artifact": {"main": [[{"node": "Return Verdict", "type": "main", "index": 0}]]}
   },
   "settings": {"executionOrder": "v1"},

@@ -13,6 +13,8 @@ must stay contained; the run directory it creates is removed again.
 
 from __future__ import annotations
 
+import json
+import re
 import shutil
 import unittest
 import uuid
@@ -22,6 +24,7 @@ from typing import Any
 from llm4mtl.paths import REPO_ROOT, TARGET
 from llm4mtl.provenance import input_hashes
 from llm4mtl.semantic_tests.diagnosis_preparation import (
+    diagnosis_artifact_references,
     prepare_after_execution_stage,
     prepare_execution_diagnosis,
 )
@@ -347,6 +350,97 @@ class DiagnosisPreparationTests(unittest.TestCase):
         self.assertEqual(
             "passed", result["reference_transformation_result"]["status"]
         )
+
+    def test_the_bundle_satisfies_what_source_diagnosis_requires(self) -> None:
+        """The two ends of the evidence contract are pinned to each other.
+
+        Source Diagnosis validates the bundle in n8n, so the required field list
+        lives in a workflow this suite cannot execute. Reading that list back and
+        checking it against a real prepared bundle is what stops the two from
+        drifting apart again, in either direction.
+        """
+        self._complete_failing_run()
+        self._write_snapshot()
+
+        index = prepare_execution_diagnosis(self.run_dir, 1)
+        report = read_json(REPO_ROOT / index["pairs"][0]["reports"][0]["report"])
+        bundle = report["source_diagnosis"]["evidence_bundle"]
+
+        for field in _required_evidence_fields():
+            with self.subTest(field=field):
+                self.assertIn(field, bundle)
+
+        # The bundle carries more than a diagnosis reads. These extras are why
+        # the workflow must check presence instead of an exact key set.
+        for extra in ("changes", "syntax_status", "stack_traces", "maven_log_excerpt"):
+            with self.subTest(extra=extra):
+                self.assertIn(extra, bundle)
+                self.assertNotIn(extra, _required_evidence_fields())
+
+        # An assertion failure carries no stack trace, so the required fields
+        # must be tested for presence and never for truthiness.
+        self.assertEqual([], bundle["stack_traces"])
+
+        # The selector the failure is attached to survives into the bundle.
+        failing = bundle["failing_test_case_or_assertion"]
+        self.assertEqual(CASE, failing["test_case_id"])
+        self.assertEqual("assertion-001", failing["assertion_id"])
+
+    def test_a_real_assertion_mismatch_is_selected_for_diagnosis(self) -> None:
+        """A recorded mismatch reaches Source Diagnosis on the evidence it has.
+
+        The model-level comparator difference is still absent, so the report
+        says ``available: false`` rather than inventing one. What the run did
+        observe — the JUnit expected/actual pair, the target-model snapshot, the
+        failing assertion — is real evidence, and selection is what decides
+        whether it is offered at all. Requiring the comparator here would refuse
+        every report the pipeline can currently produce.
+        """
+        self._complete_failing_run()
+        self._write_snapshot()
+
+        index = prepare_execution_diagnosis(self.run_dir, 1)
+        entry = index["pairs"][0]["reports"][0]
+        report = read_json(REPO_ROOT / entry["report"])
+        bundle = report["source_diagnosis"]["evidence_bundle"]
+
+        # The observed mismatch, read verbatim out of the archived failure.
+        self.assertEqual("1", report["test_case_result"]["failure"]["expected"])
+        self.assertEqual("0", report["test_case_result"]["failure"]["actual"])
+        # No comparator ran, and the report says exactly that.
+        self.assertFalse(
+            bundle["structured_actual_vs_expected_difference"]["available"]
+        )
+
+        references = diagnosis_artifact_references(self.run_dir, index)
+        self.assertEqual(entry["report"], references["failure_report_path"])
+        self.assertIn("failure_report_index", references)
+
+    def test_an_ineligible_report_is_never_selected_for_diagnosis(self) -> None:
+        """Eligibility stays the gate that selection honours.
+
+        A suite that never passed on the reference has not earned the right to
+        say anything about a generated transformation, so its report exists as
+        evidence but must not be offered for diagnosis.
+        """
+        self._complete_failing_run()
+        self._write_snapshot()
+        self._write_observation(
+            root=self.run_dir / "observations",
+            role="reference_transformation",
+            assertions_passed=False,
+            failure_stage="assertion_failure",
+        )
+
+        index = prepare_execution_diagnosis(self.run_dir, 1)
+        entry = index["pairs"][0]["reports"][0]
+        self.assertEqual("created", entry["status"])
+        self.assertFalse(entry["eligible"])
+        self.assertEqual("reference_result_not_passing", entry["reason"])
+
+        references = diagnosis_artifact_references(self.run_dir, index)
+        self.assertNotIn("failure_report_path", references)
+        self.assertIn("failure_report_index", references)
 
     def test_unparseable_expected_and_actual_are_reported_as_unknown(self) -> None:
         self._complete_failing_run(message=f"{ASSERTION_MESSAGE} missing TaskA")
@@ -705,6 +799,28 @@ class DiagnosisPreparationTests(unittest.TestCase):
 
         self.assertFalse(entry["eligible"])
         self.assertEqual("transformation_parser_check_failed", entry["reason"])
+
+
+def _required_evidence_fields() -> list[str]:
+    """The evidence fields the Source Diagnosis subworkflow insists on."""
+    workflow = json.loads(
+        (
+            REPO_ROOT
+            / "workflows"
+            / "n8n"
+            / "subworkflows"
+            / "diagnosis"
+            / "llm-diagnosis.json"
+        ).read_text(encoding="utf-8")
+    )
+    code = next(
+        node["parameters"]["jsCode"]
+        for node in workflow["nodes"]
+        if node["name"] == "Validate Evidence Bundle"
+    )
+    declaration = re.search(r"const required = \[(.*?)\];", code, re.DOTALL)
+    assert declaration is not None, "the workflow declares no required fields"
+    return re.findall(r"'([a-z_]+)'", declaration.group(1))
 
 
 def _relative(path: Path) -> str:

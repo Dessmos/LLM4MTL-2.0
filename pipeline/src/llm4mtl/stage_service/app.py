@@ -16,7 +16,10 @@ from llm4mtl.prompt_assembly.task_inputs import (
 )
 from llm4mtl.provenance import ProvenanceError, build_provenance
 from llm4mtl.run_store.identity import InvalidRunIdError
-from llm4mtl.semantic_tests.diagnosis_preparation import prepare_after_execution_stage
+from llm4mtl.semantic_tests.diagnosis_preparation import (
+    diagnosis_artifact_references,
+    prepare_after_execution_stage,
+)
 from llm4mtl.stage_contract import STAGE_DISPATCH, to_stage_payload
 from llm4mtl.stage_service.api_models import (
     DiagnosisRecordRequest,
@@ -189,10 +192,18 @@ def run_stage(run_id: str, stage: str, request: StageRunRequest) -> dict[str, An
         outcome_code=payload["outcome_code"],
         attempt=attempt,
     )
-    # Deterministic post-processing of the attempt just recorded. It does not
-    # change the payload n8n reads: routing stays a decision about the stage
-    # result, and the prepared evidence is fetched by its own path.
-    prepare_after_execution_stage(paths.root, stage, payload, attempt)
+    # Deterministic post-processing of the attempt just recorded. It changes no
+    # stage fact: routing stays a decision about status and outcome_code, and
+    # the counts, status, and outcome_code the attempt recorded are untouched.
+    index = prepare_after_execution_stage(paths.root, stage, payload, attempt)
+    # Where the prepared evidence lives is orchestration, not an observation.
+    # Preparation can only run once the attempt has claimed its number, so these
+    # references reach the caller through the response while the recorded
+    # result.json keeps exactly the contract it was validated against. Nothing
+    # is lost: both paths are re-derivable from the run directory.
+    references = diagnosis_artifact_references(paths.root, index)
+    if references:
+        payload["artifacts"] = {**payload["artifacts"], **references}
     return payload
 
 

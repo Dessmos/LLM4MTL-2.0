@@ -66,13 +66,29 @@ The last node returns exactly:
   "confidence": "high",
   "reasoning_summary": "The expected target node is missing from the actual target model.",
   "evidence": ["missing_elements contains the required target node"],
-  "test_case_id": "case-1"
+  "test_case_id": "case-1",
+  "assertion_id": "assertion-001"
 }
 ```
 
-The workflow maps that verdict to the existing persisted diagnosis artifact.
-The parent workflow owns all routing from `classification`. Each attempt is
-stored as:
+Before validation, the workflow stores the exact system/user request and the
+raw LLM text. After validation, it stores the complete structured verdict.
+These trace artifacts are grouped by semantic-execution attempt and n8n
+execution so an n8n retry cannot overwrite the earlier evidence:
+
+```text
+artifacts/work/runs/<run-id>/
+  responses/source-diagnosis/
+    execution-attempt-NNN/
+      n8n-execution-<id>/
+        diagnosis_request.json
+        diagnosis_raw_response.txt
+        diagnosis_result.json
+```
+
+The workflow also maps the verdict to the existing schema-validated canonical
+diagnosis artifact. The parent workflow owns all routing from `classification`.
+Each canonical diagnosis attempt is stored as:
 
 ```text
 artifacts/work/runs/<run-id>/

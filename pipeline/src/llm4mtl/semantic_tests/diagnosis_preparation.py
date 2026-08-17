@@ -110,6 +110,75 @@ def prepare_after_execution_stage(
         return _record_preparation_error(Path(run_dir), attempt, exc)
 
 
+def diagnosis_artifact_references(
+    run_dir: Path, index: dict[str, Any] | None
+) -> dict[str, str]:
+    """Pointers into the prepared evidence, for the caller that must route on it.
+
+    Preparation writes the reports; naming which one a diagnosis should read is
+    a separate question, and it is answered here rather than by the workflow
+    that consumes the stage result. Python already knows which report is
+    diagnosable, so making n8n re-derive that from the filesystem would put the
+    same rule in two places and let them disagree.
+
+    ``failure_report_index`` always accompanies a prepared attempt, so a caller
+    that wants every report can read them all. ``failure_report_path`` is added
+    when a report was created and the report itself declares the pair
+    diagnosable. A missing key is a fact — there is nothing to diagnose — and is
+    deliberately not an empty string.
+
+    Eligibility already requires a syntactically valid transformation, a suite
+    that passed on the reference, and at least one observed fact about the
+    failure. It deliberately does not require the model-level comparator
+    difference: no comparator produces one yet, so demanding it here would
+    reject every real report and leave the observed evidence — the JUnit
+    expected/actual pair, the target-model snapshots, the recorded exception —
+    unused.
+    """
+    if not index:
+        return {}
+    attempt = index.get("attempt")
+    if not isinstance(attempt, int):
+        return {}
+    paths = RunPaths(root=Path(run_dir).resolve())
+    references = {
+        "failure_report_index": _repository_path(
+            _diagnosis_dir(paths, attempt) / INDEX_FILENAME
+        )
+    }
+    selected = _first_diagnosable_report(index)
+    if selected is not None:
+        references["failure_report_path"] = selected
+    return references
+
+
+def _first_diagnosable_report(index: dict[str, Any]) -> str | None:
+    """The first report a diagnosis can actually be asked to read.
+
+    Order is the recorded one — pairs as the execution evidence listed them,
+    reports as Surefire reported the failures — so the same attempt always
+    selects the same report.
+    """
+    pairs = index.get("pairs")
+    if not isinstance(pairs, list):
+        return None
+    for pair in pairs:
+        if not isinstance(pair, dict):
+            continue
+        reports = pair.get("reports")
+        if not isinstance(reports, list):
+            continue
+        for report in reports:
+            if not isinstance(report, dict):
+                continue
+            if report.get("status") != "created" or report.get("eligible") is not True:
+                continue
+            reference = report.get("report")
+            if isinstance(reference, str):
+                return reference
+    return None
+
+
 def _record_preparation_error(
     run_dir: Path, attempt: int, error: Exception
 ) -> dict[str, Any] | None:

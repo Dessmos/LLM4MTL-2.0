@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 from llm4mtl.experiment_runner.models import StageResult
 from llm4mtl import run_store
 from llm4mtl.provenance import build_provenance
-from llm4mtl.serialization.json_io import read_json
+from llm4mtl.serialization.json_io import read_json, write_json
 from llm4mtl.stage_service.app import app
 
 # A run is exactly one combination, so creating one states every identity axis.
@@ -296,6 +296,182 @@ class StageServiceTests(unittest.TestCase):
         )
         self.assertTrue(artifact.is_file())
         self.assertEqual("openai", read_json(artifact)["provider"])
+
+    def _failing_execution(self, run_id: str, index: dict[str, object]):
+        """Drive one failing execution stage with a prepared diagnosis index."""
+        self.client.post("/runs", json=run_payload(run_id=run_id))
+        with (
+            patch(
+                "llm4mtl.stage_service.app._orchestrator.prepare_workspace",
+                return_value=Path(self._tmp.name) / "workspace",
+            ),
+            patch(
+                "llm4mtl.stage_service.app._orchestrator.transformations.semantic_validation",
+                return_value=StageResult(
+                    "transformation_validation",
+                    "failed",
+                    {"evaluated": 1, "failed": 1},
+                    {},
+                ),
+            ),
+            patch(
+                "llm4mtl.stage_service.app.prepare_after_execution_stage",
+                return_value=index,
+            ),
+        ):
+            return self.client.post(f"/runs/{run_id}/stages/execution", json={})
+
+    def _write_report(self, name: str, *, available: bool) -> str:
+        """One prepared failure report, named by its absolute path."""
+        report = Path(self._tmp.name) / f"{name}.json"
+        write_json(
+            report,
+            {
+                "report_type": "semantic_test_case_failure",
+                "source_diagnosis": {
+                    "eligible": True,
+                    "evidence_bundle": {
+                        "structured_actual_vs_expected_difference": {
+                            "available": available,
+                        }
+                    },
+                },
+            },
+        )
+        return str(report)
+
+    def test_execution_exposes_the_first_diagnosable_failure_report(self) -> None:
+        """The selected report is the first the run recorded as diagnosable.
+
+        A refused report was never written and an ineligible one must not be
+        diagnosed. Order is the recorded one — pairs as the execution evidence
+        listed them, reports as Surefire reported the failures — so the same
+        attempt always selects the same report.
+        """
+        # Each rejected report gets its own path, so picking the wrong one for
+        # the wrong reason cannot still satisfy the assertion.
+        refused = self._write_report("refused", available=True)
+        ineligible = self._write_report("ineligible", available=True)
+        selected = self._write_report("diagnosable", available=True)
+        later = self._write_report("later", available=True)
+        index = {
+            "attempt": 1,
+            "pairs": [
+                {
+                    "reports": [
+                        # Preparation names no file when it refuses a report.
+                        # One is named here anyway, so a refused entry stays
+                        # skipped even if it ever starts carrying a path.
+                        {
+                            "status": "refused",
+                            "detail": "no matching case",
+                            "report": refused,
+                        },
+                        {"status": "created", "eligible": False, "report": ineligible},
+                    ]
+                },
+                {"reports": [{"status": "created", "eligible": True, "report": selected}]},
+                {"reports": [{"status": "created", "eligible": True, "report": later}]},
+            ],
+        }
+
+        response = self._failing_execution("svc-exec-diagnosable", index)
+        self.assertEqual(200, response.status_code)
+        artifacts = response.json()["artifacts"]
+        self.assertEqual(selected, artifacts["failure_report_path"])
+        self.assertIn("failure_report_index", artifacts)
+
+    def test_a_report_without_a_model_comparison_is_still_diagnosable(self) -> None:
+        """An unavailable comparator difference does not disqualify a report.
+
+        No comparator produces the model-level difference yet. Requiring it
+        would reject every real report and leave what the run did observe — the
+        JUnit expected/actual pair, the target-model snapshots, the recorded
+        exception — unused, which is the whole evidence base Source Diagnosis
+        exists to reason over.
+        """
+        unavailable = self._write_report("no-difference", available=False)
+        index = {
+            "attempt": 1,
+            "pairs": [
+                {"reports": [{"status": "created", "eligible": True, "report": unavailable}]}
+            ],
+        }
+
+        response = self._failing_execution("svc-exec-no-difference", index)
+        self.assertEqual(
+            unavailable, response.json()["artifacts"]["failure_report_path"]
+        )
+
+    def test_execution_omits_the_report_path_when_none_is_diagnosable(self) -> None:
+        """A missing key is the honest answer: there is nothing to diagnose.
+
+        The index is still named, so a caller can read why every report was
+        refused instead of having to guess that preparation ran at all.
+        """
+        index = {
+            "attempt": 1,
+            "pairs": [
+                {
+                    "reports": [
+                        {"status": "refused", "detail": "no matching case"},
+                        {
+                            "status": "created",
+                            "eligible": False,
+                            "report": self._write_report("ineligible", available=True),
+                        },
+                    ]
+                }
+            ],
+        }
+
+        response = self._failing_execution("svc-exec-undiagnosable", index)
+        artifacts = response.json()["artifacts"]
+        self.assertNotIn("failure_report_path", artifacts)
+        self.assertIn("failure_report_index", artifacts)
+
+    def test_prepared_evidence_references_stay_out_of_the_recorded_result(self) -> None:
+        """Where evidence lives is orchestration, not a recorded observation.
+
+        Preparation can only run once the attempt has claimed its number, so the
+        references reach the caller through the response while ``result.json``
+        keeps exactly the contract it was validated against. Both paths stay
+        re-derivable from the run directory, so nothing is lost.
+        """
+        index = {
+            "attempt": 1,
+            "pairs": [
+                {
+                    "reports": [
+                        {
+                            "status": "created",
+                            "eligible": True,
+                            "report": self._write_report("recorded", available=True),
+                        }
+                    ]
+                }
+            ],
+        }
+
+        response = self._failing_execution("svc-exec-recorded", index)
+        body = response.json()
+        self.assertIn("failure_report_path", body["artifacts"])
+
+        recorded = read_json(
+            Path(self._tmp.name)
+            / "svc-exec-recorded"
+            / "stages"
+            / "execution"
+            / "attempts"
+            / "attempt-001"
+            / "result.json"
+        )
+        self.assertNotIn("failure_report_path", recorded["artifacts"])
+        self.assertNotIn("failure_report_index", recorded["artifacts"])
+        # The stage facts the attempt recorded are the ones the caller reads.
+        self.assertEqual(recorded["outcome_code"], body["outcome_code"])
+        self.assertEqual(recorded["status"], body["status"])
+        self.assertEqual(recorded["counts"], body["counts"])
 
     def test_diagnosis_rejects_unknown_run_and_invalid_classification(self) -> None:
         valid_payload = {
