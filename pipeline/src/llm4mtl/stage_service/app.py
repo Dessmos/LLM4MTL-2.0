@@ -16,6 +16,7 @@ from llm4mtl.prompt_assembly.task_inputs import (
 )
 from llm4mtl.provenance import ProvenanceError, build_provenance
 from llm4mtl.run_store.identity import InvalidRunIdError
+from llm4mtl.semantic_tests.diagnosis_preparation import prepare_after_execution_stage
 from llm4mtl.stage_contract import STAGE_DISPATCH, to_stage_payload
 from llm4mtl.stage_service.api_models import (
     DiagnosisRecordRequest,
@@ -167,6 +168,10 @@ def run_stage(run_id: str, stage: str, request: StageRunRequest) -> dict[str, An
         outcome_code=payload["outcome_code"],
         attempt=attempt,
     )
+    # Deterministic post-processing of the attempt just recorded. It does not
+    # change the payload n8n reads: routing stays a decision about the stage
+    # result, and the prepared evidence is fetched by its own path.
+    prepare_after_execution_stage(paths.root, stage, payload, attempt)
     return payload
 
 

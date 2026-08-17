@@ -180,6 +180,76 @@ The table below is policy guidance, not Python-owned state:
 | `INFRASTRUCTURE_ERROR` | bounded retry or stop; never ask an LLM to “repair” infrastructure |
 | `SKIPPED_*` | resolve missing prerequisite or terminate as incomplete |
 
+## Prepared diagnosis evidence
+
+A failing `execution` attempt prepares its own diagnosis evidence before the
+call returns. The stage result is unchanged — routing is still a decision about
+`status`/`outcome_code` — and the evidence is fetched by its own path:
+
+```text
+<run>/diagnosis/execution/attempt-NNN/
+    index.json                  every failing pair, its reports, and why a pair has none
+    reports/<sha12>__<suite>__<case>__<assertion>.json   per-case report
+    reports/<sha12>__<suite>__execution-pair.json        pair-level report
+```
+
+Two report types, chosen by what the run could attribute the failure to:
+
+| `report_type` | when | subject |
+| --- | --- | --- |
+| `semantic_test_case_failure` | Surefire named a failing test method | one case, and for an assertion failure one assertion |
+| `semantic_execution_pair_failure` | it named none | one suite against one transformation |
+
+The pair-level report exists for failures that happened before any test method
+was reported — the engine refused the transformation, the harness died during
+setup — which are real failures of a reference-validated suite and are not
+dropped for lacking a case. It names none: `test_case_id`, `assertion_id`,
+`expected`, and `actual` are all `null`, the whole generated test is supplied
+instead of a selected case, and its body lives under `pair_result` rather than
+`test_case_result`. The two are mutually exclusive per pair, so one failure is
+never counted twice.
+
+Its eligibility adds two conditions to the per-case ones: the execution must
+have been attempted, and no narrower attribution may exist —
+`execution_not_attempted` and `per_test_failure_available` are the reasons that
+say otherwise. Its eligible reason is
+`parser_passed_and_execution_failed_before_any_test`.
+
+`index.json` carries `counts.reports_created`, `counts.pair_level_reports`,
+`counts.diagnosis_eligible`, and per report a `scope` and a `reason`. These
+count prepared evidence, never experiment results: the stage's own counts were
+written before preparation ran and preparation never touches them, so a report
+coming into existence cannot move a semantic result. n8n calls the diagnosis LLM only for a report with
+`source_diagnosis.eligible = true`, and passes
+`source_diagnosis.evidence_bundle` — the task description, the exact metamodels,
+the generated transformation, the one failing case and assertion, and the
+execution output, each fact once. The bundle is deliberately smaller than the
+stored report: no hashes, no nested stage-evidence document, and the Maven log
+reduced to the lines Maven itself marked (`[ERROR]`, `[WARNING]`, the Surefire
+summary, the build verdict). The stored report keeps the wider tail excerpt and
+the complete stream stays in `execution_evidence/maven-stdout.log`.
+
+A report with `eligible = false` states why in `source_diagnosis.reason`:
+
+```text
+transformation_parser_check_failed        the transformation never passed the parser
+semantic_test_passed                      not a failure
+failure_not_attributable_to_the_pairing   a timeout or an infrastructure failure
+reference_result_not_passing              the suite did not pass on the reference
+no_recorded_input_model                   the case names no readable source model
+no_observed_failure_evidence              nothing was observed about the failure
+```
+
+A runtime throw is **not** among them. A validated test that throws on a
+generated transformation has failed against it, and attributing that failure is
+exactly what Source Diagnosis is for. Such a report names no assertion
+(`assertion_id: null`), carries the exception and its stack trace as evidence,
+and leaves `expected`/`actual` null rather than reconstructing them.
+
+The same assembly is reproducible outside the stage call with
+`llm4mtl diagnosis prepare --run <run-id> [--attempt N]`; the index is written
+once per attempt and re-reading it returns the same document.
+
 ## Diagnosis result
 
 The diagnosis LLM runs in n8n and returns exactly:

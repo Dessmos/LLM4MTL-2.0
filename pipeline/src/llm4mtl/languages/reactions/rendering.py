@@ -113,7 +113,7 @@ def _render_method(
             f'        List<EObject> {variable} = modelRoots(vsum, "{escape_java(str(model["metamodelUri"]))}");'
         )
         lines.append(
-            f'        writeSnapshot("{escape_java(slug(task))}-{escape_java(sanitize_method_name(str(test["name"])))}-{escape_java(str(model["name"]))}.xmi", {variable});'
+            f'        writeSnapshot("{escape_java(sanitize_method_name(str(test["name"])))}/{escape_java(str(model["name"]))}.xmi", {variable});'
         )
     lines.extend(render_assertions(test["assertions"], variables))
     lines.extend(["    }", ""])

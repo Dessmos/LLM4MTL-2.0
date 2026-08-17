@@ -216,12 +216,17 @@ def execute_suite_against(
     transformation: Path,
     test_project_dir: Path,
     timeout: int,
-    ) -> tuple[SuiteExecutionObservation, RawExecutionEvidence]:
+    observations_root: Path | None = None,
+) -> tuple[SuiteExecutionObservation, RawExecutionEvidence]:
     """Run one rendered suite against ``transformation`` and observe the outcome.
 
     The transformation is always injected explicitly: executability is only
     meaningful relative to a known transformation, and the harness ships its own
     copies that would otherwise be used silently.
+
+    ``observations_root`` is where the harness writes the actual target models it
+    produced. Omitting it means this execution keeps no snapshot — which is a
+    caller's decision, never a silent default.
 
     Returns the observation and the raw evidence behind it. The evidence is read
     while the workspace lock is still held, because the next execution's
@@ -242,11 +247,12 @@ def execute_suite_against(
             )
             inject_suite(suite, java_paths, model_paths, test_project_dir, injection)
             selector = ",".join(infer_fqcn(path) for path in java_paths)
-            result = run_maven(
-                ["mvn", "clean", "test", f"-Dtest={selector}"],
-                cwd=test_project_dir,
-                timeout=timeout,
-            )
+            command = ["mvn", "clean", "test", f"-Dtest={selector}"]
+            if observations_root is not None:
+                command.append(
+                    f"-Dllm4mtl.observations.dir={snapshot_dir(observations_root, suite)}"
+                )
+            result = run_maven(command, cwd=test_project_dir, timeout=timeout)
             # `mvn clean` wipes target/ first, so these reports describe this run only.
             reports_root = test_project_dir / "target" / "surefire-reports"
             reports = read_surefire_reports(reports_root)
@@ -285,6 +291,19 @@ def observation_path(observations_root: Path, suite: GeneratedSuite) -> Path:
         / suite.suite_id
         / OBSERVATION_FILENAME
     )
+
+
+def snapshot_dir(observations_root: Path, suite: GeneratedSuite) -> Path:
+    """Where ``suite``'s actual output models are written, for one execution.
+
+    Scoped to the observation, not to the transformation. A snapshot's identity
+    is transformation + suite + test case + model slot, and the first three are
+    all in this path (the case is a directory the harness creates below it).
+    Sharing one directory per transformation let two suites with the same case
+    name overwrite each other's actual output — and a diagnosis assembled from
+    the survivor would describe a failure that never produced it.
+    """
+    return observation_path(observations_root, suite).parent / "snapshots"
 
 
 @contextmanager

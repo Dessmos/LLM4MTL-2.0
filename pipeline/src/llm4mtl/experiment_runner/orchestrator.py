@@ -17,6 +17,10 @@ from llm4mtl import run_store
 from llm4mtl.paths import REPO_ROOT, TARGET
 from llm4mtl.provenance import build_provenance
 from llm4mtl.run_store.attempts import existing_attempts
+from llm4mtl.semantic_tests.diagnosis_preparation import (
+    prepare_after_execution_stage,
+    prepare_execution_diagnosis,
+)
 from llm4mtl.semantic_tests.failure_report import (
     load_report_request,
     write_failure_report,
@@ -58,6 +62,27 @@ class ExperimentOrchestrator:
         """
         request = load_report_request(request_path)
         return write_failure_report(request, output_path)
+
+    def prepare_diagnosis_evidence(
+        self,
+        run: str,
+        attempt: int | None = None,
+    ) -> dict[str, Any]:
+        """Re-derive the diagnosis evidence of one recorded execution attempt.
+
+        The same assembly the execution stage performs on its own. Exposed as a
+        command so an existing run can be prepared without re-executing Maven,
+        and so the automatic path has no behaviour that cannot be reproduced.
+        """
+        paths = run_store.open_run(self.runs_root, Path(run).name)
+        if not paths.manifest.exists():
+            raise ConfigError(f"unknown run: {run}")
+        if attempt is None:
+            attempts = existing_attempts(paths.stage_attempts_dir("execution"))
+            if not attempts:
+                raise ConfigError(f"run {paths.root.name} recorded no execution attempt")
+            attempt = max(attempts)
+        return prepare_execution_diagnosis(paths.root, attempt)
 
     def run(self, config: PipelineConfig) -> RunResult:
         validate_config(config)
@@ -192,6 +217,9 @@ class ExperimentOrchestrator:
             outcome_code=payload["outcome_code"],
             attempt=attempt,
         )
+        # Only now: the report assembler pins itself to the immutable attempt
+        # that was just written, so it cannot run before that evidence exists.
+        prepare_after_execution_stage(paths.root, stage, payload, attempt)
 
     def apply_stage_outputs(
         self,

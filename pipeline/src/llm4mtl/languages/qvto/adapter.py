@@ -54,7 +54,7 @@ public class Llm4mtlParserProbeTest {
 
 class QvtoAdapter:
     language_id = "qvto"
-    renderer_version = "qvto-junit-v1"
+    renderer_version = "qvto-junit-v2"
 
     def __init__(
         self,

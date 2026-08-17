@@ -124,14 +124,18 @@ def imports() -> list[str]:
 def helpers() -> list[str]:
     """Java helpers operating on canonical lists of EMF roots."""
     return [
-        "    private void writeSnapshot(String filename, List<EObject> roots) throws Exception {",
+        # `relativePath` is `<test-case>/<model-slot>.xmi`, so the snapshot is
+        # identified by the execution that produced it down to the case and the
+        # slot. Creating the parent rather than the configured root is what lets
+        # the case be a directory.
+        "    private void writeSnapshot(String relativePath, List<EObject> roots) throws Exception {",
         "        String configured = System.getProperty(\"llm4mtl.observations.dir\", \"\");",
         "        if (configured.isBlank()) return;",
-        "        Path directory = Path.of(configured);",
-        "        Files.createDirectories(directory);",
+        "        Path target = Path.of(configured).resolve(relativePath);",
+        "        Files.createDirectories(target.getParent());",
         "        ResourceSetImpl resourceSet = new ResourceSetImpl();",
         "        resourceSet.getResourceFactoryRegistry().getExtensionToFactoryMap().put(\"xmi\", new XMIResourceFactoryImpl());",
-        "        Resource resource = resourceSet.createResource(URI.createFileURI(directory.resolve(filename).toString()));",
+        "        Resource resource = resourceSet.createResource(URI.createFileURI(target.toString()));",
         "        resource.getContents().addAll(EcoreUtil.copyAll(roots));",
         "        resource.save(Map.of());",
         "    }",

@@ -74,6 +74,25 @@ def build_parser() -> argparse.ArgumentParser:
         choices=("text", "json"),
         default="text",
     )
+    diagnosis_prepare = diagnosis_actions.add_parser(
+        "prepare",
+        help=(
+            "Assemble every failure report one recorded execution attempt "
+            "justifies. Runs automatically after a failing execution stage; this "
+            "command re-derives the same index for an existing run."
+        ),
+    )
+    diagnosis_prepare.add_argument("--run", required=True, help="run id or run directory")
+    diagnosis_prepare.add_argument(
+        "--attempt",
+        type=int,
+        help="execution attempt to prepare; defaults to the latest recorded one",
+    )
+    diagnosis_prepare.add_argument(
+        "--output-format",
+        choices=("text", "json"),
+        default="text",
+    )
 
     pipeline = domains.add_parser("pipeline", help="Full experiment pipeline.")
     pipeline_actions = pipeline.add_subparsers(dest="action", required=True)
@@ -300,6 +319,29 @@ def emit_failure_report_result(
     print(f"Diagnosis eligible: {str(diagnosis_eligible).lower()}")
 
 
+def emit_diagnosis_index(index: dict[str, object], output_format: str) -> None:
+    """Print the prepared evidence without repeating the reports themselves."""
+    if output_format == "json":
+        print(json.dumps(index, indent=2, ensure_ascii=False))
+        return
+    counts = index.get("counts", {})
+    print(f"Run: {index.get('run_id')} (execution attempt {index.get('attempt')})")
+    print(f"Counts: {json.dumps(counts, sort_keys=True)}")
+    for pair in index.get("pairs", []):
+        for report in pair.get("reports", []):
+            if report["status"] == "created":
+                print(
+                    f"{report['test_case_id']}/{report['assertion_id']}: "
+                    f"{report['reason']} -> {report['report']}"
+                )
+            else:
+                print(
+                    f"{report.get('test_method')}: refused ({report.get('detail')})"
+                )
+        for skipped in pair.get("skipped", []):
+            print(f"{pair.get('suite')}: {skipped['reason']} ({skipped['detail']})")
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -310,6 +352,13 @@ def main(argv: list[str] | None = None) -> int:
                 args.output,
             )
             emit_failure_report_result(report, args.output, args.output_format)
+            return 0
+        if args.domain == "diagnosis" and args.action == "prepare":
+            index = ExperimentOrchestrator().prepare_diagnosis_evidence(
+                args.run,
+                args.attempt,
+            )
+            emit_diagnosis_index(index, args.output_format)
             return 0
         config = config_from_args(args)
         result = ExperimentOrchestrator().run(config)

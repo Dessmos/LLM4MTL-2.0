@@ -175,12 +175,17 @@ class EtlAdapterContractTests(unittest.TestCase):
                     240,
                 )
 
+            # The observation directory is scoped to this suite, so two suites
+            # with the same case name cannot overwrite each other's actual
+            # output models.
             run_maven.assert_called_once_with(
                 [
                     "mvn",
                     "clean",
                     "test",
                     "-Dtest=generated.GeneratedSmokeTest",
+                    "-Dllm4mtl.observations.dir="
+                    f"{root / 'observations' / 'Tree2Graph' / 'gpt-5' / 'few_shot' / 'suite_001' / 'snapshots'}",
                 ],
                 cwd=engine_dir,
                 timeout=240,

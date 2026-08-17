@@ -102,7 +102,7 @@ def _render_method(
             f'        List<EObject> targetRoots = executeAtl("{escape_java(transformation)}", source, '
             f'"{escape_java(source_metamodel)}", "{escape_java(target_metamodel)}", '
             f'"{escape_java(_metamodel_alias(source))}", "{escape_java(_metamodel_alias(target))}");',
-            f'        writeSnapshot("{escape_java(slug(task))}-{escape_java(method_name)}-OUT.xmi", targetRoots);',
+            f'        writeSnapshot("{escape_java(method_name)}/{escape_java(str(target["name"]))}.xmi", targetRoots);',
             *render_assertions(test["assertions"], model_variables),
             "    }",
             "",

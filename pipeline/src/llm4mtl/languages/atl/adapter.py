@@ -34,7 +34,7 @@ PARSE_RESULT = re.compile(r"RESULT:(OK|FAIL):(-?\d+)")
 
 class AtlAdapter:
     language_id = "atl"
-    renderer_version = "atl-junit-v1"
+    renderer_version = "atl-junit-v2"
 
     def __init__(
         self,

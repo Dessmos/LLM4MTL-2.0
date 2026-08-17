@@ -1,0 +1,6 @@
+projectKey=LLM4MTL
+serverUrl=http://localhost:9000
+serverVersion=26.8.0.126808
+dashboardUrl=http://localhost:9000/dashboard?id=LLM4MTL
+ceTaskId=6e9721a1-8b49-41b8-a7db-edeec754248b
+ceTaskUrl=http://localhost:9000/api/ce/task?id=6e9721a1-8b49-41b8-a7db-edeec754248b

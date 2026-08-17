@@ -42,7 +42,7 @@ SYNTAX_ISSUES = re.compile(r"Syntax issues \((\d+)\):")
 
 class ReactionsAdapter:
     language_id = "reactions"
-    renderer_version = "reactions-junit-v1"
+    renderer_version = "reactions-junit-v2"
 
     def __init__(
         self,

@@ -36,6 +36,11 @@ def render_semantic_test(class_name: str, spec: dict[str, Any], task: str) -> st
             "",
             "import org.eclipse.emf.ecore.EObject;",
             "import org.eclipse.emf.ecore.EStructuralFeature;",
+            "import org.eclipse.emf.ecore.resource.Resource;",
+            "import org.eclipse.emf.ecore.resource.ResourceSet;",
+            "import org.eclipse.emf.ecore.resource.impl.ResourceSetImpl;",
+            "import org.eclipse.emf.ecore.util.EcoreUtil;",
+            "import org.eclipse.emf.ecore.xmi.impl.XMIResourceFactoryImpl;",
             "import org.eclipse.epsilon.emc.emf.EmfModel;",
             "import org.eclipse.epsilon.emc.plainxml.PlainXmlModel;",
             "import org.eclipse.epsilon.eol.models.IModel;",
@@ -74,6 +79,17 @@ def render_test_method(spec: dict[str, Any], test: dict[str, Any], task: str) ->
         lines.append(f"        generatedModels.add(model{index});")
 
     lines.append("        runEtl(ETL, generatedModels.toArray(new IModel[0]));")
+    # Written before the assertions, so the actual output survives the first
+    # assertion that fails. Without it a structural failure — a missing edge, a
+    # wrong reference — reaches Source Diagnosis as "expected != actual" and
+    # nothing else, which is the one thing the diagnosis cannot work from.
+    for index, model in enumerate(models):
+        if model.get("role") != "target" or model.get("kind", "emf") != "emf":
+            continue
+        slot = escape_java(str(model["name"]))
+        lines.append(
+            f'        writeSnapshot("{escape_java(method_name)}/{slot}.xmi", model{index});'
+        )
     for assertion in test["assertions"]:
         lines.extend(render_assertion(assertion, model_vars))
     lines.extend(["    }", ""])
@@ -200,6 +216,22 @@ def render_count_assertion(expected: str, actual: str, assertion: dict[str, Any]
 
 def java_helpers() -> list[str]:
     return [
+        # The actual target model this execution produced, copied out of the
+        # live EMF resource. A blank property means no observation directory was
+        # configured, and then nothing is written — never a partial file.
+        "    private void writeSnapshot(String relativePath, EmfModel model) throws Exception {",
+        "        String configured = System.getProperty(\"llm4mtl.observations.dir\", \"\");",
+        "        if (configured.isBlank()) return;",
+        "        java.nio.file.Path target = java.nio.file.Path.of(configured).resolve(relativePath);",
+        "        java.nio.file.Files.createDirectories(target.getParent());",
+        "        ResourceSet snapshotSet = new ResourceSetImpl();",
+        "        snapshotSet.getResourceFactoryRegistry().getExtensionToFactoryMap().put(\"xmi\", new XMIResourceFactoryImpl());",
+        "        Resource snapshot = snapshotSet.createResource(",
+        "            org.eclipse.emf.common.util.URI.createFileURI(target.toString()));",
+        "        snapshot.getContents().addAll(EcoreUtil.copyAll(model.getResource().getContents()));",
+        "        snapshot.save(Map.of());",
+        "    }",
+        "",
         "    private Collection<?> allOfType(IModel model, String typeName) throws Exception {",
         "        return model.getAllOfType(typeName);",
         "    }",

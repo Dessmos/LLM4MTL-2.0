@@ -222,18 +222,25 @@ The standalone `transformation_execution` CLI follows the same eligibility rule:
 it requires `--observations-root` and does not discover historical
 `validated/` copies.
 
-ATL, QVT-O, and Reactions render post-execution EMF snapshots. Reference
-execution writes them to:
+All four languages render post-execution EMF snapshots of the actual target
+models. A snapshot's identity is transformation + suite + test case + model
+slot, and the path states all four:
 
 ```text
-runs/<run-id>/observations/snapshots/*.xmi
+runs/<run-id>/observations/<task>/<llm>/<strategy>/<suite-id>/
+    suite_execution.json
+    execution_evidence/
+    snapshots/<test-case>/<model-slot>.xmi      reference execution
+
+runs/<run-id>/observations/generated_transformations/<sha256>/
+    <task>/<llm>/<strategy>/<suite-id>/
+        snapshots/<test-case>/<model-slot>.xmi  generated-transformation execution
 ```
 
-Generated-transformation execution isolates each candidate by its content hash:
-
-```text
-runs/<run-id>/observations/generated_transformations/<sha256>/snapshots/*.xmi
-```
+Scoping to the suite is not cosmetic. One directory per transformation let two
+suites with the same case name overwrite each other's actual output, and a
+diagnosis assembled from the survivor would cite a model that the failing
+execution never produced.
 
 Each execution also writes a schema-validated `suite_execution.json` beneath
 the corresponding observation root. At this stage the JUnit assertions, not
@@ -282,8 +289,38 @@ Run status is derived from stage facts:
 
 ## Diagnosis
 
-Before an LLM diagnosis, Python can assemble one small evidence bundle for one
-concrete failed assertion from the immutable run facts:
+Evidence assembly is triggered by the execution stage and by nothing earlier. A
+generated test reaches this point only by having passed on the reference
+transformation first, so the failure being diagnosed is always a failure of the
+generated transformation, never an unproven oracle:
+
+```text
+execution attempt recorded
+  → counts.failed > 0
+  → for each pair with assertions_passed = false
+      → archived Surefire <failure>/<error> entries
+        ├─ named a test method
+        │    → method name → exactly one semantic case
+        │    → failure message → exactly one assertion (assertion failures only)
+        │    → one immutable per-case report per recorded failure
+        └─ named none
+             → one immutable pair-level report for the whole execution
+  → diagnosis/execution/attempt-NNN/index.json
+```
+
+Preparation reads only the immutable attempt that was just written. It never
+changes the stage result, the run status, or the events timeline, and a failure
+to assemble evidence is recorded in the index rather than failing the stage.
+The same assembly is available as `llm4mtl diagnosis prepare --run <run-id>`.
+
+The mapping back from a Surefire method to a semantic case is the renderer's own
+name function applied to every case; the mapping from a failure message to an
+assertion is the renderer's own message format. A method or message that could
+have come from more than one case or assertion is refused, with the reason
+recorded, rather than attributed to the first candidate.
+
+Before an LLM diagnosis, Python can also assemble one such bundle directly from
+the immutable run facts:
 
 ```text
 manifest + syntax attempt + execution attempt
@@ -298,13 +335,41 @@ The local orchestration command is:
 llm4mtl diagnosis report --request <request.json> --output <report.json>
 ```
 
-It emits a Source Diagnosis bundle only when the generated transformation
-passed parser validation and the selected semantic assertion was evaluated and
-failed. The selected `test_case_id` and `assertion_id` must match the Surefire
-failure. The structured actual-vs-expected difference is an observed comparator
-input; the report assembler never infers it from an error string.
-Actual-model snapshots and Surefire reports are explicit request paths; the
-assembler does not discover substitutes.
+It emits a Source Diagnosis bundle only when four conditions hold, in the order
+the pipeline establishes them:
+
+```text
+the generated transformation is syntactically valid
+AND the suite passed on the reference transformation
+AND a real failure of the pairing was observed on the generated one
+AND enough execution evidence survived to say what happened
+```
+
+A JUnit assertion failure is not one of them. A validated test that *throws* on
+a generated transformation has failed against it just as much, and that is
+usually what a broken transformation produces; the report then names no
+assertion (`assertion_id: null`), carries the exception and stack trace as its
+evidence, and leaves `expected`/`actual` null. Excluded instead is a timeout or
+an infrastructure failure, because neither is evidence about the pairing.
+
+When the failure *is* an assertion failure, the selected `test_case_id` and
+`assertion_id` must match the Surefire failure.
+
+Three independent things can carry that observed result, and the report names
+which of them it has:
+
+```text
+actual target-model snapshots        written by the harness, per test case
+expected/actual from JUnit           read verbatim out of the archived failure message
+structured comparator difference     not produced yet; optional
+```
+
+The `expected`/`actual` pair is extracted only from the exact
+`expected: <X> but was: <Y>` shape; any other message records both as `null`
+beside the raw message. The structured actual-vs-expected difference remains an
+observed comparator input, and the assembler never infers it from an error
+string. When none of the three is present the report is still written, with
+`source_diagnosis.reason = no_observed_actual_result`.
 
 This report command is deterministic post-execution processing rather than a
 new contract stage. It does not rewrite the execution attempt, call an LLM,

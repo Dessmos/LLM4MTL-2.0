@@ -50,7 +50,7 @@ class EtlAdapter:
     """ETL: Epsilon transformations executed through the Maven/JUnit harness."""
 
     language_id = "etl"
-    renderer_version = "etl-junit-v1"
+    renderer_version = "etl-junit-v2"
 
     def __init__(
         self,
@@ -106,7 +106,13 @@ class EtlAdapter:
         workspace: Workspace,
         timeout: int,
     ) -> tuple[SuiteExecutionObservation, RawExecutionEvidence]:
-        return execute_suite_against(suite, transformation, workspace.engine_dir, timeout)
+        return execute_suite_against(
+            suite,
+            transformation,
+            workspace.engine_dir,
+            timeout,
+            observations_root=workspace.observations_dir,
+        )
 
     def normalize_transformation_failure(
         self,

@@ -24,6 +24,7 @@ from llm4mtl.languages.base import Workspace
 from llm4mtl.semantic_tests.suite_execution import (
     classify_maven_run,
     execution_workspace_lock,
+    snapshot_dir,
 )
 from llm4mtl.semantic_tests.execution_evidence import (
     RawExecutionEvidence,
@@ -132,7 +133,8 @@ def execute_maven_suite(
                 for part in maven_command
             ]
             command.append(
-                f"-Dllm4mtl.observations.dir={workspace.observations_dir / 'snapshots'}"
+                "-Dllm4mtl.observations.dir="
+                f"{snapshot_dir(workspace.observations_dir, suite)}"
             )
             result = run_maven(command, cwd=maven_cwd, timeout=timeout)
             reports = read_surefire_reports(reports_root)

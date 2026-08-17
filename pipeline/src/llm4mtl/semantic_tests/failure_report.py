@@ -28,7 +28,7 @@ The request is one JSON object with these fields::
       "actual_target_models": [".../snapshot.xmi"],
       "surefire_reports": [".../TEST-GeneratedTest.xml"],   # optional, see below
       "execution_log": ".../execution.log",                 # optional
-      "actual_vs_expected": {                                # required for diagnosis
+      "actual_vs_expected": {                                # optional, see below
         "missing_elements": [],
         "extra_elements": [],
         "wrong_types": [],
@@ -37,8 +37,25 @@ The request is one JSON object with these fields::
       }
     }
 
+``actual_vs_expected`` is the model-level comparator difference.  It is optional
+because no comparator produces it yet, and inventing one here is exactly what
+this module refuses to do.  What the report records without it is what the run
+observed: the actual target-model snapshots the harness wrote, the
+``expected``/``actual`` values JUnit printed read verbatim, and the recorded
+exception.  A diagnosis-eligible failure needs a syntactically valid
+transformation, a suite that passed on the reference, a real failure of the
+pairing, the transformed input, and at least one of those observed facts.
+
+Both JUnit outcomes are real failures here.  An assertion that was evaluated and
+lost names the assertion it lost; a throw before any verdict names none, and
+``assertion_id`` is then ``null`` — the exception and its stack trace are the
+evidence, and ``expected``/``actual`` stay ``null`` rather than being
+reconstructed.  A timeout or an infrastructure failure is excluded instead,
+because neither says anything about the pairing.
+
 ``assertion_id`` is either an explicit assertion ``id`` from
-``semantic_cases.json`` or the stable positional id ``assertion-NNN``.  Input
+``semantic_cases.json``, the stable positional id ``assertion-NNN``, or ``null``
+for a runtime throw.  Input
 models, the generated transformation and suite, the reviewed task description,
 and exact metamodels are resolved from the recorded identities.  Every input
 path must stay inside the repository, and the output must stay under
@@ -71,6 +88,15 @@ from llm4mtl.serialization.json_io import read_json, write_json_once
 from llm4mtl.transformation_execution.hashing import directory_sha256, file_sha256
 
 SCHEMA_VERSION = "1.0"
+# Two report types, kept apart by what the run was able to attribute the failure
+# to. A per-case report is about one test case and, for an assertion failure,
+# one assertion. A pair-level report is about the execution of one suite against
+# one transformation and nothing narrower: it exists for failures that happened
+# before Surefire could attribute anything to a test method, and it names no
+# case and no assertion rather than inventing one to fill the shape.
+CASE_REPORT_TYPE = "semantic_test_case_failure"
+PAIR_REPORT_TYPE = "semantic_execution_pair_failure"
+SYSTEM_ERR_EXCERPT_CHARS = 4000
 DIFF_FIELDS = (
     "missing_elements",
     "extra_elements",
@@ -79,6 +105,26 @@ DIFF_FIELDS = (
     "reference_mismatches",
 )
 RUN_ID_PATTERN = re.compile(r"^[A-Za-z0-9._-]+$")
+
+# JUnit renders a failed equality assertion as
+# ``<message> ==> expected: <X> but was: <Y>``. Reading X and Y back is
+# observation, not inference: the values are the ones the harness printed. Any
+# message that does not have exactly this shape yields ``None`` for both rather
+# than a guess reconstructed from prose.
+ASSERTION_OUTCOME_SEPARATOR = " but was: <"
+ASSERTION_OUTCOME_PREFIX = "expected: <"
+
+# The report cites the Maven log rather than copying it. The complete,
+# untruncated stream is already archived beside the observation, and a build log
+# can run to thousands of lines: inlining it would put the same bytes into every
+# per-assertion report of the same execution and then into the diagnosis prompt,
+# where it drowns the evidence Python already extracted. The tail is what
+# carries the failure summary and the `[ERROR]` lines.
+EXECUTION_LOG_EXCERPT_LINES = 120
+EXECUTION_LOG_EXCERPT_CHARS = 8000
+# The diagnosis prompt gets less than the report keeps: only the lines Maven
+# itself marked, and only the last of those.
+MAVEN_BUNDLE_LINES = 40
 
 
 class FailureReportError(ValueError):
@@ -95,7 +141,7 @@ class ReportRequest:
     generated_execution: Path
     reference_execution: Path | None
     test_case_id: str
-    assertion_id: str
+    assertion_id: str | None
     attempt: int
     actual_target_models: tuple[Path, ...]
     surefire_reports: tuple[Path, ...]
@@ -128,7 +174,14 @@ class ReportRequest:
             )
 
         test_case_id = _required_string(payload, "test_case_id")
-        assertion_id = _required_string(payload, "assertion_id")
+        # Null is the honest value for a runtime throw: the harness never
+        # reached an assertion, so naming one would attribute the failure to a
+        # check that did not run.
+        assertion_id = (
+            None
+            if payload.get("assertion_id") is None
+            else _required_string(payload, "assertion_id")
+        )
         attempt = payload.get("attempt")
         if not isinstance(attempt, int) or isinstance(attempt, bool) or attempt < 1:
             raise FailureReportError("attempt must be a positive integer")
@@ -183,11 +236,11 @@ class ReportRequest:
 
 
 def build_failure_report(request: ReportRequest) -> dict[str, Any]:
-    """Build a self-contained report for one test case and assertion.
+    """Build a self-contained report for one recorded failure.
 
-    Diagnosis eligibility is a fact derived only from the syntax observation
-    and generated-transformation execution.  A bundle is emitted only when the
-    parser passed and an evaluated semantic assertion failed.
+    Diagnosis eligibility is derived from recorded facts only — the parser
+    verdict, the reference result, the generated-transformation observation, and
+    what evidence survived.  See :func:`_diagnosis_reason` for the conditions.
     """
     manifest = _read_object(request.run_manifest, "run manifest")
     identity = _identity(manifest, request.attempt)
@@ -216,11 +269,6 @@ def build_failure_report(request: ReportRequest) -> dict[str, Any]:
     )
     observation = _observation(generated_execution, "generated execution")
     semantic_status = _semantic_status(observation)
-    is_diagnosis_eligible = (
-        syntax_check["status"] == "passed"
-        and observation["assertions_evaluated"] is True
-        and observation["assertions_passed"] is False
-    )
 
     task_description = _task_description(identity, manifest)
     metamodels = _metamodel_artifacts(manifest)
@@ -233,12 +281,13 @@ def build_failure_report(request: ReportRequest) -> dict[str, Any]:
     surefire_evidence = _surefire_evidence(
         request.surefire_reports, request.test_case_id
     )
+    failure = _recorded_failure_view(surefire_evidence)
     execution_error = {
         "error_summary": str(observation.get("error_summary", "")),
         "exceptions": surefire_evidence["exceptions"],
         "stack_traces": surefire_evidence["stack_traces"],
         "execution_log": (
-            _text_artifact(request.execution_log)
+            _log_excerpt(request.execution_log)
             if request.execution_log is not None
             else None
         ),
@@ -265,13 +314,32 @@ def build_failure_report(request: ReportRequest) -> dict[str, Any]:
         if request.actual_vs_expected is not None
         else {"available": False, **{field: None for field in DIFF_FIELDS}}
     )
-    if is_diagnosis_eligible:
+    # What the run observed about this failure, as separate facts. Diagnosis
+    # needs at least one of them: without any, the LLM would be asked what went
+    # wrong while being told nothing about what actually happened. An assertion
+    # failure and a runtime throw satisfy this differently and both count — a
+    # thrown exception with its stack trace is evidence, and refusing to
+    # diagnose it would drop exactly the failures a transformation defect most
+    # often produces.
+    observed_failure_evidence = {
+        "target_model_snapshots": len(actual_target_models),
+        "assertion_expected_actual": failure is not None
+        and failure["extraction"] == "junit_assertion_message",
+        "structured_difference": request.actual_vs_expected is not None,
+        "recorded_exception": bool(surefire_evidence["exceptions"]),
+    }
+    diagnosis_reason = _diagnosis_reason(
+        syntax_check,
+        observation,
+        reference_result,
+        input_models=input_models,
+        observed_failure_evidence=observed_failure_evidence,
+    )
+    is_diagnosis_eligible = diagnosis_reason == "parser_passed_and_semantic_test_failed"
+    if is_diagnosis_eligible and failure is not None and failure["kind"] == "assertion_failure":
+        # Only an assertion failure claims to be about one assertion, so only it
+        # has to prove that the selected assertion is the one that lost.
         _require_concrete_assertion_failure(test_case, assertion, surefire_evidence)
-        _require_diagnosis_evidence(
-            input_models=input_models,
-            actual_target_models=actual_target_models,
-            difference=request.actual_vs_expected,
-        )
 
     test_case_result = {
         "test_case_id": request.test_case_id,
@@ -290,6 +358,8 @@ def build_failure_report(request: ReportRequest) -> dict[str, Any]:
         },
         "actual_target_model": actual_target_models,
         "actual_vs_expected": difference,
+        "failure": failure,
+        "observed_failure_evidence": observed_failure_evidence,
         "execution": {
             "observation": observation,
             "stage_evidence": execution_stage_evidence,
@@ -299,31 +369,30 @@ def build_failure_report(request: ReportRequest) -> dict[str, Any]:
         "versions": versions,
     }
 
-    evidence_bundle = None
-    if is_diagnosis_eligible:
-        evidence_bundle = {
-            "original_task_description": task_description,
-            "relevant_source_and_target_metamodel_constraints": metamodels,
-            "generated_transformation": _text_artifact(transformation_path),
-            "failing_test_case_or_assertion": {
-                "test_case_id": request.test_case_id,
-                "assertion_id": request.assertion_id,
-                "test_case": test_case,
-                "assertion": assertion,
-            },
-            "input_model": test_case_result["input_model"],
-            "expected_output_or_properties": test_case_result[
-                "expected_output_or_properties"
-            ],
-            "actual_target_model": actual_target_models,
-            "structured_actual_vs_expected_difference": difference,
-            "execution_error_or_log": execution_error,
-            "reference_transformation_result": reference_result,
-        }
+    evidence_bundle = (
+        _evidence_bundle(
+            request=request,
+            task_description=task_description,
+            metamodels=metamodels,
+            transformation_path=transformation_path,
+            test_case=test_case,
+            assertion=assertion,
+            failure=failure,
+            syntax_check=syntax_check,
+            observation=observation,
+            reference_result=reference_result,
+            test_case_result=test_case_result,
+            actual_target_models=actual_target_models,
+            difference=difference,
+            surefire_evidence=surefire_evidence,
+        )
+        if is_diagnosis_eligible
+        else None
+    )
 
     return {
         "schema_version": SCHEMA_VERSION,
-        "report_type": "semantic_test_case_failure",
+        "report_type": CASE_REPORT_TYPE,
         "identity": identity,
         "task_context": {
             "original_description": task_description,
@@ -332,7 +401,7 @@ def build_failure_report(request: ReportRequest) -> dict[str, Any]:
         "test_case_result": test_case_result,
         "source_diagnosis": {
             "eligible": is_diagnosis_eligible,
-            "reason": _diagnosis_reason(syntax_check, observation),
+            "reason": diagnosis_reason,
             "evidence_bundle": evidence_bundle,
             "allowed_classifications": [
                 "transformation_defect",
@@ -350,10 +419,553 @@ def build_failure_report(request: ReportRequest) -> dict[str, Any]:
     }
 
 
+def _evidence_bundle(
+    *,
+    request: ReportRequest,
+    task_description: dict[str, Any],
+    metamodels: list[dict[str, Any]],
+    transformation_path: Path,
+    test_case: dict[str, Any],
+    assertion: dict[str, Any] | None,
+    failure: dict[str, Any] | None,
+    syntax_check: dict[str, Any],
+    observation: dict[str, Any],
+    reference_result: dict[str, Any],
+    test_case_result: dict[str, Any],
+    actual_target_models: list[dict[str, Any]],
+    difference: dict[str, Any],
+    surefire_evidence: dict[str, Any],
+) -> dict[str, Any]:
+    """The prompt-shaped subset of the report, and only that.
+
+    The stored report keeps everything the run recorded — hashes, the whole
+    stage-evidence document, every Surefire entry. The bundle is what a
+    diagnosis is actually asked to read, so it carries each fact once, in the
+    form a reader needs: contents without their hashes, the reference result as
+    a verdict rather than a nested document, the execution as a summary of what
+    failed, and the build log as a bounded excerpt. Sending the report verbatim
+    would spend most of the prompt on provenance the LLM cannot use and on the
+    same JSON document quoted twice.
+    """
+    stack_traces = surefire_evidence["stack_traces"]
+    return {
+        "original_task_description": task_description["content"],
+        "relevant_source_and_target_metamodel_constraints": [
+            _cited(metamodel) for metamodel in metamodels
+        ],
+        "generated_transformation": _cited(_text_artifact(transformation_path)),
+        "failing_test_case_or_assertion": {
+            "test_case_id": request.test_case_id,
+            "assertion_id": request.assertion_id,
+            "test_case": test_case,
+            "assertion": assertion,
+        },
+        "input_model": [
+            {"model": entry["model"], **_cited(entry["artifact"])}
+            for entry in test_case_result["input_model"]["models"]
+        ],
+        "changes": test_case_result["input_model"]["changes"],
+        "expected_output_or_properties": test_case_result[
+            "expected_output_or_properties"
+        ],
+        "syntax_status": syntax_check,
+        "reference_transformation_result": {
+            "status": reference_result["status"],
+            "assertions_passed": (
+                reference_result["observation"]["assertions_passed"]
+                if reference_result["observation"] is not None
+                else None
+            ),
+        },
+        "generated_execution_summary": {
+            "failure_stage": observation.get("failure_stage"),
+            "assertions_evaluated": observation.get("assertions_evaluated"),
+            "assertions_passed": observation.get("assertions_passed"),
+            "error_summary": observation.get("error_summary"),
+            "failure_kind": failure["kind"] if failure else None,
+            "failure_type": failure["failure_type"] if failure else None,
+            "message": failure["message"] if failure else None,
+            "expected": failure["expected"] if failure else None,
+            "actual": failure["actual"] if failure else None,
+        },
+        "actual_target_model": [_cited(model) for model in actual_target_models],
+        "structured_actual_vs_expected_difference": difference,
+        # A stack trace is what identifies where a throw came from, so a runtime
+        # failure keeps it. An assertion failure does not need it: its message
+        # already carries the mismatch, and the trace is harness plumbing.
+        "stack_traces": (
+            stack_traces if failure and failure["kind"] == "runtime_error" else []
+        ),
+        "maven_log_excerpt": _relevant_log_lines(
+            test_case_result["execution"]["error"]["execution_log"]
+        ),
+    }
+
+
+def _relevant_log_lines(cited_log: dict[str, Any] | None) -> dict[str, Any] | None:
+    """The build-log lines that say something about this run's outcome.
+
+    A Maven log is mostly reactor progress. The lines that matter are the ones
+    the build itself marked — errors, warnings, the Surefire summary, the build
+    verdict — and selecting by those markers is a filter over the log's own
+    output, not a judgement about the failure. The report keeps the wider
+    excerpt and the archive keeps the whole stream, so nothing is lost by
+    sending less.
+    """
+    if cited_log is None:
+        return None
+    lines = [
+        line
+        for line in cited_log["excerpt"].splitlines()
+        if line.startswith(("[ERROR]", "[WARNING]"))
+        or "Tests run:" in line
+        or "BUILD " in line
+    ]
+    return {
+        "path": cited_log["path"],
+        "lines": cited_log["lines"],
+        "selected": "marked lines only; the full log is at `path`",
+        "excerpt": "\n".join(lines[-MAVEN_BUNDLE_LINES:]),
+    }
+
+
+def _cited(artifact: dict[str, Any]) -> dict[str, Any]:
+    """One artifact as the prompt needs it: where it is and what is in it."""
+    return {"path": artifact["path"], "content": artifact["content"]}
+
+
 def write_failure_report(request: ReportRequest, output: Path) -> dict[str, Any]:
     """Create one immutable report under ``artifacts/work`` and return it."""
     resolved_output = _output_path(output)
     report = build_failure_report(request)
+    try:
+        write_json_once(resolved_output, report)
+    except FileExistsError as exc:
+        raise FailureReportError(
+            f"report already exists and is immutable: {_repository_path(resolved_output)}"
+        ) from exc
+    return report
+
+
+@dataclass(frozen=True)
+class PairReportRequest:
+    """Validated paths for one pair-level report.
+
+    Deliberately narrower than :class:`ReportRequest`: there is no
+    ``test_case_id``, no ``assertion_id``, no actual target model and no
+    comparator difference, because a failure that never reached a test method
+    has none of them. Every field that a per-case report would fill from the
+    case is simply absent here rather than defaulted.
+    """
+
+    run_manifest: Path
+    syntax_evidence: Path
+    execution_evidence: Path
+    generated_execution: Path
+    reference_execution: Path | None
+    attempt: int
+    surefire_reports: tuple[Path, ...]
+    execution_log: Path | None
+
+    @classmethod
+    def from_payload(cls, payload: object) -> PairReportRequest:
+        if not isinstance(payload, dict):
+            raise FailureReportError("request must be one JSON object")
+        allowed_fields = {
+            "run_manifest",
+            "syntax_evidence",
+            "execution_evidence",
+            "generated_execution",
+            "reference_execution",
+            "attempt",
+            "surefire_reports",
+            "execution_log",
+        }
+        unknown_fields = sorted(set(payload) - allowed_fields)
+        if unknown_fields:
+            raise FailureReportError(
+                f"request contains unknown fields: {', '.join(unknown_fields)}"
+            )
+        attempt = payload.get("attempt")
+        if not isinstance(attempt, int) or isinstance(attempt, bool) or attempt < 1:
+            raise FailureReportError("attempt must be a positive integer")
+
+        generated_execution = _input_path(
+            payload.get("generated_execution"), "generated_execution"
+        )
+        archived = archived_execution_evidence(generated_execution)
+        return cls(
+            run_manifest=_input_path(payload.get("run_manifest"), "run_manifest"),
+            syntax_evidence=_input_path(payload.get("syntax_evidence"), "syntax_evidence"),
+            execution_evidence=_input_path(
+                payload.get("execution_evidence"), "execution_evidence"
+            ),
+            generated_execution=generated_execution,
+            reference_execution=_optional_input_path(
+                payload.get("reference_execution"), "reference_execution"
+            ),
+            attempt=attempt,
+            surefire_reports=(
+                _input_paths(payload["surefire_reports"], "surefire_reports")
+                if "surefire_reports" in payload
+                else archived.surefire_reports
+            ),
+            execution_log=(
+                _optional_input_path(payload.get("execution_log"), "execution_log")
+                if "execution_log" in payload
+                else archived.execution_log
+            ),
+        )
+
+
+def build_pair_failure_report(request: PairReportRequest) -> dict[str, Any]:
+    """Build a report about one suite/transformation execution as a whole.
+
+    This is the report for a failure the run could not attribute to any test
+    method: the engine refused the transformation, the harness died before
+    Surefire wrote a per-test entry, and so on. It is still a real failure of a
+    reference-validated suite against a generated transformation, which is
+    exactly what Source Diagnosis exists to attribute — so the evidence that
+    does exist is assembled, and the evidence that does not is left absent.
+
+    Nothing is narrowed by guessing. ``test_case_id`` and ``assertion_id`` are
+    null, ``expected`` and ``actual`` are null, and the whole generated test is
+    supplied instead of a selected case, because which case failed is precisely
+    what the run did not record.
+    """
+    manifest = _read_object(request.run_manifest, "run manifest")
+    identity = _identity(manifest, request.attempt)
+    generated_execution = _read_execution(
+        request.generated_execution, identity, "generated execution"
+    )
+    suite_dir, transformation_path = _generated_inputs(generated_execution)
+    _verify_recorded_hashes(generated_execution, suite_dir, transformation_path)
+    execution_stage_evidence = _execution_stage_evidence(
+        request.execution_evidence,
+        request.generated_execution,
+        suite_dir,
+        transformation_path,
+        request.attempt,
+        generated_execution,
+    )
+
+    syntax_check = _syntax_check(
+        _read_object(request.syntax_evidence, "syntax evidence"),
+        transformation_path,
+    )
+    observation = _observation(generated_execution, "generated execution")
+    reference_result = _reference_result(request.reference_execution, identity)
+    surefire = _pair_surefire_evidence(request.surefire_reports)
+    execution_log = (
+        _log_excerpt(request.execution_log)
+        if request.execution_log is not None
+        else None
+    )
+
+    generated_test = _text_artifact(suite_dir / "semantic_cases.json")
+    failure = {
+        "scope": "execution_pair",
+        "failure_stage": observation.get("failure_stage"),
+        "failure_type": surefire["failure_type"],
+        "message": surefire["message"] or str(observation.get("error_summary", "")),
+        # A failure that reached no assertion produced no expected and no
+        # actual. Both stay null; the harness never computed either.
+        "expected": None,
+        "actual": None,
+        "extraction": "unavailable",
+    }
+    execution_error = {
+        "error_summary": str(observation.get("error_summary", "")),
+        "exceptions": surefire["exceptions"],
+        "stack_traces": surefire["stack_traces"],
+        "system_err": surefire["system_err"],
+        "execution_log": execution_log,
+        "surefire_reports": surefire["reports"],
+    }
+    preserved_failure_evidence = {
+        "recorded_exception": bool(surefire["exceptions"]),
+        "system_err": bool(surefire["system_err"]),
+        "error_summary": bool(str(observation.get("error_summary", "")).strip()),
+        "maven_log": execution_log is not None,
+    }
+
+    diagnosis_reason = _pair_diagnosis_reason(
+        syntax_check,
+        observation,
+        reference_result,
+        execution_attempted=execution_log is not None or bool(surefire["reports"]),
+        per_test_failures=surefire["test_failures"],
+        preserved_failure_evidence=preserved_failure_evidence,
+    )
+    is_diagnosis_eligible = (
+        diagnosis_reason == "parser_passed_and_execution_failed_before_any_test"
+    )
+
+    task_description = _task_description(identity, manifest)
+    metamodels = _metamodel_artifacts(manifest)
+
+    pair_result = {
+        # Stated as null rather than omitted: a reader comparing report types
+        # must see that this failure has no case and no assertion, not wonder
+        # whether the fields were dropped.
+        "test_case_id": None,
+        "assertion_id": None,
+        "semantic_status": _semantic_status(observation),
+        "syntax_check": syntax_check,
+        "generated_test": {
+            **generated_test,
+            "suite_id": generated_execution.get("suite_id"),
+            "test_case_ids": _test_case_ids(generated_test["content"]),
+        },
+        "generated_transformation": _text_artifact(transformation_path),
+        "failure": failure,
+        "preserved_failure_evidence": preserved_failure_evidence,
+        "execution": {
+            "observation": observation,
+            "stage_evidence": execution_stage_evidence,
+            "error": execution_error,
+        },
+        "reference_transformation_result": reference_result,
+        "versions": {
+            "generated_transformation": {
+                "sha256": file_sha256(transformation_path),
+                "path": _repository_path(transformation_path),
+            },
+            "generated_test": {
+                "sha256": directory_sha256(suite_dir),
+                "path": _repository_path(suite_dir),
+                "renderer_version": manifest.get("provenance", {}).get(
+                    "renderer_version"
+                ),
+            },
+        },
+    }
+
+    evidence_bundle = (
+        _pair_evidence_bundle(
+            task_description=task_description,
+            metamodels=metamodels,
+            transformation_path=transformation_path,
+            generated_test=pair_result["generated_test"],
+            syntax_check=syntax_check,
+            observation=observation,
+            reference_result=reference_result,
+            failure=failure,
+            surefire=surefire,
+            execution_log=execution_log,
+        )
+        if is_diagnosis_eligible
+        else None
+    )
+
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "report_type": PAIR_REPORT_TYPE,
+        "identity": identity,
+        "task_context": {
+            "original_description": task_description,
+            "metamodel_constraints": metamodels,
+        },
+        "pair_result": pair_result,
+        "source_diagnosis": {
+            "eligible": is_diagnosis_eligible,
+            "reason": diagnosis_reason,
+            "evidence_bundle": evidence_bundle,
+            "allowed_classifications": [
+                "transformation_defect",
+                "test_defect",
+                "ambiguous",
+            ],
+            "required_result_fields": [
+                "classification",
+                "confidence",
+                "reasoning_summary",
+                "evidence",
+            ],
+        },
+    }
+
+
+def _pair_diagnosis_reason(
+    syntax_check: dict[str, Any],
+    observation: dict[str, Any],
+    reference_result: dict[str, Any],
+    *,
+    execution_attempted: bool,
+    per_test_failures: list[dict[str, Any]],
+    preserved_failure_evidence: dict[str, bool],
+) -> str:
+    """Why this pair failure is or is not one Source Diagnosis may be asked about.
+
+    Same first conditions as the per-case rule, plus two that are specific to
+    this report type: the execution has to have actually been attempted, and no
+    narrower attribution may exist. A run that *did* name a failing test method
+    is not a pair-level case — it has a per-case report, and producing both
+    would put the same failure into the population twice.
+    """
+    if syntax_check["status"] != "passed":
+        return "transformation_parser_check_failed"
+    if observation["assertions_passed"] is True:
+        return "semantic_test_passed"
+    if observation.get("timed_out") is True or observation.get("failure_stage") in {
+        "timeout",
+        "infrastructure",
+    }:
+        return "failure_not_attributable_to_the_pairing"
+    if reference_result.get("status") != "passed":
+        return "reference_result_not_passing"
+    if not execution_attempted:
+        return "execution_not_attempted"
+    if per_test_failures:
+        return "per_test_failure_available"
+    if not any(preserved_failure_evidence.values()):
+        return "no_preserved_failure_evidence"
+    return "parser_passed_and_execution_failed_before_any_test"
+
+
+def _pair_surefire_evidence(report_paths: Sequence[Path]) -> dict[str, Any]:
+    """What the archived reports say about a run with no per-test failure.
+
+    ``test_failures`` is the proof that no narrower attribution exists: it lists
+    every test method the reports *did* mark, so a caller can see that the
+    pair-level report was not used to bypass a per-case one. The exceptions come
+    from the testsuite element itself, which is where a harness that died before
+    running a test writes them.
+    """
+    test_failures: list[dict[str, Any]] = []
+    exceptions: list[dict[str, str]] = []
+    stack_traces: list[str] = []
+    system_err: list[str] = []
+    reports: list[str] = []
+    for path in report_paths:
+        try:
+            root = ET.parse(path).getroot()
+        except (ET.ParseError, OSError):
+            continue
+        reports.append(_repository_path(path))
+        for case in root.iter("testcase"):
+            error = case.find("error")
+            node = error if error is not None else case.find("failure")
+            if node is None:
+                continue
+            test_failures.append(
+                {
+                    "test_class": case.get("classname"),
+                    "test_method": case.get("name"),
+                    "status": "error" if error is not None else "failed",
+                }
+            )
+        for node in [*root.findall("error"), *root.findall("failure")]:
+            exceptions.append(
+                {
+                    "type": str(node.get("type") or node.tag),
+                    "message": str(node.get("message") or ""),
+                }
+            )
+            trace = (node.text or "").strip()
+            if trace:
+                stack_traces.append(trace)
+        for stream in root.findall("system-err"):
+            text = (stream.text or "").strip()
+            if text:
+                system_err.append(text[-SYSTEM_ERR_EXCERPT_CHARS:])
+    return {
+        "test_failures": test_failures,
+        "exceptions": exceptions,
+        "stack_traces": stack_traces,
+        "system_err": system_err,
+        "reports": reports,
+        "failure_type": exceptions[0]["type"] if exceptions else None,
+        "message": exceptions[0]["message"] if exceptions else "",
+    }
+
+
+def _pair_evidence_bundle(
+    *,
+    task_description: dict[str, Any],
+    metamodels: list[dict[str, Any]],
+    transformation_path: Path,
+    generated_test: dict[str, Any],
+    syntax_check: dict[str, Any],
+    observation: dict[str, Any],
+    reference_result: dict[str, Any],
+    failure: dict[str, Any],
+    surefire: dict[str, Any],
+    execution_log: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """The prompt-shaped subset of a pair-level report.
+
+    It answers the same question as the per-case bundle from less: what the task
+    was, what the transformation and the test look like, that the same test
+    passed on the reference, and how the execution died. What it must not do is
+    imply a failing case that the run never identified.
+    """
+    return {
+        "original_task_description": task_description["content"],
+        "relevant_source_and_target_metamodel_constraints": [
+            _cited(metamodel) for metamodel in metamodels
+        ],
+        "generated_transformation": _cited(_text_artifact(transformation_path)),
+        "generated_test": {
+            **_cited(generated_test),
+            "test_case_ids": generated_test["test_case_ids"],
+        },
+        "failing_test_case_or_assertion": {
+            "test_case_id": None,
+            "assertion_id": None,
+            "note": (
+                "the execution failed before any test method was reported, so "
+                "no case and no assertion can be named"
+            ),
+        },
+        "syntax_status": syntax_check,
+        "reference_transformation_result": {
+            "status": reference_result["status"],
+            "assertions_passed": (
+                reference_result["observation"]["assertions_passed"]
+                if reference_result["observation"] is not None
+                else None
+            ),
+        },
+        "generated_execution_summary": {
+            "failure_stage": observation.get("failure_stage"),
+            "assertions_evaluated": observation.get("assertions_evaluated"),
+            "assertions_passed": observation.get("assertions_passed"),
+            "error_summary": observation.get("error_summary"),
+            "failure_kind": "execution_pair_failure",
+            "failure_type": failure["failure_type"],
+            "message": failure["message"],
+            "expected": None,
+            "actual": None,
+        },
+        "stack_traces": surefire["stack_traces"],
+        "system_err": surefire["system_err"],
+        "maven_log_excerpt": _relevant_log_lines(execution_log),
+    }
+
+
+def _test_case_ids(semantic_cases_content: str) -> list[str]:
+    """Which cases the suite declares — never which of them failed."""
+    try:
+        payload = json.loads(semantic_cases_content)
+    except json.JSONDecodeError as exc:
+        raise FailureReportError(f"invalid semantic_cases.json: {exc}") from exc
+    tests = payload.get("tests") if isinstance(payload, dict) else None
+    if not isinstance(tests, list):
+        return []
+    return [
+        str(test.get("id") or test.get("name") or "")
+        for test in tests
+        if isinstance(test, dict)
+    ]
+
+
+def write_pair_failure_report(
+    request: PairReportRequest, output: Path
+) -> dict[str, Any]:
+    """Create one immutable pair-level report under ``artifacts/work``."""
+    resolved_output = _output_path(output)
+    report = build_pair_failure_report(request)
     try:
         write_json_once(resolved_output, report)
     except FileExistsError as exc:
@@ -376,13 +988,13 @@ def load_report_request(path: Path) -> ReportRequest:
 
 
 def _identity(manifest: dict[str, Any], attempt: int) -> dict[str, Any]:
-    required = (
-        "run_id",
-        "task",
-        "language",
-        "transformation_model",
-        "test_generation_model",
-    )
+    # Only the axes the report itself resolves paths from are mandatory. A run
+    # may deliberately record a null model axis — that is what `exactly_one`
+    # writes when the run fixes no value for it, as an explicitly named
+    # transformation does — and refusing the report then would make a whole
+    # legitimate run undiagnosable over a provenance field the report only
+    # copies. The null is carried through as the null it is.
+    required = ("run_id", "task", "language")
     missing = [field for field in required if not isinstance(manifest.get(field), str)]
     if missing:
         raise FailureReportError(
@@ -395,10 +1007,10 @@ def _identity(manifest: dict[str, Any], attempt: int) -> dict[str, Any]:
         "run_id": run_id,
         "task_id": manifest["task"],
         "language": manifest["language"],
-        "model": manifest["transformation_model"],
+        "model": manifest.get("transformation_model"),
         "attempt": attempt,
-        "transformation_model": manifest["transformation_model"],
-        "test_generation_model": manifest["test_generation_model"],
+        "transformation_model": manifest.get("transformation_model"),
+        "test_generation_model": manifest.get("test_generation_model"),
         "transformation_strategy": manifest.get("transformation_strategy"),
         "test_generation_strategy": manifest.get("test_generation_strategy"),
     }
@@ -544,7 +1156,11 @@ def _select_test_case(
     return matching[0]
 
 
-def _select_assertion(test_case: dict[str, Any], assertion_id: str) -> dict[str, Any]:
+def _select_assertion(
+    test_case: dict[str, Any], assertion_id: str | None
+) -> dict[str, Any] | None:
+    if assertion_id is None:
+        return None
     assertions = test_case.get("assertions")
     if not isinstance(assertions, list):
         raise FailureReportError("selected test case has no assertions array")
@@ -736,6 +1352,8 @@ def _surefire_evidence(
                 if failure is not None
                 else "passed"
             )
+            message = str(node.get("message") or "") if node is not None else ""
+            expected, actual = _assertion_outcome(message)
             test_cases.append(
                 {
                     "report": _repository_path(path),
@@ -743,12 +1361,18 @@ def _surefire_evidence(
                     "test_method": case.get("name"),
                     "duration_seconds": case.get("time"),
                     "status": status,
+                    "failure_type": (
+                        str(node.get("type") or node.tag) if node is not None else None
+                    ),
+                    "message": message or None,
+                    "expected": expected,
+                    "actual": actual,
                 }
             )
             if node is not None:
                 exception = {
                     "type": str(node.get("type") or node.tag),
-                    "message": str(node.get("message") or ""),
+                    "message": message,
                 }
                 exceptions.append(exception)
                 trace = (node.text or "").strip()
@@ -761,24 +1385,65 @@ def _surefire_evidence(
     }
 
 
-def _require_diagnosis_evidence(
-    *,
-    input_models: list[dict[str, Any]],
-    actual_target_models: list[dict[str, Any]],
-    difference: dict[str, list[Any]] | None,
-) -> None:
-    if not input_models:
-        raise FailureReportError(
-            "diagnosis-eligible failure has no recorded input model artifact"
-        )
-    if not actual_target_models:
-        raise FailureReportError(
-            "diagnosis-eligible failure has no recorded actual target model"
-        )
-    if difference is None:
-        raise FailureReportError(
-            "diagnosis-eligible failure requires structured actual_vs_expected"
-        )
+def _assertion_outcome(message: str) -> tuple[str | None, str | None]:
+    """The expected and actual values JUnit printed, or ``(None, None)``.
+
+    Extraction is deliberately literal. When the message is not exactly the
+    ``expected: <X> but was: <Y>`` shape the pair is unknown, and an unknown
+    actual result is reported as unknown: the raw message and the archived
+    report stay in the evidence, and the diagnosis LLM is never handed a value
+    this module reconstructed.
+    """
+    prefix_at = message.find(ASSERTION_OUTCOME_PREFIX)
+    separator_at = message.rfind(ASSERTION_OUTCOME_SEPARATOR)
+    if prefix_at < 0 or separator_at < prefix_at or not message.rstrip().endswith(">"):
+        return None, None
+    expected = message[prefix_at + len(ASSERTION_OUTCOME_PREFIX) : separator_at]
+    if not expected.endswith(">"):
+        return None, None
+    actual = message.rstrip()[separator_at + len(ASSERTION_OUTCOME_SEPARATOR) : -1]
+    return expected[:-1], actual
+
+
+def _recorded_failure_view(surefire_evidence: dict[str, Any]) -> dict[str, Any] | None:
+    """The one recorded failure this report is about, if there is one.
+
+    Both JUnit outcomes qualify and are kept apart by ``kind``: a ``failure`` is
+    an assertion that was evaluated and did not hold, an ``error`` is a throw
+    before any verdict. The second is still a real failure of the pairing — it
+    is what a broken generated transformation usually produces — so it gets a
+    report, with the exception and stack trace as its evidence and no invented
+    expected/actual.
+
+    ``None`` when the reports name no failure for the selected test method, or
+    name more than one: neither state identifies a single failure, and picking
+    one would be a choice this module has no evidence for.
+    """
+    failures = [
+        case
+        for case in surefire_evidence["test_cases"]
+        if case.get("status") in {"failed", "error"}
+    ]
+    if len(failures) != 1:
+        return None
+    failure = failures[0]
+    return {
+        "kind": (
+            "assertion_failure" if failure.get("status") == "failed" else "runtime_error"
+        ),
+        "report": failure.get("report"),
+        "test_class": failure.get("test_class"),
+        "test_method": failure.get("test_method"),
+        "failure_type": failure.get("failure_type"),
+        "message": failure.get("message"),
+        "expected": failure.get("expected"),
+        "actual": failure.get("actual"),
+        "extraction": (
+            "junit_assertion_message"
+            if failure.get("expected") is not None or failure.get("actual") is not None
+            else "unavailable"
+        ),
+    }
 
 
 def _require_concrete_assertion_failure(
@@ -836,14 +1501,59 @@ def _assertion_message(assertion: dict[str, Any]) -> str:
 
 
 def _diagnosis_reason(
-    syntax_check: dict[str, Any], observation: dict[str, Any]
+    syntax_check: dict[str, Any],
+    observation: dict[str, Any],
+    reference_result: dict[str, Any],
+    *,
+    input_models: list[dict[str, Any]],
+    observed_failure_evidence: dict[str, Any],
 ) -> str:
+    """Why this failure is or is not a case Source Diagnosis may be asked about.
+
+    Four conditions, in the order the pipeline establishes them:
+
+    1. the generated transformation is syntactically valid;
+    2. the suite was validated against the reference transformation;
+    3. a real failure of the pairing was observed on the generated one;
+    4. enough execution evidence survived to say what happened.
+
+    Note what is *not* a condition: that an assertion was evaluated. A validated
+    test that throws on a generated transformation has failed against it, and
+    that failure is exactly what Source Diagnosis exists to attribute — to the
+    transformation, to the test, or to neither. Requiring a JUnit assertion
+    failure would silently exclude the most common shape of a transformation
+    defect.
+
+    A timeout or an infrastructure failure is excluded instead, because neither
+    is evidence about the pairing at all.
+
+    Missing evidence downgrades eligibility rather than aborting: the report is
+    still the run's record of a real failure, and saying why it cannot be
+    diagnosed is more useful than refusing to write it.
+    """
     if syntax_check["status"] != "passed":
         return "transformation_parser_check_failed"
-    if observation["assertions_evaluated"] is not True:
-        return "semantic_assertions_not_evaluated"
     if observation["assertions_passed"] is True:
         return "semantic_test_passed"
+    if observation.get("timed_out") is True or observation.get("failure_stage") in {
+        "timeout",
+        "infrastructure",
+    }:
+        return "failure_not_attributable_to_the_pairing"
+    if reference_result.get("status") != "passed":
+        return "reference_result_not_passing"
+    if not input_models:
+        return "no_recorded_input_model"
+    if not any(
+        observed_failure_evidence[fact]
+        for fact in (
+            "target_model_snapshots",
+            "assertion_expected_actual",
+            "structured_difference",
+            "recorded_exception",
+        )
+    ):
+        return "no_observed_failure_evidence"
     return "parser_passed_and_semantic_test_failed"
 
 
@@ -878,6 +1588,31 @@ def _read_object(path: Path, label: str) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise FailureReportError(f"{label} must contain one JSON object")
     return payload
+
+
+def _log_excerpt(path: Path) -> dict[str, Any]:
+    """A bounded, self-describing citation of one build log.
+
+    The excerpt is the log's own tail, verbatim; ``path`` and ``sha256`` name the
+    complete stream so a reader who needs the rest can always get it, and
+    ``truncated`` says outright that this is not the whole file.
+    """
+    try:
+        content = path.read_text(encoding="utf-8", errors="replace")
+    except OSError as exc:
+        raise FailureReportError(f"cannot read evidence file {path}: {exc}") from exc
+    lines = content.splitlines()
+    excerpt = "\n".join(lines[-EXECUTION_LOG_EXCERPT_LINES:])
+    if len(excerpt) > EXECUTION_LOG_EXCERPT_CHARS:
+        excerpt = excerpt[-EXECUTION_LOG_EXCERPT_CHARS:]
+    return {
+        "path": _repository_path(path),
+        "sha256": file_sha256(path),
+        "lines": len(lines),
+        "excerpt": excerpt,
+        "excerpt_lines": excerpt.count("\n") + 1 if excerpt else 0,
+        "truncated": excerpt != content.rstrip("\n"),
+    }
 
 
 def _text_artifact(path: Path) -> dict[str, Any]:

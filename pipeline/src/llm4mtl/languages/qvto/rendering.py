@@ -66,7 +66,7 @@ def _render_method(
             [
                 f'        BasicModelExtent output = executeTransformation("{escape_java(transformation)}", input);',
                 "        List<EObject> target0Roots = new ArrayList<>(output.getContents());",
-                f'        writeSnapshot("{escape_java(slug(task))}-{escape_java(sanitize_method_name(str(test["name"])))}-{escape_java(str(targets[0]["name"]))}.xmi", target0Roots);',
+                f'        writeSnapshot("{escape_java(sanitize_method_name(str(test["name"])))}/{escape_java(str(targets[0]["name"]))}.xmi", target0Roots);',
             ]
         )
     else:
@@ -80,7 +80,7 @@ def _render_method(
                 f"        List<EObject> {variable} = new ArrayList<>(outputs[{index}].getContents());"
             )
             lines.append(
-                f'        writeSnapshot("{escape_java(slug(task))}-{escape_java(sanitize_method_name(str(test["name"])))}-{escape_java(str(target["name"]))}.xmi", {variable});'
+                f'        writeSnapshot("{escape_java(sanitize_method_name(str(test["name"])))}/{escape_java(str(target["name"]))}.xmi", {variable});'
             )
     lines.extend(
         [
