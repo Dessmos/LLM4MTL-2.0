@@ -56,37 +56,31 @@ def perform_mcnemar_test(baseline_values, strategy_values):
     # Ensure same length
     assert len(baseline_values) == len(strategy_values)
     
-    # Build 2x2 contingency table
-    # a: baseline=True, strategy=True
-    # b: baseline=True, strategy=False
-    # c: baseline=False, strategy=True
-    # d: baseline=False, strategy=False
-    a = b = c = d = 0
+    # Rows represent baseline True/False; columns represent strategy True/False.
+    table = [[0, 0], [0, 0]]
     
     for bl, st in zip(baseline_values, strategy_values):
-        bl_bool = bool(bl) if not pd.isna(bl) else False
-        st_bool = bool(st) if not pd.isna(st) else False
-        
-        if bl_bool and st_bool:
-            a += 1
-        elif bl_bool and not st_bool:
-            b += 1
-        elif not bl_bool and st_bool:
-            c += 1
-        else:
-            d += 1
+        bl_bool = _boolean_value(bl)
+        st_bool = _boolean_value(st)
+        baseline_index = 0 if bl_bool else 1
+        strategy_index = 0 if st_bool else 1
+        table[baseline_index][strategy_index] += 1
     
     # If b+c=0 (no changes), p_value = 1.0
-    if b + c == 0:
+    discordant_pairs = table[0][1] + table[1][0]
+    if discordant_pairs == 0:
         return (1.0, len(baseline_values), "No changes (b+c=0)")
     
     try:
         # Build contingency table (McNemar only cares about discordant pairs)
         # Use statsmodels mcnemar function
-        table = [[a, b], [c, d]]
         result = mcnemar(table, exact=True, correction=False)
         p_value = result.pvalue
         return (p_value, len(baseline_values), None)
     except Exception as e:
         return (np.nan, len(baseline_values), f"Test failed: {str(e)}")
 
+
+def _boolean_value(value):
+    """Treat a missing observation as false, matching the legacy metric."""
+    return bool(value) if not pd.isna(value) else False

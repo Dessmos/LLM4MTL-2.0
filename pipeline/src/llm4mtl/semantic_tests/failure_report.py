@@ -79,7 +79,7 @@ import sys
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any, Iterator, Sequence
 
 from llm4mtl.paths import REPO_ROOT, TARGET
 from llm4mtl.semantic_tests.codegen.java_rendering import sanitize_method_name
@@ -1123,14 +1123,14 @@ def _execution_stage_evidence(
     generated_execution: dict[str, Any],
 ) -> dict[str, Any]:
     """Pin the observation to the requested immutable execution attempt."""
-    expected_attempt_dir = f"attempt-{attempt:03d}"
-    if (
-        path.name != "evidence.json"
-        or path.parent.name != expected_attempt_dir
-        or path.parent.parent.name != "attempts"
-        or path.parent.parent.parent.name != "execution"
-        or path.parent.parent.parent.parent.name != "stages"
-    ):
+    expected_suffix = (
+        "stages",
+        "execution",
+        "attempts",
+        f"attempt-{attempt:03d}",
+        "evidence.json",
+    )
+    if path.parts[-len(expected_suffix) :] != expected_suffix:
         raise FailureReportError(
             "execution_evidence path does not match the requested execution attempt"
         )
@@ -1139,16 +1139,7 @@ def _execution_stage_evidence(
     pairs = payload.get("details", {}).get("pairs")
     if not isinstance(pairs, list):
         raise FailureReportError("execution stage evidence has no details.pairs array")
-    matching: list[dict[str, Any]] = []
-    for pair in pairs:
-        if not isinstance(pair, dict):
-            continue
-        try:
-            evidence_path = _input_path(pair.get("evidence"), "pair evidence")
-        except FailureReportError:
-            continue
-        if evidence_path == generated_execution_path:
-            matching.append(pair)
+    matching = _matching_execution_pairs(pairs, generated_execution_path)
     if len(matching) != 1:
         raise FailureReportError(
             "execution attempt must reference the generated execution exactly once"
@@ -1169,6 +1160,23 @@ def _execution_stage_evidence(
             "execution pair assertion result disagrees with recorded observation"
         )
     return _json_artifact(path)
+
+
+def _matching_execution_pairs(
+    pairs: list[Any], generated_execution_path: Path
+) -> list[dict[str, Any]]:
+    """Find well-formed pairs that cite the requested execution observation."""
+    matching: list[dict[str, Any]] = []
+    for pair in pairs:
+        if not isinstance(pair, dict):
+            continue
+        try:
+            evidence_path = _input_path(pair.get("evidence"), "pair evidence")
+        except FailureReportError:
+            continue
+        if evidence_path == generated_execution_path:
+            matching.append(pair)
+    return matching
 
 
 def _observation(execution: dict[str, Any], label: str) -> dict[str, Any]:
@@ -1387,25 +1395,32 @@ def _surefire_evidence(
     test_cases: list[dict[str, Any]] = []
     exceptions: list[dict[str, str]] = []
     stack_traces: list[str] = []
+    for path, case in _matching_surefire_cases(report_paths, method_name):
+        test_case, exception, trace = _surefire_test_case(path, case)
+        test_cases.append(test_case)
+        if exception is not None:
+            exceptions.append(exception)
+        if trace:
+            stack_traces.append(trace)
+    return {
+        "test_cases": test_cases,
+        "exceptions": exceptions,
+        "stack_traces": stack_traces,
+    }
+
+
+def _matching_surefire_cases(
+    report_paths: Sequence[Path], method_name: str
+) -> Iterator[tuple[Path, ET.Element]]:
+    """Yield matching test cases in report and XML document order."""
     for path in report_paths:
         try:
             root = ET.parse(path).getroot()
         except (ET.ParseError, OSError) as exc:
             raise FailureReportError(f"invalid Surefire report {path}: {exc}") from exc
         for case in root.iter("testcase"):
-            if case.get("name") != method_name:
-                continue
-            test_case, exception, trace = _surefire_test_case(path, case)
-            test_cases.append(test_case)
-            if exception is not None:
-                exceptions.append(exception)
-            if trace:
-                stack_traces.append(trace)
-    return {
-        "test_cases": test_cases,
-        "exceptions": exceptions,
-        "stack_traces": stack_traces,
-    }
+            if case.get("name") == method_name:
+                yield path, case
 
 
 def _surefire_test_case(

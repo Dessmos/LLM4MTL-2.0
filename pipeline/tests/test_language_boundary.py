@@ -32,6 +32,7 @@ from llm4mtl.languages import (
     implemented_languages,
     language_adapter,
 )
+from llm4mtl.languages.common import validate_rendered_suite
 from llm4mtl.languages.etl.adapter import EtlAdapter
 from llm4mtl.languages.reactions.adapter import (
     _contains_only_unresolved_linkage_diagnostics,
@@ -97,6 +98,29 @@ class EtlAdapterContractTests(unittest.TestCase):
         )
         self.assertIsInstance(observation, ArtifactValidation)
         self.assertFalse(observation.valid)
+
+    def test_static_validation_preserves_extraction_reason_precedence(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            observation = validate_rendered_suite(
+                _suite(Path(temp_dir)),
+                contract_exists=False,
+            )
+
+        self.assertIn("re-extract", observation.violations[0])
+
+    def test_static_validation_checks_contract_before_rendered_files(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            suite = _suite(Path(temp_dir))
+            (suite.path / "metadata.json").write_text(
+                '{"artifact_validation": {"valid": true}}',
+                encoding="utf-8",
+            )
+            observation = validate_rendered_suite(suite, contract_exists=False)
+
+        self.assertEqual(
+            ("No deterministic task contract exists for etl/Tree2Graph",),
+            observation.violations,
+        )
 
     def test_parsing_nothing_observes_nothing(self) -> None:
         from llm4mtl.languages.base import Workspace

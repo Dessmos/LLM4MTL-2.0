@@ -171,18 +171,37 @@ def _parse_yaml_block(
     lines: list[_YamlLine], index: int, indent: int
 ) -> tuple[Any, int]:
     is_list = lines[index][1].startswith("- ") or lines[index][1] == "-"
-    container: Any = [] if is_list else {}
+    if is_list:
+        return _parse_yaml_list_block(lines, index, indent)
+    return _parse_yaml_mapping_block(lines, index, indent)
+
+
+def _parse_yaml_list_block(
+    lines: list[_YamlLine], index: int, indent: int
+) -> tuple[list[Any], int]:
+    container: list[Any] = []
     while index < len(lines):
         current_indent, content = lines[index]
         if current_indent < indent:
             break
         if current_indent > indent:
             raise ConfigError(f"Unexpected indentation near: {content}")
-        if is_list:
-            if not content.startswith("-"):
-                break
-            index = _parse_yaml_list_item(lines, index, indent, container)
-            continue
+        if not content.startswith("-"):
+            break
+        index = _parse_yaml_list_item(lines, index, indent, container)
+    return container, index
+
+
+def _parse_yaml_mapping_block(
+    lines: list[_YamlLine], index: int, indent: int
+) -> tuple[dict[str, Any], int]:
+    container: dict[str, Any] = {}
+    while index < len(lines):
+        current_indent, content = lines[index]
+        if current_indent < indent:
+            break
+        if current_indent > indent:
+            raise ConfigError(f"Unexpected indentation near: {content}")
         if content.startswith("-"):
             break
         index = _parse_yaml_mapping_item(lines, index, indent, container)

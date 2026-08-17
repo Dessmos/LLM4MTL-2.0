@@ -10,31 +10,41 @@ from llm4mtl.domain import GeneratedSuite
 
 def discover_suites(args: argparse.Namespace, language: str) -> list[GeneratedSuite]:
     """Discover candidate suites selected by validation CLI arguments."""
+    root = args.generated_tests_root.resolve()
     if args.suite:
         return [
             suite_from_path(
                 path.resolve(),
-                args.generated_tests_root.resolve(),
+                root,
                 language,
             )
             for path in args.suite
         ]
 
-    root = args.generated_tests_root.resolve()
-    task_dirs = (
-        [root / args.task]
-        if args.task
-        else sorted(path for path in root.iterdir() if path.is_dir())
-    )
+    if args.task:
+        task_dirs = [root / args.task]
+    else:
+        task_dirs = sorted(path for path in root.iterdir() if path.is_dir())
+
     suites: list[GeneratedSuite] = []
     for task_dir in task_dirs:
-        candidates = task_dir / "candidates"
-        if not candidates.exists():
-            continue
-        for suite_dir in sorted(candidates.glob("*/*/suite_*")):
-            if suite_dir.is_dir():
-                suites.append(suite_from_path(suite_dir.resolve(), root, language))
+        suites.extend(_discover_task_suites(task_dir, root, language))
     return suites
+
+
+def _discover_task_suites(
+    task_dir: Path,
+    generated_tests_root: Path,
+    language: str,
+) -> list[GeneratedSuite]:
+    candidates = task_dir / "candidates"
+    if not candidates.exists():
+        return []
+    return [
+        suite_from_path(suite_dir.resolve(), generated_tests_root, language)
+        for suite_dir in sorted(candidates.glob("*/*/suite_*"))
+        if suite_dir.is_dir()
+    ]
 
 
 def suite_from_path(

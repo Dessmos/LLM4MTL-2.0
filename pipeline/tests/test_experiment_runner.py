@@ -43,6 +43,10 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(["Tree2Graph"], payload["tasks"])
         self.assertTrue(payload["execution"]["resume"])
 
+    def test_fallback_yaml_parser_rejects_unexpected_indentation(self) -> None:
+        with self.assertRaisesRegex(ConfigError, "Unexpected indentation near: task"):
+            parse_simple_yaml("language: etl\n  task: Tree2Graph\n")
+
     def test_a_config_cannot_silently_default_to_etl(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             config_path = Path(temp_dir) / "missing-language.yaml"

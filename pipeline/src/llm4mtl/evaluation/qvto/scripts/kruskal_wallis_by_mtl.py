@@ -278,7 +278,35 @@ def print_report(paper_table: pd.DataFrame):
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
+def _print_summary(kw_results: pd.DataFrame) -> None:
+    """Print the aggregate significance and non-calculable-result counts."""
+    total = len(kw_results)
+    significant = (kw_results["p_value"] < 0.05).sum()
+    not_calculable = kw_results["p_value"].isna().sum()
+    print(f"\n{'='*60}")
+    print(f"Total KW tests   : {total}  (10 MTLs x 4 metrics)")
+    print(f"Significant (*) : {significant}  ({100*significant/total:.0f}%)")
+    print(f"Non-calculable  : {not_calculable}")
+    if not_calculable > 0:
+        reasons = kw_results.loc[kw_results["p_value"].isna(), "reason"].unique()
+        for reason in reasons:
+            count = (kw_results["reason"] == reason).sum()
+            print(f"   - {reason}  ({count}x)")
+    print("=" * 60)
+
+
+def _resolve_csv_path(requested_path: str | None, repo_root: Path) -> Path:
+    """Resolve the requested CSV or the first legacy default location."""
+    if requested_path:
+        return Path(requested_path)
+    primary_path = repo_root / "QVT-O Test" / "qvto_test_results.csv"
+    if primary_path.exists():
+        return primary_path
+    return repo_root / "QVT-O parser" / "benchmark_results_detailed.csv"
+
+
 def main():
+    """Run the legacy QVT-O significance analysis and write its reports."""
     ap = argparse.ArgumentParser(description="KW test comparing 3 LLM models per MTL")
     ap.add_argument("--csv", default=None,
                     help="Input CSV path (default: auto-detect)")
@@ -289,12 +317,7 @@ def main():
     repo_root = SCRIPT_DIR.parent
 
     # Locate CSV
-    if args.csv:
-        csv_path = Path(args.csv)
-    else:
-        csv_path = repo_root / "QVT-O Test" / "qvto_test_results.csv"
-        if not csv_path.exists():
-            csv_path = repo_root / "QVT-O parser" / "benchmark_results_detailed.csv"
+    csv_path = _resolve_csv_path(args.csv, repo_root)
     if not csv_path.exists():
         print(f"ERROR: Cannot find input CSV at {csv_path}", file=sys.stderr)
         sys.exit(1)
@@ -350,18 +373,7 @@ def main():
     print_report(paper_table)
 
     # Summary
-    total  = len(kw_results)
-    sig    = (kw_results["p_value"] < 0.05).sum()
-    na_cnt = kw_results["p_value"].isna().sum()
-    print(f"\n{'='*60}")
-    print(f"Total KW tests   : {total}  (10 MTLs x 4 metrics)")
-    print(f"Significant (*) : {sig}  ({100*sig/total:.0f}%)")
-    print(f"Non-calculable  : {na_cnt}")
-    if na_cnt > 0:
-        for reason in kw_results.loc[kw_results["p_value"].isna(), "reason"].unique():
-            cnt = (kw_results["reason"] == reason).sum()
-            print(f"   - {reason}  ({cnt}x)")
-    print("=" * 60)
+    _print_summary(kw_results)
 
 
 if __name__ == "__main__":

@@ -143,11 +143,9 @@ def read_surefire_reports(reports_dir: Path) -> SurefireReport | None:
         tests += _count(root, "tests")
         failures += _count(root, "failures")
         errors += _count(root, "errors")
-        for case in root.iter("testcase"):
-            for node in case.findall("error"):
-                error_messages.append(_describe(case, node))
-            for node in case.findall("failure"):
-                failure_messages.append(_describe(case, node))
+        report_errors, report_failures = _report_messages(root)
+        error_messages.extend(report_errors)
+        failure_messages.extend(report_failures)
 
     if not parsed:
         # Every report file was malformed: there is no readable XML evidence.
@@ -160,6 +158,18 @@ def read_surefire_reports(reports_dir: Path) -> SurefireReport | None:
         error_messages=tuple(error_messages),
         failure_messages=tuple(failure_messages),
     )
+
+
+def _report_messages(root: ET.Element) -> tuple[list[str], list[str]]:
+    """Collect error and failure descriptions in test-case document order."""
+    error_messages: list[str] = []
+    failure_messages: list[str] = []
+    for case in root.iter("testcase"):
+        error_messages.extend(_describe(case, node) for node in case.findall("error"))
+        failure_messages.extend(
+            _describe(case, node) for node in case.findall("failure")
+        )
+    return error_messages, failure_messages
 
 
 def _count(root: ET.Element, attribute: str) -> int:

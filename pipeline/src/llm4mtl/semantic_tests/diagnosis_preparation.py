@@ -165,17 +165,25 @@ def _first_diagnosable_report(index: dict[str, Any]) -> str | None:
     if not isinstance(pairs, list):
         return None
     for pair in pairs:
-        if not isinstance(pair, dict):
+        reference = _first_diagnosable_pair_report(pair)
+        if reference is not None:
+            return reference
+    return None
+
+
+def _first_diagnosable_pair_report(pair: object) -> str | None:
+    """Return the first usable report reference recorded for one pair."""
+    if not isinstance(pair, dict):
+        return None
+    reports = pair.get("reports")
+    if not isinstance(reports, list):
+        return None
+    for report in reports:
+        if not _is_diagnosable_report(report):
             continue
-        reports = pair.get("reports")
-        if not isinstance(reports, list):
-            continue
-        for report in reports:
-            if not _is_diagnosable_report(report):
-                continue
-            reference = report.get("report")
-            if isinstance(reference, str):
-                return reference
+        reference = report.get("report")
+        if isinstance(reference, str):
+            return reference
     return None
 
 

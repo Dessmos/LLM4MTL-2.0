@@ -46,24 +46,17 @@ def validate_rendered_suite(
 ) -> ArtifactValidation:
     """Perform language-neutral checks without executing generated code."""
     reason = artifact_invalid_reason(suite.path)
-    if not reason and not contract_exists:
-        reason = f"No deterministic task contract exists for {suite.language}/{suite.task}"
-
     java_paths = sorted(suite.path.glob("*.java"))
-    if not reason and not java_paths:
-        reason = "No deterministic Java harness found in suite root"
-
     model_paths = sorted(
         path for path in (suite.path / "models").rglob("*") if path.is_file()
     )
-    if not reason and not model_paths:
-        reason = "No generated model/resource files found under models/"
-    if not reason and not any(junit_test_method_counts(java_paths).values()):
-        reason = "No JUnit @Test methods found in the rendered harness"
     if not reason:
-        models_load, model_error = check_models_load(model_paths)
-        if not models_load:
-            reason = model_error
+        reason = _rendered_suite_invalid_reason(
+            suite,
+            contract_exists=contract_exists,
+            java_paths=java_paths,
+            model_paths=model_paths,
+        )
 
     if reason:
         return ArtifactValidation(
@@ -72,6 +65,29 @@ def validate_rendered_suite(
             violations=(reason,),
         )
     return ArtifactValidation(valid=True, contract_applied=True)
+
+
+def _rendered_suite_invalid_reason(
+    suite: GeneratedSuite,
+    *,
+    contract_exists: bool,
+    java_paths: list[Path],
+    model_paths: list[Path],
+) -> str:
+    """Return the first static rendered-suite violation in contract order."""
+    if not contract_exists:
+        return (
+            "No deterministic task contract exists for "
+            f"{suite.language}/{suite.task}"
+        )
+    if not java_paths:
+        return "No deterministic Java harness found in suite root"
+    if not model_paths:
+        return "No generated model/resource files found under models/"
+    if not any(junit_test_method_counts(java_paths).values()):
+        return "No JUnit @Test methods found in the rendered harness"
+    models_load, model_error = check_models_load(model_paths)
+    return "" if models_load else model_error
 
 
 def materialize_parser(

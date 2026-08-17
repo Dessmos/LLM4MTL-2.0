@@ -12,20 +12,24 @@ from typing import Any
 
 
 def mcnemar(baseline: list[bool], variant: list[bool]) -> dict[str, Any]:
-    """Exact McNemar test for two paired binary outcome vectors (True = pass)."""
+    """Run the exact McNemar test for paired binary outcomes (``True`` = pass)."""
     if len(baseline) != len(variant):
         raise ValueError("paired samples must have equal length")
 
-    both_pass = sum(1 for a, b in zip(baseline, variant) if a and b)
-    baseline_only = sum(1 for a, b in zip(baseline, variant) if a and not b)
-    variant_only = sum(1 for a, b in zip(baseline, variant) if not a and b)
-    both_fail = sum(1 for a, b in zip(baseline, variant) if not a and not b)
+    contingency_table = [[0, 0], [0, 0]]
+    for baseline_passed, variant_passed in zip(baseline, variant):
+        baseline_index = 0 if baseline_passed else 1
+        variant_index = 0 if variant_passed else 1
+        contingency_table[baseline_index][variant_index] += 1
+
+    both_pass, baseline_only = contingency_table[0]
+    variant_only, both_fail = contingency_table[1]
 
     p_value = _exact_p(baseline_only, variant_only)
     try:  # prefer statsmodels when available, but never require it
         from statsmodels.stats.contingency_tables import mcnemar as _sm_mcnemar
 
-        p_value = float(_sm_mcnemar([[both_pass, baseline_only], [variant_only, both_fail]], exact=True).pvalue)
+        p_value = float(_sm_mcnemar(contingency_table, exact=True).pvalue)
     except Exception:
         pass
 
@@ -41,7 +45,7 @@ def mcnemar(baseline: list[bool], variant: list[bool]) -> dict[str, Any]:
 
 
 def _exact_p(baseline_only: int, variant_only: int) -> float:
-    """Two-sided exact binomial p-value on the discordant pairs (dependency-free)."""
+    """Return the dependency-free, two-sided exact discordant-pair p-value."""
     from math import comb
 
     n = baseline_only + variant_only

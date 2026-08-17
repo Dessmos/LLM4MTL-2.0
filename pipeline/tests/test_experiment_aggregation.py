@@ -57,6 +57,18 @@ class AggregationTests(unittest.TestCase):
 
 
 class SignificanceTests(unittest.TestCase):
+    def test_contingency_cells_preserve_pair_ordering(self) -> None:
+        result = mcnemar(
+            [True, True, False, False],
+            [True, False, True, False],
+        )
+
+        self.assertEqual(1, result["both_pass"])
+        self.assertEqual(1, result["baseline_only"])
+        self.assertEqual(1, result["variant_only"])
+        self.assertEqual(1, result["both_fail"])
+        self.assertEqual(1.0, result["p_value"])
+
     def test_identical_outcomes_are_not_significant(self) -> None:
         result = mcnemar([True, True, False, False], [True, True, False, False])
         self.assertEqual(0, result["baseline_only"])
@@ -68,6 +80,13 @@ class SignificanceTests(unittest.TestCase):
         self.assertEqual(8, result["baseline_only"])
         self.assertEqual(0, result["variant_only"])
         self.assertLess(result["p_value"], 0.05)
+
+    def test_mismatched_pairs_are_rejected(self) -> None:
+        with self.assertRaisesRegex(
+            ValueError,
+            "paired samples must have equal length",
+        ):
+            mcnemar([True], [])
 
 
 if __name__ == "__main__":

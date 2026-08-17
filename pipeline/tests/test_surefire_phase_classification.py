@@ -14,6 +14,7 @@ with the trusted reference.
 
 from __future__ import annotations
 
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -56,6 +57,16 @@ class RealHarnessReportTests(unittest.TestCase):
         errors = [message for message in self.report.error_messages if "engineRuntime" in message]
         self.assertTrue(errors, "the fixture must contain the engine-runtime error")
         self.assertIn("not found", errors[0])
+
+    def test_only_malformed_reports_still_mean_no_readable_report(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            reports_dir = Path(temp_dir)
+            (reports_dir / "TEST-broken.xml").write_text(
+                "<testsuite>",
+                encoding="utf-8",
+            )
+
+            self.assertIsNone(read_surefire_reports(reports_dir))
 
 
 class PhaseClassificationTests(unittest.TestCase):
