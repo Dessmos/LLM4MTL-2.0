@@ -8,6 +8,8 @@ from typing import Any
 
 @dataclass
 class PipelineConfig:
+    """Mutable selections and runtime controls for one local invocation."""
+
     # Language is an experiment identity axis, not a shared-pipeline default.
     # Every boundary must state it explicitly so a missing value cannot silently
     # execute ETL and be attributed to another language.
@@ -55,6 +57,8 @@ class PipelineConfig:
 
 @dataclass
 class StageResult:
+    """Internal stage facts and evidence used by local orchestration."""
+
     name: str
     status: str
     counts: dict[str, int] = field(default_factory=dict)
@@ -80,6 +84,8 @@ class StageResult:
 
 @dataclass
 class RunResult:
+    """Aggregate result returned by one local runner invocation."""
+
     run_id: str
     status: str
     command: str

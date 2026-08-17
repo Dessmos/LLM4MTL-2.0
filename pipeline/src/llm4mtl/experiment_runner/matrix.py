@@ -43,6 +43,7 @@ class RunSpec:
 
 
 def load_matrix(path: Path) -> dict[str, Any]:
+    """Load one experiment-matrix mapping."""
     return load_mapping(Path(path))
 
 
@@ -74,5 +75,13 @@ def expand_matrix(matrix: dict[str, Any]) -> list[RunSpec]:
             variant=str(variant),
             seed=int(seed),
         )
-        for task, transformation_model, transformation_strategy, test_model, test_strategy, variant, seed in axes
+        for (
+            task,
+            transformation_model,
+            transformation_strategy,
+            test_model,
+            test_strategy,
+            variant,
+            seed,
+        ) in axes
     ]

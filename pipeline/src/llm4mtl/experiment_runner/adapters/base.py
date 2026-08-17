@@ -9,6 +9,7 @@ from llm4mtl.experiment_runner.config import ConfigError
 
 
 def hash_paths(paths: list[Path]) -> str:
+    """Hash selected files and directory contents in deterministic path order."""
     digest = hashlib.sha256()
     for path in sorted({item.resolve() for item in paths}):
         name = str(path).encode("utf-8")
@@ -17,11 +18,16 @@ def hash_paths(paths: list[Path]) -> str:
         if path.is_file():
             digest.update(path.read_bytes())
         elif path.is_dir():
-            for child in sorted(candidate for candidate in path.rglob("*") if candidate.is_file()):
+            files = sorted(
+                candidate for candidate in path.rglob("*") if candidate.is_file()
+            )
+            for child in files:
                 relative = str(child.relative_to(path)).encode("utf-8")
                 digest.update(relative)
                 digest.update(child.read_bytes())
     return digest.hexdigest()
+
+
 def fixed_selection(axis: str, values: list[str]) -> set[str]:
     """The values a stage may select for one identity axis.
 

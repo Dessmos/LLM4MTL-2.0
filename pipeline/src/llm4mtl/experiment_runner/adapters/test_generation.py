@@ -55,11 +55,25 @@ class TestGenerationAdapter:
         input_hash = hash_paths(responses)
         details = {"responses": [str(path) for path in responses]}
         if not responses:
-            return StageResult("extraction", "error", {"selected": 0, "failed": 1}, details, input_hash)
+            return StageResult(
+                "extraction",
+                "error",
+                {"selected": 0, "failed": 1},
+                details,
+                input_hash,
+            )
         if config.suite_id and len(responses) != 1:
-            raise ConfigError("--suite-id can only be used when exactly one response is selected.")
+            raise ConfigError(
+                "--suite-id can only be used when exactly one response is selected."
+            )
         if dry_run:
-            return StageResult("extraction", "dry_run", {"selected": len(responses)}, details, input_hash)
+            return StageResult(
+                "extraction",
+                "dry_run",
+                {"selected": len(responses)},
+                details,
+                input_hash,
+            )
 
         extraction_args = argparse.Namespace(
             generated_tests_root=self.generated_tests_root(config),
@@ -68,7 +82,7 @@ class TestGenerationAdapter:
             dry_run=False,
         )
         adapter = language_adapter(config.language)
-        outcomes = []
+        extraction_outcomes = []
         for response in responses:
             target = response_target_from_path(
                 response_path=response,
@@ -78,19 +92,35 @@ class TestGenerationAdapter:
                 task_override=None,
             )
             extracted, message = extract_one(target, extraction_args, adapter)
-            outcomes.append({"response": str(response), "extracted": extracted, "detail": message})
+            extraction_outcomes.append(
+                {
+                    "response": str(response),
+                    "extracted": extracted,
+                    "detail": message,
+                }
+            )
 
-        created = sum(1 for outcome in outcomes if outcome["extracted"])
-        details["outcomes"] = outcomes
+        created = sum(
+            1 for outcome in extraction_outcomes if outcome["extracted"]
+        )
+        details["outcomes"] = extraction_outcomes
         return StageResult(
             "extraction",
             "completed",
-            {"selected": len(responses), "created": created, "failed": len(responses) - created},
+            {
+                "selected": len(responses),
+                "created": created,
+                "failed": len(responses) - created,
+            },
             details,
             input_hash,
         )
 
-    def technical_validation(self, config: PipelineConfig, dry_run: bool) -> StageResult:
+    def technical_validation(
+        self,
+        config: PipelineConfig,
+        dry_run: bool,
+    ) -> StageResult:
         return self._validate_suites(
             name="technical_validation",
             config=config,
@@ -98,7 +128,11 @@ class TestGenerationAdapter:
             judge_as_oracle=False,
         )
 
-    def reference_validation(self, config: PipelineConfig, dry_run: bool) -> StageResult:
+    def reference_validation(
+        self,
+        config: PipelineConfig,
+        dry_run: bool,
+    ) -> StageResult:
         return self._validate_suites(
             name="reference_validation",
             config=config,
@@ -123,9 +157,21 @@ class TestGenerationAdapter:
         input_hash = hash_paths(suite_paths)
         details: dict[str, object] = {"suites": [str(path) for path in suite_paths]}
         if not suite_paths:
-            return StageResult(name, "error", {"selected": 0, "failed": 1}, details, input_hash)
+            return StageResult(
+                name,
+                "error",
+                {"selected": 0, "failed": 1},
+                details,
+                input_hash,
+            )
         if dry_run:
-            return StageResult(name, "dry_run", {"selected": len(suite_paths)}, details, input_hash)
+            return StageResult(
+                name,
+                "dry_run",
+                {"selected": len(suite_paths)},
+                details,
+                input_hash,
+            )
 
         context = self.validation_context(config)
         verdicts = []
@@ -151,11 +197,17 @@ class TestGenerationAdapter:
             else technical_counts(verdicts, len(suite_paths))
         )
         details["verdicts"] = [
-            {"suite": str(verdict.suite.path), "status": verdict.status} for verdict in verdicts
+            {
+                "suite": str(verdict.suite.path),
+                "status": verdict.status,
+            }
+            for verdict in verdicts
         ]
         if counts.get("skipped"):
             details["skip_reason"] = (
-                "SKIPPED_NOT_EXECUTABLE" if judge_as_oracle else "SKIPPED_ARTIFACT_INVALID"
+                "SKIPPED_NOT_EXECUTABLE"
+                if judge_as_oracle
+                else "SKIPPED_ARTIFACT_INVALID"
             )
         return StageResult(name, "completed", counts, details, input_hash)
 
@@ -188,7 +240,11 @@ class TestGenerationAdapter:
 
     def select_responses(self, config: PipelineConfig) -> list[Path]:
         if config.responses:
-            return sorted(Path(path).resolve() for path in config.responses if Path(path).is_file())
+            return sorted(
+                Path(path).resolve()
+                for path in config.responses
+                if Path(path).is_file()
+            )
         tasks = set(config.tasks)
         models = fixed_selection("test-generation model", config.test_models)
         strategies = fixed_selection("strategy", config.test_strategies)
@@ -212,7 +268,9 @@ class TestGenerationAdapter:
         strategies = fixed_selection("strategy", config.test_strategies)
         suites = sorted(
             path.resolve()
-            for path in self.generated_tests_root(config).glob("*/candidates/*/*/suite_*")
+            for path in self.generated_tests_root(config).glob(
+                "*/candidates/*/*/suite_*"
+            )
             if path.is_dir()
             and path.parts[-3] in models
             and path.parts[-2] in strategies

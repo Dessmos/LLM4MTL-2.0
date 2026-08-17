@@ -7,7 +7,12 @@ import json
 import sys
 from pathlib import Path
 
-from llm4mtl.experiment_runner.config import ConfigError, load_pipeline_config, load_resolved_config, validate_config
+from llm4mtl.experiment_runner.config import (
+    ConfigError,
+    load_pipeline_config,
+    load_resolved_config,
+    validate_config,
+)
 from llm4mtl.experiment_runner.models import PipelineConfig, RunResult
 from llm4mtl.experiment_runner.orchestrator import ExperimentOrchestrator
 from llm4mtl.semantic_tests.failure_report import FailureReportError
@@ -16,12 +21,27 @@ PIPELINE_RUN_COMMAND = "pipeline.run"
 
 
 def build_parser() -> argparse.ArgumentParser:
+    """Build the complete command-line interface."""
     parser = argparse.ArgumentParser(prog="llm4mtl")
     domains = parser.add_subparsers(dest="domain", required=True)
+    _add_test_commands(domains)
+    _add_transformation_commands(domains)
+    _add_diagnosis_commands(domains)
+    _add_pipeline_commands(domains)
+    return parser
 
-    tests = domains.add_parser("tests", help="Generated-test extraction and validation.")
+
+def _add_test_commands(domains: argparse._SubParsersAction) -> None:
+    tests = domains.add_parser(
+        "tests",
+        help="Generated-test extraction and validation.",
+    )
     test_actions = tests.add_subparsers(dest="action", required=True)
-    extract = test_actions.add_parser("extract", help="Extract generated suites from LLM responses.")
+
+    extract = test_actions.add_parser(
+        "extract",
+        help="Extract generated suites from LLM responses.",
+    )
     add_language(extract)
     add_task_selection(extract)
     add_test_selection(extract)
@@ -32,18 +52,36 @@ def build_parser() -> argparse.ArgumentParser:
     overwrite.add_argument("--overwrite", action="store_true")
     overwrite.add_argument("--no-overwrite", action="store_true")
 
-    tests_validate = test_actions.add_parser("validate", help="Technical/reference validation of suites.")
+    tests_validate = test_actions.add_parser(
+        "validate",
+        help="Technical/reference validation of suites.",
+    )
     add_language(tests_validate)
     add_task_selection(tests_validate)
     add_test_selection(tests_validate)
     add_execution(tests_validate)
-    tests_validate.add_argument("--stage", choices=("all", "technical", "reference"), default="all")
+    tests_validate.add_argument(
+        "--stage",
+        choices=("all", "technical", "reference"),
+        default="all",
+    )
     tests_validate.add_argument("--suite-id")
     tests_validate.add_argument("--suite", action="append", type=Path)
 
-    transformations = domains.add_parser("transformations", help="Generated transformation checks.")
-    transformation_actions = transformations.add_subparsers(dest="action", required=True)
-    parse = transformation_actions.add_parser("parse", help="Syntax-check generated transformations.")
+
+def _add_transformation_commands(domains: argparse._SubParsersAction) -> None:
+    transformations = domains.add_parser(
+        "transformations",
+        help="Generated transformation checks.",
+    )
+    transformation_actions = transformations.add_subparsers(
+        dest="action",
+        required=True,
+    )
+    parse = transformation_actions.add_parser(
+        "parse",
+        help="Syntax-check generated transformations.",
+    )
     add_language(parse)
     add_task_selection(parse)
     add_transformation_selection(parse)
@@ -60,6 +98,8 @@ def build_parser() -> argparse.ArgumentParser:
     transformations_validate.add_argument("--suite-id")
     transformations_validate.add_argument("--suite", action="append", type=Path)
 
+
+def _add_diagnosis_commands(domains: argparse._SubParsersAction) -> None:
     diagnosis = domains.add_parser(
         "diagnosis",
         help="Prepare deterministic evidence for source diagnosis.",
@@ -84,7 +124,11 @@ def build_parser() -> argparse.ArgumentParser:
             "command re-derives the same index for an existing run."
         ),
     )
-    diagnosis_prepare.add_argument("--run", required=True, help="run id or run directory")
+    diagnosis_prepare.add_argument(
+        "--run",
+        required=True,
+        help="run id or run directory",
+    )
     diagnosis_prepare.add_argument(
         "--attempt",
         type=int,
@@ -96,9 +140,14 @@ def build_parser() -> argparse.ArgumentParser:
         default="text",
     )
 
+
+def _add_pipeline_commands(domains: argparse._SubParsersAction) -> None:
     pipeline = domains.add_parser("pipeline", help="Full experiment pipeline.")
     pipeline_actions = pipeline.add_subparsers(dest="action", required=True)
-    pipeline_run = pipeline_actions.add_parser("run", help="Run configured workflow stages.")
+    pipeline_run = pipeline_actions.add_parser(
+        "run",
+        help="Run configured workflow stages.",
+    )
     pipeline_run.add_argument("--config", type=Path)
     add_language(pipeline_run, required=False)
     add_task_selection(pipeline_run)
@@ -107,12 +156,13 @@ def build_parser() -> argparse.ArgumentParser:
     add_execution(pipeline_run, defaults_none=True)
     pipeline_run.add_argument("--suite-id")
     pipeline_run.add_argument(
-        "--start-stage", choices=("extract", "technical", "reference", "parsing", "semantic")
+        "--start-stage",
+        choices=("extract", "technical", "reference", "parsing", "semantic"),
     )
     pipeline_run.add_argument(
-        "--stop-after", choices=("extract", "technical", "reference", "parsing", "semantic")
+        "--stop-after",
+        choices=("extract", "technical", "reference", "parsing", "semantic"),
     )
-    return parser
 
 
 def add_language(parser: argparse.ArgumentParser, *, required: bool = True) -> None:
@@ -146,9 +196,17 @@ def add_execution(parser: argparse.ArgumentParser, defaults_none: bool = False) 
     parser.add_argument("--run-id")
     parser.add_argument("--resume", action="store_true", default=boolean_default)
     parser.add_argument("--force", action="store_true", default=boolean_default)
-    parser.add_argument("--output-format", choices=("text", "json"), default=None if defaults_none else "text")
+    parser.add_argument(
+        "--output-format",
+        choices=("text", "json"),
+        default=None if defaults_none else "text",
+    )
     parser.add_argument("--verbose", action="store_true", default=boolean_default)
-    parser.add_argument("--keep-workspace", action="store_true", default=boolean_default)
+    parser.add_argument(
+        "--keep-workspace",
+        action="store_true",
+        default=boolean_default,
+    )
     parser.add_argument("--fail-fast", action="store_true", default=boolean_default)
 
 
@@ -164,13 +222,18 @@ def config_from_args(args: argparse.Namespace) -> PipelineConfig:
         all_tasks=bool(args.all_tasks),
         responses=[str(path) for path in getattr(args, "response", None) or []],
         suites=[str(path) for path in getattr(args, "suite", None) or []],
-        transformations=[str(path) for path in getattr(args, "transformation", None) or []],
+        transformations=[
+            str(path) for path in getattr(args, "transformation", None) or []
+        ],
         test_models=list(getattr(args, "test_model", None) or []),
         test_strategies=list(getattr(args, "test_strategy", None) or []),
         transformation_models=list(getattr(args, "transformation_model", None) or []),
-        transformation_strategies=list(getattr(args, "transformation_strategy", None) or []),
+        transformation_strategies=list(
+            getattr(args, "transformation_strategy", None) or []
+        ),
         suite_id=getattr(args, "suite_id", None),
-        overwrite=bool(getattr(args, "overwrite", False)) and not bool(getattr(args, "no_overwrite", False)),
+        overwrite=bool(getattr(args, "overwrite", False))
+        and not bool(getattr(args, "no_overwrite", False)),
         test_validation_stage=getattr(args, "stage", "all"),
         start_stage=getattr(args, "start_stage", None) or "extract",
         stop_after=getattr(args, "stop_after", None) or "semantic",
@@ -231,19 +294,33 @@ def has_pipeline_selection(args: argparse.Namespace) -> bool:
 def validate_command_constraints(config: PipelineConfig) -> None:
     if config.command == "tests.extract":
         if config.suite_id and len(config.responses) != 1:
-            raise ConfigError("tests extract: --suite-id requires exactly one --response.")
+            raise ConfigError(
+                "tests extract: --suite-id requires exactly one --response."
+            )
         if config.all_tasks and config.responses:
-            raise ConfigError("tests extract: --all-tasks cannot be combined with --response.")
+            raise ConfigError(
+                "tests extract: --all-tasks cannot be combined with --response."
+            )
     if config.command == "tests.validate" and config.suite_id and not config.suites:
         require_suite_identity(config)
-    if config.command in {"transformations.validate", PIPELINE_RUN_COMMAND} and config.suite_id and not config.suites:
+    if (
+        config.command in {"transformations.validate", PIPELINE_RUN_COMMAND}
+        and config.suite_id
+        and not config.suites
+    ):
         require_suite_identity(config)
 
 
 def require_suite_identity(config: PipelineConfig) -> None:
-    if len(config.tasks) != 1 or len(config.test_models) != 1 or len(config.test_strategies) != 1:
+    has_complete_identity = (
+        len(config.tasks) == 1
+        and len(config.test_models) == 1
+        and len(config.test_strategies) == 1
+    )
+    if not has_complete_identity:
         raise ConfigError(
-            "--suite-id requires exactly one --task, --test-model, and --test-strategy, "
+            "--suite-id requires exactly one --task, --test-model, and "
+            "--test-strategy, "
             "unless --suite PATH is supplied."
         )
 
@@ -265,12 +342,20 @@ def reject_config_selector_overrides(args: argparse.Namespace) -> None:
     used = [name for name, value in selectors.items() if value not in (None, False, [])]
     if used:
         raise ConfigError(
-            "When --config is used, selector overrides are forbidden: " + ", ".join(used)
+            "When --config is used, selector overrides are forbidden: "
+            + ", ".join(used)
         )
 
 
 def apply_execution_overrides(config: PipelineConfig, args: argparse.Namespace) -> None:
-    for name in ("dry_run", "resume", "force", "verbose", "keep_workspace", "fail_fast"):
+    for name in (
+        "dry_run",
+        "resume",
+        "force",
+        "verbose",
+        "keep_workspace",
+        "fail_fast",
+    ):
         value = getattr(args, name)
         if value is not None:
             setattr(config, name, bool(value))
@@ -294,8 +379,14 @@ def emit_result(result: RunResult, output_format: str) -> None:
                 "Candidate suites awaiting reference validation: "
                 f"{stage.counts.get('selected_suites', 0)}"
             )
-            print(f"Selected transformations: {stage.counts.get('selected_transformations', 0)}")
-            print(f"Potential execution pairs: {stage.counts.get('execution_pairs', 0)}")
+            print(
+                "Selected transformations: "
+                f"{stage.counts.get('selected_transformations', 0)}"
+            )
+            print(
+                "Potential execution pairs: "
+                f"{stage.counts.get('execution_pairs', 0)}"
+            )
             for pair in stage.details.get("pairs", []):
                 print(pair)
         results_file = stage.details.get("results_file")
@@ -378,20 +469,27 @@ def main(argv: list[str] | None = None) -> int:
         emit_result(result, config.output_format)
         return 0 if result.status in {"completed", "dry_run"} else 1
     except (ConfigError, FailureReportError) as exc:
-        output_format = getattr(args, "output_format", None) or "text"
-        if output_format == "json":
-            print(json.dumps({"status": "error", "error": str(exc)}, ensure_ascii=False))
-        else:
-            print(f"Error: {exc}", file=sys.stderr)
+        _emit_error(str(exc), _output_format(args))
         return 2
     except Exception as exc:
-        output_format = getattr(args, "output_format", None) or "text"
-        payload = {"status": "error", "error": f"{type(exc).__name__}: {exc}"}
-        if output_format == "json":
-            print(json.dumps(payload, ensure_ascii=False))
-        else:
-            print(f"Error: {payload['error']}", file=sys.stderr)
+        _emit_error(f"{type(exc).__name__}: {exc}", _output_format(args))
         return 1
+
+
+def _output_format(args: argparse.Namespace) -> str:
+    return getattr(args, "output_format", None) or "text"
+
+
+def _emit_error(message: str, output_format: str) -> None:
+    if output_format == "json":
+        print(
+            json.dumps(
+                {"status": "error", "error": message},
+                ensure_ascii=False,
+            )
+        )
+        return
+    print(f"Error: {message}", file=sys.stderr)
 
 
 if __name__ == "__main__":

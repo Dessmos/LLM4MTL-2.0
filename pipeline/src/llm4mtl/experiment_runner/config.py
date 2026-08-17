@@ -14,15 +14,18 @@ from llm4mtl.run_store.identity import RUN_ID_PATTERN
 ALLOWED_MODELS = {"gpt-5", "claude-sonnet-4", "gemini-2-5-pro"}
 ALLOWED_STRATEGIES = {"only_prompt", "few_shot", "grammar", "few_shots_AND_grammar"}
 PIPELINE_STAGES = ("extract", "technical", "reference", "parsing", "semantic")
+_YamlLine = tuple[int, str]
 
 
 class ConfigError(ValueError):
-    pass
+    """Raised when an experiment configuration violates the run contract."""
 
 
 def load_pipeline_config(path: Path) -> PipelineConfig:
+    """Load and validate a human-authored pipeline configuration."""
     payload = load_mapping(path)
-    if not isinstance(payload.get("language"), str) or not payload["language"].strip():
+    language = payload.get("language")
+    if not isinstance(language, str) or not language.strip():
         raise ConfigError("Experiment config must declare a non-empty language.")
     test_suites = mapping(payload.get("test_suites"))
     extraction = mapping(test_suites.get("extraction"))
@@ -31,7 +34,7 @@ def load_pipeline_config(path: Path) -> PipelineConfig:
     execution = mapping(payload.get("execution"))
 
     config = PipelineConfig(
-        language=str(payload["language"]),
+        language=language,
         tasks=string_list(payload.get("tasks")),
         all_tasks=bool(payload.get("all_tasks", False)),
         test_models=string_list(test_suites.get("models")),
@@ -61,6 +64,7 @@ def load_pipeline_config(path: Path) -> PipelineConfig:
 
 
 def load_mapping(path: Path) -> dict[str, Any]:
+    """Load a top-level mapping from a JSON or supported YAML file."""
     if not path.is_file():
         raise ConfigError(f"Experiment config not found: {path}")
     text = path.read_text(encoding="utf-8")
@@ -79,16 +83,25 @@ def load_mapping(path: Path) -> dict[str, Any]:
 
 
 def load_resolved_config(path: Path) -> PipelineConfig:
+    """Load the persisted fields understood by the current runner version."""
     payload = load_mapping(path)
     allowed = {item.name for item in fields(PipelineConfig)}
-    return PipelineConfig(**{key: value for key, value in payload.items() if key in allowed})
+    known_values = {
+        key: value for key, value in payload.items() if key in allowed
+    }
+    return PipelineConfig(**known_values)
 
 
 def validate_config(config: PipelineConfig, require_selection: bool = True) -> None:
+    """Validate identity, selection, and stage-range constraints."""
     # The language must have an adapter. Rejecting here rather than deep in a
     # stage keeps an unimplemented language from producing partial artifacts
     # attributed to a language that never ran.
-    from llm4mtl.languages import REQUIRED_LANGUAGES, UnsupportedLanguageError, language_adapter
+    from llm4mtl.languages import (
+        REQUIRED_LANGUAGES,
+        UnsupportedLanguageError,
+        language_adapter,
+    )
 
     if not isinstance(config.language, str) or not config.language.strip():
         raise ConfigError("A run must declare a non-empty language.")
@@ -118,12 +131,17 @@ def validate_config(config: PipelineConfig, require_selection: bool = True) -> N
         set(config.test_strategies) | set(config.transformation_strategies)
     ) - ALLOWED_STRATEGIES
     if unknown_strategies:
-        raise ConfigError(f"Unsupported strategy/strategies: {', '.join(sorted(unknown_strategies))}")
+        raise ConfigError(
+            "Unsupported strategy/strategies: "
+            f"{', '.join(sorted(unknown_strategies))}"
+        )
     if config.start_stage not in PIPELINE_STAGES:
         raise ConfigError(f"Unknown start stage: {config.start_stage}")
     if config.stop_after not in PIPELINE_STAGES:
         raise ConfigError(f"Unknown stop stage: {config.stop_after}")
-    if PIPELINE_STAGES.index(config.start_stage) > PIPELINE_STAGES.index(config.stop_after):
+    start_index = PIPELINE_STAGES.index(config.start_stage)
+    stop_index = PIPELINE_STAGES.index(config.stop_after)
+    if start_index > stop_index:
         raise ConfigError("--start-stage must not come after --stop-after.")
 
 
@@ -138,8 +156,8 @@ def parse_simple_yaml(text: str) -> dict[str, Any]:
     return result
 
 
-def _simple_yaml_lines(text: str) -> list[tuple[int, str]]:
-    lines: list[tuple[int, str]] = []
+def _simple_yaml_lines(text: str) -> list[_YamlLine]:
+    lines: list[_YamlLine] = []
     for raw in text.splitlines():
         stripped = raw.strip()
         if not stripped or stripped.startswith("#"):
@@ -150,7 +168,7 @@ def _simple_yaml_lines(text: str) -> list[tuple[int, str]]:
 
 
 def _parse_yaml_block(
-    lines: list[tuple[int, str]], index: int, indent: int
+    lines: list[_YamlLine], index: int, indent: int
 ) -> tuple[Any, int]:
     is_list = lines[index][1].startswith("- ") or lines[index][1] == "-"
     container: Any = [] if is_list else {}
@@ -172,7 +190,10 @@ def _parse_yaml_block(
 
 
 def _parse_yaml_list_item(
-    lines: list[tuple[int, str]], index: int, indent: int, container: list[Any]
+    lines: list[_YamlLine],
+    index: int,
+    indent: int,
+    container: list[Any],
 ) -> int:
     item_text = lines[index][1][1:].strip()
     if not item_text:
@@ -200,7 +221,10 @@ def _parse_yaml_list_item(
 
 
 def _parse_yaml_mapping_item(
-    lines: list[tuple[int, str]], index: int, indent: int, container: dict[str, Any]
+    lines: list[_YamlLine],
+    index: int,
+    indent: int,
+    container: dict[str, Any],
 ) -> int:
     key, value_text = split_key_value(lines[index][1])
     index += 1

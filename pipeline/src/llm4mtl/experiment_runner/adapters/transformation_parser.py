@@ -5,7 +5,9 @@ from __future__ import annotations
 from pathlib import Path
 
 from llm4mtl.experiment_runner.adapters.base import hash_paths
-from llm4mtl.experiment_runner.adapters.transformation_validation import TransformationValidationAdapter
+from llm4mtl.experiment_runner.adapters.transformation_validation import (
+    TransformationValidationAdapter,
+)
 from llm4mtl.experiment_runner.config import ConfigError
 from llm4mtl.experiment_runner.models import PipelineConfig, StageResult
 from llm4mtl.languages import language_adapter
@@ -13,6 +15,8 @@ from llm4mtl.semantic_tests.validation import workspace_for
 
 
 class TransformationParserAdapter:
+    """Select and parse generated transformations in a run-local workspace."""
+
     def __init__(self, repo_root: Path) -> None:
         self.repo_root = repo_root.resolve()
         self.selector = TransformationValidationAdapter(repo_root)
@@ -25,7 +29,11 @@ class TransformationParserAdapter:
         }
         if not transformations:
             return StageResult(
-                "transformation_parsing", "error", {"selected": 0, "failed": 1}, details, input_hash
+                "transformation_parsing",
+                "error",
+                {"selected": 0, "failed": 1},
+                details,
+                input_hash,
             )
         if dry_run:
             return StageResult(
@@ -71,7 +79,11 @@ class TransformationParserAdapter:
         return StageResult(
             "transformation_parsing",
             "completed",
-            {"selected": len(transformations), "passed": len(passed), "failed": len(failed)},
+            {
+                "selected": len(transformations),
+                "passed": len(passed),
+                "failed": len(failed),
+            },
             details,
             input_hash,
         )

@@ -11,6 +11,7 @@ the populations from contaminating each other.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
 
@@ -18,7 +19,11 @@ from llm4mtl.conventions import (
     default_generated_tests_root,
     language_config,
 )
-from llm4mtl.domain import OutcomeStatus, SuiteExecutionObservation, TransformationOutcome
+from llm4mtl.domain import (
+    OutcomeStatus,
+    SuiteExecutionObservation,
+    TransformationOutcome,
+)
 from llm4mtl.experiment_runner.adapters.base import fixed_selection, hash_paths
 from llm4mtl.experiment_runner.config import ConfigError
 from llm4mtl.experiment_runner.models import PipelineConfig, StageResult
@@ -36,7 +41,35 @@ from llm4mtl.transformation_execution.hashing import file_sha256
 
 DEFAULT_PAIR_TIMEOUT_SECONDS = 240
 
+
+@dataclass(frozen=True)
+class _ObservedExecutionPair:
+    """One generated-transformation execution and its recorded evidence."""
+
+    suite_path: Path
+    transformation: Path
+    observation: SuiteExecutionObservation
+    failure_outcome: TransformationOutcome | None
+    evidence_path: Path
+
+    def to_detail(self) -> dict[str, object]:
+        return {
+            "suite": str(self.suite_path),
+            "transformation": str(self.transformation),
+            "assertions_passed": self.observation.assertions_passed,
+            "failure_stage": self.observation.failure_stage,
+            "outcome_status": (
+                self.failure_outcome.status.value
+                if self.failure_outcome is not None
+                else None
+            ),
+            "evidence": str(self.evidence_path),
+        }
+
+
 class TransformationValidationAdapter:
+    """Execute reference-valid suites against generated transformations."""
+
     def __init__(self, repo_root: Path) -> None:
         self.repo_root = repo_root.resolve()
 
@@ -62,7 +95,12 @@ class TransformationValidationAdapter:
             return StageResult(
                 "transformation_validation",
                 "skipped",
-                {"selected_suites": 0, "selected_transformations": 0, "execution_pairs": 0, "skipped": 1},
+                {
+                    "selected_suites": 0,
+                    "selected_transformations": 0,
+                    "execution_pairs": 0,
+                    "skipped": 1,
+                },
                 {"skip_reason": "SKIPPED_NO_PARSED_TRANSFORMATIONS"},
             )
 
@@ -91,27 +129,52 @@ class TransformationValidationAdapter:
         }
         if not pairs:
             counts["failed"] = 1
-            return StageResult("transformation_validation", "error", counts, details, input_hash)
+            return StageResult(
+                "transformation_validation",
+                "error",
+                counts,
+                details,
+                input_hash,
+            )
         if dry_run:
-            return StageResult("transformation_validation", "dry_run", counts, details, input_hash)
+            return StageResult(
+                "transformation_validation",
+                "dry_run",
+                counts,
+                details,
+                input_hash,
+            )
 
-        adapter = language_adapter(config.language)
+        observed_pairs = self._execute_pairs(config, pairs)
+        counts.update(
+            execution_counts(
+                (pair.observation, pair.failure_outcome)
+                for pair in observed_pairs
+            )
+        )
+        details["pairs"] = [pair.to_detail() for pair in observed_pairs]
+        return StageResult(
+            "transformation_validation",
+            "completed",
+            counts,
+            details,
+            input_hash,
+        )
+
+    def _execute_pairs(
+        self,
+        config: PipelineConfig,
+        pairs: list[tuple[Path, Path]],
+    ) -> list[_ObservedExecutionPair]:
         if not config.engine_dir:
             raise ConfigError(
                 "transformation execution requires a run-local engine workspace"
             )
+
+        adapter = language_adapter(config.language)
         engine_dir = Path(config.engine_dir)
         observations_root = self._observations_root(config)
-
-        observed: list[
-            tuple[
-                Path,
-                Path,
-                SuiteExecutionObservation,
-                TransformationOutcome | None,
-                Path,
-            ]
-        ] = []
+        observed_pairs: list[_ObservedExecutionPair] = []
         for suite_path, transformation in pairs:
             suite = suite_from_path(
                 suite_path,
@@ -152,42 +215,16 @@ class TransformationValidationAdapter:
                 else:
                     evidence_path = observation_path(pair_root, suite)
             failure_outcome = adapter.normalize_transformation_failure(observation)
-            observed.append(
-                (
-                    suite_path,
-                    transformation,
-                    observation,
-                    failure_outcome,
-                    evidence_path,
+            observed_pairs.append(
+                _ObservedExecutionPair(
+                    suite_path=suite_path,
+                    transformation=transformation,
+                    observation=observation,
+                    failure_outcome=failure_outcome,
+                    evidence_path=evidence_path,
                 )
             )
-
-        counts.update(
-            execution_counts(
-                (observation, failure_outcome)
-                for _, _, observation, failure_outcome, _ in observed
-            )
-        )
-        details["pairs"] = [
-            {
-                "suite": str(suite_path),
-                "transformation": str(transformation),
-                "assertions_passed": observation.assertions_passed,
-                "failure_stage": observation.failure_stage,
-                "outcome_status": (
-                    failure_outcome.status.value if failure_outcome is not None else None
-                ),
-                "evidence": str(evidence_path),
-            }
-            for (
-                suite_path,
-                transformation,
-                observation,
-                failure_outcome,
-                evidence_path,
-            ) in observed
-        ]
-        return StageResult("transformation_validation", "completed", counts, details, input_hash)
+        return observed_pairs
 
     def select_validated_suites(
         self,
@@ -258,7 +295,9 @@ class TransformationValidationAdapter:
     def select_transformations(self, config: PipelineConfig) -> list[Path]:
         if config.transformations or config.transformation_selection_locked:
             return sorted(
-                Path(path).resolve() for path in config.transformations if Path(path).is_file()
+                Path(path).resolve()
+                for path in config.transformations
+                if Path(path).is_file()
             )
         tasks = set(config.tasks)
         models = fixed_selection("transformation model", config.transformation_models)

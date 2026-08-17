@@ -4,16 +4,25 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Collection
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
-from llm4mtl.experiment_runner.adapters.test_generation import TestGenerationAdapter
-from llm4mtl.experiment_runner.adapters.transformation_parser import TransformationParserAdapter
-from llm4mtl.experiment_runner.adapters.transformation_validation import TransformationValidationAdapter
-from llm4mtl.experiment_runner.config import PIPELINE_STAGES, ConfigError, validate_config
-from llm4mtl.experiment_runner.models import PipelineConfig, RunResult, StageResult
 from llm4mtl import run_store
+from llm4mtl.experiment_runner.adapters.test_generation import TestGenerationAdapter
+from llm4mtl.experiment_runner.adapters.transformation_parser import (
+    TransformationParserAdapter,
+)
+from llm4mtl.experiment_runner.adapters.transformation_validation import (
+    TransformationValidationAdapter,
+)
+from llm4mtl.experiment_runner.config import (
+    PIPELINE_STAGES,
+    ConfigError,
+    validate_config,
+)
+from llm4mtl.experiment_runner.models import PipelineConfig, RunResult, StageResult
 from llm4mtl.paths import REPO_ROOT, TARGET
 from llm4mtl.provenance import build_provenance
 from llm4mtl.run_store.attempts import existing_attempts
@@ -41,6 +50,17 @@ WORKSPACE_STAGES = {
     "reference_validation",
     "transformation_validation",
 }
+_CONFIG_HASH_IGNORED_FIELDS = frozenset(
+    {
+        "resume",
+        "force",
+        "dry_run",
+        "verbose",
+        "output_format",
+        "engine_dir",
+        "run_dir",
+    }
+)
 
 
 def _stages_require_workspace(stages: list[tuple[str, StageCallable]]) -> bool:
@@ -48,6 +68,8 @@ def _stages_require_workspace(stages: list[tuple[str, StageCallable]]) -> bool:
 
 
 class ExperimentOrchestrator:
+    """Coordinate deterministic local stages and run-store persistence."""
+
     def __init__(self, repo_root: Path | None = None) -> None:
         # Adapter subprocesses use this path as their cwd. After the v5 migration
         # every active component lives below the repository root.
@@ -89,7 +111,9 @@ class ExperimentOrchestrator:
         if attempt is None:
             attempts = existing_attempts(paths.stage_attempts_dir("execution"))
             if not attempts:
-                raise ConfigError(f"run {paths.root.name} recorded no execution attempt")
+                raise ConfigError(
+                    f"run {paths.root.name} recorded no execution attempt"
+                )
             attempt = max(attempts)
         return prepare_execution_diagnosis(paths.root, attempt)
 
@@ -100,15 +124,7 @@ class ExperimentOrchestrator:
         stages = self.stage_sequence(config)
         config_hash = stable_hash(
             config.to_dict(),
-            ignored={
-                "resume",
-                "force",
-                "dry_run",
-                "verbose",
-                "output_format",
-                "engine_dir",
-                "run_dir",
-            },
+            ignored=_CONFIG_HASH_IGNORED_FIELDS,
         )
         # Resolve through the run store first: it validates that ``run_id`` is a
         # contained identifier. Deriving the directory here would let a
@@ -120,11 +136,20 @@ class ExperimentOrchestrator:
         identity = run_identity(config, config_hash)
         run_exists = paths.manifest.exists()
 
-        if run_dir.exists() and not config.dry_run and not config.resume and not config.force:
+        run_conflicts_with_request = (
+            run_dir.exists()
+            and not config.dry_run
+            and not config.resume
+            and not config.force
+        )
+        if run_conflicts_with_request:
             raise ConfigError(f"Run already exists: {run_id}. Use --resume or --force.")
 
         if config.dry_run:
-            results = [self.plan_stage(name, callback, config, config_hash) for name, callback in stages]
+            results = [
+                self.plan_stage(name, callback, config, config_hash)
+                for name, callback in stages
+            ]
             return RunResult(run_id, "dry_run", config.command, results)
 
         self._initialize_run(paths, identity, run_id, run_exists)
@@ -146,7 +171,13 @@ class ExperimentOrchestrator:
         )
 
         status = run_status(results)
-        run_result = RunResult(run_id, status, config.command, results, str(run_dir.relative_to(REPO_ROOT)))
+        run_result = RunResult(
+            run_id,
+            status,
+            config.command,
+            results,
+            str(run_dir.relative_to(REPO_ROOT)),
+        )
         write_json(run_dir / "summary.json", run_result.to_dict())
         self.write_log(run_dir, run_result)
         run_store.append_event(paths, "run_finished", run_status=status)
@@ -162,7 +193,11 @@ class ExperimentOrchestrator:
         if run_exists:
             # Identity is checked before any write or workspace materialization.
             # A rejected resume must leave every byte of the existing run intact.
-            reject_identity_drift(run_store.read_manifest(paths) or {}, identity, run_id)
+            reject_identity_drift(
+                run_store.read_manifest(paths) or {},
+                identity,
+                run_id,
+            )
             run_store.append_event(paths, "run_resumed")
             return
         # Claim the immutable identity before creating any secondary run
@@ -242,15 +277,20 @@ class ExperimentOrchestrator:
         return result, should_stop
 
     def _record_stage(self, paths: run_store.RunPaths, result: StageResult) -> None:
-        """Record one stage outcome in the run-centric store (immutable attempt + latest).
+        """Record one immutable stage attempt in the run-centric store.
 
-        The persisted result is the same contract payload the stage service writes;
-        the runner's internal detail is kept beside it as evidence.
+        The persisted result is the same contract payload the stage service
+        writes; the runner's internal detail is kept beside it as evidence.
         """
         stage = contract_stage_id(result.name)
         payload = to_stage_payload(stage, result)
         run_store.append_event(paths, "stage_started", stage=stage)
-        attempt = run_store.record_attempt(paths, stage, payload, evidence=result.to_dict())
+        attempt = run_store.record_attempt(
+            paths,
+            stage,
+            payload,
+            evidence=result.to_dict(),
+        )
         run_store.append_event(
             paths,
             "stage_finished",
@@ -286,7 +326,10 @@ class ExperimentOrchestrator:
             "technical": ("technical_validation", self.tests.technical_validation),
             "reference": ("reference_validation", self.tests.reference_validation),
             "parsing": ("transformation_parsing", self.parser.parse),
-            "semantic": ("transformation_validation", self.transformations.semantic_validation),
+            "semantic": (
+                "transformation_validation",
+                self.transformations.semantic_validation,
+            ),
         }
         enabled = {
             "technical": config.technical_validation,
@@ -319,7 +362,12 @@ class ExperimentOrchestrator:
         if config.command == "transformations.parse":
             return [("transformation_parsing", self.parser.parse)]
         if config.command == "transformations.validate":
-            return [("transformation_validation", self.transformations.semantic_validation)]
+            return [
+                (
+                    "transformation_validation",
+                    self.transformations.semantic_validation,
+                )
+            ]
         return None
 
     def plan_stage(
@@ -358,7 +406,10 @@ class ExperimentOrchestrator:
             and previous.config_hash == plan.config_hash
         ):
             previous.status = "resumed"
-            previous.details = {**previous.details, "resume_reason": "matching config and input hashes"}
+            previous.details = {
+                **previous.details,
+                "resume_reason": "matching config and input hashes",
+            }
             return previous
         return None
 
@@ -394,16 +445,32 @@ class ExperimentOrchestrator:
         )
 
     def write_log(self, run_dir: Path, result: RunResult) -> None:
-        lines = [f"run_id={result.run_id}", f"status={result.status}", f"command={result.command}"]
+        """Write the human-readable runner log for a completed local run."""
+        lines = self._log_lines(result)
+        (run_dir / "runner.log").write_text(
+            "\n".join(lines) + "\n",
+            encoding="utf-8",
+        )
+
+    @staticmethod
+    def _log_lines(result: RunResult) -> list[str]:
+        lines = [
+            f"run_id={result.run_id}",
+            f"status={result.status}",
+            f"command={result.command}",
+        ]
         for stage in result.stages:
-            lines.append(f"{stage.name}: status={stage.status} counts={json.dumps(stage.counts, sort_keys=True)}")
+            serialized_counts = json.dumps(stage.counts, sort_keys=True)
+            lines.append(
+                f"{stage.name}: status={stage.status} counts={serialized_counts}"
+            )
             stdout = stage.details.get("stdout")
             stderr = stage.details.get("stderr")
             if stdout:
                 lines.append(str(stdout).rstrip())
             if stderr:
                 lines.append(str(stderr).rstrip())
-        (run_dir / "runner.log").write_text("\n".join(lines) + "\n", encoding="utf-8")
+        return lines
 
 
 def run_identity(config: PipelineConfig, config_hash: str) -> dict[str, object]:
@@ -435,7 +502,12 @@ def run_identity(config: PipelineConfig, config_hash: str) -> dict[str, object]:
         ),
         "seed": config.seed,
         "pipeline_variant": config.pipeline_variant,
-        "provenance": build_provenance(language, task, command=config.command, config_hash=config_hash),
+        "provenance": build_provenance(
+            language,
+            task,
+            command=config.command,
+            config_hash=config_hash,
+        ),
     }
 
 
@@ -469,7 +541,11 @@ IDENTITY_AXES = (
 )
 
 
-def reject_identity_drift(manifest: dict[str, object], identity: dict[str, object], run_id: str) -> None:
+def reject_identity_drift(
+    manifest: dict[str, object],
+    identity: dict[str, object],
+    run_id: str,
+) -> None:
     """Refuse to continue a run under a different identity than it was created with."""
     drifted = {
         axis: (manifest.get(axis), identity.get(axis))
@@ -495,9 +571,21 @@ def generate_run_id(config: PipelineConfig) -> str:
     return f"{config.language}-{task}-{timestamp}"
 
 
-def stable_hash(payload: dict[str, object], ignored: set[str] | None = None) -> str:
-    normalized = {key: value for key, value in payload.items() if key not in (ignored or set())}
-    encoded = json.dumps(normalized, sort_keys=True, separators=(",", ":")).encode("utf-8")
+def stable_hash(
+    payload: dict[str, object],
+    ignored: Collection[str] | None = None,
+) -> str:
+    excluded_fields = ignored or set()
+    normalized = {
+        key: value
+        for key, value in payload.items()
+        if key not in excluded_fields
+    }
+    encoded = json.dumps(
+        normalized,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
 
 
