@@ -1,11 +1,18 @@
-// Test harness: runs one Code node of the master n8n workflow under plain Node.
+// Test harness: runs one Code node of the master n8n workflow the way n8n runs it.
 //
 // These nodes decide which subworkflow an experiment executes and what each run
 // mode does next, so the regression tests have to run the shipped JavaScript
-// rather than a Python restatement of it. n8n exposes `$input` and `$('<node>')`
-// to Code nodes; this stubs exactly those two and nothing else.
+// rather than a Python restatement of it.
+//
+// n8n executes Code nodes inside a vm2 NodeVM, which is a fresh V8 context: it
+// has the JavaScript built-ins and nothing Node installs on its own global. Code
+// that reads `structuredClone`, `fetch`, `URL`, `TextEncoder` or `crypto` throws
+// there while running fine under plain `node`. This harness therefore evaluates
+// in a `node:vm` context configured to the same surface, so a Code node that
+// cannot run in n8n cannot pass here either.
 const fs = require('fs');
 const path = require('path');
+const vm = require('node:vm');
 
 const spec = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
 const master = JSON.parse(fs.readFileSync(spec.master, 'utf8'));
@@ -44,8 +51,14 @@ const $ = (name) => {
   };
 };
 
-const run = new Function('$input', '$', node.parameters.jsCode);
+// What vm2 grants a Code node beyond the language built-ins. Anything absent
+// here is absent in n8n too; `Proxy` is removed because vm2 does not expose it.
+const sandbox = { $input, $, console, process, Buffer, setTimeout, clearTimeout };
+const context = vm.createContext(sandbox);
+vm.runInContext('Proxy = undefined;', context);
+
 try {
+  const run = vm.runInContext(`(function ($input, $) {\n${node.parameters.jsCode}\n})`, context);
   const output = run($input, $);
   process.stdout.write(JSON.stringify({ ok: true, result: output[0].json, items: output }));
 } catch (error) {

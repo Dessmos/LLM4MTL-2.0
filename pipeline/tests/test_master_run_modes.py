@@ -72,18 +72,59 @@ def _master() -> dict[str, Any]:
     return json.loads(MASTER_WORKFLOW.read_text(encoding="utf-8"))
 
 
-def _form_fields(node_name: str) -> list[dict[str, Any]]:
-    node = next(node for node in _master()["nodes"] if node["name"] == node_name)
-    return node["parameters"]["formFields"]["values"]
+def _form_fields() -> list[dict[str, Any]]:
+    """The one configuration screen's fields."""
+    trigger = next(
+        node
+        for node in _master()["nodes"]
+        if node["type"] == "n8n-nodes-base.formTrigger"
+    )
+    return trigger["parameters"]["formFields"]["values"]
 
 
-def _field_options(node_name: str, field_name: str) -> list[str]:
+def _field_options(field_name: str) -> list[str]:
     field = next(
-        field
-        for field in _form_fields(node_name)
-        if field.get("fieldName") == field_name
+        field for field in _form_fields() if field.get("fieldName") == field_name
     )
     return [option["option"] for option in field["fieldOptions"]["values"]]
+
+
+def _trigger_type_version() -> float:
+    trigger = next(
+        node
+        for node in _master()["nodes"]
+        if node["type"] == "n8n-nodes-base.formTrigger"
+    )
+    return float(trigger["typeVersion"])
+
+
+def _submitted_key(field: dict[str, Any], type_version: float) -> str:
+    """The json key n8n gives a submitted field.
+
+    This mirrors ``getFieldIdentifier`` in n8n's Form utils: only from
+    typeVersion 2.4 does a field arrive under its ``fieldName``. Below that n8n
+    keys the item by ``fieldLabel`` — presentation text — and every name the queue
+    builder reads arrives undefined. The tests submit through this so they cannot
+    pass on keys the real form never sends.
+    """
+    if type_version >= 2.4 and field.get("fieldName"):
+        return field["fieldName"]
+    return field.get("fieldLabel") or field.get("fieldName") or ""
+
+
+def _as_submitted(values: dict[str, Any]) -> dict[str, Any]:
+    """Re-key a configuration by what n8n would actually post for this form."""
+    version = _trigger_type_version()
+    submitted: dict[str, Any] = {}
+    for field in _form_fields():
+        if field["fieldType"] == "html":
+            continue
+        name = field["fieldName"]
+        if name in values:
+            submitted[_submitted_key(field, version)] = values[name]
+    missing = set(values) - {field.get("fieldName") for field in _form_fields()}
+    assert not missing, f"configuration names no form field: {sorted(missing)}"
+    return submitted
 
 
 def _run_node(
@@ -140,7 +181,7 @@ def _configure(
     disabled_components: str = "",
     unconfigured_roles: tuple[str, ...] = (),
 ) -> dict[str, Any]:
-    """Submit the four configuration screens and build the run queue."""
+    """Submit the configuration screen and build the run queue."""
     chosen = {"etl_tasks": "Tree2Graph", **(tasks or {})}
     provider_choice = {
         "semantic_test_provider": "OpenAI",
@@ -151,31 +192,23 @@ def _configure(
     }
     return _run_node(
         "Validate Config and Build Run Queue",
-        nodes={
-            "Configure and Start Pipeline": {
-                "json": {
+        inputs=[
+            _as_submitted(
+                {
                     "run_mode": run_mode,
                     "languages": languages,
                     **chosen,
                     **provider_choice,
-                    "n8n_workflow_root": "/data/repository/workflows/n8n",
-                }
-            },
-            "Semantic Test Configuration": {
-                "json": {"semantic_test_strategy": semantic_test_strategy}
-            },
-            "Transformation Configuration": {
-                "json": {"transformation_strategy": transformation_strategy}
-            },
-            "Experiment and Ablation": {
-                "json": {
+                    "semantic_test_strategy": semantic_test_strategy,
+                    "transformation_strategy": transformation_strategy,
                     "max_refinement_iterations": max_refinement_iterations,
                     "ablation_profile": ablation_profile,
                     "disabled_components": disabled_components,
+                    "n8n_workflow_root": "/data/repository/workflows/n8n",
                 }
-            },
-            **_model_nodes(unconfigured_roles),
-        },
+            )
+        ],
+        nodes=_model_nodes(unconfigured_roles),
     )
 
 
@@ -344,12 +377,7 @@ class RunQueueTests(unittest.TestCase):
                     path.stem
                     for path in (TASK_CONTRACTS / language / "task_contracts").glob("*.json")
                 )
-                self.assertEqual(
-                    contracts,
-                    sorted(
-                        _field_options("Configure and Start Pipeline", f"{language}_tasks")
-                    ),
-                )
+                self.assertEqual(contracts, sorted(_field_options(f"{language}_tasks")))
 
 
 @unittest.skipUnless(shutil.which("node"), "the master workflow's Code nodes need Node")
@@ -478,8 +506,7 @@ class AblationIdentityTests(unittest.TestCase):
 
     def test_the_form_offers_every_component_flag_for_custom_ablation(self) -> None:
         self.assertEqual(
-            sorted(STAGE_FIELDS),
-            sorted(_field_options("Experiment and Ablation", "disabled_components")),
+            sorted(STAGE_FIELDS), sorted(_field_options("disabled_components"))
         )
 
     def test_run_mode_and_stage_flags_stay_separate_in_the_config(self) -> None:
@@ -503,13 +530,10 @@ class ConfigurationPresentationTests(unittest.TestCase):
     """
 
     def test_the_strategy_cards_map_onto_the_canonical_strategy_ids(self) -> None:
-        for page, field in (
-            ("Semantic Test Configuration", "semantic_test_strategy"),
-            ("Transformation Configuration", "transformation_strategy"),
-        ):
-            with self.subTest(page=page):
+        for field in ("semantic_test_strategy", "transformation_strategy"):
+            with self.subTest(field=field):
                 self.assertEqual(
-                    sorted(STRATEGY_LABELS), sorted(_field_options(page, field))
+                    sorted(STRATEGY_LABELS), sorted(_field_options(field))
                 )
 
     def test_a_selected_strategy_card_records_its_canonical_id(self) -> None:
@@ -541,31 +565,80 @@ class ConfigurationPresentationTests(unittest.TestCase):
         stay a real option input.
         """
         submitted_types = {"radio", "checkbox", "dropdown", "hiddenField"}
-        for page in (
-            "Configure and Start Pipeline",
-            "Semantic Test Configuration",
-            "Transformation Configuration",
-            "Experiment and Ablation",
-        ):
-            for field in _form_fields(page):
-                if field["fieldType"] == "html":
-                    continue
-                with self.subTest(page=page, field=field.get("fieldName")):
-                    self.assertIn(field["fieldType"], submitted_types)
+        for field in _form_fields():
+            if field["fieldType"] == "html":
+                continue
+            with self.subTest(field=field.get("fieldName")):
+                self.assertIn(field["fieldType"], submitted_types)
 
-    def test_every_configuration_screen_carries_the_wizard_stylesheet(self) -> None:
-        pages = [
+    def test_the_whole_configuration_is_one_screen(self) -> None:
+        """One form node, so the run is configured behind a single link."""
+        form_nodes = [
             node
             for node in _master()["nodes"]
             if node["type"] in ("n8n-nodes-base.form", "n8n-nodes-base.formTrigger")
         ]
-        self.assertEqual(4, len(pages))
-        stylesheets = {node["parameters"]["options"]["customCss"] for node in pages}
-        # One stylesheet, so the four screens cannot drift apart visually.
-        self.assertEqual(1, len(stylesheets))
-        css = stylesheets.pop()
+        self.assertEqual(
+            ["n8n-nodes-base.formTrigger"], [node["type"] for node in form_nodes]
+        )
+        css = form_nodes[0]["parameters"]["options"]["customCss"]
         self.assertIn(".multiselect-option", css)
         self.assertNotIn("<", css)
+
+    def test_the_form_submits_the_names_the_queue_builder_reads(self) -> None:
+        """The submitted key has to be the field name, not the field label.
+
+        n8n's ``getFieldIdentifier`` only returns ``fieldName`` from typeVersion
+        2.4 on. On 2.3 the same form posts ``{"Run mode": "Full Pipeline"}``, the
+        queue builder reads ``form.run_mode``, and the run dies on the first
+        validation with every field undefined.
+        """
+        version = _trigger_type_version()
+        self.assertGreaterEqual(
+            version, 2.4, "below 2.4 n8n keys the submitted item by fieldLabel"
+        )
+        for field in _form_fields():
+            if field["fieldType"] == "html":
+                continue
+            with self.subTest(field=field.get("fieldName")):
+                self.assertEqual(
+                    field["fieldName"], _submitted_key(field, version)
+                )
+
+    def test_the_form_feeds_the_run_queue_directly(self) -> None:
+        connections = _master()["connections"]
+        self.assertEqual(
+            "Validate Config and Build Run Queue",
+            connections["Configure and Start Pipeline"]["main"][0][0]["node"],
+        )
+
+    def test_the_screen_collects_every_field_the_run_queue_reads(self) -> None:
+        submitted = {
+            field["fieldName"]
+            for field in _form_fields()
+            if field["fieldType"] != "html"
+        }
+        self.assertEqual(
+            {
+                "run_mode",
+                "languages",
+                "etl_tasks",
+                "atl_tasks",
+                "qvto_tasks",
+                "reactions_tasks",
+                "semantic_test_provider",
+                "transformation_provider",
+                "source_diagnosis_provider",
+                "refinement_provider",
+                "semantic_test_strategy",
+                "transformation_strategy",
+                "max_refinement_iterations",
+                "ablation_profile",
+                "disabled_components",
+                "n8n_workflow_root",
+            },
+            submitted,
+        )
 
 
 if __name__ == "__main__":

@@ -11,41 +11,55 @@ returns facts, never routing decisions.
 
 ## Configuration flow
 
-Configuration is a four-screen n8n form. The trigger is the first screen and
-each following screen is an `n8n-nodes-base.form` page (`operation: page`); the
-pages run in a fixed order and the queue is built from all four.
+A run is configured on **one screen, behind one link**. The `Configure and Start
+Pipeline` form trigger collects the whole configuration and hands it straight to
+the queue builder:
+
+```text
+Configure and Start Pipeline  ->  Validate Config and Build Run Queue  ->  State Machine
+```
 
 Every choice is a native n8n `radio` or `checkbox` group, presented as selectable
-cards through the nodes' own **Custom Form Styling** (`options.customCss`). The
+cards through the node's own **Custom Form Styling** (`options.customCss`). The
 markup is n8n's: each option is still its own input plus its label, the input is
 stretched transparently over the card, and n8n's single-select and multi-select
 behaviour is untouched. Nothing in the form is a custom control — n8n forms only
 submit native inputs, and an HTML element drawn as a button would return no usable
-value. All four screens share one stylesheet so they cannot drift apart.
+value.
 
-```text
-Run Setup  ->  Semantic Test Configuration  ->  Transformation Configuration
-           ->  Experiment and Ablation      ->  Validate Config and Build Run Queue
-           ->  State Machine
-```
+The trigger is on **typeVersion 2.5**, and that is load-bearing rather than
+incidental: n8n's `getFieldIdentifier` only keys a submitted field by its
+`fieldName` from 2.4 on. Below that the same form posts `{"Run mode": "Full
+Pipeline"}` and every name the queue builder reads arrives undefined. The tests
+submit through that same rule, so a downgrade fails the suite instead of the run.
 
-### 1. Run Setup
+The screen is ordered as the five sections below. Fields belonging to a branch the
+selected run mode does not execute stay visible and are simply ignored, because
+what a run may leave unconfigured is decided in validation, not by hiding fields.
+
+### 1. What is being run
 
 * **Run mode** — three cards, each with a one-line summary of what it executes:
   `Semantic Tests Only`, `Transformations Only`, `Full Pipeline`. Recorded as
   `config.run_mode` = `tests_only` / `transformations_only` / `full`.
 * **Languages** — ETL, ATL, QVT-O, Reactions; at least one.
-* **Tasks** — one checkbox list per language. The names are the task contracts
-  under `benchmark/tasks/<language>/task_contracts`, which is the authoritative
-  source; every selected language needs at least one task. There is no hidden
-  default task.
-* **Providers** — OpenAI / Anthropic / Google Gemini for each of the four LLM
-  roles.
 
-### 2. Semantic Test Configuration
+### 2. Tasks
 
-The semantic-test prompting strategy, as four cards. The card shows the reading
-name and the run records the canonical id, which is what the variant workflows are
+One card list per language. The names are the task contracts under
+`benchmark/tasks/<language>/task_contracts`, which is the authoritative source;
+every selected language needs at least one task, and a list for a language that
+was not selected is ignored. There is no hidden default task.
+
+### 3. LLM roles
+
+The provider for each of the four roles — OpenAI, Anthropic, or Google Gemini.
+Providers only: see below for where the exact model comes from.
+
+### 4. Prompting strategies
+
+Each branch has its own strategy, as four cards. The card shows the reading name
+and the run records the canonical id, which is what the variant workflows are
 named after:
 
 | card | recorded id |
@@ -55,18 +69,13 @@ named after:
 | Grammar | `grammar` |
 | Few-shot + Grammar | `few_shots_AND_grammar` |
 
-Configured independently of the transformation branch. Ignored when the run mode
-is Transformations Only.
+The semantic-test and transformation strategies are independent; the one belonging
+to a branch this run mode does not execute is ignored.
 
-### 3. Transformation Configuration
+### 5. Experiment and ablation
 
-The transformation prompting strategy, from the same four. The card shows the
-reading name and the run records the canonical id, as above. Ignored when the run
-mode is Semantic Tests Only.
-
-### 4. Experiment and Ablation
-
-Refinement iterations (0–5), plus the RQ4 configuration: a named profile
+Refinement iterations (0–5, bounding both branches), plus the RQ4 configuration:
+a named profile
 (`Standard full configuration`, `No parser feedback`, `No semantic feedback`,
 `No failure diagnosis` — the variants under `experiments/variants/`) or `Custom
 ablation` with an explicit component list. A named profile refuses an extra
@@ -201,6 +210,17 @@ refuses.
 `docs/n8n-python-contract.md` is authoritative for stage ids and
 `outcome_code` values.
 
+## Code nodes and the n8n sandbox
+
+n8n runs Code nodes in a vm2 `NodeVM` — a fresh V8 context with the JavaScript
+built-ins and none of Node's own globals. `structuredClone`, `fetch`, `URL`,
+`TextEncoder` and `crypto` are all absent there while working fine under plain
+`node`, so a Code node must stay within the language built-ins (`JSON`, `Object`,
+`Set`, `Map`, `Buffer`, `setTimeout` and the standard prototypes are available).
+`pipeline/tests/fixtures/run_master_code_node.js` evaluates in a `node:vm` context
+configured to that same surface, so a Code node that cannot run in n8n cannot pass
+the tests either.
+
 ## Known limitations
 
 * n8n form fields are static definitions in the workflow JSON, so the task lists
@@ -208,15 +228,13 @@ refuses.
   `pipeline/tests/test_master_run_modes.py` asserts the form's options equal the
   task contracts on disk, so adding a contract fails the suite instead of
   silently becoming unselectable.
-* Form pages are not conditionally shown: a tests-only run still walks past the
-  Transformation Configuration screen, whose value is then ignored. Skipping a
-  page would require branch-and-rejoin around a form node, which leaves the
-  Validate node referencing an unexecuted node. Role requirements are enforced
-  in validation instead.
-* A card selects; it does not also advance the wizard. n8n forms submit native
-  inputs only, so a control that both carried the value and moved to the next page
-  would have to be a custom frontend behind a webhook. Each screen keeps its own
-  continue button.
+* Fields are not conditionally shown or hidden: a tests-only run still displays
+  the transformation strategy, and its value is then ignored. n8n form fields have
+  no conditional disclosure, so which roles a run actually requires is enforced in
+  validation, where it has to be correct anyway.
+* One screen means one long screen — the full configuration is roughly 3700px
+  tall with every language expanded. That is the trade for a single link and a
+  single node, and the numbered sections carry the structure the pages used to.
 * Ablating a stage in the middle of a mode's pipeline still terminates
   `incomplete` with the stage-specific reason, as it did before run modes
   existed.
