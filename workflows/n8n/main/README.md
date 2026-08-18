@@ -103,7 +103,16 @@ Refinement                  - {OpenAI, Anthropic, Google Gemini} Chat Model
 ```
 
 Those selectors are the provider's own model list, so the master never carries
-one of its own. All twelve nodes stay connected to `Validate Config and Build
+one of its own.
+
+The artifact tree is one directory per **model family**, not per exact model id:
+every `gpt-5` variant writes under `gpt-5`, every `claude-sonnet-4` variant under
+`claude-sonnet-4`, every `gemini-2.5-pro` variant under `gemini-2-5-pro`. The
+family is read from the variant workflow that was selected, which already
+declares it, so a dated or suffixed id from a provider's selector
+(`claude-sonnet-4-20250514`, `gpt-5.3-codex`) does not point the run at a
+directory nobody prepared. The exact id still reaches the model node and the run
+manifest, which is where a run's precise identity belongs. All twelve nodes stay connected to `Validate Config and Build
 Run Queue` through `ai_languageModel`, which is how `selectedModel()` reads them
 with `$(nodeName).params`.
 
@@ -148,13 +157,49 @@ full
   terminal: completed / SEMANTIC_PASSED
 ```
 
-On `SEMANTIC_EXECUTION_FAILED` the full pipeline diagnoses the source:
+On `SEMANTIC_EXECUTION_FAILED` the full pipeline diagnoses the source. One
+execution attempt can fail several suite/transformation pairs, so the master
+routes on the whole prepared set rather than on one report:
 
 ```text
-transformation_defect -> transformation refinement
-test_defect           -> test refinement
-ambiguous             -> stop
+SEMANTIC_EXECUTION_FAILED
+        -> artifacts.failure_report_index      (Python names every prepared report)
+        -> Read Diagnosis Index
+        -> every report with status "created" and source_diagnosis.eligible true
+        -> one diagnosis subworkflow call per report, each persisting its verdict
+        -> Aggregate
+        -> refinement routing
 ```
+
+Python decides which reports are diagnosable; how many diagnoses that implies and
+how the verdicts combine is routing, and stays in n8n. `failure_report_path`
+remains a backward-compatible shortcut to the first diagnosable report, and the
+master no longer routes on it.
+
+Aggregation is conservative and deliberately not a majority vote:
+
+| individual verdicts | aggregate |
+| --- | --- |
+| only `transformation_defect` | `transformation_defect` -> transformation refinement |
+| only `test_defect` | `test_defect` -> test refinement |
+| any `ambiguous` | `ambiguous` -> stop |
+| both defect kinds | `ambiguous` -> stop |
+
+`T, T, X` is ambiguous. A majority would repair the transformation while the
+evidence still says a test may be at fault, which is the mistake source diagnosis
+exists to prevent. Terminal reasons for the cases that decide nothing:
+
+```text
+NO_ELIGIBLE_SOURCE_DIAGNOSIS_REPORTS   the attempt prepared evidence, none diagnosable
+INCOMPLETE_SOURCE_DIAGNOSIS_SET        a verdict is missing; a partial set decides nothing
+AMBIGUOUS_SOURCE_DIAGNOSIS             the set disagrees or one report was ambiguous
+```
+
+Both prepared report types are diagnosable: `semantic_test_case_failure` names the
+failing case and assertion, and `semantic_execution_pair_failure` is the failure
+that happened before any test method ran, so it names neither and carries the
+whole suite. The diagnosis subworkflow normalizes both to one input and reports
+which it read as `scope` (`test_case` / `execution_pair`).
 
 The State Machine filters every candidate action through the mode before the
 stage flags. When nothing left is in the mode's scope and the pipeline actually

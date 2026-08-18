@@ -39,8 +39,6 @@ PROVIDER_MODELS = {
     "anthropic": "claude-sonnet-4",
     "google": "gemini-2-5-pro",
 }
-
-
 def _master_document() -> dict[str, Any]:
     return json.loads(MASTER_WORKFLOW.read_text(encoding="utf-8"))
 
@@ -195,6 +193,136 @@ class MasterSubworkflowSelectionTests(unittest.TestCase):
         )
         self.assertFalse(outcome["ok"])
         self.assertIn("requires a supported strategy", outcome["error"])
+
+    def test_the_callable_workflow_is_handed_over_as_json_text(self) -> None:
+        """`workflowJson` is a json-typed string parameter, and n8n parses it.
+
+        The node builds the workflow as an object. An expression that returns the
+        object itself is coerced into the string parameter as "[object Object]",
+        and n8n's own jsonParse then refuses it, so the handover has to stringify.
+        """
+        execute = next(
+            node
+            for node in _master_document()["nodes"]
+            if node["name"] == "Execute Existing Subworkflow"
+        )
+        expression = execute["parameters"]["workflowJson"]
+        self.assertIn("JSON.stringify", expression)
+        self.assertIn("workflow_json", expression)
+
+        # The value really is an object, which is why the stringify is required.
+        selector = _selector("transformation", "etl", "grammar")
+        outcome = _run_code_node(
+            {
+                "subworkflow_path": selector,
+                "subworkflow_input": {
+                    "provider": "openai",
+                    "model": "gpt-5",
+                    "strategy": "grammar",
+                },
+            },
+            _glob_matches(selector),
+        )
+        self.assertTrue(outcome["ok"], outcome.get("error"))
+        workflow = outcome["result"]["workflow_json"]
+        self.assertIsInstance(workflow, dict)
+        # What n8n would hand to jsonParse after the expression resolves.
+        handed_over = json.dumps(workflow)
+        self.assertIsInstance(json.loads(handed_over).get("nodes"), list)
+
+    def test_a_selector_that_matches_no_file_fails_loudly(self) -> None:
+        """An empty read must not end the run as a success.
+
+        A glob matching nothing yields zero items, and n8n stops feeding the
+        branch: the run reaches its terminal state having generated nothing, and
+        reports success. A tests-only run that produced no tests is the one
+        outcome the pipeline may not report as fine.
+        """
+        selector = _selector("transformation", "etl", "grammar")
+        outcome = _run_code_node(
+            {
+                "subworkflow_path": selector,
+                "subworkflow_input": {
+                    "provider": "openai",
+                    "model": "gpt-5",
+                    "strategy": "grammar",
+                },
+            },
+            [],
+        )
+        self.assertFalse(outcome["ok"])
+        self.assertIn("No workflow file matched", outcome["error"])
+        self.assertIn(selector, outcome["error"])
+
+    def test_the_read_branch_carries_an_empty_result_to_the_check(self) -> None:
+        """The nodes are wired so the emptiness reaches the node that reports it.
+
+        Without ``alwaysOutputData`` the read and extract nodes emit nothing at
+        all, so the check above never executes and the branch just stops.
+        """
+        nodes = {node["name"]: node for node in _master_document()["nodes"]}
+        self.assertTrue(nodes["Read Existing Subworkflow"]["alwaysOutputData"])
+        self.assertTrue(nodes["Extract Subworkflow JSON"]["alwaysOutputData"])
+        self.assertEqual(
+            "continueRegularOutput", nodes["Extract Subworkflow JSON"]["onError"]
+        )
+
+    def test_the_artifact_namespace_is_the_model_family_not_the_exact_model(self) -> None:
+        """Every gpt-5 variant files under `gpt-5`, not under its own id.
+
+        The artifact tree is one directory per model family, prepared ahead of a
+        run. Naming it after the exact id the provider's selector happens to
+        return - `gpt-5.3-codex`, `claude-sonnet-4-20250514` - points the run at a
+        directory that does not exist, and the failure surfaces as an unwritable
+        file deep inside the generation subworkflow. The family is read from the
+        variant workflow itself, so no model list is kept here.
+        """
+        selector = _selector("test_generation", "etl", "few_shot")
+        matches = _glob_matches(selector)
+        for provider, model, family in (
+            ("openai", "gpt-5", "gpt-5"),
+            ("openai", "gpt-5.3-codex", "gpt-5"),
+            ("openai", "gpt-5-2025-08-07", "gpt-5"),
+            ("anthropic", "claude-sonnet-4-20250514", "claude-sonnet-4"),
+            ("google", "models/gemini-2.5-pro", "gemini-2-5-pro"),
+        ):
+            with self.subTest(model=model):
+                outcome = _run_code_node(
+                    {
+                        "subworkflow_path": selector,
+                        "subworkflow_input": {
+                            "provider": provider,
+                            "model": model,
+                            "strategy": "few_shot",
+                        },
+                    },
+                    matches,
+                )
+                self.assertTrue(outcome["ok"], outcome.get("error"))
+                workflow = outcome["result"]["workflow_json"]
+                written = [
+                    node["parameters"]["fileName"]
+                    for node in workflow["nodes"]
+                    if node["type"] == "n8n-nodes-base.readWriteFile"
+                    and node.get("parameters", {}).get("operation") == "write"
+                ]
+                self.assertTrue(written)
+                for path in written:
+                    self.assertIn(f"/{family}/", path)
+
+                # The exact model still reaches the model node: the family names
+                # the directory, never what the run actually called.
+                model_node = next(
+                    node
+                    for node in workflow["nodes"]
+                    if node["type"].startswith("@n8n/n8n-nodes-langchain.lmChat")
+                )
+                configured = (
+                    model_node["parameters"].get("modelName")
+                    or model_node["parameters"].get("model")
+                )
+                value = configured["value"] if isinstance(configured, dict) else configured
+                self.assertEqual(model, value)
 
     def test_the_diagnosis_namespace_survives_model_patching(self) -> None:
         """``/responses/source-diagnosis/`` names a stage, not a model.

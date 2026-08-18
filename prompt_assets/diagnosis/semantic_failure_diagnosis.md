@@ -23,4 +23,14 @@ Return exactly one JSON object, with no Markdown or surrounding prose:
 
 Copy both identifiers exactly from `failing_test_case_or_assertion`.
 
+When `failing_test_case_or_assertion` names no case, the execution failed before
+any individual semantic test was reported: the whole generated suite is supplied
+instead of a selected case, and there is no input model, no expected output and
+no actual target model to compare. Return `null` for both `test_case_id` and
+`assertion_id`. Do not infer or invent identifiers, and do not treat the absence
+of a case as evidence for either source. Diagnose from what is supplied — the
+generated transformation, the generated suite, the recorded execution summary and
+logs, and the reference transformation result — and answer `ambiguous` if that
+does not identify a primary source.
+
 Do not recommend changing the task description, task contract, metamodels, or reference transformation.

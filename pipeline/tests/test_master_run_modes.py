@@ -230,6 +230,7 @@ def _drive(
     config: dict[str, Any],
     results: dict[str, Any] | None = None,
     limit: int = 60,
+    factories: dict[str, Any] | None = None,
 ) -> tuple[list[str], dict[str, Any]]:
     """Run the real control loop until it reaches ``complete``.
 
@@ -248,9 +249,13 @@ def _drive(
         actions.append(action)
         if action == "complete":
             return actions, state
+        # A factory lets one action answer differently on each pass, which is how
+        # a failing execution becomes a passing one after a refinement.
+        factory = (factories or {}).get(action)
+        produced = factory() if factory is not None else stage_results.get(action, {})
         captured = _run_node(
             "Capture Action Result",
-            inputs=[stage_results.get(action, {})],
+            inputs=[produced],
             nodes={"State Machine": {"json": state}},
         )
         if not captured["ok"]:
@@ -312,23 +317,30 @@ class RunModeTests(unittest.TestCase):
         self.assertEqual("SEMANTIC_PASSED", state["results"][0]["reason"])
 
     def test_full_diagnoses_a_semantic_failure_and_refines(self) -> None:
+        actions, _ = _drive_diagnosis(["transformation_defect"])
+        self.assertIn("read_diagnosis_index", actions)
+        self.assertIn("diagnose", actions)
+        # The diagnosed transformation defect sends the run back through
+        # transformation generation rather than test generation.
+        self.assertEqual("generate_transformations", actions[actions.index("diagnose") + 1])
+
+    def test_a_failure_without_a_prepared_index_says_so(self) -> None:
+        """The shortcut report alone is no longer enough to diagnose on."""
         config = _configure(run_mode="Full Pipeline")
-        actions, _ = _drive(
+        _, state = _drive(
             config["result"],
             results={
                 "execution": {
                     "stage": "execution",
                     "status": "completed",
                     "outcome_code": "SEMANTIC_EXECUTION_FAILED",
-                    "artifacts": {"failure_report_path": "/data/artifacts/failure.json"},
-                },
-                "diagnose": {"classification": "transformation_defect", "confidence": "high"},
+                    "artifacts": {"failure_report_path": "artifacts/work/runs/x/r.json"},
+                }
             },
         )
-        self.assertIn("diagnose", actions)
-        # The diagnosed transformation defect sends the run back through
-        # transformation generation rather than test generation.
-        self.assertEqual("generate_transformations", actions[actions.index("diagnose") + 1])
+        result = state["results"][0]
+        self.assertEqual("incomplete", result["status"])
+        self.assertEqual("SOURCE_DIAGNOSIS_EVIDENCE_NOT_EXPOSED", result["reason"])
 
     def test_every_run_mode_has_a_successful_terminal_path(self) -> None:
         for mode in ("Semantic Tests Only", "Transformations Only", "Full Pipeline"):
@@ -337,6 +349,208 @@ class RunModeTests(unittest.TestCase):
                 self.assertTrue(config["ok"], config.get("error"))
                 _, state = _drive(config["result"])
                 self.assertEqual("completed", state["results"][0]["status"])
+
+
+def _diagnosis_index(*reports: dict[str, Any]) -> dict[str, Any]:
+    """One prepared attempt's index, shaped as diagnosis_preparation writes it."""
+    return {
+        "eligible_reports": [
+            {
+                "failure_report_path": report["path"],
+                "scope": report.get("scope", "test_case"),
+                "reason": "parser_passed_and_semantic_test_failed",
+                "test_case_id": report.get("test_case_id", "case-1"),
+                "assertion_id": report.get("assertion_id", "assertion-001"),
+                "suite": "suite_001",
+                "transformation": "generated.atl",
+            }
+            for report in reports
+        ],
+        "eligible_count": len(reports),
+        "diagnosis_eligible_declared": len(reports),
+    }
+
+
+def _failing_execution() -> dict[str, Any]:
+    return {
+        "stage": "execution",
+        "status": "completed",
+        "outcome_code": "SEMANTIC_EXECUTION_FAILED",
+        "attempt": 1,
+        "artifacts": {
+            "failure_report_index": (
+                "artifacts/work/runs/etl-tree2graph-0001/diagnosis/execution/"
+                "attempt-001/index.json"
+            ),
+            "failure_report_path": (
+                "artifacts/work/runs/etl-tree2graph-0001/diagnosis/execution/"
+                "attempt-001/reports/first.json"
+            ),
+        },
+    }
+
+
+def _drive_diagnosis(
+    classifications: list[str],
+    *,
+    eligible: int | None = None,
+    verdicts: list[dict[str, Any]] | None = None,
+) -> tuple[list[str], dict[str, Any]]:
+    """A full-mode run whose first execution fails with N eligible reports.
+
+    The second execution passes, so the run terminates and the action counts are
+    the counts of one diagnosis round rather than of a refinement loop.
+    """
+    count = len(classifications) if eligible is None else eligible
+    reports = [
+        {
+            "path": "artifacts/work/runs/etl-tree2graph-0001/diagnosis/execution/"
+            f"attempt-001/reports/r{index}.json"
+        }
+        for index in range(count)
+    ]
+    supplied = verdicts if verdicts is not None else [
+        {
+            "classification": value,
+            "confidence": "high",
+            "test_case_id": "case-1",
+            "assertion_id": "assertion-001",
+        }
+        for value in classifications
+    ]
+    calls = {"diagnose": 0, "execution": 0}
+
+    def next_verdict() -> dict[str, Any]:
+        index = calls["diagnose"]
+        calls["diagnose"] += 1
+        return supplied[index] if index < len(supplied) else {}
+
+    def next_execution() -> dict[str, Any]:
+        calls["execution"] += 1
+        if calls["execution"] == 1:
+            return _failing_execution()
+        return PASSING_RESULTS["execution"]
+
+    config = _configure(run_mode="Full Pipeline")
+    assert config["ok"], config.get("error")
+    return _drive(
+        config["result"],
+        {"read_diagnosis_index": _diagnosis_index(*reports)},
+        factories={"diagnose": next_verdict, "execution": next_execution},
+    )
+
+
+@unittest.skipUnless(shutil.which("node"), "the master workflow's Code nodes need Node")
+class SourceDiagnosisAggregationTests(unittest.TestCase):
+    """Every eligible report is diagnosed, and the verdicts combine conservatively.
+
+    An execution attempt can fail several suite/transformation pairs at once, and
+    the pairs need not agree. Repairing the transformation because the first
+    report happened to blame it, while another report blamed the test, is exactly
+    the mistake source diagnosis exists to prevent - so a mixed or ambiguous set
+    is ambiguous, never a majority vote.
+    """
+
+    def test_one_transformation_defect_refines_the_transformation(self) -> None:
+        actions, state = _drive_diagnosis(["transformation_defect"])
+        self.assertEqual(1, actions.count("diagnose"))
+        self.assertEqual("generate_transformations", actions[actions.index("diagnose") + 1])
+
+    def test_agreeing_transformation_defects_refine_the_transformation(self) -> None:
+        actions, _ = _drive_diagnosis(["transformation_defect", "transformation_defect"])
+        self.assertEqual(2, actions.count("diagnose"))
+        last = len(actions) - 1 - actions[::-1].index("diagnose")
+        self.assertEqual("generate_transformations", actions[last + 1])
+
+    def test_one_test_defect_refines_the_tests(self) -> None:
+        actions, _ = _drive_diagnosis(["test_defect"])
+        self.assertEqual("generate_tests", actions[actions.index("diagnose") + 1])
+
+    def test_agreeing_test_defects_refine_the_tests(self) -> None:
+        actions, _ = _drive_diagnosis(["test_defect", "test_defect"])
+        self.assertEqual(2, actions.count("diagnose"))
+        last = len(actions) - 1 - actions[::-1].index("diagnose")
+        self.assertEqual("generate_tests", actions[last + 1])
+
+    def test_a_mixed_set_is_ambiguous_and_refines_nothing(self) -> None:
+        actions, state = _drive_diagnosis(["transformation_defect", "test_defect"])
+        self.assertEqual(2, actions.count("diagnose"))
+        result = state["results"][0]
+        self.assertEqual("completed_with_failures", result["status"])
+        self.assertEqual("AMBIGUOUS_SOURCE_DIAGNOSIS", result["reason"])
+        self.assertNotIn("generate_transformations", actions[actions.index("diagnose") :])
+
+    def test_one_ambiguous_verdict_makes_the_whole_set_ambiguous(self) -> None:
+        for others in (["transformation_defect"], ["test_defect"]):
+            with self.subTest(others=others):
+                actions, state = _drive_diagnosis([*others, "ambiguous"])
+                result = state["results"][0]
+                self.assertEqual("completed_with_failures", result["status"])
+                self.assertEqual("AMBIGUOUS_SOURCE_DIAGNOSIS", result["reason"])
+
+    def test_a_majority_never_outvotes_a_dissenting_report(self) -> None:
+        """T, T, X is ambiguous - the evidence still says a test may be at fault."""
+        actions, state = _drive_diagnosis(
+            ["transformation_defect", "transformation_defect", "test_defect"]
+        )
+        self.assertEqual(3, actions.count("diagnose"))
+        self.assertEqual("AMBIGUOUS_SOURCE_DIAGNOSIS", state["results"][0]["reason"])
+
+    def test_every_eligible_report_is_diagnosed_not_only_the_first(self) -> None:
+        """The regression this whole stage exists for.
+
+        Python's index names every diagnosable report and also offers
+        ``failure_report_path`` as a shortcut to the first one. Routing on the
+        shortcut decided a refinement from one failure while the attempt had
+        recorded several.
+        """
+        actions, state = _drive_diagnosis(
+            ["transformation_defect", "transformation_defect", "transformation_defect"]
+        )
+        self.assertEqual(3, actions.count("diagnose"))
+        verdicts = state["results"][0]["timeline"]
+        diagnosed = [entry for entry in verdicts if entry.get("action") == "diagnose"]
+        self.assertEqual(3, len(diagnosed))
+        # Each invocation named its own report, so no report was diagnosed twice.
+        paths = [entry["failure_report_path"] for entry in diagnosed]
+        self.assertEqual(3, len(set(paths)), paths)
+
+    def test_every_individual_verdict_is_recorded(self) -> None:
+        actions, state = _drive_diagnosis(["transformation_defect", "test_defect"])
+        timeline = state["results"][0]["timeline"]
+        diagnosed = [entry for entry in timeline if entry.get("action") == "diagnose"]
+        self.assertEqual(
+            ["transformation_defect", "test_defect"],
+            [entry["classification"] for entry in diagnosed],
+        )
+        aggregated = [entry for entry in timeline if entry.get("action") == "aggregate_diagnosis"]
+        self.assertEqual(1, len(aggregated))
+        self.assertEqual("ambiguous", aggregated[0]["aggregate"])
+        self.assertEqual(
+            ["transformation_defect", "test_defect"], aggregated[0]["classifications"]
+        )
+
+    def test_no_eligible_report_gets_an_explicit_terminal_reason(self) -> None:
+        actions, state = _drive_diagnosis([], eligible=0)
+        self.assertNotIn("diagnose", actions)
+        result = state["results"][0]
+        self.assertEqual("completed_with_failures", result["status"])
+        self.assertEqual("NO_ELIGIBLE_SOURCE_DIAGNOSIS_REPORTS", result["reason"])
+
+    def test_a_failed_invocation_never_aggregates_a_partial_set(self) -> None:
+        """Two verdicts out of three decide nothing."""
+        actions, state = _drive_diagnosis(
+            ["transformation_defect", "transformation_defect", "transformation_defect"],
+            verdicts=[
+                {"classification": "transformation_defect", "confidence": "high"},
+                {"classification": "transformation_defect", "confidence": "high"},
+                {},
+            ],
+        )
+        result = state["results"][0]
+        self.assertEqual("incomplete", result["status"])
+        self.assertEqual("INCOMPLETE_SOURCE_DIAGNOSIS_SET", result["reason"])
+        self.assertNotIn("generate_transformations", actions[actions.index("diagnose") :])
 
 
 @unittest.skipUnless(shutil.which("node"), "the master workflow's Code nodes need Node")

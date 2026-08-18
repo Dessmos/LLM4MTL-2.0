@@ -15,9 +15,12 @@ const path = require('path');
 const vm = require('node:vm');
 
 const spec = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
-const master = JSON.parse(fs.readFileSync(spec.master, 'utf8'));
-const node = master.nodes.find((candidate) => candidate.name === spec.node);
-if (!node) throw new Error(`Master workflow has no node named ${spec.node}`);
+// `workflow` is any workflow file: the master, or a subworkflow whose Code nodes
+// are just as much part of the orchestration contract.
+const workflowPath = spec.workflow || spec.master;
+const workflow = JSON.parse(fs.readFileSync(workflowPath, 'utf8'));
+const node = workflow.nodes.find((candidate) => candidate.name === spec.node);
+if (!node) throw new Error(`${workflowPath} has no node named ${spec.node}`);
 
 // `files` reads real workflow variants off disk the way the readWriteFile glob
 // feeds the node; `input` passes items straight through.

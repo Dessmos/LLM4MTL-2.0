@@ -17,6 +17,10 @@ services:
 
       # Importable workflows and generated LLM prompts/responses.
       - "./workflows:/data/workflows:ro"
+      # The master workflow reads its subworkflows back from disk by path, across
+      # the whole n8n tree (tests/, transformations/, subworkflows/), so it needs
+      # the tree itself mounted at the workflow root it is configured with.
+      - "..:/data/repository/workflows/n8n:ro"
       - "../../../artifacts/work:/data/artifacts"
       - "../../../prompt_assets/task_prompts:/data/task_prompts:ro"
 

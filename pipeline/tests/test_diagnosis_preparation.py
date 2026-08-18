@@ -16,6 +16,8 @@ from __future__ import annotations
 import json
 import re
 import shutil
+import subprocess
+import tempfile
 import unittest
 import uuid
 import xml.etree.ElementTree as ET
@@ -490,7 +492,7 @@ class DiagnosisPreparationTests(unittest.TestCase):
         report = read_json(REPO_ROOT / index["pairs"][0]["reports"][0]["report"])
         bundle = report["source_diagnosis"]["evidence_bundle"]
 
-        for field in _required_evidence_fields():
+        for field in _required_evidence_fields("semantic_test_case_failure"):
             with self.subTest(field=field):
                 self.assertIn(field, bundle)
 
@@ -499,7 +501,9 @@ class DiagnosisPreparationTests(unittest.TestCase):
         for extra in ("changes", "syntax_status", "stack_traces", "maven_log_excerpt"):
             with self.subTest(extra=extra):
                 self.assertIn(extra, bundle)
-                self.assertNotIn(extra, _required_evidence_fields())
+                self.assertNotIn(
+                    extra, _required_evidence_fields("semantic_test_case_failure")
+                )
 
         # An assertion failure carries no stack trace, so the required fields
         # must be tested for presence and never for truthiness.
@@ -818,6 +822,111 @@ class DiagnosisPreparationTests(unittest.TestCase):
         self.assertEqual("assertion-001", entry["assertion_id"])
         self.assertNotIn("pair_result", report)
 
+    def _diagnose_report(self, entry: dict[str, object]) -> dict[str, object]:
+        """Run the diagnosis subworkflow's own validation over a prepared report.
+
+        Preparation and the subworkflow that consumes it are two halves of one
+        contract, and only one of them is Python. Running the shipped node keeps
+        a report type that Python marks eligible from being one the diagnosis
+        silently cannot read.
+        """
+        report_path = REPO_ROOT / str(entry["report"])
+        relative = report_path.relative_to(REPO_ROOT).as_posix()
+        spec = {
+            "workflow": str(
+                REPO_ROOT / "workflows" / "n8n" / "subworkflows" / "diagnosis" / "llm-diagnosis.json"
+            ),
+            "node": "Validate Evidence Bundle",
+            "input": [{"failure_report_text": report_path.read_text(encoding="utf-8")}],
+            "nodes": {
+                "Validate Input": {
+                    "json": {
+                        "run_id": self.run_id,
+                        "execution_attempt": 1,
+                        "provider": "openai",
+                        "model": "gpt-5",
+                        "evidence_ref": relative,
+                    }
+                }
+            },
+        }
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as handle:
+            json.dump(spec, handle)
+            spec_path = handle.name
+        try:
+            completed = subprocess.run(
+                [
+                    "node",
+                    str(REPO_ROOT / "pipeline" / "tests" / "fixtures" / "run_master_code_node.js"),
+                    spec_path,
+                ],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+        finally:
+            Path(spec_path).unlink()
+        return json.loads(completed.stdout)
+
+    @unittest.skipUnless(shutil.which("node"), "the diagnosis subworkflow needs Node")
+    def test_the_diagnosis_subworkflow_accepts_a_case_level_report(self) -> None:
+        self._complete_failing_run()
+        index = prepare_execution_diagnosis(self.run_dir, 1)
+        entry = index["pairs"][0]["reports"][0]
+
+        outcome = self._diagnose_report(entry)
+
+        self.assertTrue(outcome["ok"], outcome.get("error"))
+        self.assertEqual("test_case", outcome["result"]["scope"])
+        self.assertEqual(entry["test_case_id"], outcome["result"]["test_case_id"])
+        self.assertEqual(entry["assertion_id"], outcome["result"]["assertion_id"])
+
+    @unittest.skipUnless(shutil.which("node"), "the diagnosis subworkflow needs Node")
+    def test_the_diagnosis_subworkflow_accepts_a_pair_level_report(self) -> None:
+        """A failure before any test method is diagnosable, not unreadable.
+
+        Python marks these reports eligible, and the index selects them like any
+        other, so a subworkflow that only understood ``semantic_test_case_failure``
+        turned a real semantic failure into a workflow error.
+        """
+        self._failure_before_any_test_method()
+        index = prepare_execution_diagnosis(self.run_dir, 1)
+        entry = index["pairs"][0]["reports"][0]
+        self.assertTrue(entry["eligible"])
+
+        outcome = self._diagnose_report(entry)
+
+        self.assertTrue(outcome["ok"], outcome.get("error"))
+        self.assertEqual("execution_pair", outcome["result"]["scope"])
+        # No case ran, so none is named - and none is invented either.
+        self.assertIsNone(outcome["result"]["test_case_id"])
+        self.assertIsNone(outcome["result"]["assertion_id"])
+        bundle = outcome["result"]["evidence_bundle"]
+        for field in _required_evidence_fields("semantic_execution_pair_failure"):
+            with self.subTest(field=field):
+                self.assertIn(field, bundle)
+        # The whole suite stands in for the case that never ran, and the fields a
+        # case-level bundle carries are absent rather than faked empty.
+        self.assertIn("generated_test", bundle)
+        for absent in ("input_model", "expected_output_or_properties", "actual_target_model"):
+            with self.subTest(absent=absent):
+                self.assertNotIn(absent, bundle)
+
+    @unittest.skipUnless(shutil.which("node"), "the diagnosis subworkflow needs Node")
+    def test_an_unknown_report_type_is_still_refused(self) -> None:
+        self._complete_failing_run()
+        index = prepare_execution_diagnosis(self.run_dir, 1)
+        entry = dict(index["pairs"][0]["reports"][0])
+        report_path = REPO_ROOT / str(entry["report"])
+        report = read_json(report_path)
+        report["report_type"] = "semantic_something_else"
+        write_json(report_path, report)
+
+        outcome = self._diagnose_report(entry)
+
+        self.assertFalse(outcome["ok"])
+        self.assertIn("Unexpected failure report type", outcome["error"])
+
     def test_a_pair_level_timeout_is_not_eligible(self) -> None:
         self._failure_before_any_test_method(failure_stage="timeout")
 
@@ -969,8 +1078,14 @@ class DiagnosisPreparationTests(unittest.TestCase):
         self.assertEqual("transformation_parser_check_failed", entry["reason"])
 
 
-def _required_evidence_fields() -> list[str]:
-    """The evidence fields the Source Diagnosis subworkflow insists on."""
+def _required_evidence_fields(report_type: str) -> list[str]:
+    """The evidence fields Source Diagnosis insists on for one report type.
+
+    The two types carry different evidence: a case-level report has the input
+    model, the expected output and the model-level difference, and a pair-level
+    report has none of those because no case ran. Reading each list back from the
+    workflow is what keeps preparation and the diagnosis from drifting apart.
+    """
     workflow = json.loads(
         (
             REPO_ROOT
@@ -986,8 +1101,10 @@ def _required_evidence_fields() -> list[str]:
         for node in workflow["nodes"]
         if node["name"] == "Validate Evidence Bundle"
     )
-    declaration = re.search(r"const required = \[(.*?)\];", code, re.DOTALL)
-    assert declaration is not None, "the workflow declares no required fields"
+    declaration = re.search(
+        re.escape(report_type) + r":\s*\{.*?required:\s*\[(.*?)\]", code, re.DOTALL
+    )
+    assert declaration is not None, f"the workflow declares no fields for {report_type}"
     return re.findall(r"'([a-z_]+)'", declaration.group(1))
 
 

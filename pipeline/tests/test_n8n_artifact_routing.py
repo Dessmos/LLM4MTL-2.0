@@ -131,7 +131,17 @@ class N8nArtifactRoutingTests(unittest.TestCase):
             "reference_transformation_result",
         ):
             self.assertIn(evidence_field, validation_code)
-        self.assertIn("parser passed and semantic test failed", validation_code)
+        # Both prepared report types must be readable: a case-level failure and
+        # the pair-level failure that happened before any test method ran. Each
+        # states its own eligibility reason and its own semantic status.
+        for scope_marker in (
+            "semantic_test_case_failure",
+            "semantic_execution_pair_failure",
+            "parser_passed_and_semantic_test_failed",
+            "parser_passed_and_execution_failed_before_any_test",
+            "execution_pair",
+        ):
+            self.assertIn(scope_marker, validation_code)
         # The bundle Python writes is the contract, and it carries more than a
         # diagnosis reads. Requiring an exact key set made every extra field a
         # hard failure, so presence is what is checked now.
