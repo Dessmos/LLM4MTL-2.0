@@ -26,6 +26,15 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 MASTER_WORKFLOW = REPOSITORY_ROOT / "workflows" / "n8n" / "main" / "llm4mtl-agent-workflow.json"
 HARNESS = Path(__file__).parent / "fixtures" / "run_master_code_node.js"
 TASK_CONTRACTS = REPOSITORY_ROOT / "benchmark" / "tasks"
+TRANSFORMATION_WORKFLOW = (
+    REPOSITORY_ROOT
+    / "workflows"
+    / "n8n"
+    / "transformations"
+    / "workflows"
+    / "etl_variants"
+    / "Prompting_ETL_gpt-5_few_shots_AND_grammar.json"
+)
 
 # What each provider's standard AI Model node looks like once a model is picked
 # in its built-in selector. Google keeps the model under a different parameter.
@@ -267,6 +276,92 @@ def _drive(
             raise AssertionError(captured["error"])
         state = captured["result"]
     raise AssertionError(f"control loop did not terminate: {actions}")
+
+
+@unittest.skipUnless(shutil.which("node"), "the master workflow's Code nodes need Node")
+class TransformationWorkflowCompatibilityTests(unittest.TestCase):
+    """The master adapts legacy transformation workflows without editing them."""
+
+    def test_every_external_transformation_workflow_has_adapter_anchors(self) -> None:
+        workflows_root = (
+            REPOSITORY_ROOT / "workflows" / "n8n" / "transformations" / "workflows"
+        )
+        workflows = sorted(
+            path
+            for language in ("etl", "atl", "qvto")
+            for path in (workflows_root / f"{language}_variants").glob("Prompting_*.json")
+        )
+        workflows.append(
+            workflows_root
+            / "updated_reactions_workflow"
+            / "generate_reactions"
+            / "LLM4MTL_Generate_Reactions_for_all_Configurations.json"
+        )
+
+        for path in workflows:
+            with self.subTest(workflow=path):
+                nodes = json.loads(path.read_text(encoding="utf-8"))["nodes"]
+                prompt_readers = [
+                    node for node in nodes if node["name"] == "Read prompt files"
+                ]
+                save_names = [
+                    node
+                    for node in nodes
+                    if node["name"] in {"Save file name", "Save reaction name"}
+                ]
+                self.assertEqual(1, len(prompt_readers))
+                self.assertEqual(1, len(save_names))
+                self.assertEqual("n8n-nodes-base.set", save_names[0]["type"])
+
+    def test_selected_task_path_and_binary_are_adapted_in_memory(self) -> None:
+        original_text = TRANSFORMATION_WORKFLOW.read_text(encoding="utf-8")
+        workflow = json.loads(original_text)
+
+        adapted = _run_node(
+            "Adapt Transformation Workflow Compatibility",
+            inputs=[
+                {
+                    "action": "generate_transformations",
+                    "current": {"language": "etl", "task": "Tree2Graph"},
+                    "workflow_json": workflow,
+                }
+            ],
+        )
+
+        self.assertTrue(adapted["ok"], adapted.get("error"))
+        nodes = {
+            node["name"]: node
+            for node in adapted["result"]["workflow_json"]["nodes"]
+        }
+        self.assertEqual(
+            "=/data/task_prompts/etl/Tree2Graph.txt",
+            nodes["Read prompt files"]["parameters"]["fileSelector"],
+        )
+        save_name = nodes["Save file name"]
+        self.assertTrue(save_name["parameters"]["includeOtherFields"])
+        self.assertFalse(save_name["parameters"]["options"]["stripBinary"])
+        self.assertEqual(
+            original_text,
+            TRANSFORMATION_WORKFLOW.read_text(encoding="utf-8"),
+        )
+
+    def test_non_transformation_subworkflows_are_not_modified(self) -> None:
+        workflow = {
+            "nodes": [{"name": "Semantic Test Generation", "parameters": {}}],
+            "connections": {},
+        }
+        adapted = _run_node(
+            "Adapt Transformation Workflow Compatibility",
+            inputs=[
+                {
+                    "action": "generate_tests",
+                    "current": {"language": "etl", "task": "Tree2Graph"},
+                    "workflow_json": workflow,
+                }
+            ],
+        )
+        self.assertTrue(adapted["ok"], adapted.get("error"))
+        self.assertEqual(workflow, adapted["result"]["workflow_json"])
 
 
 @unittest.skipUnless(shutil.which("node"), "the master workflow's Code nodes need Node")

@@ -220,6 +220,13 @@ calls, `Make Existing Workflow Callable` (exact strategy-suffix matching and the
 reserved `/responses/source-diagnosis/` namespace), timeline recording, terminal
 statuses and refinement limits all stay as they were.
 
+`Adapt Transformation Workflow Compatibility` operates only on the transient
+workflow JSON passed to `Execute Existing Subworkflow`. It narrows the external
+transformation workflow's prompt reader to the selected task and preserves the
+`binary.data` that legacy Set nodes passed through before n8n 2.x. The external
+workflow exports on disk are not edited, and non-transformation subworkflows are
+returned unchanged.
+
 There is one master workflow. Run modes are configuration, not three copies.
 
 ## Recorded configuration

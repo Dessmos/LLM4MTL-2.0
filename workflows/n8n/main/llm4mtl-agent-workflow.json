@@ -772,12 +772,25 @@
       }
     },
     {
+      "id": "master-adapt-transformation-workflow",
+      "name": "Adapt Transformation Workflow Compatibility",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1840,
+        80
+      ],
+      "parameters": {
+        "jsCode": "const input = $input.first();\nconst state = input.json;\nif (state.action !== 'generate_transformations') return [input];\n\nconst workflow = state.workflow_json;\nconst language = state.current?.language;\nconst task = state.current?.task;\nif (!workflow || !Array.isArray(workflow.nodes)) {\n  throw new Error('Transformation compatibility requires workflow_json');\n}\nif (typeof language !== 'string' || !/^[A-Za-z0-9._-]+$/.test(language)) {\n  throw new Error(`Unsafe transformation language: ${language}`);\n}\nif (typeof task !== 'string' || !/^[A-Za-z0-9._-]+$/.test(task)) {\n  throw new Error(`Unsafe transformation task: ${task}`);\n}\n\n// The external transformation workflows remain untouched on disk. This\n// invocation-local copy reads only the task selected by the master instead of\n// iterating over the language-wide prompt directory.\nconst promptReader = workflow.nodes.find((node) => node.name === 'Read prompt files');\nif (!promptReader || promptReader.type !== 'n8n-nodes-base.readWriteFile') {\n  throw new Error('Transformation workflow has no supported Read prompt files node');\n}\npromptReader.parameters.fileSelector = `=/data/task_prompts/${language}/${task}.txt`;\n\n// Legacy transformation workflows were authored before Set v3.4 stripped\n// binary data by default. Their next Extract From File node still consumes\n// binary.data, so preserve it only in this invocation-local compatibility copy.\nconst saveName = workflow.nodes.find((node) =>\n  ['Save file name', 'Save reaction name'].includes(node.name),\n);\nif (!saveName || saveName.type !== 'n8n-nodes-base.set') {\n  throw new Error('Transformation workflow has no supported task-name Set node');\n}\nsaveName.parameters.options = { ...(saveName.parameters.options || {}) };\nif (Number(saveName.typeVersion || 0) >= 3.4) {\n  saveName.parameters.includeOtherFields = true;\n  saveName.parameters.options.stripBinary = false;\n} else {\n  saveName.parameters.options.includeBinary = true;\n}\n\nreturn [input];"
+      }
+    },
+    {
       "id": "master-execute-subworkflow",
       "name": "Execute Existing Subworkflow",
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.2,
       "position": [
-        1840,
+        2060,
         80
       ],
       "parameters": {
@@ -1258,6 +1271,17 @@
       ]
     },
     "Make Existing Workflow Callable": {
+      "main": [
+        [
+          {
+            "node": "Adapt Transformation Workflow Compatibility",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Adapt Transformation Workflow Compatibility": {
       "main": [
         [
           {
