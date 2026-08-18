@@ -8,6 +8,22 @@ from pathlib import Path
 from llm4mtl.domain import GeneratedSuite
 
 
+def candidate_suite_directories(generated_tests_root: Path) -> list[Path]:
+    """Return every candidate suite directory, regardless of its opaque id.
+
+    Explicit suite ids are allowed to use the same one-component syntax as run
+    ids. They are not required to start with ``suite_``; n8n deliberately uses
+    the run id plus an attempt suffix so every generated suite stays attributable
+    to its run.
+    """
+    root = generated_tests_root.resolve()
+    return sorted(
+        path.resolve()
+        for path in root.glob("*/candidates/*/*/*")
+        if path.is_dir()
+    )
+
+
 def discover_suites(args: argparse.Namespace, language: str) -> list[GeneratedSuite]:
     """Discover candidate suites selected by validation CLI arguments."""
     root = args.generated_tests_root.resolve()
@@ -37,13 +53,10 @@ def _discover_task_suites(
     generated_tests_root: Path,
     language: str,
 ) -> list[GeneratedSuite]:
-    candidates = task_dir / "candidates"
-    if not candidates.exists():
-        return []
     return [
         suite_from_path(suite_dir.resolve(), generated_tests_root, language)
-        for suite_dir in sorted(candidates.glob("*/*/suite_*"))
-        if suite_dir.is_dir()
+        for suite_dir in candidate_suite_directories(generated_tests_root)
+        if suite_dir.parts[-5] == task_dir.name
     ]
 
 

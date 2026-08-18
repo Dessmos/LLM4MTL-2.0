@@ -17,7 +17,10 @@ from llm4mtl.languages import language_adapter
 from llm4mtl.semantic_tests.extraction.cli import extract_one
 from llm4mtl.semantic_tests.extraction.discovery import response_target_from_path
 from llm4mtl.semantic_tests.reference_validation.runner import validate_suite
-from llm4mtl.semantic_tests.suites.discovery import suite_from_path
+from llm4mtl.semantic_tests.suites.discovery import (
+    candidate_suite_directories,
+    suite_from_path,
+)
 from llm4mtl.semantic_tests.technical_validation.suite import check_suite
 from llm4mtl.semantic_tests.validation import (
     ValidationContext,
@@ -276,12 +279,9 @@ class TestGenerationAdapter:
         models = fixed_selection("test-generation model", config.test_models)
         strategies = fixed_selection("strategy", config.test_strategies)
         suites = sorted(
-            path.resolve()
-            for path in self.generated_tests_root(config).glob(
-                "*/candidates/*/*/suite_*"
-            )
-            if path.is_dir()
-            and path.parts[-3] in models
+            path
+            for path in candidate_suite_directories(self.generated_tests_root(config))
+            if path.parts[-3] in models
             and path.parts[-2] in strategies
             and (config.all_tasks or path.parts[-5] in tasks)
             and (not config.suite_id or path.name == config.suite_id)

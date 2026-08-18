@@ -34,6 +34,11 @@ PROVIDER_PARAMS = {
     "Anthropic": {"model": {"value": "claude-sonnet-4-20250514"}},
     "Google Gemini": {"modelName": "models/gemini-2.5-pro"},
 }
+PROVIDER_FAMILIES = {
+    "OpenAI": "gpt-5",
+    "Anthropic": "claude-sonnet-4",
+    "Google Gemini": "gemini-2-5-pro",
+}
 PROVIDER_SUFFIX = {
     "OpenAI": "OpenAI Chat Model",
     "Anthropic": "Anthropic Chat Model",
@@ -659,10 +664,53 @@ class ConditionalLlmRoleTests(unittest.TestCase):
         semantic_test = config["result"]["config"]["llms"]["semantic_test"]
         self.assertEqual("google", semantic_test["provider"])
         self.assertEqual("models/gemini-2.5-pro", semantic_test["model"])
+        self.assertEqual("gemini-2-5-pro", semantic_test["artifact_model"])
         self.assertEqual(
             "Semantic Test Generation - Google Gemini Chat Model",
             semantic_test["configuration_node"],
         )
+
+    def test_python_receives_the_family_while_n8n_keeps_the_exact_model(self) -> None:
+        """Filesystem selection and provider invocation use distinct identities."""
+        for provider, family in PROVIDER_FAMILIES.items():
+            with self.subTest(provider=provider):
+                configured = PROVIDER_PARAMS[provider]
+                raw_model = configured.get("model") or configured["modelName"]
+                exact_model = (
+                    raw_model["value"] if isinstance(raw_model, dict) else raw_model
+                )
+                config = _configure(
+                    run_mode="Semantic Tests Only",
+                    providers={"semantic_test_provider": provider},
+                    max_refinement_iterations="0",
+                )
+                self.assertTrue(config["ok"], config.get("error"))
+                state = config["result"]
+                semantic_test = state["config"]["llms"]["semantic_test"]
+                self.assertEqual(exact_model, semantic_test["model"])
+                self.assertEqual(family, semantic_test["artifact_model"])
+                self.assertEqual(
+                    family,
+                    state["run_specs"][0]["test_generation_model"],
+                )
+
+                create_run = _run_node("State Machine", inputs=[state])
+                self.assertTrue(create_run["ok"], create_run.get("error"))
+                captured = _run_node(
+                    "Capture Action Result",
+                    inputs=[{"run_id": "etl-tree2graph-family-test"}],
+                    nodes={"State Machine": {"json": create_run["result"]}},
+                )
+                self.assertTrue(captured["ok"], captured.get("error"))
+                generate_tests = _run_node(
+                    "State Machine", inputs=[captured["result"]]
+                )
+                self.assertTrue(generate_tests["ok"], generate_tests.get("error"))
+                self.assertEqual("generate_tests", generate_tests["result"]["action"])
+                self.assertEqual(
+                    exact_model,
+                    generate_tests["result"]["subworkflow_input"]["model"],
+                )
 
 
 @unittest.skipUnless(shutil.which("node"), "the master workflow's Code nodes need Node")

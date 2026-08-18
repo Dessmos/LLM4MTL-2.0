@@ -96,6 +96,28 @@ class TechnicalStageCountTests(unittest.TestCase):
 
 
 class TestGenerationAdapterValidationTests(unittest.TestCase):
+    def test_run_specific_opaque_suite_id_is_selected_for_validation(self) -> None:
+        """n8n suite ids are attributable to a run, not named ``suite_*``."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            suite_id = "etl-tree2graph-20260818-133432-778772_000"
+            selected = root / "Tree2Graph/candidates/gpt-5/few_shot" / suite_id
+            selected.mkdir(parents=True)
+            (root / "Tree2Graph/candidates/gpt-5/few_shot/suite_001").mkdir()
+            config = PipelineConfig(
+                language="etl",
+                tasks=["Tree2Graph"],
+                test_models=["gpt-5"],
+                test_strategies=["few_shot"],
+                suite_id=suite_id,
+            )
+            adapter = GenerationAdapter(root)
+
+            with patch.object(adapter, "generated_tests_root", return_value=root):
+                suites = adapter.select_candidate_suites(config)
+
+            self.assertEqual([selected.resolve()], suites)
+
     def test_each_gate_uses_its_validator_and_preserves_verdict_details(self) -> None:
         suite_path = Path("/suite/Tree2Graph/candidates/gpt-5/few_shot/suite_001")
         suite = GeneratedSuite(

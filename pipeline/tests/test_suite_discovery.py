@@ -15,6 +15,8 @@ class SuiteDiscoveryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             expected_paths = [
+                root
+                / "TaskA/candidates/model/strategy/etl-tree2graph-20260818-133432-000",
                 root / "TaskA/candidates/model/strategy/suite_001",
                 root / "TaskA/candidates/model/strategy/suite_002",
                 root / "TaskB/candidates/model/strategy/suite_003",
@@ -37,7 +39,7 @@ class SuiteDiscoveryTests(unittest.TestCase):
                 [suite.path for suite in suites],
             )
             self.assertEqual(
-                ["TaskA", "TaskA", "TaskB"],
+                ["TaskA", "TaskA", "TaskA", "TaskB"],
                 [suite.task for suite in suites],
             )
 

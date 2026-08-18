@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from llm4mtl.semantic_tests.suites.discovery import candidate_suite_directories
 from llm4mtl.transformation_execution.models import (
     GeneratedTransformation,
     ValidatedSuite,
@@ -24,7 +25,7 @@ def discover_validated_suites(
     paths = (
         [path.resolve() for path in explicit]
         if explicit
-        else sorted(root.glob("*/candidates/*/*/suite_*"))
+        else candidate_suite_directories(root)
     )
     suites = [candidate_suite_from_path(path, root) for path in paths if path.is_dir()]
     selected = [

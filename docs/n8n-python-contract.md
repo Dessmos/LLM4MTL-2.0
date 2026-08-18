@@ -35,6 +35,11 @@ seed
 pipeline_variant
 ```
 
+The model values on this Python boundary are stable artifact-family ids, such
+as `gpt-5`, `claude-sonnet-4`, and `gemini-2-5-pro`. Provider-specific exact
+ids remain inside n8n and are passed to the selected AI Model nodes; Python uses
+the family ids to select the corresponding response and suite directories.
+
 One run represents one concrete task. A matrix must expand multi-task or
 multi-model experiments before calling the service.
 

@@ -111,10 +111,12 @@ every `gpt-5` variant writes under `gpt-5`, every `claude-sonnet-4` variant unde
 family is read from the variant workflow that was selected, which already
 declares it, so a dated or suffixed id from a provider's selector
 (`claude-sonnet-4-20250514`, `gpt-5.3-codex`) does not point the run at a
-directory nobody prepared. The exact id still reaches the model node and the run
-manifest, which is where a run's precise identity belongs. All twelve nodes stay connected to `Validate Config and Build
-Run Queue` through `ai_languageModel`, which is how `selectedModel()` reads them
-with `$(nodeName).params`.
+directory nobody prepared. The exact id reaches the n8n model node and remains
+in the master's LLM configuration; `POST /runs` receives the stable family id
+that Python uses to select the response and suite directories. All twelve nodes
+stay connected to `Validate Config and Build Run Queue` through
+`ai_languageModel`, which is how `selectedModel()` reads them with
+`$(nodeName).params`.
 
 A role is resolved **only when the final configuration can reach it**, so a
 tests-only run does not demand a transformation model, and a run with failure

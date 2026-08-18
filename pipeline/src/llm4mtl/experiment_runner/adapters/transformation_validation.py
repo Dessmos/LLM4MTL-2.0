@@ -35,7 +35,10 @@ from llm4mtl.semantic_tests.suite_execution import (
     read_observation,
     record_observation,
 )
-from llm4mtl.semantic_tests.suites.discovery import suite_from_path
+from llm4mtl.semantic_tests.suites.discovery import (
+    candidate_suite_directories,
+    suite_from_path,
+)
 from llm4mtl.semantic_tests.validation import workspace_for
 from llm4mtl.transformation_execution.hashing import file_sha256
 
@@ -272,10 +275,8 @@ class TransformationValidationAdapter:
         models = fixed_selection("test-generation model", config.test_models)
         strategies = fixed_selection("strategy", config.test_strategies)
         return sorted(
-            path.resolve()
-            for path in self.validated_tests_root(config).glob(
-                "*/candidates/*/*/suite_*"
-            )
+            path
+            for path in candidate_suite_directories(self.validated_tests_root(config))
             if self._matches_suite_selection(
                 path,
                 config,
