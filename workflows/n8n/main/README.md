@@ -15,6 +15,14 @@ Configuration is a four-screen n8n form. The trigger is the first screen and
 each following screen is an `n8n-nodes-base.form` page (`operation: page`); the
 pages run in a fixed order and the queue is built from all four.
 
+Every choice is a native n8n `radio` or `checkbox` group, presented as selectable
+cards through the nodes' own **Custom Form Styling** (`options.customCss`). The
+markup is n8n's: each option is still its own input plus its label, the input is
+stretched transparently over the card, and n8n's single-select and multi-select
+behaviour is untouched. Nothing in the form is a custom control — n8n forms only
+submit native inputs, and an HTML element drawn as a button would return no usable
+value. All four screens share one stylesheet so they cannot drift apart.
+
 ```text
 Run Setup  ->  Semantic Test Configuration  ->  Transformation Configuration
            ->  Experiment and Ablation      ->  Validate Config and Build Run Queue
@@ -23,9 +31,9 @@ Run Setup  ->  Semantic Test Configuration  ->  Transformation Configuration
 
 ### 1. Run Setup
 
-* **Run mode** — `Semantic Tests Only`, `Transformations Only`, or `Full
-  Pipeline`, recorded as `config.run_mode` = `tests_only` /
-  `transformations_only` / `full`.
+* **Run mode** — three cards, each with a one-line summary of what it executes:
+  `Semantic Tests Only`, `Transformations Only`, `Full Pipeline`. Recorded as
+  `config.run_mode` = `tests_only` / `transformations_only` / `full`.
 * **Languages** — ETL, ATL, QVT-O, Reactions; at least one.
 * **Tasks** — one checkbox list per language. The names are the task contracts
   under `benchmark/tasks/<language>/task_contracts`, which is the authoritative
@@ -36,13 +44,24 @@ Run Setup  ->  Semantic Test Configuration  ->  Transformation Configuration
 
 ### 2. Semantic Test Configuration
 
-The semantic-test prompting strategy (`only_prompt`, `few_shot`, `grammar`,
-`few_shots_AND_grammar`). Configured independently of the transformation branch.
-Ignored when the run mode is Transformations Only.
+The semantic-test prompting strategy, as four cards. The card shows the reading
+name and the run records the canonical id, which is what the variant workflows are
+named after:
+
+| card | recorded id |
+| --- | --- |
+| Prompt only | `only_prompt` |
+| Few-shot | `few_shot` |
+| Grammar | `grammar` |
+| Few-shot + Grammar | `few_shots_AND_grammar` |
+
+Configured independently of the transformation branch. Ignored when the run mode
+is Transformations Only.
 
 ### 3. Transformation Configuration
 
-The transformation prompting strategy, from the same four. Ignored when the run
+The transformation prompting strategy, from the same four. The card shows the
+reading name and the run records the canonical id, as above. Ignored when the run
 mode is Semantic Tests Only.
 
 ### 4. Experiment and Ablation
@@ -194,6 +213,10 @@ refuses.
   page would require branch-and-rejoin around a form node, which leaves the
   Validate node referencing an unexecuted node. Role requirements are enforced
   in validation instead.
+* A card selects; it does not also advance the wizard. n8n forms submit native
+  inputs only, so a control that both carried the value and moved to the next page
+  would have to be a custom frontend behind a webhook. Each screen keeps its own
+  continue button.
 * Ablating a stage in the middle of a mode's pipeline still terminates
   `incomplete` with the stage-specific reason, as it did before run modes
   existed.

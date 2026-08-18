@@ -45,6 +45,13 @@ ROLE_NODES = {
     "source_diagnosis": "Source Diagnosis",
     "refinement": "Refinement",
 }
+# The card label the form shows, against the id every run records.
+STRATEGY_LABELS = {
+    "Prompt only": "only_prompt",
+    "Few-shot": "few_shot",
+    "Grammar": "grammar",
+    "Few-shot + Grammar": "few_shots_AND_grammar",
+}
 STAGE_FIELDS = (
     "test_generation",
     "test_extraction",
@@ -126,8 +133,8 @@ def _configure(
     languages: str = "ETL",
     tasks: dict[str, str] | None = None,
     providers: dict[str, str] | None = None,
-    semantic_test_strategy: str = "few_shot",
-    transformation_strategy: str = "grammar",
+    semantic_test_strategy: str = "Few-shot",
+    transformation_strategy: str = "Grammar",
     max_refinement_iterations: str = "2",
     ablation_profile: str = "Standard full configuration",
     disabled_components: str = "",
@@ -482,6 +489,83 @@ class AblationIdentityTests(unittest.TestCase):
         self.assertEqual("tests_only", config["run_mode"])
         self.assertTrue(config["stages"]["transformation_generation"])
         self.assertTrue(config["stages"]["syntax_validation"])
+
+
+@unittest.skipUnless(shutil.which("node"), "the master workflow's Code nodes need Node")
+class ConfigurationPresentationTests(unittest.TestCase):
+    """The cards are presentation; the recorded values are the canonical ids.
+
+    Every option is a native n8n radio or checkbox styled as a card, so the
+    submitted value is still the field value n8n would submit unstyled. What the
+    form calls a strategy and what a run records are allowed to differ, and that
+    mapping is pinned here so a nicer label can never quietly become the value a
+    variant workflow is selected by.
+    """
+
+    def test_the_strategy_cards_map_onto_the_canonical_strategy_ids(self) -> None:
+        for page, field in (
+            ("Semantic Test Configuration", "semantic_test_strategy"),
+            ("Transformation Configuration", "transformation_strategy"),
+        ):
+            with self.subTest(page=page):
+                self.assertEqual(
+                    sorted(STRATEGY_LABELS), sorted(_field_options(page, field))
+                )
+
+    def test_a_selected_strategy_card_records_its_canonical_id(self) -> None:
+        for label, expected in STRATEGY_LABELS.items():
+            with self.subTest(label=label):
+                config = _configure(
+                    semantic_test_strategy=label, transformation_strategy=label
+                )
+                self.assertTrue(config["ok"], config.get("error"))
+                llms = config["result"]["config"]["llms"]
+                self.assertEqual(expected, llms["semantic_test"]["strategy"])
+                self.assertEqual(expected, llms["transformation"]["strategy"])
+                # The variant workflow is selected by that id, not by the label.
+                spec = config["result"]["run_specs"][0]
+                self.assertTrue(
+                    spec["test_generation_workflow"].endswith(f"_{expected}.json"), spec
+                )
+
+    def test_an_unknown_strategy_label_is_refused(self) -> None:
+        config = _configure(semantic_test_strategy="few_shot")
+        self.assertFalse(config["ok"])
+        self.assertIn("Semantic Test Generation strategy", config["error"])
+
+    def test_the_choice_fields_are_native_option_inputs(self) -> None:
+        """Cards are CSS over radio/checkbox, not custom HTML controls.
+
+        n8n forms only submit native inputs; an HTML element rendered as a button
+        would show up and return nothing usable, so every field a run reads has to
+        stay a real option input.
+        """
+        submitted_types = {"radio", "checkbox", "dropdown", "hiddenField"}
+        for page in (
+            "Configure and Start Pipeline",
+            "Semantic Test Configuration",
+            "Transformation Configuration",
+            "Experiment and Ablation",
+        ):
+            for field in _form_fields(page):
+                if field["fieldType"] == "html":
+                    continue
+                with self.subTest(page=page, field=field.get("fieldName")):
+                    self.assertIn(field["fieldType"], submitted_types)
+
+    def test_every_configuration_screen_carries_the_wizard_stylesheet(self) -> None:
+        pages = [
+            node
+            for node in _master()["nodes"]
+            if node["type"] in ("n8n-nodes-base.form", "n8n-nodes-base.formTrigger")
+        ]
+        self.assertEqual(4, len(pages))
+        stylesheets = {node["parameters"]["options"]["customCss"] for node in pages}
+        # One stylesheet, so the four screens cannot drift apart visually.
+        self.assertEqual(1, len(stylesheets))
+        css = stylesheets.pop()
+        self.assertIn(".multiselect-option", css)
+        self.assertNotIn("<", css)
 
 
 if __name__ == "__main__":
