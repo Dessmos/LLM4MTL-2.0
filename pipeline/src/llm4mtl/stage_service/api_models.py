@@ -15,9 +15,15 @@ Language = Literal["etl", "atl", "qvto", "reactions"]
 class RunCreateRequest(BaseModel):
     """Identity of a new run. These fields become the immutable manifest.
 
-    A run is exactly one combination, so every axis is required. Leaving one out
-    would let a stage select every value and attribute the results to a run id
-    that does not describe them.
+    A run is exactly one combination, so every axis a stage reads is required.
+    Leaving one out would let a stage select every value and attribute the results
+    to a run id that does not describe them.
+
+    The four generation axes are nullable because a run mode need not have both
+    branches: a semantic-tests-only run has no transformation model, and null on
+    that axis is what ``manifest.schema.json`` already means by "not applicable to
+    the stages this run executes". Null never means "any value" — a stage needing
+    an axis the run left null refuses instead of selecting every value.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -25,10 +31,10 @@ class RunCreateRequest(BaseModel):
     run_id: str | None = None
     language: Language
     task: str = Field(min_length=1)
-    transformation_model: str = Field(min_length=1)
-    test_generation_model: str = Field(min_length=1)
-    transformation_strategy: str = Field(min_length=1)
-    test_generation_strategy: str = Field(min_length=1)
+    transformation_model: str | None = Field(default=None, min_length=1)
+    test_generation_model: str | None = Field(default=None, min_length=1)
+    transformation_strategy: str | None = Field(default=None, min_length=1)
+    test_generation_strategy: str | None = Field(default=None, min_length=1)
     seed: int = 1
     pipeline_variant: str = "full"
     preset: str | None = None

@@ -129,19 +129,43 @@ class StageServiceTests(unittest.TestCase):
             400, self.client.post("/runs/bad$id/stages/extract", json={}).status_code
         )
 
-    def test_a_run_must_fix_every_identity_axis(self) -> None:
-        for missing in (
-            "language",
-            "task",
-            "transformation_model",
-            "test_generation_model",
-            "transformation_strategy",
-            "test_generation_strategy",
-        ):
+    def test_a_run_must_fix_the_language_and_task_it_reports(self) -> None:
+        for missing in ("language", "task"):
             with self.subTest(missing=missing):
                 partial = {key: value for key, value in IDENTITY.items() if key != missing}
                 response = self.client.post("/runs", json={**partial, "run_id": f"svc-no-{missing}"})
                 self.assertEqual(422, response.status_code)
+
+    def test_a_generation_axis_no_stage_uses_is_recorded_as_null(self) -> None:
+        """A run mode need not have both generation branches.
+
+        A semantic-tests-only run has no transformation model, and the manifest
+        schema already types that axis as nullable: "not applicable to the stages
+        this run executes". Null is not "any value" — a stage that needs a null
+        axis refuses, which ``fixed_selection`` covers in test_run_identity.
+        """
+        transformation_axes = (
+            "transformation_model",
+            "transformation_strategy",
+        )
+        partial = {
+            key: value for key, value in IDENTITY.items() if key not in transformation_axes
+        }
+        created = self.client.post("/runs", json={**partial, "run_id": "svc-tests-only"})
+        self.assertEqual(200, created.status_code)
+
+        manifest = self.client.get("/runs/svc-tests-only").json()["manifest"]
+        for axis in transformation_axes:
+            self.assertIsNone(manifest[axis])
+        self.assertEqual("gpt-5", manifest["test_generation_model"])
+
+    def test_an_identity_axis_cannot_be_blanked_instead_of_omitted(self) -> None:
+        """Empty is not the same statement as "not applicable"."""
+        response = self.client.post(
+            "/runs",
+            json=run_payload(run_id="svc-blank", transformation_model=""),
+        )
+        self.assertEqual(422, response.status_code)
 
     def test_transport_models_reject_unknown_fields(self) -> None:
         created = self.client.post(
