@@ -17,11 +17,20 @@ Return exactly one JSON object, with no Markdown or surrounding prose:
     "specific fact from the supplied artifacts or execution output"
   ],
   "test_case_id": "test case identifier from failing_test_case_or_assertion",
-  "assertion_id": "assertion identifier from failing_test_case_or_assertion"
+  "assertion_id": "assertion identifier from failing_test_case_or_assertion, or null"
 }
 ```
 
 Copy both identifiers exactly from `failing_test_case_or_assertion`.
+
+When `failing_test_case_or_assertion` names a case but its `assertion_id` is
+`null`, the test threw before any assertion was evaluated. That is a real
+failure of this test against this transformation and a valid input to diagnose:
+the recorded exception, its stack trace, the execution summary and the Maven log
+are the evidence, and `expected` and `actual` are `null` because the harness
+never computed either. Copy `test_case_id` exactly and return `null` for
+`assertion_id` — do not name, infer, or invent an assertion that never ran, and
+do not treat its absence as evidence for either source.
 
 When `failing_test_case_or_assertion` names no case, the execution failed before
 any individual semantic test was reported: the whole generated suite is supplied

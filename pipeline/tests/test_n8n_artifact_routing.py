@@ -267,6 +267,44 @@ class N8nArtifactRoutingTests(unittest.TestCase):
         self.assertIn("/runs/{{", persist["parameters"]["url"])
         self.assertIn("/diagnoses", persist["parameters"]["url"])
 
+    def test_a_case_level_throw_is_readable_by_the_diagnosis(self) -> None:
+        """The per-case scope covers both shapes of a per-case failure.
+
+        Python attributes a Surefire ``<error>`` to the test method it names, so
+        the report is per-case - but no assertion was evaluated, which makes the
+        semantic status ``execution_error`` and the assertion null. Pinning both
+        here keeps the guard from narrowing back to a lost assertion and turning
+        every runtime failure into a workflow error.
+        """
+        path = WORKFLOWS_ROOT / "subworkflows" / "diagnosis" / "llm-diagnosis.json"
+        document = json.loads(path.read_text(encoding="utf-8"))
+        nodes = {node["name"]: node for node in document["nodes"]}
+        validation_code = nodes["Validate Evidence Bundle"]["parameters"]["jsCode"]
+
+        self.assertIn("semanticStatuses: ['failed', 'execution_error']", validation_code)
+        self.assertIn("spec.semanticStatuses.includes(result.semantic_status)", validation_code)
+        # A single expected status is what refused the runtime failures.
+        self.assertNotIn("semanticStatus:", validation_code)
+        # The case is required; the assertion is allowed to be null.
+        self.assertIn("failing.assertion_id !== null &&", validation_code)
+        self.assertNotIn("must identify one test case and assertion", validation_code)
+        # A pair-level report still names neither.
+        self.assertIn(
+            "An execution-pair evidence bundle must name no test case and no assertion",
+            validation_code,
+        )
+
+        prompt = (
+            REPOSITORY_ROOT
+            / "prompt_assets"
+            / "diagnosis"
+            / "semantic_failure_diagnosis.md"
+        ).read_text(encoding="utf-8")
+        # The verdict check compares the returned ids with the requested ones,
+        # so the prompt has to say that null is the answer for a throw.
+        self.assertIn("threw before any assertion was evaluated", prompt)
+        self.assertIn("return `null` for\n`assertion_id`", prompt)
+
     def test_no_workflow_tree_keeps_its_own_copy_of_the_benchmark(self) -> None:
         """Task inputs live in benchmark/ only.
 

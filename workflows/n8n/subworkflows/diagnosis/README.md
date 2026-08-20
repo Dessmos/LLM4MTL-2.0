@@ -4,9 +4,16 @@
 It is called only after:
 
 1. the generated transformation passed syntax validation;
-2. one semantic assertion failed against the generated transformation.
+2. a reference-validated semantic test failed against the generated
+   transformation.
 
-It sends the report's exact ten-field `source_diagnosis.evidence_bundle` to a
+Both shapes of that failure are diagnosed. A case-level report names the case
+Surefire attributed the failure to; its `assertion_id` is an identifier when an
+assertion was evaluated and lost, and `null` when the test threw before any
+assertion ran. A pair-level report names neither, because the execution failed
+before Surefire reported any test method.
+
+It sends the report's `source_diagnosis.evidence_bundle` to a
 selected LLM, validates the verdict, persists the existing diagnosis artifact
 through the stage service, and returns:
 

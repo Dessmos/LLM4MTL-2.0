@@ -646,7 +646,14 @@ class DiagnosisPreparationTests(unittest.TestCase):
         self.assertFalse(evidence["assertion_expected_actual"])
         self.assertTrue(evidence["recorded_exception"])
 
-    def test_a_runtime_error_is_diagnosed_without_an_assertion(self) -> None:
+    def _throw_before_any_assertion(self) -> Path:
+        """A test method that threw instead of reaching its first assertion.
+
+        Surefire attributed the throw to one test method, so this is a per-case
+        report - but no assertion was evaluated, which leaves the suite
+        observation with ``assertions_evaluated`` false and the report's
+        ``semantic_status`` at ``execution_error`` rather than ``failed``.
+        """
         observation = self._write_observation(
             root=self._pair_root(),
             role="generated_transformation",
@@ -664,6 +671,10 @@ class DiagnosisPreparationTests(unittest.TestCase):
             failure_stage="",
         )
         self._write_stage_attempts(observation)
+        return observation
+
+    def test_a_runtime_error_is_diagnosed_without_an_assertion(self) -> None:
+        self._throw_before_any_assertion()
 
         index = prepare_execution_diagnosis(self.run_dir, 1)
         entry = index["pairs"][0]["reports"][0]
@@ -911,6 +922,63 @@ class DiagnosisPreparationTests(unittest.TestCase):
         for absent in ("input_model", "expected_output_or_properties", "actual_target_model"):
             with self.subTest(absent=absent):
                 self.assertNotIn(absent, bundle)
+
+    @unittest.skipUnless(shutil.which("node"), "the diagnosis subworkflow needs Node")
+    def test_the_diagnosis_subworkflow_accepts_a_case_level_throw(self) -> None:
+        """A per-case report of a throw is diagnosable, not a workflow error.
+
+        Python marks it eligible for the same reason it marks a lost assertion
+        eligible, and the two differ in exactly two fields: the semantic status
+        is ``execution_error`` because no assertion was evaluated, and the
+        assertion is null because none was lost. A subworkflow that required
+        ``failed`` and a named assertion turned every runtime failure of a
+        generated transformation - the most common shape of a transformation
+        defect - into a crashed run.
+        """
+        self._throw_before_any_assertion()
+        index = prepare_execution_diagnosis(self.run_dir, 1)
+        entry = index["pairs"][0]["reports"][0]
+        report = read_json(REPO_ROOT / entry["report"])
+
+        self.assertEqual("semantic_test_case_failure", report["report_type"])
+        self.assertEqual(
+            "execution_error", report["test_case_result"]["semantic_status"]
+        )
+        self.assertEqual(CASE, entry["test_case_id"])
+        self.assertIsNone(entry["assertion_id"])
+        self.assertTrue(entry["eligible"])
+
+        outcome = self._diagnose_report(entry)
+
+        self.assertTrue(outcome["ok"], outcome.get("error"))
+        self.assertEqual("test_case", outcome["result"]["scope"])
+        self.assertEqual(CASE, outcome["result"]["test_case_id"])
+        # Null travels on to the LLM request and back through the verdict
+        # check, so nothing downstream has to invent an assertion either.
+        self.assertIsNone(outcome["result"]["assertion_id"])
+        bundle = outcome["result"]["evidence_bundle"]
+        for field in _required_evidence_fields("semantic_test_case_failure"):
+            with self.subTest(field=field):
+                self.assertIn(field, bundle)
+        self.assertTrue(bundle["stack_traces"])
+
+    @unittest.skipUnless(shutil.which("node"), "the diagnosis subworkflow needs Node")
+    def test_a_case_level_report_without_its_case_is_refused(self) -> None:
+        """The case stays mandatory: only the assertion may be absent."""
+        self._throw_before_any_assertion()
+        index = prepare_execution_diagnosis(self.run_dir, 1)
+        entry = dict(index["pairs"][0]["reports"][0])
+        report_path = REPO_ROOT / str(entry["report"])
+        report = read_json(report_path)
+        report["test_case_result"]["test_case_id"] = None
+        bundle = report["source_diagnosis"]["evidence_bundle"]
+        bundle["failing_test_case_or_assertion"]["test_case_id"] = None
+        write_json(report_path, report)
+
+        outcome = self._diagnose_report(entry)
+
+        self.assertFalse(outcome["ok"])
+        self.assertIn("must name the failing test case", outcome["error"])
 
     @unittest.skipUnless(shutil.which("node"), "the diagnosis subworkflow needs Node")
     def test_an_unknown_report_type_is_still_refused(self) -> None:
