@@ -42,6 +42,40 @@ class ManifestTests(unittest.TestCase):
             with self.assertRaises(ManifestExistsError):
                 run_store.write_manifest(paths, {"run_id": "run_001", **IDENTITY})
 
+    def test_run_creation_prepares_only_configured_initial_generation_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            full = run_store.create_run(Path(temp_dir), "run_full", IDENTITY)
+            tests_only = run_store.create_run(
+                Path(temp_dir),
+                "run_tests",
+                {
+                    **IDENTITY,
+                    "transformation_model": None,
+                    "transformation_strategy": None,
+                },
+            )
+
+            self.assertTrue(
+                full.generation_iteration_dir(
+                    "semantic-test-generation", 0
+                ).is_dir()
+            )
+            self.assertTrue(
+                full.generation_iteration_dir(
+                    "transformation-generation", 0
+                ).is_dir()
+            )
+            self.assertTrue(
+                tests_only.generation_iteration_dir(
+                    "semantic-test-generation", 0
+                ).is_dir()
+            )
+            self.assertFalse(
+                tests_only.generation_iteration_dir(
+                    "transformation-generation", 0
+                ).exists()
+            )
+
 
 class StageAttemptTests(unittest.TestCase):
     def test_attempts_are_immutable_and_latest_tracks_newest(self) -> None:

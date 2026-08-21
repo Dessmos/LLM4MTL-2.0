@@ -1120,6 +1120,24 @@ class DiagnosisPreparationTests(unittest.TestCase):
         self.assertIn("no execution attempt 7", index["error"])
         self.assertEqual([], index["pairs"])
 
+    def test_unwritable_diagnosis_response_path_exposes_no_llm_work(self) -> None:
+        self._complete_failing_run()
+        self._write_snapshot()
+        response_directory = diagnosis_response_dir(self.run_dir, 1)
+        response_directory.parent.mkdir(parents=True, exist_ok=True)
+        response_directory.write_text(
+            "blocks directory creation\n", encoding="utf-8"
+        )
+
+        index = prepare_after_execution_stage(
+            self.run_dir, "execution", {"counts": {"failed": 1}}, 1
+        )
+
+        self.assertIsNotNone(index)
+        self.assertIn("cannot prepare diagnosis response directory", index["error"])
+        self.assertEqual(0, index["counts"]["diagnosis_eligible"])
+        self.assertEqual([], index["pairs"])
+
     def test_the_index_is_written_once_per_attempt(self) -> None:
         self._complete_failing_run()
         self._write_snapshot()

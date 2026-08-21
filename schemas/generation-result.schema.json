@@ -1,34 +1,28 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://llm4mtl/schemas/generation-result.schema.json",
-  "title": "Generation result",
-  "description": "Written by n8n next to each raw LLM response. Records the provider/model selection made INSIDE n8n; never contains an API key. Downstream depends only on these normalized fields and on `artifact`, not on provider-specific response internals.",
+  "title": "Generation attempt provenance",
   "type": "object",
-  "required": ["schema_version", "language", "task", "artifact_type", "provider", "model", "response_file"],
+  "required": ["schema_version", "run_id", "language", "task", "artifact_type", "iteration", "purpose", "provider", "model", "strategy", "input_artifact_iteration", "created_artifact_iteration", "prompt", "input_artifact", "output_artifact", "refinement_request", "recorded_at"],
   "additionalProperties": false,
   "properties": {
-    "schema_version": {"type": "string"},
+    "schema_version": {"const": "1.0"},
+    "run_id": {"type": "string", "minLength": 1},
     "language": {"type": "string", "enum": ["etl", "atl", "qvto", "reactions"]},
-    "task": {"type": "string"},
-    "artifact_type": {"type": "string", "enum": ["transformation", "semantic_test", "diagnosis"]},
-    "operation": {
-      "type": "string",
-      "enum": [
-        "transformation-generation",
-        "semantic-test-generation",
-        "failure-diagnosis",
-        "transformation-refinement",
-        "semantic-test-refinement"
-      ]
-    },
-    "provider": {"type": "string"},
-    "model": {"type": "string"},
+    "task": {"type": "string", "minLength": 1},
+    "artifact_type": {"type": "string", "enum": ["transformation", "semantic-test"]},
+    "iteration": {"type": "integer", "minimum": 0},
+    "purpose": {"type": "string", "enum": ["initial", "syntax_refinement", "technical_refinement", "reference_refinement", "semantic_refinement"]},
+    "provider": {"type": "string", "enum": ["openai", "anthropic", "google"]},
+    "model": {"type": "string", "minLength": 1},
     "strategy": {"type": ["string", "null"]},
-    "attempt": {"type": "integer", "minimum": 1, "default": 1},
-    "workflow_name": {"type": "string"},
-    "generated_at": {"type": "string", "format": "date-time"},
-    "parameters": {"type": "object", "additionalProperties": true},
-    "response_file": {"type": "string", "description": "Relative path to raw-content.md."},
-    "artifact": {"type": ["string", "null"], "description": "Relative path to the extracted first-class artifact (e.g. transformations/candidate-NNN/transformation.etl)."}
-  }
+    "input_artifact_iteration": {"type": ["integer", "null"], "minimum": 0},
+    "created_artifact_iteration": {"type": "integer", "minimum": 0},
+    "prompt": {"$ref": "#/$defs/fileFact", "description": "Most specific persisted prompt input: the fully assembled prompt when the workflow archives it, otherwise the frozen or prepared prompt consumed by the workflow."},
+    "input_artifact": {"anyOf": [{"$ref": "#/$defs/fileFact"}, {"type": "null"}]},
+    "output_artifact": {"$ref": "#/$defs/fileFact"},
+    "refinement_request": {"anyOf": [{"$ref": "#/$defs/fileFact"}, {"type": "null"}]},
+    "recorded_at": {"type": "string", "format": "date-time"}
+  },
+  "$defs": {"fileFact": {"type": "object", "required": ["path", "sha256", "bytes"], "additionalProperties": false, "properties": {"path": {"type": "string", "minLength": 1}, "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}, "bytes": {"type": "integer", "minimum": 0}}}}
 }

@@ -81,6 +81,43 @@ class RunResultRequest(BaseModel):
     refinement_iterations_used: int = Field(ge=0)
     refinement_iterations_allowed: int = Field(ge=0)
     suite_id: str | None = Field(default=None, pattern=r"^[A-Za-z0-9._-]+$")
+    failed_component: str | None = Field(default=None, min_length=1, max_length=200)
+    last_completed_stage: str | None = Field(default=None, min_length=1, max_length=100)
+    test_iteration: int | None = Field(default=None, ge=0)
+    transformation_iteration: int | None = Field(default=None, ge=0)
+
+
+class RefinementPrepareRequest(BaseModel):
+    """The LLM selection and failed iteration n8n asks Python to package."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    artifact_type: Literal["transformation", "semantic-test"]
+    iteration: int = Field(ge=1)
+    previous_iteration: int = Field(ge=0)
+    execution_attempt: int | None = Field(default=None, ge=1)
+    provider: Literal["openai", "anthropic", "google"]
+    model: str = Field(min_length=1)
+    reason: str = Field(min_length=1, max_length=200)
+
+
+class GenerationRecordRequest(BaseModel):
+    """Actual LLM selection observed by n8n for one completed generation."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    artifact_type: Literal["transformation", "semantic-test"]
+    iteration: int = Field(ge=0)
+    purpose: Literal[
+        "initial",
+        "syntax_refinement",
+        "technical_refinement",
+        "reference_refinement",
+        "semantic_refinement",
+    ]
+    provider: Literal["openai", "anthropic", "google"]
+    model: str = Field(min_length=1)
+    strategy: str | None = Field(default=None, min_length=1)
 
 
 class PromptInputsRequest(BaseModel):

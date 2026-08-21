@@ -186,10 +186,10 @@ class N8nArtifactRoutingTests(unittest.TestCase):
         ):
             self.assertIn(f"{derived}: `${{artifactPrefix}}{suffix}`", build_code)
         self.assertNotIn("n8n-execution-${executionId}`;", build_code.split("artifactPrefix")[0])
-        # Writing a file creates its parent directories, so the diagnosis needs
-        # no shell step to prepare them. Execute Command is unavailable in a
-        # default n8n container, where it imports as an unrecognized node and
-        # takes its neighbours' connections down with it.
+        # Python prepares the per-attempt parent directory before this workflow
+        # is exposed. Execute Command is unavailable in a default n8n container,
+        # where it imports as an unrecognized node and takes its neighbours'
+        # connections down with it.
         self.assertNotIn(
             "n8n-nodes-base.executeCommand",
             {node["type"] for node in document["nodes"]},

@@ -36,6 +36,7 @@ from pathlib import Path
 from typing import Any, Iterator
 from xml.etree import ElementTree as ET
 
+from llm4mtl.artifact_schemas import validate_artifact
 from llm4mtl.paths import REPO_ROOT
 from llm4mtl.run_store.attempts import existing_attempts
 from llm4mtl.run_store.models import RunPaths
@@ -62,6 +63,14 @@ SAFE_NAME = re.compile(r"[^A-Za-z0-9._-]+")
 
 class DiagnosisPreparationError(RuntimeError):
     """Raised when the requested execution attempt cannot be read at all."""
+
+
+@dataclass(frozen=True)
+class IndexedFailureReport:
+    """One schema-validated report referenced by a diagnosis index."""
+
+    reference: str
+    payload: dict[str, Any]
 
 
 @dataclass(frozen=True)
@@ -154,6 +163,108 @@ def diagnosis_artifact_references(
     return references
 
 
+def read_diagnosis_queue(run_dir: Path, attempt: int) -> dict[str, Any]:
+    """Read, validate, and normalize the diagnosable reports for resume/routing."""
+    paths = RunPaths(root=Path(run_dir).resolve())
+    index_path, index = _read_diagnosis_index(paths, attempt)
+    eligible_reports: list[dict[str, Any]] = []
+    for pair in index["pairs"]:
+        for report in pair["reports"]:
+            if not _is_diagnosable_report(report):
+                continue
+            _read_indexed_failure_report(paths, attempt, report)
+            eligible_reports.append(
+                {
+                    "failure_report_path": report["report"],
+                    "scope": report.get("scope", "test_case"),
+                    "test_case_id": report.get("test_case_id"),
+                    "assertion_id": report.get("assertion_id"),
+                }
+            )
+    return {
+        "run_id": paths.root.name,
+        "attempt": attempt,
+        "counts": index["counts"],
+        "eligible_reports": eligible_reports,
+        "failure_report_index": _repository_path(index_path),
+    }
+
+
+def read_failure_reports_for_attempt(
+    run_dir: Path, attempt: int
+) -> list[IndexedFailureReport]:
+    """Return only reports referenced by one execution attempt's validated index."""
+    paths = RunPaths(root=Path(run_dir).resolve())
+    _, index = _read_diagnosis_index(paths, attempt)
+    reports: list[IndexedFailureReport] = []
+    for pair in index["pairs"]:
+        for entry in pair["reports"]:
+            if not isinstance(entry, dict) or entry.get("status") != "created":
+                continue
+            reports.append(_read_indexed_failure_report(paths, attempt, entry))
+    return reports
+
+
+def _read_diagnosis_index(
+    paths: RunPaths, attempt: int
+) -> tuple[Path, dict[str, Any]]:
+    index_path = _diagnosis_dir(paths, attempt) / INDEX_FILENAME
+    if not index_path.is_file():
+        raise DiagnosisPreparationError(
+            f"no diagnosis index for execution attempt {attempt}"
+        )
+    index = read_json(index_path)
+    validate_artifact("diagnosis-index", index)
+    if index.get("run_id") != paths.root.name or index.get("attempt") != attempt:
+        raise DiagnosisPreparationError("diagnosis index identity does not match request")
+    return index_path, index
+
+
+def _read_indexed_failure_report(
+    paths: RunPaths, attempt: int, entry: dict[str, Any]
+) -> IndexedFailureReport:
+    reference = entry.get("report")
+    if not isinstance(reference, str) or not reference:
+        raise DiagnosisPreparationError("created diagnosis report has no file reference")
+    candidate = Path(reference)
+    if not candidate.is_absolute():
+        candidate = REPO_ROOT / candidate
+    resolved = candidate.resolve()
+    expected_directory = (
+        _diagnosis_dir(paths, attempt) / REPORTS_DIRNAME
+    ).resolve()
+    try:
+        relative = resolved.relative_to(expected_directory)
+    except ValueError as exc:
+        raise DiagnosisPreparationError(
+            f"diagnosis report is outside run {paths.root.name} attempt {attempt}: "
+            f"{reference}"
+        ) from exc
+    if len(relative.parts) != 1:
+        raise DiagnosisPreparationError(
+            f"diagnosis report is not a direct attempt report: {reference}"
+        )
+    if not resolved.is_file():
+        raise DiagnosisPreparationError(f"diagnosis report is missing: {reference}")
+    try:
+        report = read_json(resolved)
+        validate_artifact("failure-report", report)
+    except (OSError, ValueError) as exc:
+        raise DiagnosisPreparationError(
+            f"diagnosis report is invalid: {reference}: {exc}"
+        ) from exc
+    identity = report.get("identity")
+    if not isinstance(identity, dict):
+        raise DiagnosisPreparationError(
+            f"diagnosis report has no identity: {reference}"
+        )
+    if identity.get("run_id") != paths.root.name or identity.get("attempt") != attempt:
+        raise DiagnosisPreparationError(
+            f"diagnosis report identity does not match run/attempt: {reference}"
+        )
+    return IndexedFailureReport(reference=reference, payload=report)
+
+
 def _first_diagnosable_report(index: dict[str, Any]) -> str | None:
     """The first report a diagnosis can actually be asked to read.
 
@@ -212,6 +323,7 @@ def _record_preparation_error(
         "pairs": [],
     }
     try:
+        validate_artifact("diagnosis-index", index)
         write_json_once(
             _diagnosis_dir(RunPaths(root=run_dir.resolve()), attempt) / INDEX_FILENAME,
             index,
@@ -232,6 +344,7 @@ def prepare_execution_diagnosis(run_dir: Path, attempt: int) -> dict[str, Any]:
     index_path = _diagnosis_dir(paths, attempt) / INDEX_FILENAME
     if index_path.is_file():
         existing = read_json(index_path)
+        validate_artifact("diagnosis-index", existing)
         # Idempotent: a re-read must still leave the trace directory in place,
         # so a run whose evidence was prepared before this existed can be
         # diagnosed without re-deriving it.
@@ -270,8 +383,9 @@ def prepare_execution_diagnosis(run_dir: Path, attempt: int) -> dict[str, Any]:
         "counts": _index_counts(pairs),
         "pairs": pairs,
     }
-    write_json_once(index_path, index)
+    validate_artifact("diagnosis-index", index)
     _ensure_diagnosis_response_dir(paths, attempt, index)
+    write_json_once(index_path, index)
     return index
 
 
@@ -305,10 +419,11 @@ def _ensure_diagnosis_response_dir(
         return
     try:
         diagnosis_response_dir(paths.root, attempt).mkdir(parents=True, exist_ok=True)
-    except OSError:
-        # Preparation must not fail because the trace directory could not be
-        # made; the workflow reports that far more precisely than a stage can.
-        return
+    except OSError as exc:
+        raise DiagnosisPreparationError(
+            f"cannot prepare diagnosis response directory for execution "
+            f"attempt {attempt:03d}: {exc}"
+        ) from exc
 
 
 def _failed_pairs(evidence: dict[str, Any]) -> Iterator[dict[str, Any]]:

@@ -17,10 +17,16 @@ from typing import Any
 
 from llm4mtl.run_store.attempts import AttemptAllocationError
 from llm4mtl.run_store.events import append_event, read_events
+from llm4mtl.run_store.generations import (
+    GenerationRecordError,
+    prepare_generation_response_directory,
+    record_generation,
+)
 from llm4mtl.run_store.identity import InvalidRunIdError, resolve_contained_dir
 from llm4mtl.run_store.manifest import ManifestExistsError, read_manifest, write_manifest
 from llm4mtl.run_store.models import SCHEMA_VERSION, RunPaths
 from llm4mtl.run_store.responses import record_diagnosis
+from llm4mtl.run_store.refinements import RefinementPreparationError, prepare_refinement
 from llm4mtl.run_store.results import ResultConflictError, read_result, record_result
 from llm4mtl.run_store.stages import list_stages, read_latest, record_attempt
 from llm4mtl.run_store.transformations import (
@@ -44,6 +50,14 @@ def create_run(runs_root: Path, run_id: str, manifest: dict[str, Any]) -> RunPat
     paths = open_run(runs_root, run_id)
     paths.root.mkdir(parents=True, exist_ok=True)
     write_manifest(paths, {"run_id": run_id, **manifest})
+    if manifest.get("test_generation_model") is not None:
+        prepare_generation_response_directory(
+            paths, artifact_type="semantic-test", iteration=0
+        )
+    if manifest.get("transformation_model") is not None:
+        prepare_generation_response_directory(
+            paths, artifact_type="transformation", iteration=0
+        )
     append_event(paths, "run_created")
     return paths
 
@@ -64,6 +78,11 @@ __all__ = [
     "read_latest",
     "list_stages",
     "record_diagnosis",
+    "GenerationRecordError",
+    "prepare_generation_response_directory",
+    "record_generation",
+    "RefinementPreparationError",
+    "prepare_refinement",
     "ResultConflictError",
     "read_result",
     "record_result",

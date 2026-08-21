@@ -258,8 +258,9 @@ refuses.
 1. **Create Run** — `POST http://stage-service:8129/runs` → `{run_id}`.
 2. **Generation** (n8n owns it) — the provider subworkflow calls the LLM and
    writes the raw response into the run-specific response directory. The
-   repository's `generation-result.schema.json` is not currently persisted by
-   these workflows.
+   stage service then persists actual provider/model provenance as
+   `generations/<artifact-type>/iteration-NNN/generation.json`, validated by
+   `generation-result.schema.json`.
 3. **Stages** — `POST /runs/{run_id}/stages/{stage}`; n8n reads
    `{status, outcome_code, artifacts}` and routes on it.
 

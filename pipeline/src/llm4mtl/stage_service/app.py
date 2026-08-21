@@ -24,13 +24,17 @@ from llm4mtl.run_store.transformations import (
     iteration_from_suite_id,
 )
 from llm4mtl.semantic_tests.diagnosis_preparation import (
+    DiagnosisPreparationError,
     diagnosis_artifact_references,
     prepare_after_execution_stage,
+    read_diagnosis_queue,
 )
 from llm4mtl.stage_contract import STAGE_DISPATCH, to_stage_payload
 from llm4mtl.stage_service.api_models import (
     DiagnosisRecordRequest,
+    GenerationRecordRequest,
     PromptInputsRequest,
+    RefinementPrepareRequest,
     RunCreateRequest,
     RunCreateResponse,
     RunResultRequest,
@@ -202,6 +206,56 @@ def _run_transformations(
     return adopt_transformations(paths, manifest, sources, iteration=iteration)
 
 
+def _generation_artifact_references(
+    paths: run_store.RunPaths, stage: str, request: StageRunRequest
+) -> dict[str, str]:
+    """Generation records responsible for the artifact iteration this stage judged."""
+    references: dict[str, str] = {}
+    if stage in {"extract", "technical-validation", "reference-validation"}:
+        test_iteration = request.refinement_iteration or 0
+        _add_generation_reference(
+            paths,
+            references,
+            "semantic_test_generation_record",
+            "semantic-test",
+            test_iteration,
+        )
+    if stage in {"syntax-validation", "execution"}:
+        transformation_iteration = (
+            request.refinement_iteration
+            if request.refinement_iteration is not None
+            else iteration_from_suite_id(request.suite_id)
+        )
+        _add_generation_reference(
+            paths,
+            references,
+            "transformation_generation_record",
+            "transformation",
+            transformation_iteration,
+        )
+    if stage == "execution":
+        _add_generation_reference(
+            paths,
+            references,
+            "semantic_test_generation_record",
+            "semantic-test",
+            iteration_from_suite_id(request.suite_id),
+        )
+    return references
+
+
+def _add_generation_reference(
+    paths: run_store.RunPaths,
+    references: dict[str, str],
+    key: str,
+    artifact_type: str,
+    iteration: int,
+) -> None:
+    generation = paths.generation_record(artifact_type, iteration)
+    if generation.is_file():
+        references[key] = generation.relative_to(paths.root).as_posix()
+
+
 @app.post(
     "/runs/{run_id}/stages/{stage}",
     responses={
@@ -259,6 +313,10 @@ def run_stage(run_id: str, stage: str, request: StageRunRequest) -> dict[str, An
             exit_code=1,
         )
     payload = to_stage_payload(stage, result)
+    payload["artifacts"] = {
+        **payload.get("artifacts", {}),
+        **_generation_artifact_references(paths, stage, request),
+    }
     attempt = run_store.record_attempt(paths, stage, payload, evidence=result.to_dict())
     payload["attempt"] = attempt
     run_store.append_event(
@@ -296,7 +354,68 @@ def get_stage(run_id: str, stage: str) -> dict[str, Any]:
     latest = run_store.read_latest(paths, stage)
     if latest is None:
         raise HTTPException(status_code=404, detail=f"no result for stage {stage}")
+    if stage == "execution" and isinstance(latest.get("attempt"), int):
+        try:
+            queue = read_diagnosis_queue(paths.root, latest["attempt"])
+        except DiagnosisPreparationError:
+            return latest
+        latest["artifacts"] = {
+            **latest.get("artifacts", {}),
+            "failure_report_index": queue["failure_report_index"],
+        }
+        if queue["eligible_reports"]:
+            latest["artifacts"]["failure_report_path"] = queue["eligible_reports"][0][
+                "failure_report_path"
+            ]
     return latest
+
+
+@app.get(
+    "/runs/{run_id}/diagnosis/execution/{attempt}",
+    responses={400: BAD_REQUEST_RESPONSE, 404: NOT_FOUND_RESPONSE, 409: CONFLICT_RESPONSE},
+)
+def get_diagnosis_queue(run_id: str, attempt: int) -> dict[str, Any]:
+    paths, _ = _require_manifest(run_id)
+    try:
+        return read_diagnosis_queue(paths.root, attempt)
+    except DiagnosisPreparationError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.post(
+    "/runs/{run_id}/refinements",
+    responses={400: BAD_REQUEST_RESPONSE, 404: NOT_FOUND_RESPONSE, 409: CONFLICT_RESPONSE, 422: UNPROCESSABLE_RESPONSE},
+)
+def prepare_run_refinement(
+    run_id: str, request: RefinementPrepareRequest
+) -> dict[str, Any]:
+    paths, manifest = _require_manifest(run_id)
+    try:
+        return run_store.prepare_refinement(
+            paths,
+            manifest,
+            **request.model_dump(mode="json"),
+            diagnoses_root=_diagnoses_root(),
+        )
+    except run_store.RefinementPreparationError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.post(
+    "/runs/{run_id}/generations",
+    responses={400: BAD_REQUEST_RESPONSE, 404: NOT_FOUND_RESPONSE, 409: CONFLICT_RESPONSE},
+)
+def record_run_generation(
+    run_id: str, request: GenerationRecordRequest
+) -> dict[str, Any]:
+    paths, manifest = _require_manifest(run_id)
+    try:
+        generation = run_store.record_generation(
+            paths, manifest, **request.model_dump(mode="json")
+        )
+    except run_store.GenerationRecordError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return generation
 
 
 @app.get(

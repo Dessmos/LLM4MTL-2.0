@@ -72,7 +72,7 @@ class TransformationAdoptionTests(unittest.TestCase):
         )
         self.manifest = run_store.read_manifest(self.paths)
         self.shared = self.root / "shared" / "Tree2Graph.etl"
-        self.shared.parent.mkdir(parents=True)
+        self.shared.parent.mkdir(parents=True, exist_ok=True)
         self.shared.write_text(GENERATED, encoding="utf-8")
 
     def test_adoption_copies_the_file_and_records_where_it_came_from(self) -> None:
@@ -190,7 +190,7 @@ class StageServiceAdoptionTests(unittest.TestCase):
             / "iteration-000"
             / "Tree2Graph.etl"
         )
-        self.shared.parent.mkdir(parents=True)
+        self.shared.parent.mkdir(parents=True, exist_ok=True)
         self.shared.write_text(GENERATED, encoding="utf-8")
 
     def _run_stage(
@@ -258,7 +258,7 @@ class StageServiceAdoptionTests(unittest.TestCase):
             / "iteration-001"
             / "Tree2Graph.etl"
         )
-        refined_response.parent.mkdir(parents=True)
+        refined_response.parent.mkdir(parents=True, exist_ok=True)
         refined_response.write_text(REGENERATED, encoding="utf-8")
 
         refined = self._run_stage(

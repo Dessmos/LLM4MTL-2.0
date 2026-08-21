@@ -264,8 +264,38 @@ class MasterSubworkflowSelectionTests(unittest.TestCase):
         self.assertTrue(nodes["Read Existing Subworkflow"]["alwaysOutputData"])
         self.assertTrue(nodes["Extract Subworkflow JSON"]["alwaysOutputData"])
         self.assertEqual(
-            "continueRegularOutput", nodes["Extract Subworkflow JSON"]["onError"]
+            "continueErrorOutput", nodes["Extract Subworkflow JSON"]["onError"]
         )
+        error_targets = _master_document()["connections"]["Extract Subworkflow JSON"]["main"][1]
+        self.assertEqual("Capture Orchestration Error", error_targets[0]["node"])
+
+    def test_every_persistence_and_workflow_read_error_reaches_terminalization(
+        self,
+    ) -> None:
+        workflow = _master_document()
+        nodes = {node["name"]: node for node in workflow["nodes"]}
+        for name in (
+            "Read Existing Subworkflow",
+            "Prepare Refinement Input",
+            "Record Generation Attempt",
+        ):
+            with self.subTest(node=name):
+                self.assertEqual("continueErrorOutput", nodes[name]["onError"])
+                error_targets = workflow["connections"][name]["main"][1]
+                self.assertEqual(1, len(error_targets))
+                self.assertEqual(
+                    "Capture Orchestration Error", error_targets[0]["node"]
+                )
+
+    def test_every_http_request_has_an_absolute_service_url(self) -> None:
+        """A missing base URL must fail export validation, not a live run."""
+        for node in _master_document()["nodes"]:
+            if node["type"] != "n8n-nodes-base.httpRequest":
+                continue
+            with self.subTest(node=node["name"]):
+                url = node["parameters"]["url"]
+                self.assertNotIn("stage_service_url", url)
+                self.assertRegex(url.removeprefix("="), r"^https?://")
 
     def test_the_artifact_namespace_is_the_model_family_not_the_exact_model(self) -> None:
         """Every gpt-5 variant files under `gpt-5`, not under its own id.

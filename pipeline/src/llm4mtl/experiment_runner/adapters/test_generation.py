@@ -35,6 +35,15 @@ from llm4mtl.semantic_tests.validation import (
 DEFAULT_SUITE_TIMEOUT_SECONDS = 240
 
 
+def _single_identity_value(axis: str, values: list[str]) -> str:
+    selected = fixed_selection(axis, values)
+    if len(selected) != 1:
+        raise ConfigError(
+            f"extraction requires exactly one {axis}; selected {len(selected)}"
+        )
+    return next(iter(selected))
+
+
 class TestGenerationAdapter:
     """Stage entry points for generated-test extraction and validation.
 
@@ -86,11 +95,11 @@ class TestGenerationAdapter:
             dry_run=False,
         )
         adapter = language_adapter(config.language)
-        selected_model = fixed_selection(
+        selected_model = _single_identity_value(
             "test-generation model", config.test_models
-        )[0]
-        selected_strategy = fixed_selection("strategy", config.test_strategies)[0]
-        selected_task = fixed_selection("task", config.tasks)[0]
+        )
+        selected_strategy = _single_identity_value("strategy", config.test_strategies)
+        selected_task = _single_identity_value("task", config.tasks)
         extraction_outcomes = []
         for response in responses:
             target = response_target_from_path(

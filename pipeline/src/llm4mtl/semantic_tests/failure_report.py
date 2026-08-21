@@ -81,6 +81,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterator, Sequence
 
+from llm4mtl.artifact_schemas import validate_artifact
 from llm4mtl.paths import REPO_ROOT, TARGET
 from llm4mtl.semantic_tests.codegen.java_rendering import sanitize_method_name
 from llm4mtl.semantic_tests.execution_evidence import archived_execution_evidence
@@ -581,6 +582,7 @@ def write_failure_report(request: ReportRequest, output: Path) -> dict[str, Any]
     """Create one immutable report under ``artifacts/work`` and return it."""
     resolved_output = _output_path(output)
     report = build_failure_report(request)
+    validate_artifact("failure-report", report)
     try:
         write_json_once(resolved_output, report)
     except FileExistsError as exc:
@@ -1024,6 +1026,7 @@ def write_pair_failure_report(
     """Create one immutable pair-level report under ``artifacts/work``."""
     resolved_output = _output_path(output)
     report = build_pair_failure_report(request)
+    validate_artifact("failure-report", report)
     try:
         write_json_once(resolved_output, report)
     except FileExistsError as exc:

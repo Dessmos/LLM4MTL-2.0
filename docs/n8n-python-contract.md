@@ -331,9 +331,40 @@ transformation refinement increments it without renaming the validated suite.
 
 `metadata.json` (`schemas/transformation-adoption.schema.json`) records the
 manifest's transformation-model family, the strategy, the sha256 of each copy
-and the run-scoped path it came from. The current generation workflows do not
-persist the exact provider/model used by a refinement; that provenance gap is
-not filled by guessing it in Python.
+and the run-scoped path it came from. Exact per-call provenance is separate:
+
+```text
+runs/<run-id>/generations/<artifact-type>/iteration-<NNN>/generation.json
+```
+
+n8n reports the actual provider/model after each LLM call. Python verifies and
+hashes the persisted prompt input, previous artifact (for refinement), raw
+response, and prepared refinement request before writing this schema-validated
+record. Semantic-test workflows archive the fully assembled prompt; initial
+transformation generation hashes the frozen task prompt because the legacy
+export does not archive its assembled request. This keeps model selection in
+n8n without attributing a refinement to the initial manifest model family.
+
+Refinement is prepared before that call:
+
+```text
+runs/<run-id>/refinements/<artifact-type>/iteration-<NNN>/request.json
+runs/<run-id>/refinements/<artifact-type>/iteration-<NNN>/prompt.md
+```
+
+Python assembles the previous transformation or semantic test and only the
+relevant recorded parser/technical/reference/semantic evidence. For semantic
+feedback, n8n names the execution attempt and Python follows that attempt's
+schema-validated diagnosis index; reports and diagnoses from earlier attempts
+remain history and never enter the current LLM prompt. n8n reads the returned
+prompt path, selects the configured refinement LLM, and persists its raw answer.
+It does not reinterpret failure reports or regenerate a prompt from the original
+task alone.
+
+Stage results cite the responsible `generation.json` through their existing
+`artifacts` map. Evaluation keeps the configured manifest model-family axes and
+separately groups outcomes by the actual provider/model and artifact iteration
+read from those cited generation records.
 
 The stage service adopts on the call n8n already makes.
 
@@ -353,7 +384,11 @@ POST /runs/<run-id>/result
   "run_mode": "full",
   "refinement_iterations_used": 0,
   "refinement_iterations_allowed": 0,
-  "suite_id": "etl-tree2graph-20260820_000"
+  "suite_id": "etl-tree2graph-20260820_000",
+  "failed_component": null,
+  "last_completed_stage": "execution",
+  "test_iteration": 0,
+  "transformation_iteration": 1
 }
 ```
 
@@ -364,7 +399,10 @@ attempt of each stage, the diagnosis aggregate from the persisted diagnosis
 records. A stale workflow therefore cannot report a run as passing that its own
 stages recorded as failing. The result is written once to
 `runs/<run-id>/result.json` (`schemas/run-result.schema.json`); re-posting the
-same ending returns the stored one, a different ending is a `409`.
+same ending returns the stored one, a different ending is a `409`. If a node
+fails after run creation, the master's error branch records status `failed`,
+`ORCHESTRATION_ERROR:<component>`, the last completed stage, and both artifact
+iterations before it stops.
 
 `diagnosis_records` counts the verdicts, not the defects: one broken
 transformation fails every test case that uses it, and each failing case gets its

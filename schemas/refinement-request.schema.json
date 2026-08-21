@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://llm4mtl/schemas/refinement-request.schema.json",
+  "title": "Prepared refinement request",
+  "type": "object",
+  "required": ["schema_version", "run_id", "task", "language", "artifact_type", "iteration", "previous_iteration", "provider", "model", "original_task_context", "previous_artifact", "feedback", "instruction", "prompt_file", "prepared_at"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "run_id": {"type": "string", "minLength": 1},
+    "task": {"type": "string", "minLength": 1},
+    "language": {"type": "string", "enum": ["etl", "atl", "qvto", "reactions"]},
+    "artifact_type": {"type": "string", "enum": ["transformation", "semantic-test"]},
+    "iteration": {"type": "integer", "minimum": 1},
+    "previous_iteration": {"type": "integer", "minimum": 0},
+    "execution_attempt": {"type": ["integer", "null"], "minimum": 1},
+    "provider": {"type": "string", "enum": ["openai", "anthropic", "google"]},
+    "model": {"type": "string", "minLength": 1},
+    "original_task_context": {"type": "object", "required": ["prompt", "metamodels", "supporting_files"], "additionalProperties": false, "properties": {"prompt": {"$ref": "#/$defs/textArtifact"}, "metamodels": {"type": "array", "items": {"$ref": "#/$defs/textArtifact"}}, "supporting_files": {"type": "array", "items": {"$ref": "#/$defs/textArtifact"}}}},
+    "previous_artifact": {"type": "object", "required": ["files"], "additionalProperties": false, "properties": {"files": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/textArtifact"}}}},
+    "feedback": {"type": "object", "required": ["source", "reason", "stage_facts", "failure_reports", "diagnoses"], "additionalProperties": false, "properties": {"source": {"type": "string", "enum": ["syntax", "technical", "reference", "semantic"]}, "reason": {"type": "string", "minLength": 1}, "stage_facts": {"type": "array", "items": {"type": "object"}}, "failure_reports": {"type": "array", "items": {"type": "object"}}, "diagnoses": {"type": "array", "items": {"type": "object"}}}},
+    "instruction": {"type": "string", "minLength": 1},
+    "prompt_file": {"type": "string", "minLength": 1},
+    "prepared_at": {"type": "string", "format": "date-time"}
+  },
+  "$defs": {"textArtifact": {"type": "object", "required": ["path", "sha256", "content"], "additionalProperties": false, "properties": {"path": {"type": "string", "minLength": 1}, "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}, "content": {"type": "string"}}}}
+}

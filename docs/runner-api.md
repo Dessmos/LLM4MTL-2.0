@@ -18,6 +18,9 @@ GET  /runs/{run_id}
 POST /runs/{run_id}/stages/{stage}
 GET  /runs/{run_id}/stages/{stage}
 
+POST /runs/{run_id}/refinements
+POST /runs/{run_id}/generations
+GET  /runs/{run_id}/diagnosis/execution/{attempt}
 POST /runs/{run_id}/diagnoses
 POST /runs/{run_id}/result
 ```
@@ -186,6 +189,36 @@ Returns the highest-numbered recorded `result.json`. There is no mutable
 
 `404` means the stage has no recorded result.
 
+For `execution`, a recovered result also re-derives `failure_report_index` and
+the first eligible `failure_report_path` from the schema-validated diagnosis
+index. They are routing references, not mutable stage facts.
+
+## Prepare and record generation
+
+Before refinement, n8n calls `POST /runs/{run_id}/refinements` with the artifact
+type, consecutive iterations, configured refinement provider/model, and the
+recorded failure reason. Semantic refinement also names the exact
+`execution_attempt` that produced the decision. Python resolves the previous
+artifact and only the parser, execution, failure-report, and diagnosis facts
+belonging to that evidence set. It writes a schema-validated `request.json` and exact `prompt.md` below
+`refinements/<artifact-type>/iteration-NNN/`. n8n passes that prompt unchanged
+to its selected LLM.
+
+After every initial generation or refinement, n8n calls
+`POST /runs/{run_id}/generations` before validation continues. The body reports
+the actual provider/model selected inside n8n. Python verifies the raw output
+exists and writes `generations/<artifact-type>/iteration-NNN/generation.json`
+with hashes of the persisted prompt input, prior artifact, raw output, and
+refinement request. Semantic-test workflows archive their fully assembled
+prompt; initial transformation generation currently hashes the frozen task
+prompt because the legacy export does not archive its assembled request.
+
+`GET /runs/{run_id}/diagnosis/execution/{attempt}` validates the stored index and
+every eligible failure-report reference: containment, existence, report schema,
+run id, and execution attempt. Only then does it return the queue. The master
+uses this endpoint instead of parsing diagnosis files itself, including after
+resume.
+
 ## Read a run
 
 ```http
@@ -250,6 +283,8 @@ artifacts/work/runs/<run-id>/
 ├── observations/
 ├── workspaces/
 ├── responses/
+├── refinements/<artifact-type>/iteration-NNN/{request.json,prompt.md}
+├── generations/<artifact-type>/iteration-NNN/generation.json
 └── stages/<stage>/attempts/attempt-NNN/
     ├── result.json
     └── evidence.json

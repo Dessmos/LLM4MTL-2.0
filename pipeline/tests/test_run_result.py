@@ -157,6 +157,28 @@ class RunResultServiceTests(unittest.TestCase):
         self.assertIsNone(result["terminal_reason"])
         self.assertEqual({}, result["stages"])
 
+    def test_orchestration_error_records_recoverable_terminal_context(self) -> None:
+        response = self.client.post(
+            "/runs/result-1/result",
+            json={
+                **TERMINAL,
+                "status": "failed",
+                "terminal_state": "ORCHESTRATION_ERROR:prepare_refinement",
+                "failed_component": "prepare_refinement",
+                "last_completed_stage": "execution",
+                "test_iteration": 0,
+                "transformation_iteration": 1,
+            },
+        )
+
+        self.assertEqual(200, response.status_code, response.text)
+        result = response.json()
+        self.assertEqual("ORCHESTRATION_ERROR", result["outcome_code"])
+        self.assertEqual("prepare_refinement", result["failed_component"])
+        self.assertEqual("execution", result["last_completed_stage"])
+        self.assertEqual(0, result["test_iteration"])
+        self.assertEqual(1, result["transformation_iteration"])
+
     def test_the_same_ending_may_be_reported_twice_and_a_different_one_may_not(
         self,
     ) -> None:

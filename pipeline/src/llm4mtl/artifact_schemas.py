@@ -71,6 +71,9 @@ SCHEMA_FILES: dict[str, str] = {
     "contract": "contract.schema.json",
     "run-result": "run-result.schema.json",
     "transformation-adoption": "transformation-adoption.schema.json",
+    "refinement-request": "refinement-request.schema.json",
+    "failure-report": "failure-report.schema.json",
+    "diagnosis-index": "diagnosis-index.schema.json",
 }
 
 

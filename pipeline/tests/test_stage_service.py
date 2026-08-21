@@ -52,6 +52,18 @@ class StageServiceTests(unittest.TestCase):
         self.assertEqual(200, created.status_code)
         self.assertEqual({"run_id": "svc-1", "status": "initialized"}, created.json())
 
+        paths = run_store.open_run(Path(self._tmp.name), "svc-1")
+        self.assertTrue(
+            paths.generation_iteration_dir(
+                "semantic-test-generation", 0
+            ).is_dir()
+        )
+        self.assertTrue(
+            paths.generation_iteration_dir(
+                "transformation-generation", 0
+            ).is_dir()
+        )
+
         fetched = self.client.get("/runs/svc-1")
         self.assertEqual(200, fetched.status_code)
         self.assertEqual("etl", fetched.json()["manifest"]["language"])
@@ -64,6 +76,9 @@ class StageServiceTests(unittest.TestCase):
             ("/runs", "post"): {"400", "409", "422"},
             ("/runs/{run_id}/stages/{stage}", "post"): {"400", "404", "409"},
             ("/runs/{run_id}/stages/{stage}", "get"): {"400", "404"},
+            ("/runs/{run_id}/refinements", "post"): {"400", "404", "409", "422"},
+            ("/runs/{run_id}/generations", "post"): {"400", "404", "409"},
+            ("/runs/{run_id}/diagnosis/execution/{attempt}", "get"): {"400", "404", "409"},
             ("/runs/{run_id}", "get"): {"400", "404"},
             ("/runs/{run_id}/diagnoses", "post"): {"400", "404"},
             ("/runs/{run_id}/result", "post"): {"400", "404", "409"},
@@ -311,6 +326,51 @@ class StageServiceTests(unittest.TestCase):
         )
         self.assertEqual([str(expected.resolve())], seen[0].responses)
 
+    def test_stage_result_references_the_generation_iteration_it_consumed(self) -> None:
+        run_id = "svc-generation-attribution"
+        self.client.post("/runs", json=run_payload(run_id=run_id))
+        paths = run_store.open_run(Path(self._tmp.name), run_id)
+        manifest = run_store.read_manifest(paths)
+        assert manifest is not None
+        raw = paths.generation_response(
+            "semantic-test-generation", 0, "Tree2Graph.md"
+        )
+        raw.parent.mkdir(parents=True, exist_ok=True)
+        raw.write_text("generated suite\n", encoding="utf-8")
+        run_store.record_generation(
+            paths,
+            manifest,
+            artifact_type="semantic-test",
+            iteration=0,
+            purpose="initial",
+            provider="anthropic",
+            model="claude-sonnet-4-20250514",
+            strategy="few_shot",
+        )
+
+        with patch(
+            "llm4mtl.stage_service.app._orchestrator.tests.extract",
+            return_value=StageResult(
+                "extraction",
+                "completed",
+                {"selected": 1, "created": 1, "failed": 0},
+                {},
+            ),
+        ):
+            response = self.client.post(
+                f"/runs/{run_id}/stages/extract",
+                json={"suite_id": f"{run_id}_000", "refinement_iteration": 0},
+            )
+
+        self.assertEqual(200, response.status_code, response.text)
+        self.assertEqual(
+            "generations/semantic-test/iteration-000/generation.json",
+            response.json()["artifacts"]["semantic_test_generation_record"],
+        )
+        stored = run_store.read_latest(paths, "extract")
+        assert stored is not None
+        self.assertEqual(response.json()["artifacts"], stored["artifacts"])
+
     def test_two_runs_cannot_read_each_others_generation_response(self) -> None:
         observed: list[tuple[str, str]] = []
         for run_id, content in (("svc-run-a", "response A"), ("svc-run-b", "response B")):
@@ -323,7 +383,7 @@ class StageServiceTests(unittest.TestCase):
                 / "iteration-000"
                 / "Tree2Graph.md"
             )
-            response_path.parent.mkdir(parents=True)
+            response_path.parent.mkdir(parents=True, exist_ok=True)
             response_path.write_text(content, encoding="utf-8")
 
         def capture(config, dry_run):

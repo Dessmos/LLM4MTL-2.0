@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://llm4mtl/schemas/failure-report.schema.json",
+  "title": "Prepared semantic failure report",
+  "type": "object",
+  "required": ["schema_version", "report_type", "identity", "task_context", "source_diagnosis"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "report_type": {"type": "string", "enum": ["semantic_test_case_failure", "semantic_execution_pair_failure"]},
+    "identity": {"type": "object", "required": ["run_id", "task_id", "language", "attempt"], "properties": {"run_id": {"type": "string", "minLength": 1}, "task_id": {"type": "string", "minLength": 1}, "language": {"type": "string"}, "attempt": {"type": "integer", "minimum": 1}}, "additionalProperties": true},
+    "task_context": {"type": "object"},
+    "test_case_result": {"type": "object"},
+    "pair_result": {"type": "object"},
+    "source_diagnosis": {"type": "object", "required": ["eligible", "reason", "evidence_bundle", "allowed_classifications", "required_result_fields"], "additionalProperties": false, "properties": {"eligible": {"type": "boolean"}, "reason": {"type": "string", "minLength": 1}, "evidence_bundle": {"type": ["object", "null"]}, "allowed_classifications": {"type": "array", "items": {"type": "string", "enum": ["transformation_defect", "test_defect", "ambiguous"]}}, "required_result_fields": {"type": "array", "items": {"type": "string"}}}}
+  },
+  "allOf": [
+    {"if": {"properties": {"report_type": {"const": "semantic_test_case_failure"}}}, "then": {"required": ["test_case_result"], "not": {"required": ["pair_result"]}}},
+    {"if": {"properties": {"report_type": {"const": "semantic_execution_pair_failure"}}}, "then": {"required": ["pair_result"], "not": {"required": ["test_case_result"]}}}
+  ]
+}

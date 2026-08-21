@@ -92,3 +92,15 @@ class RunPaths:
     ) -> Path:
         """The exact raw response a deterministic stage consumes."""
         return self.generation_iteration_dir(operation, iteration) / filename
+
+    def refinement_dir(self, artifact_type: str, iteration: int) -> Path:
+        return self.root / "refinements" / artifact_type / f"iteration-{iteration:03d}"
+
+    def generation_record(self, artifact_type: str, iteration: int) -> Path:
+        return (
+            self.root
+            / "generations"
+            / artifact_type
+            / f"iteration-{iteration:03d}"
+            / "generation.json"
+        )

@@ -45,6 +45,10 @@
     "refinement_iterations_used": {"type": "integer", "minimum": 0},
     "refinement_iterations_allowed": {"type": "integer", "minimum": 0},
     "suite_id": {"type": ["string", "null"]},
+    "failed_component": {"type": ["string", "null"]},
+    "last_completed_stage": {"type": ["string", "null"]},
+    "test_iteration": {"type": ["integer", "null"], "minimum": 0},
+    "transformation_iteration": {"type": ["integer", "null"], "minimum": 0},
     "syntax_status": {
       "type": "string",
       "enum": ["passed", "failed", "skipped", "infrastructure_error", "not_run"],

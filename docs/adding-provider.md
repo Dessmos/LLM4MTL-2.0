@@ -10,7 +10,7 @@ artifacts.
 ## New model on an existing provider
 
 1. Add the model to the appropriate n8n selection and provider mapping.
-2. Preserve the normalized `generation-result.json` shape defined by
+2. Preserve the normalized `generation.json` shape defined by
    `schemas/generation-result.schema.json`.
 3. Record the concrete provider and model names; do not infer them later from a
    directory or workflow name.

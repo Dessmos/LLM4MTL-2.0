@@ -234,6 +234,7 @@ PASSING_RESULTS = {
     "technical": {"stage": "technical-validation", "status": "completed", "outcome_code": "TECH_VALID"},
     "reference": {"stage": "reference-validation", "status": "completed", "outcome_code": "REFERENCE_VALIDATED"},
     "generate_transformations": {"status": "completed"},
+    "record_generation": {"schema_version": "1.0"},
     "syntax": {"stage": "syntax-validation", "status": "completed", "outcome_code": "SYNTAX_VALID"},
     "execution": {"stage": "execution", "status": "completed", "outcome_code": "SEMANTIC_PASSED"},
     "final": {"artifacts": {}},
@@ -269,7 +270,22 @@ def _drive(
         # A factory lets one action answer differently on each pass, which is how
         # a failing execution becomes a passing one after a refinement.
         factory = (factories or {}).get(action)
-        produced = factory() if factory is not None else stage_results.get(action, {})
+        if factory is not None:
+            produced = factory()
+        elif action == "prepare_refinement":
+            artifact_type = state["refinement_request"]["artifact_type"]
+            iteration = state["refinement_request"]["iteration"]
+            produced = {
+                "prompt_path": (
+                    f"/data/artifacts/runs/{state['current']['run_id']}/refinements/"
+                    f"{artifact_type}/iteration-{iteration:03d}/prompt.md"
+                ),
+                "request_path": (
+                    f"refinements/{artifact_type}/iteration-{iteration:03d}/request.json"
+                ),
+            }
+        else:
+            produced = stage_results.get(action, {})
         captured = _run_node(
             "Capture Action Result",
             inputs=[produced],
@@ -279,6 +295,91 @@ def _drive(
             raise AssertionError(captured["error"])
         state = captured["result"]
     raise AssertionError(f"control loop did not terminate: {actions}")
+
+
+@unittest.skipUnless(shutil.which("node"), "the master workflow's Code nodes need Node")
+class OrchestrationFailureTests(unittest.TestCase):
+    def test_persistence_http_errors_build_a_terminal_result_request(self) -> None:
+        configured = _configure()
+        self.assertTrue(configured["ok"], configured.get("error"))
+        for action in ("prepare_refinement", "record_generation"):
+            with self.subTest(action=action):
+                state = json.loads(json.dumps(configured["result"]))
+                state["action"] = action
+                state["current"]["run_id"] = "terminal-error-1"
+                state["current"]["suite_id"] = "terminal-error-1_001"
+                state["current"]["refinement_iteration"] = 1
+                state["current"]["test_iteration"] = 1
+                state["current"]["transformation_iteration"] = 0
+                state["current"]["timeline"] = [
+                    {
+                        "stage": "reference-validation",
+                        "outcome_code": "REFERENCE_VALIDATION_FAILED",
+                    }
+                ]
+                captured = _run_node(
+                    "Capture Orchestration Error",
+                    inputs=[{"error": {"httpCode": 409}}],
+                    nodes={"State Machine": {"json": state}},
+                )
+
+                self.assertTrue(captured["ok"], captured.get("error"))
+                terminal = captured["result"]["orchestration_terminal_request"]
+                self.assertEqual("failed", terminal["status"])
+                self.assertEqual(
+                    f"ORCHESTRATION_ERROR:{action}", terminal["terminal_state"]
+                )
+                self.assertEqual(action, terminal["failed_component"])
+                self.assertEqual(
+                    "reference-validation", terminal["last_completed_stage"]
+                )
+                self.assertEqual(1, terminal["test_iteration"])
+                self.assertEqual(0, terminal["transformation_iteration"])
+
+    def test_orchestration_error_reaches_the_shared_final_result_contract(self) -> None:
+        configured = _configure()
+        self.assertTrue(configured["ok"], configured.get("error"))
+        state = configured["result"]
+        state["results"] = [
+            {
+                "run_id": "previous-run",
+                "language": "etl",
+                "status": "completed",
+            }
+        ]
+        state["action"] = "record_generation"
+        state["current"]["run_id"] = "terminal-error-2"
+        state["current"]["language"] = "etl"
+        state["current"]["task"] = "Tree2Graph"
+
+        captured = _run_node(
+            "Capture Orchestration Error",
+            inputs=[{"error": {"httpCode": 409}}],
+            nodes={"State Machine": {"json": state}},
+        )
+        self.assertTrue(captured["ok"], captured.get("error"))
+        terminal = {
+            **captured["result"]["orchestration_terminal_request"],
+            "run_id": "terminal-error-2",
+        }
+        finalized = _run_node(
+            "Finalize Orchestration Error",
+            inputs=[terminal],
+            nodes={"Capture Orchestration Error": {"json": captured["result"]}},
+        )
+        self.assertTrue(finalized["ok"], finalized.get("error"))
+        self.assertEqual(2, len(finalized["result"]["results"]))
+        self.assertEqual(
+            "terminal-error-2", finalized["result"]["results"][-1]["run_id"]
+        )
+
+        summary = _run_node(
+            "Final Result and Artifacts", inputs=[finalized["result"]]
+        )
+        self.assertTrue(summary["ok"], summary.get("error"))
+        self.assertEqual("failed", summary["result"]["status"])
+        self.assertEqual(2, summary["result"]["run_count"])
+        self.assertEqual(terminal, summary["result"]["results"][-1]["artifacts"])
 
 
 @unittest.skipUnless(shutil.which("node"), "the master workflow's Code nodes need Node")
@@ -307,12 +408,19 @@ class TransformationWorkflowCompatibilityTests(unittest.TestCase):
                 prompt_readers = [
                     node for node in nodes if node["name"] == "Read prompt files"
                 ]
+                response_writers = [
+                    node for node in nodes if node["name"] == "Write response to disk"
+                ]
                 save_names = [
                     node
                     for node in nodes
                     if node["name"] in {"Save file name", "Save reaction name"}
                 ]
                 self.assertEqual(1, len(prompt_readers))
+                self.assertEqual(1, len(response_writers))
+                self.assertEqual(
+                    "n8n-nodes-base.readWriteFile", response_writers[0]["type"]
+                )
                 self.assertEqual(1, len(save_names))
                 self.assertEqual("n8n-nodes-base.set", save_names[0]["type"])
 
@@ -357,6 +465,10 @@ class TransformationWorkflowCompatibilityTests(unittest.TestCase):
                         "run_id": "run-transform-1",
                         "refinement_iteration": 1,
                     },
+                    "subworkflow_input": {
+                        "refinement_iteration": 1,
+                        "prompt_path": "/data/artifacts/runs/run-transform-1/refinements/transformation/iteration-001/prompt.md",
+                    },
                     "workflow_json": workflow,
                 }
             ],
@@ -368,10 +480,21 @@ class TransformationWorkflowCompatibilityTests(unittest.TestCase):
             for node in adapted["result"]["workflow_json"]["nodes"]
         }
         self.assertEqual(
-            "=/data/task_prompts/etl/Tree2Graph.txt",
+            "=/data/artifacts/runs/run-transform-1/refinements/"
+            "transformation/iteration-001/prompt.md",
             nodes["Read prompt files"]["parameters"]["fileSelector"],
         )
+        self.assertEqual(
+            "={{ $json.prompt }}",
+            nodes["(Re-)Generate code"]["parameters"]["text"],
+        )
         save_name = nodes["Save file name"]
+        base_name = next(
+            assignment
+            for assignment in save_name["parameters"]["assignments"]["assignments"]
+            if assignment["name"] == "baseName"
+        )
+        self.assertEqual("=Tree2Graph", base_name["value"])
         self.assertTrue(save_name["parameters"]["includeOtherFields"])
         self.assertFalse(save_name["parameters"]["options"]["stripBinary"])
         self.assertEqual(
@@ -409,6 +532,10 @@ class TransformationWorkflowCompatibilityTests(unittest.TestCase):
                         "run_id": "run-tests-1",
                         "refinement_iteration": 2,
                     },
+                    "subworkflow_input": {
+                        "refinement_iteration": 2,
+                        "prompt_path": "/data/artifacts/runs/run-tests-1/refinements/semantic-test/iteration-002/prompt.md",
+                    },
                     "workflow_json": workflow,
                 }
             ],
@@ -419,8 +546,13 @@ class TransformationWorkflowCompatibilityTests(unittest.TestCase):
             for node in adapted["result"]["workflow_json"]["nodes"]
         }
         self.assertEqual(
-            "=/data/task_prompts/etl/Tree2Graph.txt",
+            "=/data/artifacts/runs/run-tests-1/refinements/"
+            "semantic-test/iteration-002/prompt.md",
             nodes["Read prompt files"]["parameters"]["fileSelector"],
+        )
+        self.assertEqual(
+            "={{ $json.prompt }}",
+            nodes["(Re-)Generate test suite"]["parameters"]["text"],
         )
         self.assertEqual(
             "=/data/artifacts/runs/run-tests-1/responses/"
@@ -430,6 +562,60 @@ class TransformationWorkflowCompatibilityTests(unittest.TestCase):
         self.assertEqual(
             original_text,
             workflow_path.read_text(encoding="utf-8"),
+        )
+
+    def test_initial_semantic_test_writes_only_to_the_prepared_run_directory(
+        self,
+    ) -> None:
+        workflow_path = (
+            REPOSITORY_ROOT
+            / "workflows"
+            / "n8n"
+            / "tests"
+            / "workflows"
+            / "etl_variants"
+            / "test_generation"
+            / "Prompting_tests_ETL_gpt-5_few_shot.json"
+        )
+        workflow = json.loads(workflow_path.read_text(encoding="utf-8"))
+
+        adapted = _run_node(
+            "Adapt Transformation Workflow Compatibility",
+            inputs=[
+                {
+                    "action": "generate_tests",
+                    "current": {
+                        "language": "etl",
+                        "task": "Tree2Graph",
+                        "run_id": "run-tests-initial",
+                        "refinement_iteration": 0,
+                    },
+                    "subworkflow_input": {"refinement_iteration": 0},
+                    "workflow_json": workflow,
+                }
+            ],
+        )
+
+        self.assertTrue(adapted["ok"], adapted.get("error"))
+        nodes = {
+            node["name"]: node
+            for node in adapted["result"]["workflow_json"]["nodes"]
+        }
+        response_directory = (
+            "=/data/artifacts/runs/run-tests-initial/responses/"
+            "semantic-test-generation/iteration-000"
+        )
+        self.assertEqual(
+            "=/data/task_prompts/etl/Tree2Graph.txt",
+            nodes["Read prompt files"]["parameters"]["fileSelector"],
+        )
+        self.assertEqual(
+            f"{response_directory}/prompt.md",
+            nodes["Write prompt to disk"]["parameters"]["fileName"],
+        )
+        self.assertEqual(
+            f"{response_directory}/Tree2Graph.md",
+            nodes["Write response to disk"]["parameters"]["fileName"],
         )
 
     def test_non_generation_subworkflows_are_not_modified(self) -> None:
@@ -460,7 +646,7 @@ class RunModeTests(unittest.TestCase):
         for action in ("generate_transformations", "syntax", "execution", "diagnose"):
             self.assertNotIn(action, actions)
         self.assertEqual(
-            ["create_run", "generate_tests", "extract", "technical", "reference", "final", "complete"],
+            ["create_run", "generate_tests", "record_generation", "extract", "technical", "reference", "final", "complete"],
             actions,
         )
         self.assertEqual("completed", state["results"][0]["status"])
@@ -473,7 +659,7 @@ class RunModeTests(unittest.TestCase):
         for action in ("generate_tests", "extract", "technical", "reference", "execution", "diagnose"):
             self.assertNotIn(action, actions)
         self.assertEqual(
-            ["create_run", "generate_transformations", "syntax", "final", "complete"],
+            ["create_run", "generate_transformations", "record_generation", "syntax", "final", "complete"],
             actions,
         )
         self.assertEqual("completed", state["results"][0]["status"])
@@ -489,10 +675,12 @@ class RunModeTests(unittest.TestCase):
             [
                 "create_run",
                 "generate_tests",
+                "record_generation",
                 "extract",
                 "technical",
                 "reference",
                 "generate_transformations",
+                "record_generation",
                 "syntax",
                 "execution",
                 "final",
@@ -509,7 +697,8 @@ class RunModeTests(unittest.TestCase):
         self.assertIn("diagnose", actions)
         # The diagnosed transformation defect sends the run back through
         # transformation generation rather than test generation.
-        self.assertEqual("generate_transformations", actions[actions.index("diagnose") + 1])
+        self.assertEqual("prepare_refinement", actions[actions.index("diagnose") + 1])
+        self.assertEqual("generate_transformations", actions[actions.index("diagnose") + 2])
 
     def test_a_failure_without_a_prepared_index_says_so(self) -> None:
         """The shortcut report alone is no longer enough to diagnose on."""
@@ -582,6 +771,7 @@ def _drive_diagnosis(
     *,
     eligible: int | None = None,
     verdicts: list[dict[str, Any]] | None = None,
+    observed_states: list[dict[str, Any]] | None = None,
 ) -> tuple[list[str], dict[str, Any]]:
     """A full-mode run whose first execution fails with N eligible reports.
 
@@ -624,6 +814,7 @@ def _drive_diagnosis(
         config["result"],
         {"read_diagnosis_index": _diagnosis_index(*reports)},
         factories={"diagnose": next_verdict, "execution": next_execution},
+        observed_states=observed_states,
     )
 
 
@@ -641,23 +832,37 @@ class SourceDiagnosisAggregationTests(unittest.TestCase):
     def test_one_transformation_defect_refines_the_transformation(self) -> None:
         actions, state = _drive_diagnosis(["transformation_defect"])
         self.assertEqual(1, actions.count("diagnose"))
-        self.assertEqual("generate_transformations", actions[actions.index("diagnose") + 1])
+        self.assertEqual("prepare_refinement", actions[actions.index("diagnose") + 1])
+        self.assertEqual("generate_transformations", actions[actions.index("diagnose") + 2])
 
     def test_agreeing_transformation_defects_refine_the_transformation(self) -> None:
         actions, _ = _drive_diagnosis(["transformation_defect", "transformation_defect"])
         self.assertEqual(2, actions.count("diagnose"))
         last = len(actions) - 1 - actions[::-1].index("diagnose")
-        self.assertEqual("generate_transformations", actions[last + 1])
+        self.assertEqual("prepare_refinement", actions[last + 1])
+        self.assertEqual("generate_transformations", actions[last + 2])
 
     def test_one_test_defect_refines_the_tests(self) -> None:
         actions, _ = _drive_diagnosis(["test_defect"])
-        self.assertEqual("generate_tests", actions[actions.index("diagnose") + 1])
+        self.assertEqual("prepare_refinement", actions[actions.index("diagnose") + 1])
+        self.assertEqual("generate_tests", actions[actions.index("diagnose") + 2])
+
+    def test_semantic_refinement_request_names_its_execution_attempt(self) -> None:
+        observed: list[dict[str, Any]] = []
+        _drive_diagnosis(["test_defect"], observed_states=observed)
+        request = next(
+            state["refinement_request"]
+            for state in observed
+            if state["action"] == "prepare_refinement"
+        )
+        self.assertEqual(1, request["execution_attempt"])
 
     def test_agreeing_test_defects_refine_the_tests(self) -> None:
         actions, _ = _drive_diagnosis(["test_defect", "test_defect"])
         self.assertEqual(2, actions.count("diagnose"))
         last = len(actions) - 1 - actions[::-1].index("diagnose")
-        self.assertEqual("generate_tests", actions[last + 1])
+        self.assertEqual("prepare_refinement", actions[last + 1])
+        self.assertEqual("generate_tests", actions[last + 2])
 
     def test_a_refined_transformation_keeps_the_validated_suite(self) -> None:
         """Only a refined *suite* is a new suite.
