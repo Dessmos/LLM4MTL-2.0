@@ -305,6 +305,56 @@ class N8nArtifactRoutingTests(unittest.TestCase):
         self.assertIn("threw before any assertion was evaluated", prompt)
         self.assertIn("return `null` for\n`assertion_id`", prompt)
 
+    def test_the_master_records_where_each_run_ended(self) -> None:
+        """The terminal state reaches disk instead of only the n8n execution.
+
+        Without it, reading a finished run means reconstructing its ending from
+        the event log, from which artifacts are absent, and from the routing
+        rules themselves — acceptable while debugging one run, and not as the
+        input to a metrics module over hundreds.
+        """
+        master_path = WORKFLOWS_ROOT / "main" / "llm4mtl-agent-workflow.json"
+        master = json.loads(master_path.read_text(encoding="utf-8"))
+        nodes = {node["name"]: node for node in master["nodes"]}
+        connections = master["connections"]
+
+        record = nodes["Record Terminal Result"]
+        self.assertEqual("n8n-nodes-base.httpRequest", record["type"])
+        self.assertEqual("POST", record["parameters"]["method"])
+        self.assertIn("/result", record["parameters"]["url"])
+        body = record["parameters"]["jsonBody"]
+        # Only what the orchestration owns; stage statuses are read off the run.
+        for reported in (
+            "status:",
+            "terminal_state:",
+            "run_mode:",
+            "refinement_iterations_used:",
+            "refinement_iterations_allowed:",
+        ):
+            self.assertIn(reported, body)
+        self.assertNotIn("syntax_status", body)
+        self.assertNotIn("semantic_status", body)
+
+        # Each stage call states which refinement iteration it belongs to, so
+        # the run's copy of the transformation is filed under the right one even
+        # when the suite id deliberately stays behind.
+        stage_body = nodes["Run Existing Python Stage"]["parameters"]["jsonBody"]
+        self.assertIn(
+            "refinement_iteration: $json.stage_iteration", stage_body
+        )
+
+        # The final branch records the ending before it reads the artifacts.
+        final_branch = connections["Route Next Action"]["main"][4]
+        self.assertEqual("Record Terminal Result", final_branch[0]["node"])
+        self.assertEqual(
+            "Read Final Run Artifacts",
+            connections["Record Terminal Result"]["main"][0][0]["node"],
+        )
+        # That node no longer receives the state directly, so it may not read
+        # the run id from $json.
+        artifacts_url = nodes["Read Final Run Artifacts"]["parameters"]["url"]
+        self.assertIn("$('State Machine').first().json.current.run_id", artifacts_url)
+
     def test_no_workflow_tree_keeps_its_own_copy_of_the_benchmark(self) -> None:
         """Task inputs live in benchmark/ only.
 

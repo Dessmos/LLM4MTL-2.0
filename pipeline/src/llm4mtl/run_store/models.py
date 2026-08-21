@@ -9,7 +9,12 @@ One run lives under ``artifacts/work/runs/<run-id>/`` and is described by:
   from these on read; there is no mutable projection that could go stale.
 * ``stages/<stage>/attempts/attempt-NNN/evidence.json`` — immutable internal
   detail behind that result (commands, stdout, selections). Never a contract.
+* ``responses/<operation>/iteration-NNN/`` — run-scoped raw generation output.
 * ``responses/<operation>/attempt-NNN/`` — immutable normalized LLM responses.
+* ``transformation/iteration-NNN/`` — the run's own copy of the transformations
+  it judged, adopted from that run's raw response, with the ``metadata.json``
+  that says where each came from.
+* ``result.json`` — the terminal result, written once when the run ends.
 
 ``<stage>`` is always a contract stage id (see ``llm4mtl.stage_contract``), so a
 run directory reads the same whether the local runner or the stage service wrote
@@ -75,3 +80,15 @@ class RunPaths:
     def response_attempt_dir(self, operation: str, attempt: int) -> Path:
         return self.response_operation_dir(operation) / f"attempt-{attempt:03d}"
 
+    def generation_iteration_dir(self, operation: str, iteration: int) -> Path:
+        """Run-scoped raw generation artifacts for one refinement iteration."""
+        return self.response_operation_dir(operation) / f"iteration-{iteration:03d}"
+
+    def generation_response(
+        self,
+        operation: str,
+        iteration: int,
+        filename: str,
+    ) -> Path:
+        """The exact raw response a deterministic stage consumes."""
+        return self.generation_iteration_dir(operation, iteration) / filename

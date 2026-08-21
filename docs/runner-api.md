@@ -19,6 +19,7 @@ POST /runs/{run_id}/stages/{stage}
 GET  /runs/{run_id}/stages/{stage}
 
 POST /runs/{run_id}/diagnoses
+POST /runs/{run_id}/result
 ```
 
 ## Resolve exact prompt inputs
@@ -129,6 +130,7 @@ The body contains only attempt-specific controls:
 ```json
 {
   "suite_id": "suite_001",
+  "refinement_iteration": 0,
   "verbose": false
 }
 ```
@@ -137,6 +139,10 @@ An empty object is valid. `suite_id`, when present, uses the same opaque
 one-component identifier syntax. Identity fields and all other unknown fields
 are rejected with `422`; the service reconstructs language/task/model/strategy
 selection exclusively from `manifest.json`.
+
+`refinement_iteration` is the artifact-specific iteration consumed by the
+stage. Test and transformation iterations may differ; the master sends the test
+iteration to extraction and the transformation iteration to syntax/execution.
 
 Executable stages atomically materialize the language harness under the current
 run. They never execute in the shared `engines/**` template.

@@ -9,6 +9,7 @@ from fastapi import FastAPI, HTTPException
 from llm4mtl import run_store
 from llm4mtl.experiment_runner.models import PipelineConfig, StageResult
 from llm4mtl.experiment_runner.orchestrator import ExperimentOrchestrator, generate_run_id
+from llm4mtl.languages import language_adapter
 from llm4mtl.paths import TARGET
 from llm4mtl.prompt_assembly.task_inputs import (
     TaskInputResolutionError,
@@ -16,6 +17,12 @@ from llm4mtl.prompt_assembly.task_inputs import (
 )
 from llm4mtl.provenance import ProvenanceError, build_provenance
 from llm4mtl.run_store.identity import InvalidRunIdError
+from llm4mtl.run_store.transformations import (
+    TransformationAdoptionError,
+    adopt_transformations,
+    adopted_transformations,
+    iteration_from_suite_id,
+)
 from llm4mtl.semantic_tests.diagnosis_preparation import (
     diagnosis_artifact_references,
     prepare_after_execution_stage,
@@ -26,6 +33,7 @@ from llm4mtl.stage_service.api_models import (
     PromptInputsRequest,
     RunCreateRequest,
     RunCreateResponse,
+    RunResultRequest,
     StageRunRequest,
 )
 
@@ -36,6 +44,11 @@ BAD_REQUEST_RESPONSE = {"description": "Malformed or escaping identifier"}
 NOT_FOUND_RESPONSE = {"description": "Requested run, stage, or result not found"}
 CONFLICT_RESPONSE = {"description": "Run state conflicts with the request"}
 UNPROCESSABLE_RESPONSE = {"description": "Request violates a task or run contract"}
+# The stages that judge a generated transformation both read the immutable copy
+# adopted from this run's raw generation response.
+TRANSFORMATION_STAGES = frozenset({"syntax-validation", "execution"})
+
+
 def _runs_root():
     return TARGET.runs
 
@@ -152,6 +165,43 @@ def _selection(manifest_value: Any) -> list[str]:
     return []
 
 
+def _run_transformations(
+    paths: run_store.RunPaths,
+    manifest: dict[str, Any],
+    config: PipelineConfig,
+    request: StageRunRequest,
+):
+    """The run's immutable copy of the transformations this iteration judges.
+
+    Adopted once from the run-scoped raw response by whichever stage of the
+    artifact iteration runs first. Every later stage reads the copy back.
+    """
+    # Stated by the caller when it knows it; otherwise read from the suite id,
+    # which encodes it for every run whose tests were the refined artefact.
+    iteration = (
+        request.refinement_iteration
+        if request.refinement_iteration is not None
+        else iteration_from_suite_id(request.suite_id)
+    )
+    existing = adopted_transformations(paths, iteration)
+    if existing is not None:
+        return existing
+    extension = language_adapter(config.language).reference_transformation(
+        config.tasks[0]
+    ).suffix
+    response = paths.generation_response(
+        "transformation-generation",
+        iteration,
+        f"{config.tasks[0]}{extension}",
+    )
+    if not response.is_file() and request.refinement_iteration is not None:
+        raise TransformationAdoptionError(
+            f"run-scoped generated transformation is missing: {response}"
+        )
+    sources = [response] if response.is_file() else []
+    return adopt_transformations(paths, manifest, sources, iteration=iteration)
+
+
 @app.post(
     "/runs/{run_id}/stages/{stage}",
     responses={
@@ -166,6 +216,29 @@ def run_stage(run_id: str, stage: str, request: StageRunRequest) -> dict[str, An
     paths, manifest = _require_manifest(run_id)
     config = _stage_config(run_id, manifest, request)
     config.run_dir = str(paths.root)
+
+    if stage == "extract":
+        iteration = request.refinement_iteration or 0
+        config.responses = [
+            str(
+                paths.generation_response(
+                    "semantic-test-generation",
+                    iteration,
+                    f"{config.tasks[0]}.md",
+                )
+            )
+        ]
+
+    if stage in TRANSFORMATION_STAGES:
+        try:
+            adopted = _run_transformations(paths, manifest, config, request)
+        except TransformationAdoptionError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        if adopted is not None:
+            # Both stages judge the same bytes for the whole iteration: without
+            # this, execution re-selects from the shared tree and can validate a
+            # file the parser never saw.
+            config.transformations = [str(path) for path in adopted.paths]
 
     adapter_attr, method_name = STAGE_DISPATCH[stage]
     adapter = getattr(_orchestrator, adapter_attr)
@@ -236,6 +309,33 @@ def get_stage(run_id: str, stage: str) -> dict[str, Any]:
 def get_run(run_id: str) -> dict[str, Any]:
     paths, manifest = _require_manifest(run_id)
     return {"run_id": run_id, "manifest": manifest, "stages": run_store.list_stages(paths)}
+
+
+@app.post(
+    "/runs/{run_id}/result",
+    responses={
+        400: BAD_REQUEST_RESPONSE,
+        404: NOT_FOUND_RESPONSE,
+        409: CONFLICT_RESPONSE,
+    },
+)
+def record_run_result(run_id: str, request: RunResultRequest) -> dict[str, Any]:
+    """Persist where the orchestration ended, with what the run itself recorded."""
+    paths, _ = _require_manifest(run_id)
+    try:
+        result = run_store.record_result(
+            paths, request.model_dump(mode="json"), _diagnoses_root()
+        )
+    except run_store.ResultConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    # A run-scoped event: no stage, and the run vocabulary in `run_status`.
+    run_store.append_event(
+        paths,
+        "run_finished",
+        run_status=result["status"],
+        outcome_code=result["outcome_code"],
+    )
+    return result
 
 
 @app.post(

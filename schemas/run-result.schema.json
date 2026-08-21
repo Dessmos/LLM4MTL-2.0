@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://llm4mtl/schemas/run-result.schema.json",
+  "title": "Terminal run result",
+  "description": "What one run ended as, written once when the orchestration reaches its terminal state. The terminal decision belongs to n8n and is reported here; every other field is derived from the run's own recorded attempts and diagnoses, so a metrics module reads this file instead of reconstructing the workflow's state from events, absent artifacts and routing rules.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "run_id",
+    "status",
+    "outcome_code",
+    "terminal_state",
+    "run_mode",
+    "refinement_iterations_used",
+    "refinement_iterations_allowed",
+    "syntax_status",
+    "semantic_status",
+    "stages",
+    "recorded_at"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "run_id": {"type": "string", "minLength": 1},
+    "status": {
+      "type": "string",
+      "enum": ["completed", "completed_with_failures", "failed", "incomplete"],
+      "description": "Terminal status decided by the orchestration."
+    },
+    "outcome_code": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Why the run ended, without the qualifier: the part of terminal_state before ':'."
+    },
+    "terminal_reason": {
+      "type": ["string", "null"],
+      "description": "Qualifier that stopped the run there (REFINEMENT_LIMIT_REACHED, SEMANTIC_FEEDBACK_DISABLED, ...); null when the outcome carried none."
+    },
+    "terminal_state": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The reason string exactly as the orchestration reported it."
+    },
+    "run_mode": {"type": "string", "enum": ["full", "tests_only", "transformations_only"]},
+    "refinement_iterations_used": {"type": "integer", "minimum": 0},
+    "refinement_iterations_allowed": {"type": "integer", "minimum": 0},
+    "suite_id": {"type": ["string", "null"]},
+    "syntax_status": {
+      "type": "string",
+      "enum": ["passed", "failed", "skipped", "infrastructure_error", "not_run"],
+      "description": "Status of the run's latest syntax-validation attempt; not_run when the stage never ran."
+    },
+    "semantic_status": {
+      "type": "string",
+      "enum": ["passed", "failed", "skipped", "infrastructure_error", "not_run"],
+      "description": "Status of the run's latest execution attempt."
+    },
+    "diagnosis": {
+      "type": ["string", "null"],
+      "enum": ["TRANSFORMATION_DEFECT", "TEST_DEFECT", "AMBIGUOUS", null],
+      "description": "Aggregate over every diagnosis this run recorded, derived from the persisted records. Conservative: one AMBIGUOUS verdict, or one of each defect kind, aggregates to AMBIGUOUS. Null when the run recorded no diagnosis."
+    },
+    "diagnosis_records": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "How many diagnosis records the run persisted. One underlying defect can produce several, one per affected test case; clustering them is evaluation's job, not this file's."
+    },
+    "diagnosis_classifications": {
+      "type": "array",
+      "items": {"type": "string", "enum": ["TRANSFORMATION_DEFECT", "TEST_DEFECT", "AMBIGUOUS"]},
+      "description": "Every recorded verdict, in attempt order, so agreement between them stays measurable."
+    },
+    "stages": {
+      "type": "object",
+      "description": "Latest recorded attempt per contract stage id.",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["status", "outcome_code", "attempt"],
+        "additionalProperties": false,
+        "properties": {
+          "status": {"type": "string"},
+          "outcome_code": {"type": ["string", "null"]},
+          "attempt": {"type": ["integer", "null"]}
+        }
+      }
+    },
+    "recorded_at": {"type": "string", "format": "date-time"}
+  }
+}

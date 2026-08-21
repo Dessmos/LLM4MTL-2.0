@@ -164,6 +164,18 @@ def default_references_root(config: LanguageConfig) -> Path:
     return _benchmark_tasks_root(config) / "references"
 
 
+def default_reactions_metamodels_root() -> Path:
+    """Metamodel corpus accepted by the frozen standalone Reactions parser."""
+    from llm4mtl.paths import TARGET
+
+    return (
+        TARGET.benchmark
+        / "metamodels"
+        / "additional_models"
+        / "Reaction_model"
+    )
+
+
 def default_test_project_dir(config: LanguageConfig) -> Path:
     # v5 migration (Stage 2): the test-harness engine moved to engines/<lang>/harness.
     from llm4mtl.paths import TARGET

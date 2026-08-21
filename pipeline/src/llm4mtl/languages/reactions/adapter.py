@@ -10,6 +10,7 @@ from typing import Sequence
 
 from llm4mtl.conventions import (
     REACTIONS_CONFIG,
+    default_reactions_metamodels_root,
     default_references_root,
     default_task_contracts_root,
 )
@@ -147,7 +148,7 @@ class ReactionsAdapter:
                 for path in transformations
             }
         jar = jars[-1]
-        ecores = TARGET.benchmark / "metamodels"
+        ecores = default_reactions_metamodels_root()
         workspace.observations_dir.mkdir(parents=True, exist_ok=True)
         observations: dict[Path, ParseObservation] = {}
         for index, transformation in enumerate(transformations):

@@ -56,7 +56,31 @@ class StageRunRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     suite_id: str | None = Field(default=None, pattern=r"^[A-Za-z0-9._-]+$")
+    # Which refinement iteration this attempt belongs to. The run keeps its own
+    # copy of the transformation per iteration, and only a *test* refinement
+    # renames the suite - so the iteration cannot be read off the suite id
+    # without making a transformation refinement look like the initial one.
+    refinement_iteration: int | None = Field(default=None, ge=0)
     verbose: bool = False
+
+
+class RunResultRequest(BaseModel):
+    """Where one run's orchestration stopped, and on what budget.
+
+    Only what the workflow itself owns is representable. Stage statuses and the
+    diagnosis aggregate are read from the run's own recorded attempts, so a
+    stale workflow cannot report a run as passing that its stages recorded as
+    failing.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    status: Literal["completed", "completed_with_failures", "failed", "incomplete"]
+    terminal_state: str = Field(min_length=1, max_length=200)
+    run_mode: Literal["full", "tests_only", "transformations_only"]
+    refinement_iterations_used: int = Field(ge=0)
+    refinement_iterations_allowed: int = Field(ge=0)
+    suite_id: str | None = Field(default=None, pattern=r"^[A-Za-z0-9._-]+$")
 
 
 class PromptInputsRequest(BaseModel):

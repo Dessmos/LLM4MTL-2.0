@@ -52,16 +52,19 @@ reference transformation
        + the same exact task metamodels
        + prompt_assets/tests/contract/<lang>/semantic_cases_contract.txt
        + selected few-shot/grammar strategy inputs
-       → artifacts/work/test_generation/<lang>/prompts/<model>/<strategy>/<task>.md
-       → artifacts/work/test_generation/<lang>/responses/<model>/<strategy>/<task>.md
+       → artifacts/work/runs/<run-id>/responses/semantic-test-generation/
+         iteration-<NNN>/prompt.md
+       → artifacts/work/runs/<run-id>/responses/semantic-test-generation/
+         iteration-<NNN>/<task>.md
 ```
 
 The output contract is delivered on every strategy, not only on `few_shot`: it
 is what the extractor enforces, so a variant that omits it asks for a
 structured artifact without ever stating its shape, and the strategy axis would
 compare "with examples" against "without a contract". The assembled prompt is
-archived beside the response it produced, because a response that violates the
-contract is otherwise indistinguishable from a prompt that never carried it.
+archived beside the run-scoped response it produced, because a response that
+violates the contract is otherwise indistinguishable from a prompt that never
+carried it.
 
 The first LLM reconstructs only a concise natural-language task request; Python
 does not generate that text. Python deterministically validates the task

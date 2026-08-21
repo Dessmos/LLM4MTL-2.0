@@ -6,6 +6,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
+from typing import Any
 
 from llm4mtl.experiment_runner.config import (
     ConfigError,
@@ -135,6 +136,31 @@ def _add_diagnosis_commands(domains: argparse._SubParsersAction) -> None:
         help="execution attempt to prepare; defaults to the latest recorded one",
     )
     diagnosis_prepare.add_argument(
+        "--output-format",
+        choices=("text", "json"),
+        default="text",
+    )
+
+
+    diagnosis_aggregate = diagnosis_actions.add_parser(
+        "aggregate",
+        help=(
+            "Cluster one execution attempt's prepared reports by the failure "
+            "they describe, and report how far their verdicts agreed. Reads "
+            "recorded evidence only; it writes and changes nothing."
+        ),
+    )
+    diagnosis_aggregate.add_argument(
+        "--run",
+        required=True,
+        help="run id or run directory",
+    )
+    diagnosis_aggregate.add_argument(
+        "--attempt",
+        type=int,
+        help="execution attempt to aggregate; defaults to the latest recorded one",
+    )
+    diagnosis_aggregate.add_argument(
         "--output-format",
         choices=("text", "json"),
         default="text",
@@ -455,6 +481,33 @@ def emit_diagnosis_index(index: dict[str, object], output_format: str) -> None:
             print(f"{pair.get('suite')}: {skipped['reason']} ({skipped['detail']})")
 
 
+def emit_diagnosis_aggregate(aggregated: dict[str, Any], output_format: str) -> None:
+    """One line per distinct failure, not per report about it."""
+    if output_format == "json":
+        print(json.dumps(aggregated, ensure_ascii=False))
+        return
+    totals = aggregated.get("totals", {})
+    print(f"Run: {aggregated.get('run_id')} (execution attempt {aggregated.get('attempt')})")
+    print(f"Totals: {json.dumps(totals, sort_keys=True)}")
+    print(f"Aggregate verdict: {aggregated.get('aggregate_verdict')}")
+    for pair in aggregated.get("pairs", []):
+        print(
+            f"{pair['pair_id']}: {pair['unique_failure_clusters']} failure(s) "
+            f"from {pair['diagnosis_reports']} report(s) "
+            f"over {pair['affected_test_cases']} test case(s)"
+        )
+        for cluster in pair.get("clusters", []):
+            print(
+                f"  {cluster['failure_fingerprint'][:12]} "
+                f"[{cluster['failure_stage']}] {cluster['normalized_error_summary']}"
+            )
+            print(
+                f"    verdict={cluster['verdict']} "
+                f"diagnosed={cluster['diagnosed']}/{cluster['reports']} "
+                f"agreement={cluster['agreement']}"
+            )
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -465,6 +518,13 @@ def main(argv: list[str] | None = None) -> int:
                 args.output,
             )
             emit_failure_report_result(report, args.output, args.output_format)
+            return 0
+        if args.domain == "diagnosis" and args.action == "aggregate":
+            aggregated = ExperimentOrchestrator().aggregate_diagnosis_evidence(
+                args.run,
+                args.attempt,
+            )
+            emit_diagnosis_aggregate(aggregated, args.output_format)
             return 0
         if args.domain == "diagnosis" and args.action == "prepare":
             index = ExperimentOrchestrator().prepare_diagnosis_evidence(

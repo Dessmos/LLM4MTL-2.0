@@ -209,8 +209,9 @@ artifacts/work/runs/<run-id>/
 ├── observations/
 ├── workspaces/
 ├── responses/
-│   └── source-diagnosis/
-│       └── execution-attempt-NNN/       # what a diagnosis was asked and answered
+│   ├── semantic-test-generation/iteration-NNN/
+│   ├── transformation-generation/iteration-NNN/
+│   └── source-diagnosis/execution-attempt-NNN/
 └── stages/
     └── <contract-stage>/
         └── attempts/

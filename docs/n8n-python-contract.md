@@ -38,7 +38,8 @@ pipeline_variant
 The model values on this Python boundary are stable artifact-family ids, such
 as `gpt-5`, `claude-sonnet-4`, and `gemini-2-5-pro`. Provider-specific exact
 ids remain inside n8n and are passed to the selected AI Model nodes; Python uses
-the family ids to select the corresponding response and suite directories.
+the family ids for generated-suite identity and selection. Raw master-workflow
+responses are selected by run, artifact iteration, and task instead.
 
 One run represents one concrete task. A matrix must expand multi-task or
 multi-model experiments before calling the service.
@@ -49,9 +50,17 @@ limited to:
 ```json
 {
   "suite_id": "suite_001",
+  "refinement_iteration": 0,
   "verbose": false
 }
 ```
+
+`refinement_iteration` says which iteration of the artifact consumed by that
+stage the attempt belongs to. The master keeps test and transformation artifact
+iterations separately from the shared refinement-budget count. It is not
+derivable from `suite_id`: a refined *suite* gets a new id, while a refined
+*transformation* is judged against the suite that already passed on the
+reference and therefore keeps the old one.
 
 Unknown fields fail with `422`, including identity fields that happen to equal
 the manifest.
@@ -294,6 +303,74 @@ AMBIGUOUS
 ```
 
 Python validates and stores this fact, but does not choose the resulting branch.
+
+## Transformation inputs a run keeps
+
+The master narrows each transient generation workflow to the selected task and
+writes both kinds of raw response below the current run:
+
+```text
+runs/<run-id>/responses/semantic-test-generation/iteration-<NNN>/<Task>.md
+runs/<run-id>/responses/transformation-generation/iteration-<NNN>/<Task>.<ext>
+```
+
+The first stage that judges a transformation — `syntax-validation`, or
+`execution` when the parser is ablated — adopts that run-scoped response before
+judging it:
+
+```text
+runs/<run-id>/transformation/iteration-<NNN>/<Task>.<ext>
+runs/<run-id>/transformation/iteration-<NNN>/metadata.json
+```
+
+Every later stage of that iteration is handed the copy, so the parser and the
+executor cannot end up judging different bytes, and a recorded result stays
+backed by the input that produced it. `<NNN>` is the transformation artifact
+iteration stated in the stage request. A test refinement leaves it unchanged; a
+transformation refinement increments it without renaming the validated suite.
+
+`metadata.json` (`schemas/transformation-adoption.schema.json`) records the
+manifest's transformation-model family, the strategy, the sha256 of each copy
+and the run-scoped path it came from. The current generation workflows do not
+persist the exact provider/model used by a refinement; that provenance gap is
+not filled by guessing it in Python.
+
+The stage service adopts on the call n8n already makes.
+
+## Terminal run result
+
+The terminal decision is n8n's, so n8n reports it once, when the state machine
+reaches `final`:
+
+```text
+POST /runs/<run-id>/result
+```
+
+```json
+{
+  "status": "completed_with_failures",
+  "terminal_state": "DIAGNOSED_TRANSFORMATION_DEFECT:REFINEMENT_LIMIT_REACHED",
+  "run_mode": "full",
+  "refinement_iterations_used": 0,
+  "refinement_iterations_allowed": 0,
+  "suite_id": "etl-tree2graph-20260820_000"
+}
+```
+
+Nothing else is representable. Python splits `terminal_state` into the
+`outcome_code` and the qualifier that stopped the run there, and derives every
+other field from what the run itself recorded — stage statuses from the latest
+attempt of each stage, the diagnosis aggregate from the persisted diagnosis
+records. A stale workflow therefore cannot report a run as passing that its own
+stages recorded as failing. The result is written once to
+`runs/<run-id>/result.json` (`schemas/run-result.schema.json`); re-posting the
+same ending returns the stored one, a different ending is a `409`.
+
+`diagnosis_records` counts the verdicts, not the defects: one broken
+transformation fails every test case that uses it, and each failing case gets its
+own report and its own verdict. Clustering those observations into distinct
+failures is evaluation's job — `llm4mtl diagnosis aggregate --run <run-id>` —
+and never the pipeline's.
 
 ## Retry and concurrency rules
 

@@ -27,6 +27,7 @@ from llm4mtl.prompt_assembly.n8n_exports import STRATEGIES
 from llm4mtl.semantic_tests.suite_execution import (
     GENERATED_TRANSFORMATION_ROLE,
     record_observation,
+    snapshot_dir,
 )
 from llm4mtl.task_contracts.build_language_task_contracts import (
     BUILDERS,
@@ -281,7 +282,7 @@ class RealEngineWalkingSkeletonTests(unittest.TestCase):
                     self.assertTrue(parse[reference].parsed, parse[reference].diagnostic)
                     self.assertTrue(parse[generated].parsed, parse[generated].diagnostic)
 
-                    reference_observation = adapter.execute_suite(
+                    reference_observation, reference_evidence = adapter.execute_suite(
                         suite, reference, workspace, 1200
                     )
                     self.assertTrue(
@@ -297,6 +298,7 @@ class RealEngineWalkingSkeletonTests(unittest.TestCase):
                         suite,
                         reference,
                         reference_observation,
+                        evidence=reference_evidence,
                     )
                     self.assertTrue(evidence_path.is_file())
 
@@ -305,7 +307,7 @@ class RealEngineWalkingSkeletonTests(unittest.TestCase):
                         / "generated_transformations"
                         / file_sha256(generated)
                     )
-                    generated_observation = adapter.execute_suite(
+                    generated_observation, generated_raw_evidence = adapter.execute_suite(
                         suite,
                         generated,
                         Workspace(
@@ -324,6 +326,7 @@ class RealEngineWalkingSkeletonTests(unittest.TestCase):
                         generated,
                         generated_observation,
                         transformation_role=GENERATED_TRANSFORMATION_ROLE,
+                        evidence=generated_raw_evidence,
                     )
                     self.assertTrue(generated_evidence.is_file())
                     generated_payload = json.loads(
@@ -336,15 +339,13 @@ class RealEngineWalkingSkeletonTests(unittest.TestCase):
                     if language in {"atl", "qvto", "reactions"}:
                         self.assertTrue(
                             any(
-                                (workspace.observations_dir / "snapshots").glob("*.xmi")
+                                snapshot_dir(
+                                    workspace.observations_dir, suite
+                                ).rglob("*.xmi")
                             )
                         )
                         self.assertTrue(
-                            any(
-                                (
-                                    generated_root / "snapshots"
-                                ).glob("*.xmi")
-                            )
+                            any(snapshot_dir(generated_root, suite).rglob("*.xmi"))
                         )
 
 

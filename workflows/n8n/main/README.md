@@ -109,11 +109,10 @@ The artifact tree is one directory per **model family**, not per exact model id:
 every `gpt-5` variant writes under `gpt-5`, every `claude-sonnet-4` variant under
 `claude-sonnet-4`, every `gemini-2.5-pro` variant under `gemini-2-5-pro`. The
 family is read from the variant workflow that was selected, which already
-declares it, so a dated or suffixed id from a provider's selector
-(`claude-sonnet-4-20250514`, `gpt-5.3-codex`) does not point the run at a
-directory nobody prepared. The exact id reaches the n8n model node and remains
-in the master's LLM configuration; `POST /runs` receives the stable family id
-that Python uses to select the response and suite directories. All twelve nodes
+declares it. The exact id reaches the n8n model node and remains in the master's
+LLM configuration; `POST /runs` receives the stable family id that Python uses
+for generated-suite identity and selection. Raw responses are selected from the
+run- and artifact-iteration-scoped path instead. All twelve nodes
 stay connected to `Validate Config and Build Run Queue` through
 `ai_languageModel`, which is how `selectedModel()` reads them with
 `$(nodeName).params`.
@@ -221,11 +220,12 @@ reserved `/responses/source-diagnosis/` namespace), timeline recording, terminal
 statuses and refinement limits all stay as they were.
 
 `Adapt Transformation Workflow Compatibility` operates only on the transient
-workflow JSON passed to `Execute Existing Subworkflow`. It narrows the external
-transformation workflow's prompt reader to the selected task and preserves the
-`binary.data` that legacy Set nodes passed through before n8n 2.x. The external
-workflow exports on disk are not edited, and non-transformation subworkflows are
-returned unchanged.
+workflow JSON passed to `Execute Existing Subworkflow`. For both generation
+branches it narrows the prompt reader to the selected task and makes the raw
+response run- and artifact-iteration-scoped. For transformations it additionally
+preserves the `binary.data` that legacy Set nodes passed through before n8n 2.x.
+The external workflow exports on disk are not edited, and non-generation
+subworkflows are returned unchanged.
 
 There is one master workflow. Run modes are configuration, not three copies.
 
@@ -257,7 +257,9 @@ refuses.
 
 1. **Create Run** — `POST http://stage-service:8129/runs` → `{run_id}`.
 2. **Generation** (n8n owns it) — the provider subworkflow calls the LLM and
-   writes the raw response plus `generation-result.json` into the run.
+   writes the raw response into the run-specific response directory. The
+   repository's `generation-result.schema.json` is not currently persisted by
+   these workflows.
 3. **Stages** — `POST /runs/{run_id}/stages/{stage}`; n8n reads
    `{status, outcome_code, artifacts}` and routes on it.
 

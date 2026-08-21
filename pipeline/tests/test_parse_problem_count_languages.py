@@ -16,6 +16,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
+from llm4mtl.conventions import default_reactions_metamodels_root
 from llm4mtl.languages.atl.adapter import AtlAdapter
 from llm4mtl.languages.base import Workspace
 from llm4mtl.languages.reactions.adapter import ReactionsAdapter
@@ -76,7 +77,14 @@ class AtlProblemCountTests(unittest.TestCase):
 class ReactionsProblemCountTests(unittest.TestCase):
     """`ReactionsCli` prints `Syntax issues (N):` when the parser returns issues."""
 
-    def observe(self, stderr: str, *, returncode: int = 0, write_output: bool = True):
+    def observe(
+        self,
+        stderr: str,
+        *,
+        returncode: int = 0,
+        write_output: bool = True,
+        commands: list[list[str]] | None = None,
+    ):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             transformation = root / "candidate.reactions"
@@ -88,6 +96,8 @@ class ReactionsProblemCountTests(unittest.TestCase):
             run = SimpleNamespace(stdout="", stderr=stderr, returncode=returncode)
 
             def fake_run(command, **_kwargs):
+                if commands is not None:
+                    commands.append(command)
                 if command[0] == "mvn":
                     return build
                 if write_output:
@@ -114,6 +124,14 @@ class ReactionsProblemCountTests(unittest.TestCase):
 
         self.assertEqual(0, observation.problem_count)
         self.assertTrue(observation.parsed)
+
+    def test_parser_loads_only_the_reactions_metamodel_corpus(self) -> None:
+        commands: list[list[str]] = []
+
+        self.observe("", commands=commands)
+
+        java_command = next(command for command in commands if command[0] == "java")
+        self.assertEqual(str(default_reactions_metamodels_root()), java_command[-1])
 
     def test_reported_issues_are_counted_not_collapsed_to_one(self) -> None:
         observation = self.observe(

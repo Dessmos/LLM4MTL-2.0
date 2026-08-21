@@ -21,7 +21,13 @@ from llm4mtl.run_store.identity import InvalidRunIdError, resolve_contained_dir
 from llm4mtl.run_store.manifest import ManifestExistsError, read_manifest, write_manifest
 from llm4mtl.run_store.models import SCHEMA_VERSION, RunPaths
 from llm4mtl.run_store.responses import record_diagnosis
+from llm4mtl.run_store.results import ResultConflictError, read_result, record_result
 from llm4mtl.run_store.stages import list_stages, read_latest, record_attempt
+from llm4mtl.run_store.transformations import (
+    TransformationAdoptionError,
+    adopt_transformations,
+    adopted_transformations,
+)
 
 
 def open_run(runs_root: Path, run_id: str) -> RunPaths:
@@ -58,4 +64,10 @@ __all__ = [
     "read_latest",
     "list_stages",
     "record_diagnosis",
+    "ResultConflictError",
+    "read_result",
+    "record_result",
+    "TransformationAdoptionError",
+    "adopt_transformations",
+    "adopted_transformations",
 ]

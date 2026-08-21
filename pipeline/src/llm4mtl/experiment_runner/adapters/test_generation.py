@@ -86,14 +86,23 @@ class TestGenerationAdapter:
             dry_run=False,
         )
         adapter = language_adapter(config.language)
+        selected_model = fixed_selection(
+            "test-generation model", config.test_models
+        )[0]
+        selected_strategy = fixed_selection("strategy", config.test_strategies)[0]
+        selected_task = fixed_selection("task", config.tasks)[0]
         extraction_outcomes = []
         for response in responses:
             target = response_target_from_path(
                 response_path=response,
                 responses_root=self.responses_root(config),
-                llm_override=None,
-                strategy_override=None,
-                task_override=None,
+                # Stage-service generation responses are run-scoped rather than
+                # filed below the shared <model>/<strategy> convenience tree.
+                # Their identity comes from the immutable manifest, while the
+                # filename must still agree with its one task.
+                llm_override=selected_model,
+                strategy_override=selected_strategy,
+                task_override=selected_task,
             )
             extracted, message = extract_one(target, extraction_args, adapter)
             extraction_outcomes.append(

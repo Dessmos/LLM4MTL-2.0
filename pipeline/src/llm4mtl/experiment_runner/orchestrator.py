@@ -22,6 +22,7 @@ from llm4mtl.experiment_runner.config import (
     ConfigError,
     validate_config,
 )
+from llm4mtl.evaluation.diagnosis_aggregation import aggregate_run_diagnoses
 from llm4mtl.experiment_runner.models import PipelineConfig, RunResult, StageResult
 from llm4mtl.paths import REPO_ROOT, TARGET
 from llm4mtl.provenance import build_provenance
@@ -116,6 +117,29 @@ class ExperimentOrchestrator:
                 )
             attempt = max(attempts)
         return prepare_execution_diagnosis(paths.root, attempt)
+
+    def aggregate_diagnosis_evidence(
+        self,
+        run: str,
+        attempt: int | None = None,
+    ) -> dict[str, Any]:
+        """Cluster one attempt's prepared reports by the failure they describe.
+
+        Read-only. The pipeline keeps one report and one verdict per failing
+        test case; this counts how many distinct failures those observations
+        actually cover, and how far the separate verdicts agreed.
+        """
+        paths = run_store.open_run(self.runs_root, Path(run).name)
+        if not paths.manifest.exists():
+            raise ConfigError(f"unknown run: {run}")
+        if attempt is None:
+            attempts = existing_attempts(paths.stage_attempts_dir("execution"))
+            if not attempts:
+                raise ConfigError(
+                    f"run {paths.root.name} recorded no execution attempt"
+                )
+            attempt = max(attempts)
+        return aggregate_run_diagnoses(paths.root, attempt, TARGET.diagnoses)
 
     def run(self, config: PipelineConfig) -> RunResult:
         validate_config(config)

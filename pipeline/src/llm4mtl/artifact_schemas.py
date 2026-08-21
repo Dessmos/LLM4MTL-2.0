@@ -69,6 +69,8 @@ SCHEMA_FILES: dict[str, str] = {
     "generation-result": "generation-result.schema.json",
     "semantic-cases": "semantic_cases.schema.json",
     "contract": "contract.schema.json",
+    "run-result": "run-result.schema.json",
+    "transformation-adoption": "transformation-adoption.schema.json",
 }
 
 

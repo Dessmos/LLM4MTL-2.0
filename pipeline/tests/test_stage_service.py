@@ -66,6 +66,7 @@ class StageServiceTests(unittest.TestCase):
             ("/runs/{run_id}/stages/{stage}", "get"): {"400", "404"},
             ("/runs/{run_id}", "get"): {"400", "404"},
             ("/runs/{run_id}/diagnoses", "post"): {"400", "404"},
+            ("/runs/{run_id}/result", "post"): {"400", "404", "409"},
         }
         for (path, method), status_codes in expected.items():
             with self.subTest(path=path, method=method):
@@ -276,6 +277,80 @@ class StageServiceTests(unittest.TestCase):
         fetched = self.client.get("/runs/svc-3/stages/extract")
         self.assertEqual(200, fetched.status_code)
         self.assertEqual("INFRASTRUCTURE_ERROR", fetched.json()["outcome_code"])
+
+    def test_extract_consumes_the_run_scoped_generation_response(self) -> None:
+        self.client.post("/runs", json=run_payload(run_id="svc-response"))
+        seen = []
+
+        def capture(config, dry_run):
+            seen.append(config)
+            return StageResult(
+                "extraction",
+                "completed",
+                {"selected": 1, "created": 1, "failed": 0},
+                {},
+            )
+
+        with patch(
+            "llm4mtl.stage_service.app._orchestrator.tests.extract",
+            side_effect=capture,
+        ):
+            response = self.client.post(
+                "/runs/svc-response/stages/extract",
+                json={"suite_id": "svc-response_002", "refinement_iteration": 2},
+            )
+
+        self.assertEqual(200, response.status_code, response.text)
+        expected = (
+            Path(self._tmp.name)
+            / "svc-response"
+            / "responses"
+            / "semantic-test-generation"
+            / "iteration-002"
+            / "Tree2Graph.md"
+        )
+        self.assertEqual([str(expected.resolve())], seen[0].responses)
+
+    def test_two_runs_cannot_read_each_others_generation_response(self) -> None:
+        observed: list[tuple[str, str]] = []
+        for run_id, content in (("svc-run-a", "response A"), ("svc-run-b", "response B")):
+            self.client.post("/runs", json=run_payload(run_id=run_id))
+            response_path = (
+                Path(self._tmp.name)
+                / run_id
+                / "responses"
+                / "semantic-test-generation"
+                / "iteration-000"
+                / "Tree2Graph.md"
+            )
+            response_path.parent.mkdir(parents=True)
+            response_path.write_text(content, encoding="utf-8")
+
+        def capture(config, dry_run):
+            path = Path(config.responses[0])
+            observed.append((path.parts[-5], path.read_text(encoding="utf-8")))
+            return StageResult(
+                "extraction",
+                "completed",
+                {"selected": 1, "created": 1, "failed": 0},
+                {},
+            )
+
+        with patch(
+            "llm4mtl.stage_service.app._orchestrator.tests.extract",
+            side_effect=capture,
+        ):
+            for run_id in ("svc-run-a", "svc-run-b"):
+                response = self.client.post(
+                    f"/runs/{run_id}/stages/extract",
+                    json={"suite_id": f"{run_id}_000", "refinement_iteration": 0},
+                )
+                self.assertEqual(200, response.status_code, response.text)
+
+        self.assertEqual(
+            [("svc-run-a", "response A"), ("svc-run-b", "response B")],
+            observed,
+        )
 
     def test_stage_exception_is_recorded_as_infrastructure_error(self) -> None:
         self.client.post("/runs", json=run_payload(run_id="svc-4", task="Tree2Graph"))
