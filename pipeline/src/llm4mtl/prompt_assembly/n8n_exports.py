@@ -513,7 +513,15 @@ def _normalize_workflow_shape(payload: dict[str, Any]) -> dict[str, Any]:
     quotes elsewhere, and ATL's field assignments carried duplicate ids. Neither
     changes behaviour, but while they differ no one can diff two languages'
     workflows and see only the intended differences.
+
+    The top-level workflow id is dropped for the same reason and one more: the
+    master runs these exports as inline sub-workflows, and n8n files the
+    sub-execution under ``workflow.id``.  A hand-written id that no
+    ``workflow_entity`` row carries fails that insert on a foreign key, so the
+    sub-workflow never starts.  Only the QVT-O transformation exports carried
+    one, which is why QVT-O alone could not generate transformations.
     """
+    payload.pop("id", None)
     for node in payload["nodes"]:
         _normalize_node_shape(payload, node)
     return _pin_provider_model_ids(_drop_unwired_chat_models(payload))
