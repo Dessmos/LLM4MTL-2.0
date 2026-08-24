@@ -144,7 +144,7 @@
             },
             "metamodels": {
               "type": "object",
-              "minProperties": 1,
+              "description": "Hash per metamodel file the task contract names, keyed by repository-relative path. The key is always present, so a run that recorded nothing is distinguishable from one that never recorded. It is empty exactly when the contract names no metamodel file at all \u2014 a task whose models are all metamodel-less, such as the plainXml slots of etl/rss2atom. Requiring at least one entry here made such a task impossible to run: provenance has no file to hash, so the manifest could never be written.",
               "additionalProperties": {
                 "type": "string",
                 "pattern": "^[0-9a-f]{64}$"
