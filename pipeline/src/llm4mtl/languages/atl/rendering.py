@@ -97,11 +97,13 @@ def _render_method(
         [
             "    @Test",
             f"    void {method_name}() throws Exception {{",
-            f'        Resource source = loadModel("{escape_java(source_path)}", "{escape_java(source_metamodel)}");',
+            f'        Resource source = loadModel("{escape_java(source_path)}", '
+            f'"{escape_java(source_metamodel)}", "{escape_java(_metamodel_uri(source))}");',
             "        List<EObject> sourceRoots = new ArrayList<>(source.getContents());",
             f'        List<EObject> targetRoots = executeAtl("{escape_java(transformation)}", source, '
             f'"{escape_java(source_metamodel)}", "{escape_java(target_metamodel)}", '
-            f'"{escape_java(_metamodel_alias(source))}", "{escape_java(_metamodel_alias(target))}");',
+            f'"{escape_java(_metamodel_alias(source))}", "{escape_java(_metamodel_alias(target))}", '
+            f'"{escape_java(_metamodel_uri(target))}");',
             f'        writeSnapshot("{escape_java(method_name)}/{escape_java(str(target["name"]))}.xmi", targetRoots);',
             *render_assertions(test["assertions"], model_variables),
             "    }",
@@ -122,6 +124,16 @@ def _metamodel_alias(model: dict[str, Any]) -> str:
     )
 
 
+def _metamodel_uri(model: dict[str, Any]) -> str:
+    """The nsURI the harness must resolve this model against.
+
+    Several ATL .ecore files hold two root EPackages (an auxiliary
+    ``PrimitiveTypes`` first, the real metamodel second), so the package cannot
+    be picked positionally.  The contract's nsURI selects it.
+    """
+    return str(model.get("metamodelUri") or "")
+
+
 def _metamodel_name(model: dict[str, Any]) -> str:
     path = model.get("metamodelFile")
     if not path:
@@ -138,20 +150,27 @@ def _generated_model_path(task: str, path: str) -> str:
 
 def _atl_helpers() -> list[str]:
     return [
-        "    private Resource loadModel(String resourcePath, String ecoreName) throws Exception {",
+        "    private Resource loadModel(String resourcePath, String ecoreName, String nsUri) throws Exception {",
         "        ResourceSet resourceSet = new ResourceSetImpl();",
-        "        EPackage metamodel = loadMetamodel(resourceSet, ecoreName);",
-        "        resourceSet.getPackageRegistry().put(metamodel.getNsURI(), metamodel);",
+        "        loadMetamodel(resourceSet, ecoreName, nsUri);",
         "        URL url = getClass().getClassLoader().getResource(resourcePath);",
         "        if (url == null) throw new IllegalArgumentException(\"Resource not found: \" + resourcePath);",
         "        return resourceSet.getResource(URI.createURI(url.toString()), true);",
         "    }",
         "",
-        "    private EPackage loadMetamodel(ResourceSet resourceSet, String name) {",
+        "    private EPackage loadMetamodel(ResourceSet resourceSet, String name, String nsUri) {",
         "        URL url = getClass().getClassLoader().getResource(\"metamodels/\" + name);",
         "        if (url == null) throw new IllegalArgumentException(\"Resource not found: metamodels/\" + name);",
         "        Resource resource = resourceSet.getResource(URI.createURI(url.toString()), true);",
-        "        return (EPackage) resource.getContents().get(0);",
+        "        EPackage selected = null;",
+        "        for (EObject root : resource.getContents()) {",
+        "            if (!(root instanceof EPackage)) continue;",
+        "            EPackage candidate = (EPackage) root;",
+        "            resourceSet.getPackageRegistry().put(candidate.getNsURI(), candidate);",
+        "            if (selected == null || candidate.getNsURI().equals(nsUri)) selected = candidate;",
+        "        }",
+        "        if (selected == null) throw new IllegalStateException(\"No EPackage in metamodels/\" + name);",
+        "        return selected;",
         "    }",
         "",
         "    private File compileAtl(String transformation) throws Exception {",
@@ -166,7 +185,7 @@ def _atl_helpers() -> list[str]:
         "        return asm;",
         "    }",
         "",
-        "    private List<EObject> executeAtl(String transformation, Resource sourceResource, String sourceEcore, String targetEcore, String sourceAlias, String targetAlias) throws Exception {",
+        "    private List<EObject> executeAtl(String transformation, Resource sourceResource, String sourceEcore, String targetEcore, String sourceAlias, String targetAlias, String targetNsUri) throws Exception {",
         "        ModelFactory factory = new EMFModelFactory();",
         "        IInjector injector = new EMFInjector();",
         "        IReferenceModel sourceMetamodel = factory.newReferenceModel();",
@@ -191,8 +210,7 @@ def _atl_helpers() -> list[str]:
         "        IExtractor extractor = new EMFExtractor();",
         "        extractor.extract(target, URI.createFileURI(output.getAbsolutePath()).toString());",
         "        ResourceSet resourceSet = new ResourceSetImpl();",
-        "        EPackage targetPackage = loadMetamodel(resourceSet, targetEcore);",
-        "        resourceSet.getPackageRegistry().put(targetPackage.getNsURI(), targetPackage);",
+        "        loadMetamodel(resourceSet, targetEcore, targetNsUri);",
         "        Resource resource = resourceSet.getResource(URI.createFileURI(output.getAbsolutePath()), true);",
         "        return new ArrayList<>(resource.getContents());",
         "    }",
