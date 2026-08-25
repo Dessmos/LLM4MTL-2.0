@@ -5,9 +5,6 @@
   "transformation": "NetworkToGraph_ComponentDeleted.reactions",
   "reference": "benchmark/tasks/reactions/references/NetworkToGraph_ComponentDeleted.reactions",
   "sourceHash": "cae30ca883ebb81a19fe8cd6935f4aad714690b0a02249e22744e34e79bf8c5a",
-  "prerequisiteTasks": [
-    "NetworkToGraph_ComponentInsertedIntoSystem"
-  ],
   "models": [
     {
       "runtimeName": "network",
@@ -50,6 +47,9 @@
         "Link"
       ]
     }
+  ],
+  "prerequisiteTasks": [
+    "NetworkToGraph_ComponentInsertedIntoSystem"
   ],
   "rules": [
     "semantic_cases model slots must map to runtimeName exactly.",

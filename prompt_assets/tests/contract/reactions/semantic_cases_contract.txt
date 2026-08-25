@@ -145,6 +145,17 @@ Steps 1 and 2 are what separate a passing test from a test that would pass
 against an empty transformation. Give every test at least one assertion whose
 `expected` is non-zero and non-empty.
 
+Step 2 also decides whether the scenario is expressible at all. The observed
+element must be one the transformation actually produces from the change you
+made. If the presence assertion would come out zero, the source element you
+chose is not one this transformation reacts to, and no later change rescues the
+test. Where a metamodel offers several places to hold the same source type -- a
+single-valued reference and a list, or several lists -- they are not
+interchangeable: a reaction covers the one its trigger names and nothing else.
+Put the source element where the task specification puts it; where the
+specification names no place, pick one and let the presence assertion prove the
+choice, instead of assuming every place is covered.
+
 The allowed assertion shapes are:
 
 ```json

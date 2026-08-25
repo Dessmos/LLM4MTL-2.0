@@ -5,9 +5,6 @@
   "transformation": "FamiliesToPersons_InsertedDaughter.reactions",
   "reference": "benchmark/tasks/reactions/references/FamiliesToPersons_InsertedDaughter.reactions",
   "sourceHash": "d10e2f7582b1a32ec6ca29ec173722d35df254ccb8c583e30585c1b057cf3419",
-  "prerequisiteTasks": [
-    "FamiliesToPersons_InsertedFamilyRegister"
-  ],
   "models": [
     {
       "runtimeName": "families",
@@ -51,6 +48,9 @@
         "Female"
       ]
     }
+  ],
+  "prerequisiteTasks": [
+    "FamiliesToPersons_InsertedFamilyRegister"
   ],
   "rules": [
     "semantic_cases model slots must map to runtimeName exactly.",

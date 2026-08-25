@@ -23,7 +23,7 @@ routine createAscetTask(amalthea::Task task, amalthea::ComponentContainer contai
             interruptTaskOption,
             periodicTaskOption,
             softwareTaskOption,
-            timeTableTaskOption,
+            timeTableTaskOption
         ]
 
         val selected = userInteractor

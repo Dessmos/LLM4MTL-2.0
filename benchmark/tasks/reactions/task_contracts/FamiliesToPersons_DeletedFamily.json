@@ -5,9 +5,6 @@
   "transformation": "FamiliesToPersons_DeletedFamily.reactions",
   "reference": "benchmark/tasks/reactions/references/FamiliesToPersons_DeletedFamily.reactions",
   "sourceHash": "370b01f8fbf24851c690f51f7c2ebf71df2322188f4a50911a61a8cd32864c98",
-  "prerequisiteTasks": [
-    "FamiliesToPersons_InsertedDaughter"
-  ],
   "models": [
     {
       "runtimeName": "families",
@@ -49,6 +46,9 @@
         "Female"
       ]
     }
+  ],
+  "prerequisiteTasks": [
+    "FamiliesToPersons_InsertedDaughter"
   ],
   "rules": [
     "semantic_cases model slots must map to runtimeName exactly.",

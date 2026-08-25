@@ -4,10 +4,7 @@
   "language": "reactions",
   "transformation": "AmaltheaToAscet_TaskCreated.reactions",
   "reference": "benchmark/tasks/reactions/references/AmaltheaToAscet_TaskCreated.reactions",
-  "sourceHash": "bb13853c2df2bce2911ebc81b3c9c9ca72de8dfc451dc875f878847e4d0688f9",
-  "prerequisiteTasks": [
-    "AmaltheaToAscet_ComponentContainerInsertedAsRoot"
-  ],
+  "sourceHash": "e90fab137a64ba8cae788e58d03af945619cb50e45faf1c6f6553051b02a2209",
   "models": [
     {
       "runtimeName": "ascet",
@@ -68,6 +65,9 @@
         "CallSequenceEntry"
       ]
     }
+  ],
+  "prerequisiteTasks": [
+    "AmaltheaToAscet_ComponentContainerInsertedAsRoot"
   ],
   "rules": [
     "semantic_cases model slots must map to runtimeName exactly.",
