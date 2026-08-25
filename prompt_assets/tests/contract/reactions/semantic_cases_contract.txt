@@ -144,31 +144,43 @@ Every assertion must contain `kind`, `model`, `type`, and `expected`. `model`
 must equal one of the exact runtime slot names in the same test. `type` is
 unqualified. Never use `object` instead of `model` plus `type`.
 
-A test whose only assertion is `"expected": 0` proves nothing: the observed
-slot starts empty, so the count is zero whether or not the transformation ran
-at all. When the reaction under test removes something, the test must first
-bring that something into existence and say so, in this order:
+Every assertion of a test is evaluated once, after all of that test's changes
+have run. Assertions are never interleaved with changes, so one test cannot
+both watch something appear and watch it disappear: `"expected": 1` and
+`"expected": 0` for the same type in the same test contradict each other and
+one of them always fails.
 
-1. changes that make the transformation create the observed element;
-2. an assertion that it now exists -- `count` with a non-zero `expected`, or
-   `featureValues` naming it;
-3. the change that removes the source element;
-4. the assertion that it is gone.
+A test whose only assertion is `"expected": 0` proves nothing either: the
+observed slot starts empty, so the count is zero whether or not the
+transformation ran at all.
 
-Steps 1 and 2 are what separate a passing test from a test that would pass
-against an empty transformation. Give every test at least one assertion whose
-`expected` is non-zero and non-empty.
+A reaction that removes something therefore needs two tests in the `tests`
+array, not one:
 
-Step 2 also decides whether the scenario is expressible at all. The observed
-element must be one the transformation actually produces from the change you
-made. If the presence assertion would come out zero, the source element you
-chose is not one this transformation reacts to, and no later change rescues the
-test. Where a metamodel offers several places to hold the same source type -- a
-single-valued reference and a list, or several lists -- they are not
-interchangeable: a reaction covers the one its trigger names and nothing else.
+1. the first stops at the pre-state -- the changes that make the
+   transformation create the observed element, and an assertion that it exists,
+   `count` with a non-zero `expected` or `featureValues` naming it;
+2. the second repeats those same changes, adds the change that removes the
+   source element, and asserts only that the observed element is gone.
+
+The first test is what separates a proved removal from a test that would pass
+against an empty transformation; the second is the removal itself. Anything a
+test needs in order to run -- `userSelections` above all -- belongs to both,
+because each test starts from an empty virtual model of its own. Give every
+test at least one assertion whose `expected` is non-zero and non-empty, except
+the removal test, whose whole point is the zero.
+
+The pre-state test also decides whether the scenario is expressible at all.
+The observed element must be one the transformation actually produces from the
+change you made. If the presence assertion would come out zero, the source
+element you chose is not one this transformation reacts to, and no later change
+rescues the test. Where a metamodel offers several places to hold the same
+source type -- a single-valued reference and a list, or several lists -- they
+are not interchangeable: a reaction covers the one its trigger
+names and nothing else.
 Put the source element where the task specification puts it; where the
-specification names no place, pick one and let the presence assertion prove the
-choice, instead of assuming every place is covered.
+specification names no place, pick one and let the presence assertion prove
+the choice, instead of assuming every place is covered.
 
 The allowed assertion shapes are:
 
