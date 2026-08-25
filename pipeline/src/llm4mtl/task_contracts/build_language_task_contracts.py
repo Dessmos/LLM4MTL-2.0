@@ -262,6 +262,24 @@ def _resolve_etl_ecore(
     return sorted(fitting, key=lambda item: (len(item.classifiers), item.path.name))[0]
 
 
+# Which task's reactions have to have run before this task's reaction has a
+# correspondence to retrieve. Read off the `retrieve ... corresponding to`
+# statements in the references: the task that establishes the correspondence is
+# the prerequisite. Direct prerequisites only; the chain is walked where it is
+# used. A task that only requires the absence of a correspondence has none.
+REACTIONS_PREREQUISITES = {
+    "AmaltheaToAscet_TaskCreated": ["AmaltheaToAscet_ComponentContainerInsertedAsRoot"],
+    "AmaltheaToAscet_TaskDeleted": ["AmaltheaToAscet_TaskCreated"],
+    "FamiliesToPersons_CreatedFather": ["FamiliesToPersons_InsertedFamilyRegister"],
+    "FamiliesToPersons_InsertedDaughter": ["FamiliesToPersons_InsertedFamilyRegister"],
+    "FamiliesToPersons_DeletedMember": ["FamiliesToPersons_InsertedDaughter"],
+    "FamiliesToPersons_DeletedFamily": ["FamiliesToPersons_InsertedDaughter"],
+    "NetworkToGraph_ComponentInsertedIntoSystem": ["NetworkToGraph_CreateAndRegisterRoot"],
+    "NetworkToGraph_ComponentRenamed": ["NetworkToGraph_ComponentInsertedIntoSystem"],
+    "NetworkToGraph_ComponentDeleted": ["NetworkToGraph_ComponentInsertedIntoSystem"],
+}
+
+
 def build_reactions_contract(reference: Path) -> dict[str, Any]:
     source = reference.read_text(encoding="utf-8")
     imports = REACTIONS_IMPORT.findall(source)
@@ -288,7 +306,13 @@ def build_reactions_contract(reference: Path) -> dict[str, Any]:
                 sorted(used.get(alias.lower(), set())),
             )
         )
-    return contract_mapping("reactions", reference, models)
+    contract = contract_mapping("reactions", reference, models)
+    prerequisites = REACTIONS_PREREQUISITES.get(reference.stem)
+    if prerequisites:
+        rules = contract.pop("rules")
+        contract["prerequisiteTasks"] = list(prerequisites)
+        contract["rules"] = rules
+    return contract
 
 
 def contract_mapping(

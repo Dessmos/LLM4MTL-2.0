@@ -5,6 +5,9 @@
   "transformation": "FamiliesToPersons_DeletedMember.reactions",
   "reference": "benchmark/tasks/reactions/references/FamiliesToPersons_DeletedMember.reactions",
   "sourceHash": "b4521488442231749975d26fc04fa594a9a7d7a10a32ab1e7ac9852e580948ef",
+  "prerequisiteTasks": [
+    "FamiliesToPersons_InsertedDaughter"
+  ],
   "models": [
     {
       "runtimeName": "families",

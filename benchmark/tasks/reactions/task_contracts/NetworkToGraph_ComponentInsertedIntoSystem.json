@@ -5,6 +5,9 @@
   "transformation": "NetworkToGraph_ComponentInsertedIntoSystem.reactions",
   "reference": "benchmark/tasks/reactions/references/NetworkToGraph_ComponentInsertedIntoSystem.reactions",
   "sourceHash": "3f91e63a12d6a0c285d4a4c094c91222415104cd234a9898742c8acfbbdc1f59",
+  "prerequisiteTasks": [
+    "NetworkToGraph_CreateAndRegisterRoot"
+  ],
   "models": [
     {
       "runtimeName": "network",

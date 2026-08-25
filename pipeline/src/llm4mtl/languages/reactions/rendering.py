@@ -7,6 +7,7 @@ reflective EMF operations; the LLM never supplies executable change code.
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from llm4mtl.languages.java_assertions import (
@@ -18,6 +19,7 @@ from llm4mtl.semantic_tests.codegen.java_rendering import (
     escape_java,
     sanitize_method_name,
 )
+from llm4mtl.conventions import REACTIONS_CONFIG, default_task_contracts_root
 from llm4mtl.semantic_tests.semantic_spec import effective_models
 from llm4mtl.semantic_tests.suites.java import slug
 
@@ -26,9 +28,45 @@ FEATURE_LOOKUP_LINE = (
 )
 
 
+def prerequisite_tasks(task: str) -> tuple[str, ...]:
+    """Tasks whose reactions must run alongside this one, prerequisites first.
+
+    A reaction that retrieves a correspondence cannot act until some other
+    task's reaction has established it. Splitting one consistency
+    specification into one task per reaction left those tasks unable to do
+    anything on their own -- not even the reference transformation -- so the
+    contract names what each one presupposes and the chain is walked here.
+    """
+    root = default_task_contracts_root(REACTIONS_CONFIG)
+    ordered: list[str] = []
+
+    def walk(name: str, seen: tuple[str, ...]) -> None:
+        if name in seen:
+            raise ValueError(f"prerequisite cycle through {name!r}")
+        path = root / f"{name}.json"
+        if not path.is_file():
+            return
+        contract = json.loads(path.read_text(encoding="utf-8"))
+        for prerequisite in contract.get("prerequisiteTasks") or ():
+            walk(str(prerequisite), (*seen, name))
+            if prerequisite not in ordered:
+                ordered.append(str(prerequisite))
+
+    walk(task, ())
+    return tuple(ordered)
+
+
+def _specification(task: str) -> str:
+    return f"{task}ChangePropagationSpecification"
+
+
 def render_reactions_test(class_name: str, spec: dict[str, Any], task: str) -> str:
+    # One specification, always. A virtual model accepts a single change
+    # propagation specification per pair of metamodels, and a task's
+    # prerequisites work on the very same pair -- they reach the engine merged
+    # into this task's reactions file, not as specifications of their own.
     reaction_name = task[:1].lower() + task[1:]
-    specification = f"{task}ChangePropagationSpecification"
+    specification = _specification(task)
     return "\n".join(
         [
             "package tools.vitruv.methodologisttemplate.generated;",

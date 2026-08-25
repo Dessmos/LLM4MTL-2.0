@@ -5,6 +5,9 @@
   "transformation": "AmaltheaToAscet_TaskCreated.reactions",
   "reference": "benchmark/tasks/reactions/references/AmaltheaToAscet_TaskCreated.reactions",
   "sourceHash": "bb13853c2df2bce2911ebc81b3c9c9ca72de8dfc451dc875f878847e4d0688f9",
+  "prerequisiteTasks": [
+    "AmaltheaToAscet_ComponentContainerInsertedAsRoot"
+  ],
   "models": [
     {
       "runtimeName": "ascet",

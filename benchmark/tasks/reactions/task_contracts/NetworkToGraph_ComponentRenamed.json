@@ -5,6 +5,9 @@
   "transformation": "NetworkToGraph_ComponentRenamed.reactions",
   "reference": "benchmark/tasks/reactions/references/NetworkToGraph_ComponentRenamed.reactions",
   "sourceHash": "1d1d9122e68b7b163010ed8c257beea767a8f9a43ddc4e775031b5af84b14162",
+  "prerequisiteTasks": [
+    "NetworkToGraph_ComponentInsertedIntoSystem"
+  ],
   "models": [
     {
       "runtimeName": "network",

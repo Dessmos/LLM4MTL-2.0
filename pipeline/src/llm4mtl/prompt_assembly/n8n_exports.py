@@ -116,7 +116,12 @@ INPUTS = {
         named_entities="transformation, reaction, and routine",
         extra_rule=(
             "Use as much of the Reactions Language as possible and fall back "
-            "to Xtend only where the language cannot express the change."
+            "to Xtend only where the language cannot express the change. Never "
+            "name a `val` after a word the grammar itself uses -- `root`, "
+            "`element`, `attribute`, `change`, `reaction`, `routine`, `match`, "
+            "`create`, `update`, `retrieve`, `check` -- because the parser "
+            "reads it as that keyword and reports a syntax error; prefix such a "
+            "name instead, as in `mRoot`."
         ),
     ),
 }
@@ -325,6 +330,12 @@ def synchronize_reactions_matrix(
     ):
         generation = nodes[generation_name]
         generation["parameters"]["text"] = _transformation_request()
+        # The matrix carried its own hand-written instruction, so the shared
+        # one -- and every rule added to it, including the Reactions extra
+        # rule -- never reached the model on this language.
+        generation["parameters"].setdefault("messages", {})["messageValues"] = [
+            {"message": _transformation_system_message("reactions")}
+        ]
 
     obsolete = {
         READ_MODEL_FILES_NODE,

@@ -130,6 +130,21 @@ Every assertion must contain `kind`, `model`, `type`, and `expected`. `model`
 must equal one of the exact runtime slot names in the same test. `type` is
 unqualified. Never use `object` instead of `model` plus `type`.
 
+A test whose only assertion is `"expected": 0` proves nothing: the observed
+slot starts empty, so the count is zero whether or not the transformation ran
+at all. When the reaction under test removes something, the test must first
+bring that something into existence and say so, in this order:
+
+1. changes that make the transformation create the observed element;
+2. an assertion that it now exists -- `count` with a non-zero `expected`, or
+   `featureValues` naming it;
+3. the change that removes the source element;
+4. the assertion that it is gone.
+
+Steps 1 and 2 are what separate a passing test from a test that would pass
+against an empty transformation. Give every test at least one assertion whose
+`expected` is non-zero and non-empty.
+
 The allowed assertion shapes are:
 
 ```json

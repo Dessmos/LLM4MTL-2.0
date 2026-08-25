@@ -6,6 +6,7 @@ import re
 import subprocess
 import xml.etree.ElementTree as ET
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import Sequence
 
 from llm4mtl.conventions import (
@@ -29,12 +30,20 @@ from llm4mtl.languages.common import (
     normalize_failure,
     validate_rendered_suite,
 )
-from llm4mtl.languages.reactions.rendering import render_reactions_test
+from llm4mtl.languages.reactions.rendering import (
+    prerequisite_tasks,
+    render_reactions_test,
+)
 from llm4mtl.paths import TARGET
 from llm4mtl.semantic_tests.extraction.semantic_cases import render_generated_suite
 from llm4mtl.semantic_tests.suites.java import slug
 
 PARSER_TIMEOUT_SECONDS = 1200
+
+SEGMENT_START = re.compile(r"^reactions:", re.MULTILINE)
+HEADER_END = re.compile(r"^\s*execute\s+actions\s+in\b[^\n]*$", re.MULTILINE)
+METAMODEL_IMPORT = re.compile(r'^\s*import\s+"[^"]+"\s+as\s+\w+[^\n]*$', re.MULTILINE)
+ROUTINE_NAME = re.compile(r"^\s*routine\s+(\w+)", re.MULTILINE)
 
 # `ReactionsCli` prints this exact line for a run in which the parser returned
 # issues; the number is the measured issue count.
@@ -85,6 +94,54 @@ class ReactionsAdapter:
         timeout: int,
     ) -> tuple[SuiteExecutionObservation, RawExecutionEvidence]:
         _remove_unused_legacy_dependency(workspace.engine_dir / "consistency/pom.xml")
+        with TemporaryDirectory() as scratch:
+            transformation = self._with_prerequisites(
+                suite.task,
+                transformation,
+                Path(scratch),
+            )
+            return self._execute(suite, transformation, workspace, timeout)
+
+    def _with_prerequisites(
+        self,
+        task: str,
+        transformation: Path,
+        scratch: Path,
+    ) -> Path:
+        """Merge the reactions this task presupposes into the file under test.
+
+        A virtual model accepts one change propagation specification per pair
+        of metamodels, and a prerequisite works on the same pair as the task
+        that needs it, so they cannot be separate specifications. They can be
+        separate reactions of one segment -- that is how the template's own
+        consistency file holds five of them -- so the prerequisite references
+        are merged in here. They are context, not the artifact under test:
+        without them this task's reaction has no correspondence to retrieve and
+        produces nothing, however well it was written.
+        """
+        prerequisites = prerequisite_tasks(task)
+        if not prerequisites:
+            return transformation
+        merged = _merge_reactions(
+            transformation.read_text(encoding="utf-8"),
+            [
+                (self._references_root / f"{name}.reactions").read_text(
+                    encoding="utf-8"
+                )
+                for name in prerequisites
+            ],
+        )
+        destination = scratch / transformation.name
+        destination.write_text(merged, encoding="utf-8")
+        return destination
+
+    def _execute(
+        self,
+        suite: GeneratedSuite,
+        transformation: Path,
+        workspace: Workspace,
+        timeout: int,
+    ) -> tuple[SuiteExecutionObservation, RawExecutionEvidence]:
         return execute_maven_suite(
             suite,
             transformation,
@@ -231,6 +288,37 @@ def _contains_only_unresolved_linkage_diagnostics(diagnostic: str) -> bool:
         "The method or field affectedEObject is undefined",
     )
     return all(any(fragment in line for fragment in allowed_fragments) for line in lines)
+
+
+def _merge_reactions(base: str, prerequisites: list[str]) -> str:
+    """Put every prerequisite's reactions into the base file's one segment."""
+    start = SEGMENT_START.search(base)
+    if start is None:
+        raise ValueError("transformation declares no reactions segment")
+    head, segment = base[: start.start()], base[start.start() :]
+    imports = set(METAMODEL_IMPORT.findall(head))
+    routines = set(ROUTINE_NAME.findall(base))
+
+    bodies = []
+    for prerequisite in prerequisites:
+        for statement in METAMODEL_IMPORT.findall(prerequisite):
+            if statement.strip() not in {value.strip() for value in imports}:
+                imports.add(statement)
+                head = head.rstrip("\n") + "\n" + statement.strip() + "\n"
+        header = HEADER_END.search(prerequisite)
+        if header is None:
+            raise ValueError("prerequisite declares no reactions segment header")
+        body = prerequisite[header.end() :]
+        clashing = routines & set(ROUTINE_NAME.findall(body))
+        if clashing:
+            raise ValueError(
+                "prerequisite reuses routine names of the transformation under "
+                f"test: {', '.join(sorted(clashing))}"
+            )
+        routines |= set(ROUTINE_NAME.findall(body))
+        bodies.append(body.strip("\n"))
+
+    return "\n".join([head.rstrip("\n"), "", segment.rstrip("\n"), "", *bodies, ""])
 
 
 def _remove_unused_legacy_dependency(pom: Path) -> None:

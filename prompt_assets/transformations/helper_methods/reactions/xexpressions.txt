@@ -1,11 +1,26 @@
 ReactionsLanguageConstants:
 
-affectedEObject
+Which of these a reaction may read depends on its trigger. Reading one the
+trigger does not provide is not a runtime problem: the reactions compiler
+rejects it with "method or field <name> is undefined".
+
+after element <Type> created            affectedEObject
+after element <Type> deleted            affectedEObject
+after element <Type> inserted as root   newValue
+after element <Type> removed as root    oldValue
+after element <Type> inserted in <Type>[<ref>]    affectedEObject, newValue, index
+after element <Type> removed from <Type>[<ref>]   affectedEObject, oldValue, index
+after element <Type> replaced at <Type>[<ref>]    affectedEObject, oldValue, newValue
+after attribute inserted in|removed from|replaced at <Type>[<attr>]
+                                        affectedEObject, affectedFeature,
+                                        oldValue, newValue, index
+anychange                               affectedEObject
+
+affectedEObject is the element the change happened to: for `deleted` it is the
+deleted element itself, and for a change at a reference it is the element that
+owns the reference, not the element that was placed into it.
+
 getAffectedElement()
-affectedFeature
-oldValue
-newValue
-index
 
 
 AbstractRoutine:
