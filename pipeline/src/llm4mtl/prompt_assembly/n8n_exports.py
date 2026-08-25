@@ -99,6 +99,11 @@ INPUTS = {
             "expressions, object literals, etc."
         ),
         named_entities="transformation and mapping",
+        extra_rule=(
+            "Every `modeltype` declaration must quote one of the namespace "
+            "URIs given above verbatim in its `uses` clause; never leave that "
+            "string empty."
+        ),
     ),
     "reactions": WorkflowInputs(
         display_name="Vitruv Reactions Language",
