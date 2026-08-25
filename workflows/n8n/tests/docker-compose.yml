@@ -33,6 +33,12 @@ services:
       - "../../../prompt_assets/tests/few_shot:/data/examples:ro"
       - "../../../prompt_assets/tests/grammar:/data/grammar:ro"
       - "../../../prompt_assets/tests/helper_methods:/data/helper_methods:ro"
+      # The master runs the transformation-generation subworkflows in this same
+      # instance, and they read a different asset tree. Both trees used to claim
+      # the three paths above, so only the test one was ever reachable here.
+      - "../../../prompt_assets/transformations/few_shot:/data/transformations/examples:ro"
+      - "../../../prompt_assets/transformations/grammar:/data/transformations/grammar:ro"
+      - "../../../prompt_assets/transformations/helper_methods:/data/transformations/helper_methods:ro"
       - "../../../prompt_assets/diagnosis:/data/diagnosis_prompts:ro"
 
   stage-service:

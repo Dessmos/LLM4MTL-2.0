@@ -36,7 +36,7 @@
     },
     {
       "parameters": {
-        "fileSelector": "=/data/examples/qvto/Examples.txt",
+        "fileSelector": "=/data/transformations/examples/qvto/Examples.txt",
         "options": {}
       },
       "type": "n8n-nodes-base.readWriteFile",
@@ -130,7 +130,7 @@
     },
     {
       "parameters": {
-        "fileSelector": "/data/grammar/qvto/EBNF.txt",
+        "fileSelector": "/data/transformations/grammar/qvto/EBNF.txt",
         "options": {}
       },
       "type": "n8n-nodes-base.readWriteFile",
@@ -293,7 +293,7 @@
     },
     {
       "parameters": {
-        "fileSelector": "=/data/helper_methods/qvto/*",
+        "fileSelector": "=/data/transformations/helper_methods/qvto/*",
         "options": {}
       },
       "type": "n8n-nodes-base.readWriteFile",

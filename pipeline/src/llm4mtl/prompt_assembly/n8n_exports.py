@@ -121,6 +121,22 @@ INPUTS = {
     ),
 }
 
+# Tried in order; the first condition that matches the run's model wins.
+REACTIONS_MODEL_CASCADE = (
+    "If gpt-5",
+    "If claude-sonnet-4",
+    "If gemini-2.5-pro",
+)
+
+CONVERT_RESPONSE_NODE = "Convert response to File"
+# generation node -> merge that rejoins it with the routing item -> its converter.
+# The Gemini branch already owned the shared converter, so it keeps that name.
+REACTIONS_RESPONSE_BRANCHES = (
+    ("(Re-)Generate code1", "MergeGPT-5", "Convert response to File GPT-5"),
+    ("(Re-)Generate code3", "MergeClaude", "Convert response to File Claude"),
+    ("(Re-)Generate Code2", "MergeGemini", CONVERT_RESPONSE_NODE),
+)
+
 PROMPT_INPUT_NODE = "Resolve exact task inputs"
 OBSOLETE_INPUT_NODES = {
     PROMPT_INPUT_NODE,
@@ -272,7 +288,7 @@ def synchronize_transformation_generation(
     nodes[READ_PROMPT_FILES_NODE]["parameters"]["fileSelector"] = (
         f"=/data/task_prompts/{language}/*.txt"
     )
-    _scope_helper_methods(nodes, language)
+    _scope_transformation_assets(nodes, language)
     generation = nodes[GENERATE_CODE_NODE]
     generation["parameters"]["text"] = _transformation_request()
     generation["parameters"].setdefault("messages", {})["messageValues"] = [
@@ -301,7 +317,7 @@ def synchronize_reactions_matrix(
     nodes[READ_PROMPT_FILES_NODE]["parameters"]["fileSelector"] = (
         "=/data/task_prompts/reactions/*.txt"
     )
-    _scope_helper_methods(nodes, "reactions")
+    _scope_transformation_assets(nodes, "reactions")
     for generation_name in (
         "(Re-)Generate code1",
         "(Re-)Generate code3",
@@ -394,11 +410,71 @@ def synchronize_reactions_matrix(
     }
     connections[MERGE_PROMPT_INPUTS_NODE] = {
         "main": [[
-            {"node": "If gpt-5", "type": "main", "index": 0},
-            {"node": "If gemini-2.5-pro", "type": "main", "index": 0},
-            {"node": "If claude-sonnet-4", "type": "main", "index": 0},
+            {"node": REACTIONS_MODEL_CASCADE[0], "type": "main", "index": 0},
         ]]
     }
+    _cascade_reactions_model_branches(connections)
+    return _convert_every_reactions_response(payload)
+
+
+def _cascade_reactions_model_branches(connections: dict[str, Any]) -> None:
+    """Offer the run's model to one branch at a time, not to all three at once.
+
+    The three model conditions used to hang off the same node, so n8n ran the
+    matching branch first and then drained the two that could not match. Their
+    false output goes nowhere, which left the workflow ending on an ``If`` with
+    no items -- and a subworkflow returns the last executed node's data, so the
+    master received nothing even though the response had been written. Chaining
+    the conditions leaves exactly one live path, ending at the write node, the
+    way a single-model language workflow already ends.
+    """
+    for current, following in zip(
+        REACTIONS_MODEL_CASCADE, REACTIONS_MODEL_CASCADE[1:]
+    ):
+        outputs = connections[current]["main"]
+        while len(outputs) < 2:
+            outputs.append([])
+        outputs[1] = [{"node": following, "type": "main", "index": 0}]
+    outputs = connections[REACTIONS_MODEL_CASCADE[-1]]["main"]
+    while len(outputs) < 2:
+        outputs.append([])
+    outputs[1] = []
+
+
+def _convert_every_reactions_response(payload: dict[str, Any]) -> dict[str, Any]:
+    """Convert the response on every model branch, not only the Gemini one.
+
+    ``Write response to disk`` writes a binary property, and only ``Convert
+    response to File`` produces one. In the matrix workflow that converter sat
+    on the Gemini branch alone, so the gpt-5 and Claude branches reached the
+    write node with a plain item and failed with "The item has no binary field
+    'data'". Every other language runs ``generate -> convert -> write``; giving
+    each branch its own converter is that same chain, and it keeps a branch's
+    merge fed only when that branch actually ran.
+    """
+    template = next(
+        node for node in payload["nodes"] if node["name"] == CONVERT_RESPONSE_NODE
+    )
+    connections = payload["connections"]
+    for generation, merge, converter in REACTIONS_RESPONSE_BRANCHES:
+        if not any(node["name"] == converter for node in payload["nodes"]):
+            clone = json.loads(json.dumps(template))
+            clone["name"] = converter
+            clone["id"] = re.sub(r"[^a-z0-9]+", "-", converter.lower()).strip("-")
+            generation_node = next(
+                node for node in payload["nodes"] if node["name"] == generation
+            )
+            clone["position"] = [
+                template["position"][0],
+                generation_node["position"][1],
+            ]
+            payload["nodes"].append(clone)
+        connections[generation] = {
+            "main": [[{"node": converter, "type": "main", "index": 0}]]
+        }
+        connections[converter] = {
+            "main": [[{"node": merge, "type": "main", "index": 1}]]
+        }
     return payload
 
 
@@ -501,12 +577,44 @@ PROVIDER_MODEL_IDS = {
     "@n8n/n8n-nodes-langchain.lmChatGoogleGemini": "models/gemini-2.5-pro",
 }
 
+# One credential per provider, the one every other export already references.
+# A chat model node carries the credential by id, and an id belongs to the n8n
+# instance that stored it: the Reactions matrix kept three ids from a different
+# instance, so its nodes failed with "Credential with ID ... does not exist" the
+# moment the workflow finally reached them. Pinning the reference here keeps a
+# node from pointing at a credential the pipeline's instance never had. Only the
+# reference is pinned; the secret itself stays in n8n.
+PROVIDER_CREDENTIALS = {
+    "@n8n/n8n-nodes-langchain.lmChatOpenAi": (
+        "openAiApi",
+        {"id": "22X9yU5QaIUyA1Dx", "name": "OpenAi account"},
+    ),
+    "@n8n/n8n-nodes-langchain.lmChatAnthropic": (
+        "anthropicApi",
+        {"id": "R9d6pMqZ8LzipdDW", "name": "Anthropic account"},
+    ),
+    "@n8n/n8n-nodes-langchain.lmChatGoogleGemini": (
+        "googlePalmApi",
+        {"id": "nUZ88X2Akoz1dXpt", "name": "Google Gemini(PaLM) Api account"},
+    ),
+}
+
 
 def _pin_provider_model_ids(payload: dict[str, Any]) -> dict[str, Any]:
     for node in payload["nodes"]:
         pinned = PROVIDER_MODEL_IDS.get(node.get("type", ""))
         if pinned is not None and node["parameters"].get("modelName") != pinned:
             node["parameters"]["modelName"] = pinned
+    return payload
+
+
+def _pin_provider_credentials(payload: dict[str, Any]) -> dict[str, Any]:
+    for node in payload["nodes"]:
+        pinned = PROVIDER_CREDENTIALS.get(node.get("type", ""))
+        if pinned is None or "credentials" not in node:
+            continue
+        credential_type, reference = pinned
+        node["credentials"][credential_type] = dict(reference)
     return payload
 
 
@@ -529,7 +637,9 @@ def _normalize_workflow_shape(payload: dict[str, Any]) -> dict[str, Any]:
     payload.pop("id", None)
     for node in payload["nodes"]:
         _normalize_node_shape(payload, node)
-    return _pin_provider_model_ids(_drop_unwired_chat_models(payload))
+    return _pin_provider_credentials(
+        _pin_provider_model_ids(_drop_unwired_chat_models(payload))
+    )
 
 
 def _normalize_node_shape(payload: dict[str, Any], node: dict[str, Any]) -> None:
@@ -675,6 +785,29 @@ def _scope_helper_methods(nodes: dict[str, Any], language: str) -> None:
     if node is None:
         return
     node["parameters"]["fileSelector"] = f"=/data/helper_methods/{language}/*"
+
+
+def _scope_transformation_assets(nodes: dict[str, Any], language: str) -> None:
+    """Read the transformation asset tree, not the test one.
+
+    Both trees used to claim ``/data/examples``, ``/data/grammar`` and
+    ``/data/helper_methods``. One container can bind each path to one host
+    tree, and the instance that runs the master binds the test tree — so the
+    transformation subworkflows read a directory that holds a differently named
+    examples file and no helper methods, and their readers returned no items.
+    Reactions stops dead on that (its static-file merge has no optional
+    branch); the other three languages silently drop the examples section.
+    Giving the transformation assets their own mount root keeps the two trees
+    from shadowing each other.
+    """
+    for node_name, selector in (
+        ("Read few shot examples", f"=/data/transformations/examples/{language}/Examples.txt"),
+        ("Read Grammar", f"/data/transformations/grammar/{language}/EBNF.txt"),
+        ("Read helper methods", f"=/data/transformations/helper_methods/{language}/*"),
+    ):
+        node = nodes.get(node_name)
+        if node is not None:
+            node["parameters"]["fileSelector"] = selector
 
 
 def _replace_language_wide_models(

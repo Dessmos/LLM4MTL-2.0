@@ -14,7 +14,7 @@
     },
     {
       "parameters": {
-        "fileSelector": "=/data/examples/reactions/Examples.txt",
+        "fileSelector": "=/data/transformations/examples/reactions/Examples.txt",
         "options": {}
       },
       "type": "n8n-nodes-base.readWriteFile",
@@ -76,7 +76,7 @@
     },
     {
       "parameters": {
-        "fileSelector": "/data/grammar/reactions/EBNF.txt",
+        "fileSelector": "/data/transformations/grammar/reactions/EBNF.txt",
         "options": {}
       },
       "type": "n8n-nodes-base.readWriteFile",
@@ -164,7 +164,7 @@
     },
     {
       "parameters": {
-        "fileSelector": "=/data/helper_methods/reactions/*",
+        "fileSelector": "=/data/transformations/helper_methods/reactions/*",
         "options": {}
       },
       "type": "n8n-nodes-base.readWriteFile",
@@ -193,7 +193,7 @@
       "name": "Google Gemini Chat Model",
       "credentials": {
         "googlePalmApi": {
-          "id": "kVN2o2JuGgaIQobc",
+          "id": "nUZ88X2Akoz1dXpt",
           "name": "Google Gemini(PaLM) Api account"
         }
       }
@@ -220,7 +220,7 @@
       "name": "Anthropic Chat Model",
       "credentials": {
         "anthropicApi": {
-          "id": "6NIjcn9tUu98BMC2",
+          "id": "R9d6pMqZ8LzipdDW",
           "name": "Anthropic account"
         }
       }
@@ -262,7 +262,7 @@
       "name": "OpenAI Chat Model",
       "credentials": {
         "openAiApi": {
-          "id": "tO8ZWLpFlc8MsamN",
+          "id": "22X9yU5QaIUyA1Dx",
           "name": "OpenAi account"
         }
       }
@@ -622,6 +622,40 @@
     },
     {
       "parameters": {
+        "operation": "toText",
+        "sourceProperty": "text",
+        "binaryPropertyName": "=data",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        448,
+        480
+      ],
+      "id": "convert-response-to-file-gpt-5",
+      "name": "Convert response to File GPT-5",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "operation": "toText",
+        "sourceProperty": "text",
+        "binaryPropertyName": "=data",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        448,
+        1088
+      ],
+      "id": "convert-response-to-file-claude",
+      "name": "Convert response to File Claude",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
         "method": "POST",
         "url": "http://stage-service:8129/prompt-inputs/resolve",
         "sendBody": true,
@@ -881,6 +915,13 @@
             "type": "main",
             "index": 0
           }
+        ],
+        [
+          {
+            "node": "If gemini-2.5-pro",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     },
@@ -894,6 +935,13 @@
           },
           {
             "node": "MergeGPT-5",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "If claude-sonnet-4",
             "type": "main",
             "index": 0
           }
@@ -913,7 +961,8 @@
             "type": "main",
             "index": 0
           }
-        ]
+        ],
+        []
       ]
     },
     "Google Gemini Chat Model": {
@@ -942,9 +991,9 @@
       "main": [
         [
           {
-            "node": "MergeGPT-5",
+            "node": "Convert response to File GPT-5",
             "type": "main",
-            "index": 1
+            "index": 0
           }
         ]
       ]
@@ -953,9 +1002,9 @@
       "main": [
         [
           {
-            "node": "MergeClaude",
+            "node": "Convert response to File Claude",
             "type": "main",
-            "index": 1
+            "index": 0
           }
         ]
       ]
@@ -1048,6 +1097,28 @@
         ]
       ]
     },
+    "Convert response to File GPT-5": {
+      "main": [
+        [
+          {
+            "node": "MergeGPT-5",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Convert response to File Claude": {
+      "main": [
+        [
+          {
+            "node": "MergeClaude",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
     "Resolve exact task inputs": {
       "main": [
         [
@@ -1064,16 +1135,6 @@
         [
           {
             "node": "If gpt-5",
-            "type": "main",
-            "index": 0
-          },
-          {
-            "node": "If gemini-2.5-pro",
-            "type": "main",
-            "index": 0
-          },
-          {
-            "node": "If claude-sonnet-4",
             "type": "main",
             "index": 0
           }

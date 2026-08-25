@@ -604,7 +604,8 @@ class N8nWorkflowTests(unittest.TestCase):
                 if not isinstance(selector, str):
                     continue
                 match = re.search(
-                    r"/data/(helper_methods|examples|grammar|task_prompts|contract)"
+                    r"/data/(?:transformations/)?"
+                    r"(helper_methods|examples|grammar|task_prompts|contract)"
                     r"/([^/]*)/",
                     selector,
                 )

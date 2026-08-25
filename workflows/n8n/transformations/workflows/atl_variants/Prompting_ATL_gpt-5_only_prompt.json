@@ -36,7 +36,7 @@
     },
     {
       "parameters": {
-        "fileSelector": "=/data/examples/atl/Examples.txt",
+        "fileSelector": "=/data/transformations/examples/atl/Examples.txt",
         "options": {}
       },
       "type": "n8n-nodes-base.readWriteFile",
@@ -130,7 +130,7 @@
     },
     {
       "parameters": {
-        "fileSelector": "/data/grammar/atl/EBNF.txt",
+        "fileSelector": "/data/transformations/grammar/atl/EBNF.txt",
         "options": {}
       },
       "type": "n8n-nodes-base.readWriteFile",
@@ -293,7 +293,7 @@
     },
     {
       "parameters": {
-        "fileSelector": "=/data/helper_methods/atl/*",
+        "fileSelector": "=/data/transformations/helper_methods/atl/*",
         "options": {}
       },
       "type": "n8n-nodes-base.readWriteFile",
