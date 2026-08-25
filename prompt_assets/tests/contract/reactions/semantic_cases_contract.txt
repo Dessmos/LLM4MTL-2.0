@@ -126,6 +126,20 @@ Four rules govern which to use:
   no root: everything observed there must be the transformation's work, or the
   test proves nothing.
 
+A routine may ask the user which of several elements to create, through a
+single-selection dialog. Such a test must say which option it means, or the
+interaction has no answer, throws, and no assertion is ever evaluated. Add the
+answers to the test, in the order the dialog asks for them, as zero-based
+indices into the option list the task specification gives:
+
+```json
+"userSelections": [0]
+```
+
+The specification lists the options in the order the dialog offers them, so
+index 0 is the first option it names. Leave the field out when the task asks
+the user nothing. The assertions must then expect what that option produces.
+
 Every assertion must contain `kind`, `model`, `type`, and `expected`. `model`
 must equal one of the exact runtime slot names in the same test. `type` is
 unqualified. Never use `object` instead of `model` plus `type`.

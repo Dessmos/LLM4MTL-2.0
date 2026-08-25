@@ -51,6 +51,7 @@ class ResolvedTaskInputs:
     metamodels: tuple[PromptInputFile, ...]
     metamodel_uris: tuple[str, ...]
     grammar: PromptInputFile
+    prerequisite_prompts: tuple[PromptInputFile, ...] = ()
 
     @property
     def metamodel_text(self) -> str:
@@ -69,6 +70,20 @@ class ResolvedTaskInputs:
         """
         return "\n".join(f"- {uri}" for uri in self.metamodel_uris)
 
+    @property
+    def prerequisite_prompt_text(self) -> str:
+        """The specifications of the tasks this one presupposes.
+
+        A test has to build its pre-state through changes something reacts to.
+        Which changes those are is decided by the other tasks that run beside
+        this one, and their specifications say it in the same words as this
+        task's own -- so they are handed over rather than left to be guessed.
+        """
+        return "\n\n".join(
+            f"### {prompt.path}\n{prompt.content}"
+            for prompt in self.prerequisite_prompts
+        )
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "language": self.language,
@@ -82,6 +97,10 @@ class ResolvedTaskInputs:
             "metamodel_uris": list(self.metamodel_uris),
             "metamodel_uri_text": self.metamodel_uri_text,
             "grammar": self.grammar.to_dict(),
+            "prerequisite_prompts": [
+                prompt.to_dict() for prompt in self.prerequisite_prompts
+            ],
+            "prerequisite_prompt_text": self.prerequisite_prompt_text,
         }
 
 
@@ -138,6 +157,37 @@ def resolve_task_inputs(language: str, task: str) -> ResolvedTaskInputs:
         metamodels=tuple(_read_input(path) for path in metamodel_paths),
         metamodel_uris=tuple(metamodel_uris),
         grammar=_read_input(grammar_path),
+        prerequisite_prompts=_prerequisite_prompts(language_key, contract, config),
+    )
+
+
+def _prerequisite_prompts(
+    language: str,
+    contract: dict[str, Any],
+    config: Any,
+) -> tuple[PromptInputFile, ...]:
+    """Task specifications of the prerequisites, prerequisites first."""
+    contracts_root = default_task_contracts_root(config)
+    prompts_root = TARGET.prompt_assets / "task_prompts" / language
+    ordered: list[str] = []
+
+    def walk(task: str, seen: tuple[str, ...]) -> None:
+        if task in seen:
+            raise TaskInputResolutionError(f"prerequisite cycle through {task!r}")
+        path = contracts_root / f"{task}.json"
+        if not path.is_file():
+            return
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        for name in payload.get("prerequisiteTasks") or ():
+            walk(str(name), (*seen, task))
+            if name not in ordered:
+                ordered.append(str(name))
+
+    walk(str(contract["task"]), ())
+    return tuple(
+        _read_input(prompts_root / f"{name}.txt")
+        for name in ordered
+        if (prompts_root / f"{name}.txt").is_file()
     )
 
 

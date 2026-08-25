@@ -127,10 +127,19 @@ def _render_method(
         str(model["name"]): str(model["metamodelUri"])
         for model in models
     }
+    # A routine may ask the user which of several targets to create. The test
+    # says which option it means; without an answer the interaction throws and
+    # no assertion is ever reached.
+    selections = test.get("userSelections") or []
     lines = [
         "    @Test",
         f"    void {sanitize_method_name(str(test['name']))}(@TempDir Path tempDir) throws Exception {{",
-        f"        InternalVirtualModel vsum = createVirtualModel(tempDir, new {specification}());",
+        "        TestUserInteraction interaction = new TestUserInteraction();",
+        *[
+            f"        interaction.addNextSingleSelection({int(selection)});"
+            for selection in selections
+        ],
+        f"        InternalVirtualModel vsum = createVirtualModel(tempDir, interaction, new {specification}());",
     ]
     for model in models:
         path = model.get("path")
@@ -286,10 +295,10 @@ def _reactions_helpers() -> list[str]:
         "        return values;",
         "    }",
         "",
-        "    private InternalVirtualModel createVirtualModel(Path directory, ChangePropagationSpecification specification) {",
+        "    private InternalVirtualModel createVirtualModel(Path directory, TestUserInteraction interaction, ChangePropagationSpecification specification) {",
         "        InternalVirtualModel model = new VirtualModelBuilder()",
         "            .withStorageFolder(directory)",
-        "            .withUserInteractorForResultProvider(new TestUserInteraction.ResultProvider(new TestUserInteraction()))",
+        "            .withUserInteractorForResultProvider(new TestUserInteraction.ResultProvider(interaction))",
         "            .withChangePropagationSpecifications(specification)",
         "            .buildAndInitialize();",
         "        model.setChangePropagationMode(ChangePropagationMode.TRANSITIVE_CYCLIC);",
