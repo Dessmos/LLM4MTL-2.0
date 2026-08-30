@@ -57,7 +57,7 @@ limited to:
 
 `refinement_iteration` says which iteration of the artifact consumed by that
 stage the attempt belongs to. The master keeps test and transformation artifact
-iterations separately from the shared refinement-budget count. It is not
+iterations and their refinement budgets separately. It is not
 derivable from `suite_id`: a refined *suite* gets a new id, while a refined
 *transformation* is judged against the suite that already passed on the
 reference and therefore keeps the old one.
@@ -193,6 +193,28 @@ The table below is policy guidance, not Python-owned state:
 | `SEMANTIC_EXECUTION_FAILED` | prepare evidence and diagnose the failure source |
 | `INFRASTRUCTURE_ERROR` | bounded retry or stop; never ask an LLM to “repair” infrastructure |
 | `SKIPPED_*` | resolve missing prerequisite or terminate as incomplete |
+
+There are two independently bounded correction loops:
+
+```text
+test:           extraction / technical / reference / diagnosed test defect
+transformation: syntax / diagnosed transformation defect
+```
+
+`max_test_refinement_iterations` and
+`max_transformation_refinement_iterations` therefore measure opportunities to
+repair the artifact they name; work on one artifact cannot consume the other's
+budget. Both accept `0..3`, which supports the evaluation configurations
+`K ∈ {0, 1, 2, 3}` without changing routing code. A test-only refinement returns
+from reference validation directly to execution against the unchanged,
+already-syntax-valid transformation.
+
+Every prepared refinement already persists the three trajectory dimensions:
+`iteration`, `artifact_type` (the refinement target), and `feedback.source`
+(`syntax`, `technical`, `reference`, or `semantic`). The linked generation
+record adds its normalized `purpose`. An unrecognized refinement reason is an
+orchestration error; it is never silently reclassified as technical or semantic
+feedback.
 
 ## Prepared diagnosis evidence
 
@@ -382,8 +404,8 @@ POST /runs/<run-id>/result
   "status": "completed_with_failures",
   "terminal_state": "DIAGNOSED_TRANSFORMATION_DEFECT:REFINEMENT_LIMIT_REACHED",
   "run_mode": "full",
-  "refinement_iterations_used": 0,
-  "refinement_iterations_allowed": 0,
+  "refinement_iterations_used": 1,
+  "refinement_iterations_allowed": 3,
   "suite_id": "etl-tree2graph-20260820_000",
   "failed_component": null,
   "last_completed_stage": "execution",
@@ -392,7 +414,11 @@ POST /runs/<run-id>/result
 }
 ```
 
-Nothing else is representable. Python splits `terminal_state` into the
+For schema compatibility, `refinement_iterations_used` is the sum of the two
+artifact iterations and `refinement_iterations_allowed` is the sum of the
+budgets applicable to the run mode. `test_iteration` and
+`transformation_iteration` preserve the exact per-target values. Python splits
+`terminal_state` into the
 `outcome_code` and the qualifier that stopped the run there, and derives every
 other field from what the run itself recorded — stage statuses from the latest
 attempt of each stage, the diagnosis aggregate from the persisted diagnosis

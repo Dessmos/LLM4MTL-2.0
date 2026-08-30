@@ -190,7 +190,8 @@ def _configure(
     providers: dict[str, str] | None = None,
     semantic_test_strategy: str = "Few-shot",
     transformation_strategy: str = "Grammar",
-    max_refinement_iterations: str = "2",
+    max_test_refinement_iterations: str = "2",
+    max_transformation_refinement_iterations: str = "2",
     ablation_profile: str = "Standard full configuration",
     disabled_components: str = "",
     unconfigured_roles: tuple[str, ...] = (),
@@ -215,7 +216,10 @@ def _configure(
                     **provider_choice,
                     "semantic_test_strategy": semantic_test_strategy,
                     "transformation_strategy": transformation_strategy,
-                    "max_refinement_iterations": max_refinement_iterations,
+                    "max_test_refinement_iterations": max_test_refinement_iterations,
+                    "max_transformation_refinement_iterations": (
+                        max_transformation_refinement_iterations
+                    ),
                     "ablation_profile": ablation_profile,
                     "disabled_components": disabled_components,
                     "n8n_workflow_root": "/data/repository/workflows/n8n",
@@ -299,6 +303,19 @@ def _drive(
 
 @unittest.skipUnless(shutil.which("node"), "the master workflow's Code nodes need Node")
 class OrchestrationFailureTests(unittest.TestCase):
+    def test_terminal_result_reports_both_artifact_iterations(self) -> None:
+        record = next(
+            node
+            for node in _master()["nodes"]
+            if node["name"] == "Record Terminal Result"
+        )
+        body = record["parameters"]["jsonBody"]
+
+        self.assertIn("test_iteration:", body)
+        self.assertIn("transformation_iteration:", body)
+        self.assertIn("max_test_refinement_iterations", body)
+        self.assertIn("max_transformation_refinement_iterations", body)
+
     def test_persistence_http_errors_build_a_terminal_result_request(self) -> None:
         configured = _configure()
         self.assertTrue(configured["ok"], configured.get("error"))
@@ -308,7 +325,6 @@ class OrchestrationFailureTests(unittest.TestCase):
                 state["action"] = action
                 state["current"]["run_id"] = "terminal-error-1"
                 state["current"]["suite_id"] = "terminal-error-1_001"
-                state["current"]["refinement_iteration"] = 1
                 state["current"]["test_iteration"] = 1
                 state["current"]["transformation_iteration"] = 0
                 state["current"]["timeline"] = [
@@ -333,6 +349,8 @@ class OrchestrationFailureTests(unittest.TestCase):
                 self.assertEqual(
                     "reference-validation", terminal["last_completed_stage"]
                 )
+                self.assertEqual(1, terminal["refinement_iterations_used"])
+                self.assertEqual(4, terminal["refinement_iterations_allowed"])
                 self.assertEqual(1, terminal["test_iteration"])
                 self.assertEqual(0, terminal["transformation_iteration"])
 
@@ -718,6 +736,24 @@ class RunModeTests(unittest.TestCase):
         self.assertEqual("incomplete", result["status"])
         self.assertEqual("SOURCE_DIAGNOSIS_EVIDENCE_NOT_EXPOSED", result["reason"])
 
+    def test_disabled_semantic_feedback_cannot_reach_diagnosis_or_refinement(
+        self,
+    ) -> None:
+        config = _configure(ablation_profile="No semantic feedback")
+        self.assertTrue(config["ok"], config.get("error"))
+        actions, state = _drive(
+            config["result"],
+            results={"execution": _failing_execution()},
+        )
+
+        self.assertNotIn("read_diagnosis_index", actions)
+        self.assertNotIn("diagnose", actions)
+        self.assertNotIn("prepare_refinement", actions)
+        self.assertEqual(
+            "SEMANTIC_EXECUTION_FAILED:SEMANTIC_FEEDBACK_DISABLED",
+            state["results"][0]["reason"],
+        )
+
     def test_every_run_mode_has_a_successful_terminal_path(self) -> None:
         for mode in ("Semantic Tests Only", "Transformations Only", "Full Pipeline"):
             with self.subTest(mode=mode):
@@ -725,6 +761,83 @@ class RunModeTests(unittest.TestCase):
                 self.assertTrue(config["ok"], config.get("error"))
                 _, state = _drive(config["result"])
                 self.assertEqual("completed", state["results"][0]["status"])
+
+
+@unittest.skipUnless(shutil.which("node"), "the master workflow's Code nodes need Node")
+class RefinementOutcomeRoutingTests(unittest.TestCase):
+    def test_test_failures_share_one_target_budget_and_keep_their_source(self) -> None:
+        cases = (
+            ("extract", "TEST_SPEC_INVALID", "technical", "technical_refinement"),
+            ("technical", "TECH_COMPILE_FAILED", "technical", "technical_refinement"),
+            (
+                "reference",
+                "REFERENCE_VALIDATION_FAILED",
+                "reference",
+                "reference_refinement",
+            ),
+        )
+        for action, outcome_code, source, purpose in cases:
+            with self.subTest(action=action, outcome_code=outcome_code):
+                calls = 0
+
+                def fail_once() -> dict[str, Any]:
+                    nonlocal calls
+                    calls += 1
+                    if calls == 1:
+                        return {
+                            "stage": PASSING_RESULTS[action]["stage"],
+                            "status": "completed",
+                            "outcome_code": outcome_code,
+                        }
+                    return PASSING_RESULTS[action]
+
+                configured = _configure()
+                self.assertTrue(configured["ok"], configured.get("error"))
+                _, state = _drive(
+                    configured["result"],
+                    factories={action: fail_once},
+                )
+                refined = next(
+                    entry
+                    for entry in state["results"][0]["timeline"]
+                    if entry.get("action") == "generate_tests"
+                    and entry.get("refinement_iteration") == 1
+                )
+
+                self.assertEqual("tests", refined["refinement_target"])
+                self.assertEqual(source, refined["refinement_source"])
+                self.assertEqual(purpose, refined["purpose"])
+
+    def test_syntax_failure_routes_to_transformation_refinement(self) -> None:
+        calls = 0
+
+        def fail_once() -> dict[str, Any]:
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                return {
+                    "stage": "syntax-validation",
+                    "status": "completed",
+                    "outcome_code": "SYNTAX_INVALID",
+                }
+            return PASSING_RESULTS["syntax"]
+
+        configured = _configure()
+        self.assertTrue(configured["ok"], configured.get("error"))
+        _, state = _drive(
+            configured["result"],
+            factories={"syntax": fail_once},
+        )
+        refined = next(
+            entry
+            for entry in state["results"][0]["timeline"]
+            if entry.get("action") == "generate_transformations"
+            and entry.get("refinement_iteration") == 1
+        )
+
+        self.assertEqual("transformations", refined["refinement_target"])
+        self.assertEqual("syntax", refined["refinement_source"])
+        self.assertEqual("syntax_refinement", refined["purpose"])
 
 
 def _diagnosis_index(*reports: dict[str, Any]) -> dict[str, Any]:
@@ -857,6 +970,18 @@ class SourceDiagnosisAggregationTests(unittest.TestCase):
         )
         self.assertEqual(1, request["execution_attempt"])
 
+    def test_refinement_trajectory_names_target_and_feedback_source(self) -> None:
+        _, state = _drive_diagnosis(["test_defect"])
+        refined_generation = next(
+            entry
+            for entry in state["results"][0]["timeline"]
+            if entry.get("action") == "generate_tests"
+            and entry.get("refinement_iteration") == 1
+        )
+
+        self.assertEqual("tests", refined_generation["refinement_target"])
+        self.assertEqual("semantic", refined_generation["refinement_source"])
+
     def test_agreeing_test_defects_refine_the_tests(self) -> None:
         actions, _ = _drive_diagnosis(["test_defect", "test_defect"])
         self.assertEqual(2, actions.count("diagnose"))
@@ -896,9 +1021,87 @@ class SourceDiagnosisAggregationTests(unittest.TestCase):
         ]
 
         self.assertEqual(
-            [0, 0],
+            [0],
             [entry["refinement_iteration"] for entry in syntax_attempts],
         )
+
+    def test_test_budget_cannot_exhaust_transformation_budget(self) -> None:
+        reference_calls = 0
+        execution_calls = 0
+
+        def reference_result() -> dict[str, Any]:
+            nonlocal reference_calls
+            reference_calls += 1
+            if reference_calls <= 2:
+                return {
+                    "stage": "reference-validation",
+                    "status": "completed",
+                    "outcome_code": "REFERENCE_VALIDATION_FAILED",
+                }
+            return PASSING_RESULTS["reference"]
+
+        def execution_result() -> dict[str, Any]:
+            nonlocal execution_calls
+            execution_calls += 1
+            if execution_calls == 1:
+                return _failing_execution()
+            return PASSING_RESULTS["execution"]
+
+        configured = _configure(
+            max_test_refinement_iterations="2",
+            max_transformation_refinement_iterations="1",
+        )
+        self.assertTrue(configured["ok"], configured.get("error"))
+        actions, state = _drive(
+            configured["result"],
+            results={
+                "read_diagnosis_index": _diagnosis_index(
+                    {
+                        "path": (
+                            "artifacts/work/runs/etl-tree2graph-0001/diagnosis/"
+                            "execution/attempt-001/reports/r0.json"
+                        )
+                    }
+                )
+            },
+            factories={
+                "reference": reference_result,
+                "execution": execution_result,
+                "diagnose": lambda: {
+                    "classification": "transformation_defect",
+                    "confidence": "high",
+                    "test_case_id": "case-1",
+                    "assertion_id": "assertion-001",
+                },
+            },
+        )
+
+        result = state["results"][0]
+        self.assertEqual("completed", result["status"])
+        self.assertEqual(2, result["test_refinement_iterations"])
+        self.assertEqual(1, result["transformation_refinement_iterations"])
+        self.assertEqual(3, result["refinement_iterations"])
+        self.assertEqual(3, actions.count("prepare_refinement"))
+
+    def test_unknown_refinement_reason_is_an_orchestration_error(self) -> None:
+        configured = _configure()
+        self.assertTrue(configured["ok"], configured.get("error"))
+        state = configured["result"]
+        state["current"]["run_id"] = "unknown-refinement-reason"
+        state["current"]["test_iteration"] = 1
+        state["current"]["refinement_reason"] = "UNRECOGNIZED_TEST_FAILURE"
+        state["subworkflow_input"] = {
+            "provider": "anthropic",
+            "model": "claude-sonnet-4-20250514",
+            "strategy": "few_shot",
+        }
+        state["completed_action"] = "generate_tests"
+        state["last_result"] = {"status": "completed"}
+
+        routed = _run_node("State Machine", inputs=[state])
+
+        self.assertFalse(routed["ok"])
+        self.assertIn("Unknown refinement reason", routed["error"])
 
     def test_transformation_refinement_keeps_the_test_iteration(self) -> None:
         """A refined transformation stays paired with the validated suite."""
@@ -947,7 +1150,6 @@ class SourceDiagnosisAggregationTests(unittest.TestCase):
             if state["action"] == "generate_transformations"
         )
 
-        self.assertEqual(1, initial_transformation["current"]["refinement_iteration"])
         self.assertEqual(0, initial_transformation["current"]["transformation_iteration"])
         self.assertEqual(
             initial_transformation["config"]["llms"]["transformation"]["provider"],
@@ -1133,9 +1335,11 @@ class ConditionalLlmRoleTests(unittest.TestCase):
         self.assertTrue(config["ok"], config.get("error"))
         self.assertNotIn("source_diagnosis", config["result"]["config"]["llms"])
 
-    def test_zero_refinement_iterations_removes_the_refinement_requirement(self) -> None:
+    def test_zero_refinement_iterations_remove_the_refinement_requirement(self) -> None:
         config = _configure(
-            max_refinement_iterations="0", unconfigured_roles=("refinement",)
+            max_test_refinement_iterations="0",
+            max_transformation_refinement_iterations="0",
+            unconfigured_roles=("refinement",),
         )
         self.assertTrue(config["ok"], config.get("error"))
         self.assertNotIn("refinement", config["result"]["config"]["llms"])
@@ -1169,7 +1373,8 @@ class ConditionalLlmRoleTests(unittest.TestCase):
                 config = _configure(
                     run_mode="Semantic Tests Only",
                     providers={"semantic_test_provider": provider},
-                    max_refinement_iterations="0",
+                    max_test_refinement_iterations="0",
+                    max_transformation_refinement_iterations="0",
                 )
                 self.assertTrue(config["ok"], config.get("error"))
                 state = config["result"]
@@ -1306,6 +1511,14 @@ class ConfigurationPresentationTests(unittest.TestCase):
         self.assertFalse(config["ok"])
         self.assertIn("Semantic Test Generation strategy", config["error"])
 
+    def test_each_refinement_budget_offers_the_evaluation_range(self) -> None:
+        for field in (
+            "max_test_refinement_iterations",
+            "max_transformation_refinement_iterations",
+        ):
+            with self.subTest(field=field):
+                self.assertEqual(["0", "1", "2", "3"], _field_options(field))
+
     def test_the_choice_fields_are_native_option_inputs(self) -> None:
         """Cards are CSS over radio/checkbox, not custom HTML controls.
 
@@ -1381,7 +1594,8 @@ class ConfigurationPresentationTests(unittest.TestCase):
                 "refinement_provider",
                 "semantic_test_strategy",
                 "transformation_strategy",
-                "max_refinement_iterations",
+                "max_test_refinement_iterations",
+                "max_transformation_refinement_iterations",
                 "ablation_profile",
                 "disabled_components",
                 "n8n_workflow_root",

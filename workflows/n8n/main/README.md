@@ -213,11 +213,15 @@ keeps the existing `incomplete` reason.
 State Machine -> Route Next Action -> action -> Capture Action Result -> State Machine
 ```
 
-Unchanged, and deliberately compact — one Switch and one loop rather than a
+Deliberately compact — one Switch and one control loop rather than a
 duplicated IF graph per stage. `Create Immutable Run`, the Python stage HTTP
 calls, `Make Existing Workflow Callable` (exact strategy-suffix matching and the
 reserved `/responses/source-diagnosis/` namespace), timeline recording, terminal
-statuses and refinement limits all stay as they were.
+statuses, and refinement routing stay centralized here. Test and transformation
+refinements have independent `0..3` budgets; a failure in one branch therefore
+cannot exhaust the other branch before it starts. Test refinement after semantic
+diagnosis re-runs extraction, technical validation, reference validation, and
+execution, but not syntax validation of the unchanged transformation.
 
 `Adapt Transformation Workflow Compatibility` operates only on the transient
 workflow JSON passed to `Execute Existing Subworkflow`. For both generation
@@ -233,8 +237,16 @@ There is one master workflow. Run modes are configuration, not three copies.
 
 `config` carries the full experimental identity: `run_mode`, `llms` (per role:
 provider, exact model, `configuration_node`, and strategy where applicable),
-`max_refinement_iterations`, the twelve effective `stages` flags,
+`max_test_refinement_iterations`,
+`max_transformation_refinement_iterations`, the twelve effective `stages` flags,
 `ablation_profile`, `disabled_stages`, and `pipeline_variant`.
+
+Each refinement trajectory records its artifact-specific iteration, target, and
+feedback source. The persisted refinement request represents these as
+`iteration`, `artifact_type`, and `feedback.source`; generation timeline entries
+also expose `refinement_target` and `refinement_source` directly. Disabling
+`semantic_feedback` stops on semantic failure before diagnosis or either
+refinement path.
 
 `pipeline_variant` is `run_mode` when nothing is ablated and
 `run_mode:ablation-id` otherwise, so a standard full run keeps the plain `full`
