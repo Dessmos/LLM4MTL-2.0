@@ -788,7 +788,7 @@
         "url": "http://stage-service:8129/runs",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ { language: $json.current.language, task: $json.current.task, transformation_model: $json.current.transformation_model, test_generation_model: $json.current.test_generation_model, transformation_strategy: $json.current.transformation_strategy, test_generation_strategy: $json.current.test_generation_strategy, seed: $json.current.seed, pipeline_variant: $json.current.pipeline_variant } }}",
+        "jsonBody": "={{ { language: $json.current.language, task: $json.current.task, transformation_model: $json.current.transformation_model, test_generation_model: $json.current.test_generation_model, transformation_strategy: $json.current.transformation_strategy, test_generation_strategy: $json.current.test_generation_strategy, seed: $json.current.seed, pipeline_variant: $json.current.pipeline_variant, experiment_config: { max_test_refinement_iterations: $json.config.max_test_refinement_iterations, max_transformation_refinement_iterations: $json.config.max_transformation_refinement_iterations, parser_feedback: $json.config.stages.parser_feedback, semantic_feedback: $json.config.stages.semantic_feedback, source_diagnosis: $json.config.stages.source_diagnosis } } }}",
         "options": {}
       }
     },

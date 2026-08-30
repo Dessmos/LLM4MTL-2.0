@@ -23,10 +23,17 @@ IDENTITY = {
     "transformation_strategy": "grammar",
     "test_generation_strategy": "few_shot",
 }
+EXPERIMENT_CONFIG = {
+    "max_test_refinement_iterations": 1,
+    "max_transformation_refinement_iterations": 2,
+    "parser_feedback": True,
+    "semantic_feedback": True,
+    "source_diagnosis": True,
+}
 
 
 def run_payload(**overrides: object) -> dict[str, object]:
-    return {**IDENTITY, **overrides}
+    return {**IDENTITY, "experiment_config": EXPERIMENT_CONFIG, **overrides}
 
 
 class StageServiceTests(unittest.TestCase):
@@ -68,6 +75,23 @@ class StageServiceTests(unittest.TestCase):
         self.assertEqual(200, fetched.status_code)
         self.assertEqual("etl", fetched.json()["manifest"]["language"])
         self.assertEqual("svc-1", fetched.json()["manifest"]["run_id"])
+        self.assertEqual(
+            EXPERIMENT_CONFIG,
+            fetched.json()["manifest"]["experiment_config"],
+        )
+
+    def test_run_experiment_config_is_bounded(self) -> None:
+        response = self.client.post(
+            "/runs",
+            json=run_payload(
+                run_id="svc-invalid-budget",
+                experiment_config={
+                    **EXPERIMENT_CONFIG,
+                    "max_test_refinement_iterations": 4,
+                },
+            ),
+        )
+        self.assertEqual(422, response.status_code)
 
     def test_openapi_documents_explicit_http_errors(self) -> None:
         paths = self.client.get("/openapi.json").json()["paths"]

@@ -113,21 +113,24 @@ def create_run(request: RunCreateRequest) -> RunCreateResponse:
         PipelineConfig(language=request.language, tasks=[request.task])
     )
     try:
+        manifest = {
+            "language": request.language,
+            "task": request.task,
+            "transformation_model": request.transformation_model,
+            "test_generation_model": request.test_generation_model,
+            "transformation_strategy": request.transformation_strategy,
+            "test_generation_strategy": request.test_generation_strategy,
+            "seed": request.seed,
+            "pipeline_variant": request.pipeline_variant,
+            "preset": request.preset,
+            "provenance": build_provenance(request.language, request.task),
+        }
+        if request.experiment_config is not None:
+            manifest["experiment_config"] = request.experiment_config.model_dump()
         run_store.create_run(
             _runs_root(),
             run_id,
-            {
-                "language": request.language,
-                "task": request.task,
-                "transformation_model": request.transformation_model,
-                "test_generation_model": request.test_generation_model,
-                "transformation_strategy": request.transformation_strategy,
-                "test_generation_strategy": request.test_generation_strategy,
-                "seed": request.seed,
-                "pipeline_variant": request.pipeline_variant,
-                "preset": request.preset,
-                "provenance": build_provenance(request.language, request.task),
-            },
+            manifest,
         )
     except run_store.ManifestExistsError as exc:
         raise HTTPException(status_code=409, detail=f"run already exists: {run_id}") from exc

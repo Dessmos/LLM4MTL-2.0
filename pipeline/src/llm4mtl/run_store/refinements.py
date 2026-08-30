@@ -22,9 +22,6 @@ from llm4mtl.run_store.generations import (
 )
 from llm4mtl.run_store.models import RunPaths
 from llm4mtl.run_store.transformations import adopted_transformations
-from llm4mtl.semantic_tests.diagnosis_preparation import (
-    read_failure_reports_for_attempt,
-)
 from llm4mtl.serialization.json_io import read_json, write_json_once
 
 SCHEMA_VERSION = "1.0"
@@ -316,6 +313,12 @@ def _stage_facts(
 def _failure_report_facts(
     paths: RunPaths, execution_attempt: int
 ) -> list[dict[str, Any]]:
+    # Deferred to keep the run-store facade from importing diagnosis preparation
+    # back through this module while diagnosis preparation imports run-store models.
+    from llm4mtl.semantic_tests.diagnosis_preparation import (
+        read_failure_reports_for_attempt,
+    )
+
     facts: list[dict[str, Any]] = []
     for indexed in read_failure_reports_for_attempt(paths.root, execution_attempt):
         report = indexed.payload

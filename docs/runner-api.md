@@ -80,11 +80,23 @@ Every identity axis is explicit:
   "test_generation_strategy": "few_shot",
   "seed": 1,
   "pipeline_variant": "full",
+  "experiment_config": {
+    "max_test_refinement_iterations": 1,
+    "max_transformation_refinement_iterations": 2,
+    "parser_feedback": true,
+    "semantic_feedback": true,
+    "source_diagnosis": true
+  },
   "preset": "tree2graph_smoke"
 }
 ```
 
-`run_id` and `preset` are optional. A generated or supplied run id must match:
+`run_id`, `preset`, and `experiment_config` are optional for compatibility with
+older callers. The master workflow always supplies `experiment_config`; a
+missing value therefore identifies a legacy or non-master run whose exact loop
+configuration is unknown. `pipeline_variant` remains the single variant id.
+
+A generated or supplied run id must match:
 
 ```text
 [A-Za-z0-9._-]+

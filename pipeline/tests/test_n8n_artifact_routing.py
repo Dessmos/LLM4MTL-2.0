@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
+import sys
 import unittest
 from pathlib import Path
 from typing import Any
@@ -370,6 +372,23 @@ class N8nArtifactRoutingTests(unittest.TestCase):
                     "/data/snippets",
                     compose.read_text(encoding="utf-8"),
                 )
+
+    def test_diagnosis_preparation_imports_in_a_clean_process(self) -> None:
+        completed = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                (
+                    "from llm4mtl.semantic_tests.diagnosis_preparation "
+                    "import diagnosis_response_dir"
+                ),
+            ],
+            cwd=REPOSITORY_ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(0, completed.returncode, completed.stderr)
 
 
 if __name__ == "__main__":

@@ -84,6 +84,39 @@
       "type": "string",
       "default": "full"
     },
+    "experiment_config": {
+      "description": "Exact bounded-loop and feedback configuration selected for this run. Optional only so manifests recorded before this field was introduced remain readable.",
+      "type": "object",
+      "required": [
+        "max_test_refinement_iterations",
+        "max_transformation_refinement_iterations",
+        "parser_feedback",
+        "semantic_feedback",
+        "source_diagnosis"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "max_test_refinement_iterations": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3
+        },
+        "max_transformation_refinement_iterations": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3
+        },
+        "parser_feedback": {
+          "type": "boolean"
+        },
+        "semantic_feedback": {
+          "type": "boolean"
+        },
+        "source_diagnosis": {
+          "type": "boolean"
+        }
+      }
+    },
     "limits": {
       "type": "object",
       "additionalProperties": true,

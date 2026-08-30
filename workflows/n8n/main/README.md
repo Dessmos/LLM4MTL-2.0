@@ -241,6 +241,12 @@ provider, exact model, `configuration_node`, and strategy where applicable),
 `max_transformation_refinement_iterations`, the twelve effective `stages` flags,
 `ablation_profile`, `disabled_stages`, and `pipeline_variant`.
 
+At run creation the immutable manifest records `pipeline_variant` plus the
+compact `experiment_config`: both independent refinement budgets and the
+effective `parser_feedback`, `semantic_feedback`, and `source_diagnosis` flags.
+The terminal result may still carry the combined allowed count as a convenience;
+it is not the authoritative experiment configuration.
+
 Each refinement trajectory records its artifact-specific iteration, target, and
 feedback source. The persisted refinement request represents these as
 `iteration`, `artifact_type`, and `feedback.source`; generation timeline entries

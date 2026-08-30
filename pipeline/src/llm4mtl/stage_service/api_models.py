@@ -12,6 +12,18 @@ from pydantic import BaseModel, ConfigDict, Field
 Language = Literal["etl", "atl", "qvto", "reactions"]
 
 
+class RunExperimentConfig(BaseModel):
+    """The bounded refinement and feedback configuration used by one run."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    max_test_refinement_iterations: int = Field(ge=0, le=3)
+    max_transformation_refinement_iterations: int = Field(ge=0, le=3)
+    parser_feedback: bool
+    semantic_feedback: bool
+    source_diagnosis: bool
+
+
 class RunCreateRequest(BaseModel):
     """Identity of a new run. These fields become the immutable manifest.
 
@@ -38,6 +50,7 @@ class RunCreateRequest(BaseModel):
     seed: int = 1
     pipeline_variant: str = "full"
     preset: str | None = None
+    experiment_config: RunExperimentConfig | None = None
 
 
 class RunCreateResponse(BaseModel):

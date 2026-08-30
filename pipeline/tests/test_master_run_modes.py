@@ -303,6 +303,26 @@ def _drive(
 
 @unittest.skipUnless(shutil.which("node"), "the master workflow's Code nodes need Node")
 class OrchestrationFailureTests(unittest.TestCase):
+    def test_create_run_persists_the_exact_experiment_configuration(self) -> None:
+        create = next(
+            node
+            for node in _master()["nodes"]
+            if node["name"] == "Create Immutable Run"
+        )
+        body = create["parameters"]["jsonBody"]
+
+        self.assertIn("experiment_config:", body)
+        for field in (
+            "max_test_refinement_iterations",
+            "max_transformation_refinement_iterations",
+            "parser_feedback",
+            "semantic_feedback",
+            "source_diagnosis",
+        ):
+            with self.subTest(field=field):
+                self.assertIn(f"{field}:", body)
+        self.assertIn("pipeline_variant: $json.current.pipeline_variant", body)
+
     def test_terminal_result_reports_both_artifact_iterations(self) -> None:
         record = next(
             node

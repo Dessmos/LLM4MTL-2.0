@@ -32,6 +32,10 @@ Current stage success therefore establishes validation and execution facts; it
 must not be reported as an adjusted mutation score or as evidence that the
 measurement layer below has been completed.
 
+`metric-raw-data.md` maps each planned metric to its current authoritative raw
+artifacts. That map is a preflight requirement for metric experiments; metric
+calculation remains offline and is never part of n8n routing.
+
 ## 0. What this project measures
 
 Prior LLM4MTL generated **transformations**. This work generates **semantic
