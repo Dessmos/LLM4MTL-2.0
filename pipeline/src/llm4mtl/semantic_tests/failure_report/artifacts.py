@@ -11,7 +11,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from llm4mtl.paths import REPO_ROOT
+from llm4mtl.paths import require_repository_relative
 from llm4mtl.semantic_tests.failure_report.errors import FailureReportError
 from llm4mtl.semantic_tests.failure_report.models import (
     EXECUTION_LOG_EXCERPT_CHARS,
@@ -128,7 +128,14 @@ def _cited(artifact: dict[str, Any]) -> dict[str, Any]:
 
 
 def _repository_path(path: Path) -> str:
+    """A cited path, in this package's error vocabulary.
+
+    The spelling is the repository's own; what this adds is the refusal. A
+    report that cited a path outside the repository would be unreadable to
+    anyone who did not produce it, so the boundary translates that into the
+    error the assembler already handles rather than letting it escape.
+    """
     try:
-        return path.resolve().relative_to(REPO_ROOT.resolve()).as_posix()
+        return require_repository_relative(path)
     except ValueError as exc:
         raise FailureReportError(f"path escapes the repository: {path}") from exc

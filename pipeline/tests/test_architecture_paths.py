@@ -8,23 +8,23 @@ from copy import deepcopy
 from llm4mtl.conventions import (
     LANGUAGE_CONFIGS,
     n8n_workflows_root,
-    repo_root,
     task_prompt_candidates_root,
 )
 from llm4mtl.experiment_runner.orchestrator import ExperimentOrchestrator
 from llm4mtl.paths import MIGRATION_MAP, REPO_ROOT, TARGET
 from llm4mtl.prompt_assembly.n8n_exports import (
-    INPUTS,
-    MODELS,
-    PROMPT_INPUT_NODE,
-    PROVIDER_MODEL_IDS,
-    STRATEGIES,
-    _drop_unwired_chat_models,
-    _normalize_node_entry_ids,
-    _rename_connection_node,
     synchronize_prompt_generation,
     synchronize_test_generation,
     synchronize_transformation_generation,
+)
+from llm4mtl.prompt_assembly.n8n_exports.prompts import INPUTS
+from llm4mtl.prompt_assembly.n8n_exports.sync import MODELS, STRATEGIES
+from llm4mtl.prompt_assembly.n8n_exports.synchronizers import PROMPT_INPUT_NODE
+from llm4mtl.prompt_assembly.n8n_exports.workflow_graph import (
+    PROVIDER_MODEL_IDS,
+    drop_unwired_chat_models,
+    normalize_node_entry_ids,
+    rename_connection_node,
 )
 
 # Transformation generation is a full model x strategy grid per language. The
@@ -69,7 +69,6 @@ def _nested_strings(value: object) -> list[str]:
 
 class ActivePathTests(unittest.TestCase):
     def test_active_runtime_uses_existing_repository_root(self) -> None:
-        self.assertEqual(REPO_ROOT, repo_root())
         self.assertEqual(REPO_ROOT, ExperimentOrchestrator().repo_root)
         self.assertTrue(REPO_ROOT.is_dir())
 
@@ -114,7 +113,7 @@ class N8nWorkflowTests(unittest.TestCase):
             },
         }
 
-        _normalize_node_entry_ids(node)
+        normalize_node_entry_ids(node)
 
         assignments = node["parameters"]["assignments"]["assignments"]
         conditions = node["parameters"]["conditions"]["conditions"]
@@ -140,7 +139,7 @@ class N8nWorkflowTests(unittest.TestCase):
             },
         }
 
-        result = _drop_unwired_chat_models(payload)
+        result = drop_unwired_chat_models(payload)
 
         self.assertIs(payload, result)
         self.assertEqual(
@@ -160,7 +159,7 @@ class N8nWorkflowTests(unittest.TestCase):
             "Unchanged": {"node": "Old node"},
         }
 
-        renamed = _rename_connection_node(
+        renamed = rename_connection_node(
             connections,
             "Old node",
             "New node",

@@ -27,10 +27,7 @@ from llm4mtl.experiment_runner.models import PipelineConfig, RunResult, StageRes
 from llm4mtl.paths import REPO_ROOT, TARGET
 from llm4mtl.provenance import build_provenance
 from llm4mtl.run_store.attempts import existing_attempts
-from llm4mtl.semantic_tests.diagnosis_preparation import (
-    prepare_after_execution_stage,
-    prepare_execution_diagnosis,
-)
+from llm4mtl.semantic_tests.diagnosis_preparation import prepare_execution_diagnosis
 from llm4mtl.semantic_tests.failure_report import (
     read_request_payload,
     write_report,
@@ -40,7 +37,11 @@ from llm4mtl.stage_contract import (
     CONTRACT_STAGE_IDS,
     contract_stage_id,
     stage_status,
-    to_stage_payload,
+)
+from llm4mtl.stage_recording import (
+    announce_stage_start,
+    infrastructure_error_result,
+    record_stage_attempt,
 )
 from llm4mtl.workspace import materialize_engine
 
@@ -282,13 +283,10 @@ class ExperimentOrchestrator:
         try:
             result = callback(config, False)
         except Exception as exc:
-            result = StageResult(
+            result = infrastructure_error_result(
                 name,
-                "infrastructure_error",
-                {"infrastructure_errors": 1},
-                {"error": f"{type(exc).__name__}: {exc}"},
+                exc,
                 input_hash=plan.input_hash,
-                exit_code=1,
             )
         result.config_hash = config_hash
         if not result.input_hash:
@@ -304,29 +302,14 @@ class ExperimentOrchestrator:
     def _record_stage(self, paths: run_store.RunPaths, result: StageResult) -> None:
         """Record one immutable stage attempt in the run-centric store.
 
-        The persisted result is the same contract payload the stage service
-        writes; the runner's internal detail is kept beside it as evidence.
+        Recording is shared with the stage service so a run directory reads the
+        same whoever wrote it. The runner announces the stage as it records it
+        rather than before the work: it also records planning errors, which
+        never ran a stage at all.
         """
         stage = contract_stage_id(result.name)
-        payload = to_stage_payload(stage, result)
-        run_store.append_event(paths, "stage_started", stage=stage)
-        attempt = run_store.record_attempt(
-            paths,
-            stage,
-            payload,
-            evidence=result.to_dict(),
-        )
-        run_store.append_event(
-            paths,
-            "stage_finished",
-            stage=stage,
-            status=payload["status"],
-            outcome_code=payload["outcome_code"],
-            attempt=attempt,
-        )
-        # Only now: the report assembler pins itself to the immutable attempt
-        # that was just written, so it cannot run before that evidence exists.
-        prepare_after_execution_stage(paths.root, stage, payload, attempt)
+        announce_stage_start(paths, stage)
+        record_stage_attempt(paths, stage, result)
 
     def apply_stage_outputs(
         self,

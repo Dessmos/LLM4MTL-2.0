@@ -37,10 +37,13 @@ from typing import Any, Iterator
 from xml.etree import ElementTree as ET
 
 from llm4mtl.artifact_schemas import validate_artifact
-from llm4mtl.paths import REPO_ROOT
+from llm4mtl.paths import REPO_ROOT, repository_relative
 from llm4mtl.run_store.attempts import existing_attempts
 from llm4mtl.run_store.models import RunPaths
-from llm4mtl.semantic_tests.codegen.java_rendering import sanitize_method_name
+from llm4mtl.semantic_tests.codegen.java_rendering import (
+    assertion_message,
+    sanitize_method_name,
+)
 from llm4mtl.semantic_tests.execution_evidence import archived_execution_evidence
 from llm4mtl.semantic_tests.failure_report import FailureReportError, write_report
 from llm4mtl.semantic_tests.surefire import testcase_outcome
@@ -148,7 +151,7 @@ def diagnosis_artifact_references(
         return {}
     paths = RunPaths(root=Path(run_dir).resolve())
     references = {
-        "failure_report_index": _repository_path(
+        "failure_report_index": repository_relative(
             _diagnosis_dir(paths, attempt) / INDEX_FILENAME
         )
     }
@@ -181,7 +184,7 @@ def read_diagnosis_queue(run_dir: Path, attempt: int) -> dict[str, Any]:
         "attempt": attempt,
         "counts": index["counts"],
         "eligible_reports": eligible_reports,
-        "failure_report_index": _repository_path(index_path),
+        "failure_report_index": repository_relative(index_path),
     }
 
 
@@ -371,9 +374,9 @@ def prepare_execution_diagnosis(run_dir: Path, attempt: int) -> dict[str, Any]:
         "stage": EXECUTION_STAGE,
         "attempt": attempt,
         "prepared_at": datetime.now(timezone.utc).isoformat(),
-        "execution_evidence": _repository_path(evidence_path),
+        "execution_evidence": repository_relative(evidence_path),
         "syntax_evidence": (
-            _repository_path(syntax_evidence) if syntax_evidence is not None else None
+            repository_relative(syntax_evidence) if syntax_evidence is not None else None
         ),
         "counts": _index_counts(pairs),
         "pairs": pairs,
@@ -563,12 +566,12 @@ def _prepare_report(
         }
 
     payload = {
-        "run_manifest": _repository_path(paths.manifest),
-        "syntax_evidence": _repository_path(syntax_evidence),
-        "execution_evidence": _repository_path(execution_evidence),
-        "generated_execution": _repository_path(observation_path),
+        "run_manifest": repository_relative(paths.manifest),
+        "syntax_evidence": repository_relative(syntax_evidence),
+        "execution_evidence": repository_relative(execution_evidence),
+        "generated_execution": repository_relative(observation_path),
         "reference_execution": (
-            _repository_path(reference_execution)
+            repository_relative(reference_execution)
             if reference_execution is not None
             else None
         ),
@@ -576,7 +579,7 @@ def _prepare_report(
         "assertion_id": assertion_id,
         "attempt": attempt,
         "actual_target_models": [
-            _repository_path(path)
+            repository_relative(path)
             for path in _actual_target_models(observation_path, failure.test_method)
         ],
         # Surefire reports and the Maven log are resolved from the archive the
@@ -601,7 +604,7 @@ def _prepare_report(
         "test_method": failure.test_method,
         "test_case_id": test_case_id,
         "assertion_id": assertion_id,
-        "report": _repository_path(output),
+        "report": repository_relative(output),
         "eligible": diagnosis["eligible"],
         "reason": diagnosis["reason"],
     }
@@ -619,12 +622,12 @@ def _prepare_pair_report(
 ) -> dict[str, Any]:
     """One report about the execution pair itself, or why there is none."""
     payload = {
-        "run_manifest": _repository_path(paths.manifest),
-        "syntax_evidence": _repository_path(syntax_evidence),
-        "execution_evidence": _repository_path(execution_evidence),
-        "generated_execution": _repository_path(observation_path),
+        "run_manifest": repository_relative(paths.manifest),
+        "syntax_evidence": repository_relative(syntax_evidence),
+        "execution_evidence": repository_relative(execution_evidence),
+        "generated_execution": repository_relative(observation_path),
         "reference_execution": (
-            _repository_path(reference_execution)
+            repository_relative(reference_execution)
             if reference_execution is not None
             else None
         ),
@@ -647,7 +650,7 @@ def _prepare_pair_report(
         # attributed to no case rather than that the fields went missing.
         "test_case_id": None,
         "assertion_id": None,
-        "report": _repository_path(output),
+        "report": repository_relative(output),
         "eligible": diagnosis["eligible"],
         "reason": diagnosis["reason"],
     }
@@ -754,28 +757,13 @@ def _matching_assertion_ids(
     for index, assertion in enumerate(assertions, start=1):
         if not isinstance(assertion, dict):
             continue
-        rendered = _rendered_assertion_message(assertion)
+        # The renderer's own rule, run forwards: this reads a value back out of
+        # a Surefire report, so restating the rule here would let the two drift
+        # apart without failing anything.
+        rendered = assertion_message(assertion)
         if rendered and stripped_message.startswith(rendered):
             matching.append(str(assertion.get("id") or f"assertion-{index:03d}"))
     return matching
-
-
-def _rendered_assertion_message(assertion: dict[str, Any]) -> str:
-    """The message the Java renderer emits for ``assertion``.
-
-    Kept identical to ``llm4mtl.languages.java_assertions``: this function reads
-    a value back out of a Surefire report, so any divergence would silently stop
-    matching real failures.
-    """
-    explicit = assertion.get("message")
-    if isinstance(explicit, str) and explicit:
-        return explicit
-    if not all(field in assertion for field in ("kind", "model", "type")):
-        return ""
-    return (
-        f"{assertion['kind']} assertion for "
-        f"{assertion['model']}::{assertion['type']}"
-    )
 
 
 def _actual_target_models(observation_path: Path, test_method: str) -> list[Path]:
@@ -932,11 +920,3 @@ def _optional_path(value: object) -> Path | None:
         return None
     candidate = Path(value)
     return candidate if candidate.is_absolute() else REPO_ROOT / candidate
-
-
-def _repository_path(path: Path) -> str:
-    resolved = Path(path).resolve()
-    try:
-        return resolved.relative_to(REPO_ROOT.resolve()).as_posix()
-    except ValueError:
-        return str(resolved)

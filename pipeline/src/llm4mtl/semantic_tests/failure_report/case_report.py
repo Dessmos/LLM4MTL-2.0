@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from llm4mtl.artifact_schemas import validate_artifact
+from llm4mtl.semantic_tests.codegen.java_rendering import assertion_message
 from llm4mtl.semantic_tests.failure_report.artifacts import (
     _cited,
     _log_excerpt,
@@ -461,15 +462,17 @@ def _require_concrete_assertion_failure(
 
 
 def _assertion_message(assertion: dict[str, Any]) -> str:
-    explicit = assertion.get("message")
-    if isinstance(explicit, str) and explicit:
-        return explicit
-    required = ("kind", "model", "type")
-    if not all(field in assertion for field in required):
+    """The harness message for ``assertion``, refusing an unnameable one.
+
+    The rule is the renderer's own, so a report cannot look for a message the
+    harness would never have printed. What this adds is the refusal: an
+    assertion with neither a message nor kind/model/type identity yields no
+    message at all, and matching a recorded failure against nothing would
+    attribute it blindly.
+    """
+    message = assertion_message(assertion)
+    if not message:
         raise FailureReportError(
             "assertion needs an explicit message or kind/model/type identity"
         )
-    return (
-        f"{assertion['kind']} assertion for "
-        f"{assertion['model']}::{assertion['type']}"
-    )
+    return message

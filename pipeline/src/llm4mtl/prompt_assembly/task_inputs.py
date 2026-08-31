@@ -19,7 +19,7 @@ from llm4mtl.conventions import (
     default_task_contracts_root,
     language_config,
 )
-from llm4mtl.paths import REPO_ROOT, TARGET
+from llm4mtl.paths import REPO_ROOT, TARGET, require_repository_relative
 from llm4mtl.transformation_execution.hashing import file_sha256
 
 TASK_NAME = re.compile(r"^[A-Za-z0-9._-]+$")
@@ -152,7 +152,7 @@ def resolve_task_inputs(language: str, task: str) -> ResolvedTaskInputs:
     return ResolvedTaskInputs(
         language=language_key,
         task=task,
-        contract_path=_relative_path(contract_path),
+        contract_path=require_repository_relative(contract_path),
         reference=_read_input(reference_path),
         metamodels=tuple(_read_input(path) for path in metamodel_paths),
         metamodel_uris=tuple(metamodel_uris),
@@ -297,10 +297,6 @@ def _protected_path(
 
 def _read_input(path: Path) -> PromptInputFile:
     return PromptInputFile(
-        path=_relative_path(path),
+        path=require_repository_relative(path),
         content=path.read_text(encoding="utf-8"),
     )
-
-
-def _relative_path(path: Path) -> str:
-    return path.resolve().relative_to(REPO_ROOT).as_posix()

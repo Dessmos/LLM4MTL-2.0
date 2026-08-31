@@ -103,7 +103,11 @@ derive results from stored facts and must not call language engines.
 - `task_contracts/` — deterministic structural contracts and enforcement.
 - `prompt_assembly/` — exact task-input resolution and synchronization of the
   prompt/transformation/test n8n exports. It resolves files but never authors
-  the natural-language task prompt.
+  the natural-language task prompt. Inside `prompt_assembly/n8n_exports/`,
+  `prompts.py` is the exact text every model receives and holds no n8n
+  knowledge, `workflow_graph.py` is generic node/connection mechanics and holds
+  no prompt knowledge, `synchronizers.py` states what each workflow is
+  rewritten to do, and `sync.py` walks the files and owns `--write`.
 - `semantic_tests/extraction/` — fenced artifact extraction, semantic-case
   normalization, shared-contract mapping, and deterministic renderer dispatch.
 - `semantic_tests/validation.py` — shared artifact/technical/reference funnel.
@@ -116,10 +120,17 @@ derive results from stored facts and must not call language engines.
   reference-valid observation.
 - `experiment_runner/` — local CLI orchestration and resume logic.
 - `stage_service/` — FastAPI transport for n8n.
+- `stage_recording.py` — how a stage attempt is recorded, for both entry points
+  above: the started/finished events, the canonical payload, the evidence
+  beside it, and the diagnosis assembler pinned to the attempt just written. A
+  run directory reads the same whichever entry point produced it.
 - `run_store/` — immutable run identity, append-only events, and atomic stage
   attempts.
 - `experiment_store/` — immutable experiment identity and locked run membership.
 - `provenance.py` — code, tool, schema, renderer, and protected-input identity.
+- `paths.py` — the repository layout, and the one spelling of a recorded path:
+  `repository_relative` keeps a path outside the repository absolute,
+  `require_repository_relative` refuses it.
 - `workspace/` — atomic materialization plus temporary injection/restore.
 - `external_tools/` — structured subprocess boundaries.
 - `evaluation/` — current aggregation plus frozen legacy analysis zones.

@@ -7,7 +7,7 @@ from typing import Any
 from fastapi import FastAPI, HTTPException
 
 from llm4mtl import run_store
-from llm4mtl.experiment_runner.models import PipelineConfig, StageResult
+from llm4mtl.experiment_runner.models import PipelineConfig
 from llm4mtl.experiment_runner.orchestrator import ExperimentOrchestrator, generate_run_id
 from llm4mtl.languages import language_adapter
 from llm4mtl.paths import TARGET
@@ -26,10 +26,14 @@ from llm4mtl.run_store.transformations import (
 from llm4mtl.semantic_tests.diagnosis_preparation import (
     DiagnosisPreparationError,
     diagnosis_artifact_references,
-    prepare_after_execution_stage,
     read_diagnosis_queue,
 )
-from llm4mtl.stage_contract import STAGE_DISPATCH, to_stage_payload
+from llm4mtl.stage_contract import STAGE_DISPATCH
+from llm4mtl.stage_recording import (
+    announce_stage_start,
+    infrastructure_error_result,
+    record_stage_attempt,
+)
 from llm4mtl.stage_service.api_models import (
     DiagnosisRecordRequest,
     GenerationRecordRequest,
@@ -304,42 +308,28 @@ def run_stage(run_id: str, stage: str, request: StageRunRequest) -> dict[str, An
             _orchestrator.prepare_workspace(paths.root, config.language)
         )
 
-    run_store.append_event(paths, "stage_started", stage=stage)
+    # Announced before the work, so a stage that dies mid-execution leaves a
+    # started event with no finished one.
+    announce_stage_start(paths, stage)
     try:
         result = getattr(adapter, method_name)(config, False)
     except Exception as exc:
-        result = StageResult(
-            stage,
-            "infrastructure_error",
-            {"infrastructure_errors": 1},
-            {"error": f"{type(exc).__name__}: {exc}"},
-            exit_code=1,
-        )
-    payload = to_stage_payload(stage, result)
-    payload["artifacts"] = {
-        **payload.get("artifacts", {}),
-        **_generation_artifact_references(paths, stage, request),
-    }
-    attempt = run_store.record_attempt(paths, stage, payload, evidence=result.to_dict())
-    payload["attempt"] = attempt
-    run_store.append_event(
+        result = infrastructure_error_result(stage, exc)
+    # The generation records responsible for the iteration this stage judged
+    # belong to the attempt itself, so they are recorded with it.
+    recorded = record_stage_attempt(
         paths,
-        "stage_finished",
-        stage=stage,
-        status=payload["status"],
-        outcome_code=payload["outcome_code"],
-        attempt=attempt,
+        stage,
+        result,
+        artifacts=_generation_artifact_references(paths, stage, request),
     )
-    # Deterministic post-processing of the attempt just recorded. It changes no
-    # stage fact: routing stays a decision about status and outcome_code, and
-    # the counts, status, and outcome_code the attempt recorded are untouched.
-    index = prepare_after_execution_stage(paths.root, stage, payload, attempt)
+    payload = recorded.payload
     # Where the prepared evidence lives is orchestration, not an observation.
     # Preparation can only run once the attempt has claimed its number, so these
     # references reach the caller through the response while the recorded
     # result.json keeps exactly the contract it was validated against. Nothing
     # is lost: both paths are re-derivable from the run directory.
-    references = diagnosis_artifact_references(paths.root, index)
+    references = diagnosis_artifact_references(paths.root, recorded.diagnosis_index)
     if references:
         payload["artifacts"] = {**payload["artifacts"], **references}
     return payload

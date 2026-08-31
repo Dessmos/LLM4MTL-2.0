@@ -86,12 +86,6 @@ def language_config(language: str) -> LanguageConfig:
         ) from exc
 
 
-def repo_root() -> Path:
-    from llm4mtl.paths import REPO_ROOT
-
-    return REPO_ROOT
-
-
 def test_generation_root() -> Path:
     # v5 final cleanup: generated test suites and their metrics are OUTPUT; they now
     # live under artifacts/work/ (the old nested Test_Generation dir is retired).
@@ -185,10 +179,3 @@ def default_test_project_dir(config: LanguageConfig) -> Path:
 
 def default_results_root(config: LanguageConfig) -> Path:
     return test_generation_root() / "results" / config.generated_tests_dir
-
-
-def relative_or_absolute(path: Path) -> str:
-    try:
-        return str(path.resolve().relative_to(repo_root()))
-    except ValueError:
-        return str(path.resolve())

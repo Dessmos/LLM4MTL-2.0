@@ -7,7 +7,7 @@ import shutil
 from pathlib import Path
 
 from llm4mtl.transformation_execution.models import TransformationValidationResult
-from llm4mtl.transformation_execution.paths import relative_or_absolute
+from llm4mtl.paths import repository_relative
 
 
 def archive_result(result: TransformationValidationResult, artifacts_root: Path) -> TransformationValidationResult:
@@ -27,7 +27,7 @@ def archive_result(result: TransformationValidationResult, artifacts_root: Path)
     shutil.copy2(pair.transformation.path, bundle_dir / "transformation.etl")
     shutil.copytree(pair.suite.path, bundle_dir / "suite")
 
-    archived = result.with_artifact_dir(relative_or_absolute(bundle_dir))
+    archived = result.with_artifact_dir(repository_relative(bundle_dir))
     manifest = {
         "run_id": result.run_id,
         "language": "ETL",
@@ -37,7 +37,7 @@ def archive_result(result: TransformationValidationResult, artifacts_root: Path)
             "transformation": {
                 "model": pair.transformation.llm,
                 "strategy": pair.transformation.strategy,
-                "source_path": relative_or_absolute(pair.transformation.path),
+                "source_path": repository_relative(pair.transformation.path),
                 "sha256": result.transformation_sha256,
                 "archived_path": "transformation.etl",
             },
@@ -45,7 +45,7 @@ def archive_result(result: TransformationValidationResult, artifacts_root: Path)
                 "model": pair.suite.llm,
                 "strategy": pair.suite.strategy,
                 "suite_id": pair.suite.suite_id,
-                "source_path": relative_or_absolute(pair.suite.path),
+                "source_path": repository_relative(pair.suite.path),
                 "sha256": result.suite_sha256,
                 "archived_path": "suite",
             },

@@ -505,7 +505,9 @@ class StageServiceTests(unittest.TestCase):
                 ),
             ),
             patch(
-                "llm4mtl.stage_service.app.prepare_after_execution_stage",
+                # Recording an attempt — and preparing the evidence pinned to
+                # it — is owned by llm4mtl.stage_recording for both callers.
+                "llm4mtl.stage_recording.prepare_after_execution_stage",
                 return_value=index,
             ),
         ):

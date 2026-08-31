@@ -23,7 +23,7 @@ from llm4mtl.languages import (
     language_adapter,
 )
 from llm4mtl.paths import TARGET
-from llm4mtl.prompt_assembly.n8n_exports import STRATEGIES
+from llm4mtl.prompt_assembly.n8n_exports.sync import STRATEGIES
 from llm4mtl.semantic_tests.suite_execution import (
     GENERATED_TRANSFORMATION_ROLE,
     record_observation,

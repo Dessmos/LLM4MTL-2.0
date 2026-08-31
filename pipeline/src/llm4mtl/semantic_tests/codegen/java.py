@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from llm4mtl.semantic_tests.codegen.java_rendering import (
+    assertion_message,
     escape_java,
     java_bool,
     java_string_array,
@@ -166,7 +167,8 @@ def render_assertion(assertion: dict[str, Any], model_vars: dict[str, str]) -> l
     model_var = model_vars[str(assertion["model"])]
     kind = assertion["kind"]
     type_name = escape_java(str(assertion["type"]))
-    message = escape_java(str(assertion.get("message") or f"{kind} assertion for {assertion['model']}::{assertion['type']}"))
+    # The unescaped text is the shared rule; escaping it is this emitter's job.
+    message = escape_java(assertion_message(assertion))
 
     # The former set-membership dispatch raised TypeError for malformed,
     # unhashable kinds. Keep that exception behavior even though validated

@@ -221,6 +221,37 @@ class TargetLayout:
 LEGACY = LegacyLayout()
 TARGET = TargetLayout()
 
+
+def repository_relative(path: Path) -> str:
+    """``path`` as a repository-relative POSIX string, or its absolute form.
+
+    How a path is written into an artifact, so that a run recorded on one
+    machine reads the same on another. Everything the pipeline records lives
+    inside the repository; a path that does not is kept absolute rather than
+    reached for with ``..``, because a stored ``..`` would resolve against
+    whatever directory happened to read it.
+
+    Use :func:`require_repository_relative` where an escaping path is a fault
+    rather than an unusual location.
+    """
+    resolved = Path(path).resolve()
+    try:
+        return resolved.relative_to(REPO_ROOT).as_posix()
+    except ValueError:
+        return str(resolved)
+
+
+def require_repository_relative(path: Path) -> str:
+    """``path`` as a repository-relative POSIX string, refusing to leave it.
+
+    The same spelling as :func:`repository_relative`, for the callers where a
+    path outside the repository is a fault: an input resolved from somewhere it
+    could not have come from, or evidence that would be unreadable to anyone
+    else. Raises :class:`ValueError`; a caller with its own error vocabulary
+    translates it at its own boundary.
+    """
+    return Path(path).resolve().relative_to(REPO_ROOT).as_posix()
+
 # Migration map (legacy -> target) used by Stages 1-2 and by the self-check.
 # Kept as data so a stage can move a component and update one entry here.
 MIGRATION_MAP: dict[str, tuple[Path, Path]] = {

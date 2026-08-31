@@ -5,12 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 
 
-def repo_root() -> Path:
-    from llm4mtl.paths import REPO_ROOT
-
-    return REPO_ROOT
-
-
 def validation_root() -> Path:
     # v5 final cleanup: transformation-validation output lives under artifacts/work/.
     from llm4mtl.paths import TARGET
@@ -46,10 +40,3 @@ def default_artifacts_root() -> Path:
 
 def default_results_root() -> Path:
     return validation_root() / "results" / "etl"
-
-
-def relative_or_absolute(path: Path) -> str:
-    try:
-        return str(path.resolve().relative_to(repo_root()))
-    except ValueError:
-        return str(path.resolve())

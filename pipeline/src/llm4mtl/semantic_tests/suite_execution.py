@@ -30,7 +30,7 @@ from typing import Iterator, Literal
 from llm4mtl.artifact_schemas import validate_artifact
 from llm4mtl.domain import ArtifactRef, GeneratedSuite, SuiteExecutionObservation
 from llm4mtl.external_tools.maven import CommandResult, run_maven, summarize_error
-from llm4mtl.paths import REPO_ROOT
+from llm4mtl.paths import repository_relative
 from llm4mtl.semantic_tests.reference_validation.maven_status import (
     compiles,
     executes,
@@ -459,12 +459,12 @@ def _input_identity(
 ) -> dict[str, dict[str, str]]:
     return {
         "suite": ArtifactRef(
-            path=_stable_artifact_path(suite.path),
+            path=repository_relative(suite.path),
             sha256=directory_sha256(suite.path),
             role="generated_suite",
         ).to_dict(),
         "transformation": ArtifactRef(
-            path=_stable_artifact_path(transformation),
+            path=repository_relative(transformation),
             sha256=file_sha256(transformation),
             role=transformation_role,
         ).to_dict(),
@@ -479,11 +479,3 @@ def _suite_identity(suite: GeneratedSuite) -> dict[str, str]:
         "strategy": suite.strategy,
         "suite_id": suite.suite_id,
     }
-
-
-def _stable_artifact_path(path: Path) -> str:
-    resolved = path.resolve()
-    try:
-        return resolved.relative_to(REPO_ROOT).as_posix()
-    except ValueError:
-        return str(resolved)

@@ -6,6 +6,7 @@ from typing import Any
 
 from llm4mtl.semantic_tests.codegen.java import object_signatures
 from llm4mtl.semantic_tests.codegen.java_rendering import (
+    assertion_message,
     escape_java,
     java_string_array,
     java_string_list,
@@ -31,12 +32,8 @@ def _render_assertion(
     model = model_variables[str(assertion["model"])]
     kind = str(assertion["kind"])
     type_name = escape_java(str(assertion["type"]))
-    message = escape_java(
-        str(
-            assertion.get("message")
-            or f"{kind} assertion for {assertion['model']}::{assertion['type']}"
-        )
-    )
+    # The unescaped text is the shared rule; escaping it is this emitter's job.
+    message = escape_java(assertion_message(assertion))
     match kind:
         case "count":
             return [

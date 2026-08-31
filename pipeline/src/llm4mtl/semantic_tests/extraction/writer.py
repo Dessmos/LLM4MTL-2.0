@@ -12,10 +12,10 @@ from llm4mtl.conventions import (
     frozen_task_prompt,
     language_config,
     n8n_workflows_root,
-    relative_or_absolute,
 )
 from llm4mtl.domain import ArtifactValidation
 from llm4mtl.languages.base import LanguageAdapter
+from llm4mtl.paths import repository_relative
 from llm4mtl.run_store.identity import resolve_contained_dir
 from llm4mtl.semantic_tests.extraction.models import ResponseTarget
 from llm4mtl.semantic_tests.extraction.parser import (
@@ -152,14 +152,14 @@ def build_metadata(
         "suite_id": suite_id,
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "prompt_file": (
-            relative_or_absolute(prompt_path) if prompt_path.exists() else None
+            repository_relative(prompt_path) if prompt_path.exists() else None
         ),
         "workflow_file": (
-            relative_or_absolute(workflow_path)
+            repository_relative(workflow_path)
             if workflow_path.exists()
             else None
         ),
-        "raw_output_file": relative_or_absolute(target.response_path),
+        "raw_output_file": repository_relative(target.response_path),
         "status": "candidate" if validation.valid else "invalid",
         "artifact_validation": validation.as_metadata(),
         "extraction": {
