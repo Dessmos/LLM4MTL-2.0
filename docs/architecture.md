@@ -336,15 +336,11 @@ See `n8n-python-contract.md` and `runner-api.md`.
 
 ## Measurement layer
 
-`measurement-spec.md` is authoritative. Its major target boundaries are:
+`measurement-spec.md` is authoritative. The controlled BA campaign uses a
+standalone `evaluation/` layer over immutable production artifacts. Fixed
+held-out suites, deterministic mutants, qualification/baseline/generated suite
+roles, static EClass coverage, and derived CSVs belong there; they do not add
+production nodes, endpoints, ledgers, telemetry, or runtime instrumentation.
 
-- one language-neutral transformation-outcome comparator;
-- versioned per-language mutation operators as capabilities adjacent to, not
-  methods on, the active pipeline adapter;
-- fixed qualification corpus `Q` and qualified denominator `M_Q`;
-- mutation observations and metrics derived from immutable run facts;
-- typed LLM-call telemetry recorded in the run journal.
-
-The comparator, mutation subsystem, full cost telemetry ingest, and thesis
-metrics remain future work. The current code establishes the four-language
-execution, integrity, scenario, and validation foundations they require.
+Language adapters are reused only as the existing parser/execution boundary and
+all evaluator workspaces are temporary. Run directories remain read-only inputs.

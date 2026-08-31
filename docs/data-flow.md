@@ -389,21 +389,19 @@ Python validates it against `diagnosis.schema.json`, stores it as an immutable
 response attempt, and appends `diagnosis_recorded`. Provider selection and the
 diagnosis LLM call remain in n8n.
 
-## Target measurement flow
+## Offline measurement flow
 
-The following measurement stages are specified but not yet implemented:
+The controlled BA campaign evaluates completed runs outside n8n:
 
 ```text
-versioned per-language mutation operators
-  → fixed qualification corpus Q
-  → shared semantic outcome comparison
-  → frozen qualified mutant catalog M_Q
-  → reference-valid suite × M_Q
-  → confirmed kills / coherence audit
-  → run metrics
-  → experiment aggregation and significance
+selected run ids + strict experiment_config preflight
+  → fixed held-out suites × stored transformation iterations
+  → deterministic mutants × qualification/baseline/generated suites
+  → static EClass analysis of stored generated inputs
+  → derived observation CSVs
+  → metric CSV
 ```
 
-Typed LLM-call telemetry will also enter the run journal once its ingest schema
-and endpoint are implemented. `measurement-spec.md` is authoritative for these
-future stages.
+These procedures reuse immutable artifacts and temporary engine workspaces. They
+do not add production telemetry, endpoints, ledgers, or n8n nodes. See
+`measurement-spec.md` for the frozen populations and denominators.
