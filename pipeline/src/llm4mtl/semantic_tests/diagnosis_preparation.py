@@ -42,13 +42,8 @@ from llm4mtl.run_store.attempts import existing_attempts
 from llm4mtl.run_store.models import RunPaths
 from llm4mtl.semantic_tests.codegen.java_rendering import sanitize_method_name
 from llm4mtl.semantic_tests.execution_evidence import archived_execution_evidence
-from llm4mtl.semantic_tests.failure_report import (
-    FailureReportError,
-    PairReportRequest,
-    ReportRequest,
-    write_failure_report,
-    write_pair_failure_report,
-)
+from llm4mtl.semantic_tests.failure_report import FailureReportError, write_report
+from llm4mtl.semantic_tests.surefire import testcase_outcome
 from llm4mtl.serialization.json_io import read_json, write_json_once
 
 SCHEMA_VERSION = "1.0"
@@ -591,8 +586,7 @@ def _prepare_report(
     }
     output = _report_path(paths, attempt, execution, test_case_id, assertion_id)
     try:
-        request = ReportRequest.from_payload(payload)
-        report = write_failure_report(request, output)
+        report = write_report(payload, output, scope="test_case")
     except FailureReportError as exc:
         return {
             "status": "refused",
@@ -638,8 +632,7 @@ def _prepare_pair_report(
     }
     output = _pair_report_path(paths, attempt, execution)
     try:
-        request = PairReportRequest.from_payload(payload)
-        report = write_pair_failure_report(request, output)
+        report = write_report(payload, output, scope="execution_pair")
     except FailureReportError as exc:
         return {
             "status": "refused",
@@ -685,13 +678,12 @@ def _recorded_failures(reports: tuple[Path, ...]) -> list[SurefireFailure]:
 
 
 def _recorded_failure(path: Path, case: ET.Element) -> SurefireFailure | None:
-    error = case.find("error")
-    node = error if error is not None else case.find("failure")
+    status, node = testcase_outcome(case)
     if node is None:
         return None
     return SurefireFailure(
         report=path,
-        kind="runtime_error" if error is not None else "assertion_failure",
+        kind="runtime_error" if status == "error" else "assertion_failure",
         test_class=str(case.get("classname") or ""),
         test_method=str(case.get("name") or ""),
         message=str(node.get("message") or ""),

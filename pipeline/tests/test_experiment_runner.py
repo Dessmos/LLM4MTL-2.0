@@ -24,9 +24,8 @@ from llm4mtl.experiment_runner.models import PipelineConfig, RunResult, StageRes
 from llm4mtl.experiment_runner.orchestrator import ExperimentOrchestrator
 from llm4mtl.experiment_runner.adapters.transformation_validation import TransformationValidationAdapter
 from llm4mtl.paths import LEGACY_PROJECT_ROOT, TARGET
-from llm4mtl.semantic_tests.failure_report import (
-    DIFF_FIELDS,
-    FailureReportError,
+from llm4mtl.semantic_tests.failure_report import DIFF_FIELDS, FailureReportError
+from llm4mtl.semantic_tests.failure_report.request import (
     ReportRequest,
     _validate_difference,
 )
@@ -320,14 +319,14 @@ class CliTests(unittest.TestCase):
 class OrchestratorTests(unittest.TestCase):
     def test_failure_report_command_delegates_to_the_shared_assembler(self) -> None:
         orchestrator = ExperimentOrchestrator(REPO_ROOT)
-        request = object()
+        payload = {"attempt": 1}
         expected = {"report_type": "semantic_test_case_failure"}
         with patch(
-            "llm4mtl.experiment_runner.orchestrator.load_report_request",
-            return_value=request,
-        ) as load_request:
+            "llm4mtl.experiment_runner.orchestrator.read_request_payload",
+            return_value=payload,
+        ) as read_payload:
             with patch(
-                "llm4mtl.experiment_runner.orchestrator.write_failure_report",
+                "llm4mtl.experiment_runner.orchestrator.write_report",
                 return_value=expected,
             ) as write_report:
                 actual = orchestrator.assemble_failure_report(
@@ -336,10 +335,11 @@ class OrchestratorTests(unittest.TestCase):
                 )
 
         self.assertEqual(expected, actual)
-        load_request.assert_called_once_with(Path("request.json"))
+        read_payload.assert_called_once_with(Path("request.json"))
         write_report.assert_called_once_with(
-            request,
+            payload,
             Path("artifacts/work/report.json"),
+            scope="test_case",
         )
 
     def test_dry_run_does_not_create_run_directory(self) -> None:

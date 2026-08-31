@@ -160,6 +160,28 @@ def read_surefire_reports(reports_dir: Path) -> SurefireReport | None:
     )
 
 
+def testcase_outcome(case: ET.Element) -> tuple[str, ET.Element | None]:
+    """The outcome of one ``<testcase>``: ``passed``, ``failed``, or ``error``.
+
+    An ``<error>`` wins over a ``<failure>``. A case that both threw and lost an
+    assertion never reached a trustworthy verdict, so the throw is what it is
+    about; reading the assertion instead would attribute the failure to a check
+    that had already been invalidated.
+
+    Stated here because four readers of these reports need it — the phase
+    classifier below, both failure-report views, and diagnosis preparation —
+    and a reader that ordered the two differently would disagree with the
+    others about the same recorded case.
+    """
+    error = case.find("error")
+    if error is not None:
+        return "error", error
+    failure = case.find("failure")
+    if failure is not None:
+        return "failed", failure
+    return "passed", None
+
+
 def _report_messages(root: ET.Element) -> tuple[list[str], list[str]]:
     """Collect error and failure descriptions in test-case document order."""
     error_messages: list[str] = []

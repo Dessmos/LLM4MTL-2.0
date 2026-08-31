@@ -32,8 +32,8 @@ from llm4mtl.semantic_tests.diagnosis_preparation import (
     prepare_execution_diagnosis,
 )
 from llm4mtl.semantic_tests.failure_report import (
-    load_report_request,
-    write_failure_report,
+    read_request_payload,
+    write_report,
 )
 from llm4mtl.serialization.json_io import read_json, write_json
 from llm4mtl.stage_contract import (
@@ -85,6 +85,7 @@ class ExperimentOrchestrator:
         self,
         request_path: Path,
         output_path: Path,
+        scope: str = "test_case",
     ) -> dict[str, Any]:
         """Create one diagnosis evidence report from an existing run attempt.
 
@@ -92,8 +93,8 @@ class ExperimentOrchestrator:
         it neither invokes the diagnosis LLM nor modifies the run's manifest,
         events, or recorded stage attempts.
         """
-        request = load_report_request(request_path)
-        return write_failure_report(request, output_path)
+        payload = read_request_payload(request_path)
+        return write_report(payload, output_path, scope=scope)
 
     def prepare_diagnosis_evidence(
         self,

@@ -35,10 +35,8 @@ from llm4mtl.semantic_tests.diagnosis_preparation import (
     prepare_execution_diagnosis,
 )
 from llm4mtl.semantic_tests.failure_report import FailureReportError
-from llm4mtl.semantic_tests.failure_report import (
-    _failure_evidence,
-    _surefire_test_case,
-)
+from llm4mtl.semantic_tests.failure_report.case_report import _failure_evidence
+from llm4mtl.semantic_tests.failure_report.surefire_view import _surefire_test_case
 from llm4mtl.semantic_tests.execution_evidence import (
     STDOUT_FILENAME,
     SUREFIRE_DIRNAME,
