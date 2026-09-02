@@ -5,4 +5,3 @@ This package provides tools for performing paired significance tests on ATL pars
 """
 
 __version__ = "1.0.0"
-

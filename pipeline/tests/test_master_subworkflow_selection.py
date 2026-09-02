@@ -39,6 +39,8 @@ PROVIDER_MODELS = {
     "anthropic": "claude-sonnet-4",
     "google": "gemini-2-5-pro",
 }
+
+
 def _master_document() -> dict[str, Any]:
     return json.loads(MASTER_WORKFLOW.read_text(encoding="utf-8"))
 
@@ -111,6 +113,7 @@ def _run_code_node(state: dict[str, Any], files: list[Path]) -> dict[str, Any]:
 
 @unittest.skipUnless(shutil.which("node"), "the master workflow's Code nodes need Node")
 class MasterSubworkflowSelectionTests(unittest.TestCase):
+
     def test_each_language_provider_strategy_selects_exactly_one_workflow(self) -> None:
         checked = 0
         for kind, prefix in (
@@ -151,7 +154,9 @@ class MasterSubworkflowSelectionTests(unittest.TestCase):
                             )
                             self.assertTrue(outcome["ok"], outcome.get("error"))
                             self.assertEqual(
-                                json.loads(expected.read_text(encoding="utf-8"))["name"],
+                                json.loads(expected.read_text(encoding="utf-8"))[
+                                    "name"
+                                ],
                                 outcome["result"]["workflow_json"]["name"],
                             )
                             checked += 1
@@ -174,7 +179,10 @@ class MasterSubworkflowSelectionTests(unittest.TestCase):
                         for path in _glob_matches(_selector(kind, language, "grammar"))
                     }
                     self.assertTrue(
-                        any(name.endswith("_few_shots_AND_grammar.json") for name in names),
+                        any(
+                            name.endswith("_few_shots_AND_grammar.json")
+                            for name in names
+                        ),
                         names,
                     )
 
@@ -266,7 +274,9 @@ class MasterSubworkflowSelectionTests(unittest.TestCase):
         self.assertEqual(
             "continueErrorOutput", nodes["Extract Subworkflow JSON"]["onError"]
         )
-        error_targets = _master_document()["connections"]["Extract Subworkflow JSON"]["main"][1]
+        error_targets = _master_document()["connections"]["Extract Subworkflow JSON"][
+            "main"
+        ][1]
         self.assertEqual("Capture Orchestration Error", error_targets[0]["node"])
 
     def test_every_persistence_and_workflow_read_error_reaches_terminalization(
@@ -297,7 +307,9 @@ class MasterSubworkflowSelectionTests(unittest.TestCase):
                 self.assertNotIn("stage_service_url", url)
                 self.assertRegex(url.removeprefix("="), r"^https?://")
 
-    def test_the_artifact_namespace_is_the_model_family_not_the_exact_model(self) -> None:
+    def test_the_artifact_namespace_is_the_model_family_not_the_exact_model(
+        self,
+    ) -> None:
         """Every gpt-5 variant files under `gpt-5`, not under its own id.
 
         The artifact tree is one directory per model family, prepared ahead of a
@@ -347,11 +359,12 @@ class MasterSubworkflowSelectionTests(unittest.TestCase):
                     for node in workflow["nodes"]
                     if node["type"].startswith("@n8n/n8n-nodes-langchain.lmChat")
                 )
-                configured = (
-                    model_node["parameters"].get("modelName")
-                    or model_node["parameters"].get("model")
+                configured = model_node["parameters"].get("modelName") or model_node[
+                    "parameters"
+                ].get("model")
+                value = (
+                    configured["value"] if isinstance(configured, dict) else configured
                 )
-                value = configured["value"] if isinstance(configured, dict) else configured
                 self.assertEqual(model, value)
 
     def test_the_diagnosis_namespace_survives_model_patching(self) -> None:

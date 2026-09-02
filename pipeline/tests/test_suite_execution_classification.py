@@ -46,10 +46,13 @@ ALL_PASSED = """
 
 
 def maven(output: str, exit_code: int, timed_out: bool = False) -> CommandResult:
-    return CommandResult(exit_code=exit_code, stdout=output, stderr="", timed_out=timed_out)
+    return CommandResult(
+        exit_code=exit_code, stdout=output, stderr="", timed_out=timed_out
+    )
 
 
 class ClassificationTests(unittest.TestCase):
+
     def test_assertion_failure_is_executable_but_not_reference_valid(self) -> None:
         observation = classify_maven_run(maven(ASSERTION_FAILURE, exit_code=1))
 

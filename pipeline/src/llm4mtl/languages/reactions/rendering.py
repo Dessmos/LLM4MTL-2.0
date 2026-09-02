@@ -105,10 +105,7 @@ def render_reactions_test(class_name: str, spec: dict[str, Any], task: str) -> s
             '        Resource.Factory.Registry.INSTANCE.getExtensionToFactoryMap().put("*", new XMIResourceFactoryImpl());',
             "    }",
             "",
-            *[
-                _render_method(test, task, specification)
-                for test in spec["tests"]
-            ],
+            *[_render_method(test, task, specification) for test in spec["tests"]],
             *_reactions_helpers(),
             *assertion_helpers(),
             "}",
@@ -123,10 +120,7 @@ def _render_method(
     specification: str,
 ) -> str:
     models = effective_models({}, test)
-    slot_uris = {
-        str(model["name"]): str(model["metamodelUri"])
-        for model in models
-    }
+    slot_uris = {str(model["name"]): str(model["metamodelUri"]) for model in models}
     # A routine may ask the user which of several targets to create. The test
     # says which option it means; without an answer the interaction throws and
     # no assertion is ever reached.
@@ -289,7 +283,7 @@ def _java_literal(value: Any) -> str:
 def _reactions_helpers() -> list[str]:
     return [
         "    private Map<String, Object> map(Object... entries) {",
-        "        if (entries.length % 2 != 0) throw new IllegalArgumentException(\"map needs key/value pairs\");",
+        '        if (entries.length % 2 != 0) throw new IllegalArgumentException("map needs key/value pairs");',
         "        Map<String, Object> values = new LinkedHashMap<>();",
         "        for (int index = 0; index < entries.length; index += 2) values.put((String) entries[index], entries[index + 1]);",
         "        return values;",
@@ -309,9 +303,9 @@ def _reactions_helpers() -> list[str]:
         "    // that slot. Deriving the change over the whole VSUM adds an empty",
         "    // change for every resource the commit did not touch -- including one",
         "    // a reaction has just created -- and propagation rejects those with",
-        "    // \"Cannot identify the packages of this change\".",
+        '    // "Cannot identify the packages of this change".',
         "    private View slotView(InternalVirtualModel vsum, String nsUri) {",
-        "        var selector = vsum.createSelector(ViewTypeFactory.createIdentityMappingViewType(\"llm4mtl\"));",
+        '        var selector = vsum.createSelector(ViewTypeFactory.createIdentityMappingViewType("llm4mtl"));',
         "        for (EObject element : selector.getSelectableElements()) {",
         "            if (element.eClass().getEPackage().getNsURI().equals(nsUri)) selector.setSelected(element, true);",
         "        }",
@@ -319,14 +313,14 @@ def _reactions_helpers() -> list[str]:
         "    }",
         "",
         "    private View allView(InternalVirtualModel vsum) {",
-        "        var selector = vsum.createSelector(ViewTypeFactory.createIdentityMappingViewType(\"llm4mtl\"));",
+        '        var selector = vsum.createSelector(ViewTypeFactory.createIdentityMappingViewType("llm4mtl"));',
         "        selector.getSelectableElements().forEach(element -> selector.setSelected(element, true));",
         "        return selector.createView();",
         "    }",
         "",
         "    private void registerInitialModel(InternalVirtualModel vsum, Path directory, String resourcePath) throws Exception {",
         "        URL url = getClass().getClassLoader().getResource(resourcePath);",
-        "        if (url == null) throw new IllegalArgumentException(\"Resource not found: \" + resourcePath);",
+        '        if (url == null) throw new IllegalArgumentException("Resource not found: " + resourcePath);',
         "        ResourceSet resourceSet = new ResourceSetImpl();",
         "        Resource resource = resourceSet.getResource(org.eclipse.emf.common.util.URI.createURI(url.toString()), true);",
         "        for (EObject root : new ArrayList<>(resource.getContents())) {",
@@ -362,14 +356,14 @@ def _reactions_helpers() -> list[str]:
         "            }",
         "            if (matches) return candidate;",
         "        }",
-        "        throw new IllegalArgumentException(\"Element not found: \" + nsUri + \"::\" + type + \" \" + where);",
+        '        throw new IllegalArgumentException("Element not found: " + nsUri + "::" + type + " " + where);',
         "    }",
         "",
         "    private EObject createObject(String nsUri, String type, Map<String, Object> features) {",
         "        EPackage ePackage = EPackage.Registry.INSTANCE.getEPackage(nsUri);",
-        "        if (ePackage == null) throw new IllegalArgumentException(\"Metamodel not registered: \" + nsUri);",
+        '        if (ePackage == null) throw new IllegalArgumentException("Metamodel not registered: " + nsUri);',
         "        EClass eClass = (EClass) ePackage.getEClassifier(type);",
-        "        if (eClass == null) throw new IllegalArgumentException(\"Type not found: \" + nsUri + \"::\" + type);",
+        '        if (eClass == null) throw new IllegalArgumentException("Type not found: " + nsUri + "::" + type);',
         "        EObject object = ePackage.getEFactoryInstance().create(eClass);",
         "        for (Map.Entry<String, Object> entry : features.entrySet()) setFeature(object, entry.getKey(), entry.getValue());",
         "        return object;",
@@ -377,24 +371,24 @@ def _reactions_helpers() -> list[str]:
         "",
         "    private void setFeature(EObject object, String name, Object value) {",
         FEATURE_LOOKUP_LINE,
-        "        if (feature == null) throw new IllegalArgumentException(\"Feature not found: \" + object.eClass().getName() + \".\" + name);",
+        '        if (feature == null) throw new IllegalArgumentException("Feature not found: " + object.eClass().getName() + "." + name);',
         "        object.eSet(feature, coerce(feature, value));",
         "    }",
         "",
-        "    @SuppressWarnings(\"unchecked\")",
+        '    @SuppressWarnings("unchecked")',
         "    private void addToCollection(EObject object, String name, Object value) {",
         FEATURE_LOOKUP_LINE,
         "        ((Collection<Object>) object.eGet(feature)).add(coerce(feature, value));",
         "    }",
         "",
-        "    @SuppressWarnings(\"unchecked\")",
+        '    @SuppressWarnings("unchecked")',
         "    private void removeFromCollection(EObject object, String name, Object value) {",
         FEATURE_LOOKUP_LINE,
         "        ((Collection<Object>) object.eGet(feature)).remove(coerce(feature, value));",
         "    }",
         "",
         "    private void moveInto(EObject destination, String name, Object value) {",
-        "        if (!(value instanceof EObject)) throw new IllegalArgumentException(\"move needs an EObject value\");",
+        '        if (!(value instanceof EObject)) throw new IllegalArgumentException("move needs an EObject value");',
         "        EcoreUtil.remove((EObject) value);",
         "        addToCollection(destination, name, value);",
         "    }",

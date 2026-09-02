@@ -29,9 +29,7 @@ def discover_validated_suites(
     )
     suites = [candidate_suite_from_path(path, root) for path in paths if path.is_dir()]
     selected = [
-        suite
-        for suite in suites
-        if _matches_identity(suite, task, llm, strategy)
+        suite for suite in suites if _matches_identity(suite, task, llm, strategy)
     ]
     return _reference_validated_suites(selected, observations_root)
 
@@ -79,7 +77,9 @@ def candidate_suite_from_path(path: Path, root: Path) -> ValidatedSuite:
         except (ValueError, IndexError):
             raise SystemExit(f"Cannot infer candidate suite metadata from {path}")
 
-    return ValidatedSuite(path=path, task=task, llm=llm, strategy=strategy, suite_id=suite_id)
+    return ValidatedSuite(
+        path=path, task=task, llm=llm, strategy=strategy, suite_id=suite_id
+    )
 
 
 def discover_transformations(
@@ -90,8 +90,16 @@ def discover_transformations(
     strategy: str | None = None,
 ) -> list[GeneratedTransformation]:
     root = root.resolve()
-    paths = [path.resolve() for path in explicit] if explicit else sorted(root.glob("*/*/*.etl"))
-    transformations = [generated_transformation_from_path(path, root) for path in paths if path.is_file()]
+    paths = (
+        [path.resolve() for path in explicit]
+        if explicit
+        else sorted(root.glob("*/*/*.etl"))
+    )
+    transformations = [
+        generated_transformation_from_path(path, root)
+        for path in paths
+        if path.is_file()
+    ]
     return [
         transformation
         for transformation in transformations
@@ -112,7 +120,9 @@ def _matches_identity(
     )
 
 
-def generated_transformation_from_path(path: Path, root: Path) -> GeneratedTransformation:
+def generated_transformation_from_path(
+    path: Path, root: Path
+) -> GeneratedTransformation:
     path = path.resolve()
     try:
         rel = path.relative_to(root.resolve())
@@ -126,9 +136,13 @@ def generated_transformation_from_path(path: Path, root: Path) -> GeneratedTrans
             strategy = path.parent.name
             llm = path.parent.parent.name
         except IndexError:
-            raise SystemExit(f"Cannot infer generated transformation metadata from {path}")
+            raise SystemExit(
+                f"Cannot infer generated transformation metadata from {path}"
+            )
 
-    return GeneratedTransformation(path=path, task=path.stem, llm=llm, strategy=strategy)
+    return GeneratedTransformation(
+        path=path, task=path.stem, llm=llm, strategy=strategy
+    )
 
 
 def match_pairs(

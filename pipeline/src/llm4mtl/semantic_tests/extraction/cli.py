@@ -137,7 +137,10 @@ def extract_one(
     action = "would write" if args.dry_run else "wrote"
     if not validation.valid:
         reason = "; ".join(validation.violations)
-        return False, f"{action} {suite_dir} [INVALID: {validation.reason_code}] {reason}"
+        return (
+            False,
+            f"{action} {suite_dir} [INVALID: {validation.reason_code}] {reason}",
+        )
     return True, f"{action} {suite_dir}"
 
 

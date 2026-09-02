@@ -30,12 +30,12 @@ def load_task_contract(
     return contract_from_mapping(data, task)
 
 
-def contract_from_mapping(data: dict[str, Any], task: str | None = None) -> TaskContract:
+def contract_from_mapping(
+    data: dict[str, Any], task: str | None = None
+) -> TaskContract:
     """Build a ``TaskContract`` from an already-parsed contract mapping."""
     models = tuple(
-        _model_from_dict(raw)
-        for raw in data.get("models", [])
-        if isinstance(raw, dict)
+        _model_from_dict(raw) for raw in data.get("models", []) if isinstance(raw, dict)
     )
     resolved_task = str(data.get("task") or task or "")
     return TaskContract(
@@ -54,8 +54,12 @@ def _model_from_dict(raw: dict[str, Any]) -> ModelContract:
         roles=tuple(str(role) for role in raw.get("roles", [])),
         kind=str(raw.get("kind") or "emf"),
         metamodel_uri=str(raw["metamodelUri"]) if raw.get("metamodelUri") else None,
-        metamodel_ns_prefix=str(raw["metamodelNsPrefix"]) if raw.get("metamodelNsPrefix") else None,
-        metamodel_alias=str(raw["metamodelAlias"]) if raw.get("metamodelAlias") else None,
+        metamodel_ns_prefix=str(raw["metamodelNsPrefix"])
+        if raw.get("metamodelNsPrefix")
+        else None,
+        metamodel_alias=str(raw["metamodelAlias"])
+        if raw.get("metamodelAlias")
+        else None,
         metamodel_file=str(raw["metamodelFile"]) if raw.get("metamodelFile") else None,
         types_used_in_transformation=tuple(
             str(type_name)
@@ -69,5 +73,7 @@ def _model_from_dict(raw: dict[str, Any]) -> ModelContract:
                 or []
             )
         ),
-        available_types=tuple(str(type_name) for type_name in raw.get("availableTypes", [])),
+        available_types=tuple(
+            str(type_name) for type_name in raw.get("availableTypes", [])
+        ),
     )

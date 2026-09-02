@@ -149,9 +149,7 @@ def java_files(extracted: dict[str, str]) -> list[str]:
 def model_files(extracted: dict[str, str]) -> list[str]:
     """Return generated model artifact paths in deterministic order."""
     return sorted(
-        path
-        for path in extracted
-        if path.endswith((".model", ".xmi", ".xml"))
+        path for path in extracted if path.endswith((".model", ".xmi", ".xml"))
     )
 
 

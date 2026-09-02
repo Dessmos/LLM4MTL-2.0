@@ -4,8 +4,8 @@ File utilities for finding ground truth files and counting LOC.
 
 from pathlib import Path
 
-ATL_GLOB = '*.atl'
-QVTO_GLOB = '*.qvto'
+ATL_GLOB = "*.atl"
+QVTO_GLOB = "*.qvto"
 
 
 def find_ground_truth_dir(repo_root):
@@ -22,10 +22,10 @@ def find_ground_truth_dir(repo_root):
 
     # Possible ground truth directory patterns
     possible_patterns = [
-        '**/other_references',
-        '**/referenceATL',
-        '**/reference',
-        '**/src/main/resources/transformations',
+        "**/other_references",
+        "**/referenceATL",
+        "**/reference",
+        "**/src/main/resources/transformations",
     ]
 
     for pattern in possible_patterns:
@@ -47,9 +47,8 @@ def find_ground_truth_dir(repo_root):
 
 
 def _contains_transformations(directory):
-    return (
-        directory.is_dir()
-        and (list(directory.glob(ATL_GLOB)) or list(directory.glob(QVTO_GLOB)))
+    return directory.is_dir() and (
+        list(directory.glob(ATL_GLOB)) or list(directory.glob(QVTO_GLOB))
     )
 
 
@@ -72,7 +71,7 @@ def count_loc(file_path):
         LOC count
     """
     try:
-        with open(file_path, 'r', encoding='utf-8') as f:
+        with open(file_path, "r", encoding="utf-8") as f:
             lines = f.readlines()
 
         loc_count = 0
@@ -82,7 +81,7 @@ def count_loc(file_path):
             if not stripped:
                 continue
             # Exclude pure comment lines (starting with --)
-            if stripped.startswith('--'):
+            if stripped.startswith("--"):
                 continue
             loc_count += 1
 
@@ -139,7 +138,7 @@ def match_file_to_ground_truth(file_name, file_to_loc):
         return file_to_loc[f"{stem}_All"]
 
     # Try removing _All suffix
-    if stem.endswith('_All'):
+    if stem.endswith("_All"):
         base_name = stem[:-4]
         if base_name in file_to_loc:
             return file_to_loc[base_name]

@@ -125,7 +125,9 @@ def _execute_suites(
 
     rows: list[dict[str, str]] = []
     for suite in suites:
-        print(f"Validating {suite.task} | {suite.llm} | {suite.strategy} | {suite.suite_id}")
+        print(
+            f"Validating {suite.task} | {suite.llm} | {suite.strategy} | {suite.suite_id}"
+        )
         verdict = validate_suite(suite, context)
         row = reference_row(verdict)
         rows.append(row)

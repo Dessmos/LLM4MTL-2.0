@@ -47,7 +47,9 @@ def write_readable_report(
 
     path.parent.mkdir(parents=True, exist_ok=True)
     append_to_existing = append and path.exists()
-    with path.open("a" if append_to_existing else "w", newline="", encoding="utf-8") as handle:
+    with path.open(
+        "a" if append_to_existing else "w", newline="", encoding="utf-8"
+    ) as handle:
         writer = csv.writer(handle)
         if not append_to_existing:
             writer.writerow(READABLE_REPORT_COLUMNS)
@@ -68,7 +70,10 @@ def readable_rows(result: TransformationValidationResult) -> list[tuple[str, str
             "Transformation",
             f"{pair.transformation.llm} / {pair.transformation.strategy} / {pair.transformation.path.name}",
         ),
-        ("Test suite", f"{pair.suite.llm} / {pair.suite.strategy} / {pair.suite.suite_id}"),
+        (
+            "Test suite",
+            f"{pair.suite.llm} / {pair.suite.strategy} / {pair.suite.suite_id}",
+        ),
         ("Test result", "PASS" if result.tests_pass else "FAIL"),
         ("Compilation", "PASS" if result.compiles else "FAIL"),
         ("Test execution", "PASS" if result.executes else "FAIL"),

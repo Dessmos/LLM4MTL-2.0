@@ -56,9 +56,7 @@ ETL_TYPE = re.compile(r"\b([A-Za-z_]\w*)!\s*`?([A-Za-z_][\w:-]*)`?")
 ETL_TRANSFORM = re.compile(
     r"\btransform\b[^:\n]*:\s*([A-Za-z_]\w*)!\s*`?([A-Za-z_][\w:-]*)`?"
 )
-ETL_TO = re.compile(
-    r"\bto\b(?P<body>.*?)(?:\{|\n[^\S\r\n]*\r?\n)", re.DOTALL
-)
+ETL_TO = re.compile(r"\bto\b(?P<body>.*?)(?:\{|\n[^\S\r\n]*\r?\n)", re.DOTALL)
 ETL_DECLARED_TYPE = re.compile(r":\s*([A-Za-z_]\w*)!\s*`?([A-Za-z_][\w:-]*)`?")
 ECORE_GLOB = "*.ecore"
 ETL_NEW = re.compile(r"\bnew\s+([A-Za-z_]\w*)!\s*`?([A-Za-z_][\w:-]*)`?")
@@ -150,19 +148,14 @@ def build_atl_contract(reference: Path) -> dict[str, Any]:
 
 def build_qvto_contract(reference: Path) -> dict[str, Any]:
     source = reference.read_text(encoding="utf-8")
-    modeltypes = {
-        alias: uri
-        for alias, uri in QVTO_MODELTYPES.findall(source)
-    }
+    modeltypes = {alias: uri for alias, uri in QVTO_MODELTYPES.findall(source)}
     signature = QVTO_SIGNATURE.search(source)
     if signature is None:
         raise ValueError(f"cannot read QVT-O model signature from {reference}")
 
     models = []
     for direction, runtime_name, alias in QVTO_PARAMETER.findall(signature.group(1)):
-        role = {"in": "source", "out": "target", "inout": "inout"}[
-            direction.lower()
-        ]
+        role = {"in": "source", "out": "target", "inout": "inout"}[direction.lower()]
         uri = modeltypes.get(alias)
         if not uri:
             raise ValueError(f"QVT-O alias {alias} has no modeltype in {reference}")
@@ -274,7 +267,9 @@ REACTIONS_PREREQUISITES = {
     "FamiliesToPersons_InsertedDaughter": ["FamiliesToPersons_InsertedFamilyRegister"],
     "FamiliesToPersons_DeletedMember": ["FamiliesToPersons_InsertedDaughter"],
     "FamiliesToPersons_DeletedFamily": ["FamiliesToPersons_InsertedDaughter"],
-    "NetworkToGraph_ComponentInsertedIntoSystem": ["NetworkToGraph_CreateAndRegisterRoot"],
+    "NetworkToGraph_ComponentInsertedIntoSystem": [
+        "NetworkToGraph_CreateAndRegisterRoot"
+    ],
     "NetworkToGraph_ComponentRenamed": ["NetworkToGraph_ComponentInsertedIntoSystem"],
     "NetworkToGraph_ComponentDeleted": ["NetworkToGraph_ComponentInsertedIntoSystem"],
 }
@@ -364,9 +359,7 @@ def resolve_atl_ecore(alias: str) -> EcoreInfo:
     if override:
         return load_ecore(root / override, preferred_package=alias)
     candidates = [
-        path
-        for path in root.glob(ECORE_GLOB)
-        if path.stem.lower() == alias.lower()
+        path for path in root.glob(ECORE_GLOB) if path.stem.lower() == alias.lower()
     ]
     if len(candidates) != 1:
         raise ValueError(f"cannot resolve ATL alias {alias!r} under {root}")
@@ -436,9 +429,7 @@ def _domain_package(root: ET.Element, preferred: str) -> ET.Element:
     """The EPackage a contract should quote, not the document root."""
     if root.tag.endswith("EPackage"):
         return root
-    packages = [
-        element for element in root.iter() if element.tag.endswith("EPackage")
-    ]
+    packages = [element for element in root.iter() if element.tag.endswith("EPackage")]
     if not packages:
         raise ValueError(f"no EPackage in metamodel document: {preferred}")
     named = [

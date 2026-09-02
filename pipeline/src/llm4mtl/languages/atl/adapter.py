@@ -80,7 +80,9 @@ class AtlAdapter:
             transformation,
             workspace,
             timeout,
-            transformation_destination=workspace.engine_dir / "src/main/atl" / f"{suite.task}.atl",
+            transformation_destination=workspace.engine_dir
+            / "src/main/atl"
+            / f"{suite.task}.atl",
             java_root=workspace.engine_dir / "src/test/java",
             models_root=(
                 workspace.engine_dir
@@ -131,12 +133,18 @@ class AtlAdapter:
             match = PARSE_RESULT.search(combined)
             reported = int(match.group(2)) if match else None
             observations[transformation] = ParseObservation(
-                parsed=bool(match and match.group(1) == "OK" and completed.returncode == 0),
+                parsed=bool(
+                    match and match.group(1) == "OK" and completed.returncode == 0
+                ),
                 # ATLParserMain prints `RESULT:FAIL:-1` when it could not parse
                 # the file at all, so a negative value is its own signal that no
                 # count exists — the same fact as a missing RESULT line. Only a
                 # non-negative value was actually measured.
-                problem_count=reported if reported is not None and reported >= 0 else None,
-                diagnostic="" if match and match.group(1) == "OK" else combined.strip()[-500:],
+                problem_count=reported
+                if reported is not None and reported >= 0
+                else None,
+                diagnostic=""
+                if match and match.group(1) == "OK"
+                else combined.strip()[-500:],
             )
         return observations

@@ -35,8 +35,11 @@ REPO_ROOT = LEGACY_PROJECT_ROOT
 
 
 class ConfigTests(unittest.TestCase):
+
     def test_loads_repository_experiment_yaml(self) -> None:
-        config = load_pipeline_config(TARGET.experiments_presets / "etl" / "gpt_tests_vs_claude.yaml")
+        config = load_pipeline_config(
+            TARGET.experiments_presets / "etl" / "gpt_tests_vs_claude.yaml"
+        )
         self.assertEqual(["Tree2Graph"], config.tasks)
         self.assertEqual(["gpt-5"], config.test_models)
         self.assertEqual(["claude-sonnet-4"], config.transformation_models)
@@ -126,6 +129,7 @@ class ConfigTests(unittest.TestCase):
 
 
 class DifferenceValidationTests(unittest.TestCase):
+
     def test_shape_errors_preserve_missing_then_unknown_order(self) -> None:
         with self.assertRaisesRegex(
             FailureReportError,
@@ -145,6 +149,7 @@ class DifferenceValidationTests(unittest.TestCase):
 
 
 class CliTests(unittest.TestCase):
+
     def test_text_result_output_preserves_stage_detail_order(self) -> None:
         result = RunResult(
             run_id="dry-test",
@@ -163,9 +168,7 @@ class CliTests(unittest.TestCase):
                     details={
                         "pairs": ["pair-one", "pair-two"],
                         "results_file": "artifacts/work/results.json",
-                        "artifacts": [
-                            {"status": "candidate", "path": "suite-001"}
-                        ],
+                        "artifacts": [{"status": "candidate", "path": "suite-001"}],
                     },
                 )
             ],
@@ -193,9 +196,7 @@ class CliTests(unittest.TestCase):
 
     def test_a_direct_command_requires_an_explicit_language(self) -> None:
         with self.assertRaises(SystemExit):
-            build_parser().parse_args(
-                ["tests", "extract", "--task", "Tree2Graph"]
-            )
+            build_parser().parse_args(["tests", "extract", "--task", "Tree2Graph"])
 
     def test_suite_id_builds_identity_selection(self) -> None:
         args = build_parser().parse_args(
@@ -310,13 +311,12 @@ class CliTests(unittest.TestCase):
         # report with silently empty runtime evidence.
         incomplete = {**payload}
         del incomplete["surefire_reports"]
-        with self.assertRaisesRegex(
-            FailureReportError, "archived execution evidence"
-        ):
+        with self.assertRaisesRegex(FailureReportError, "archived execution evidence"):
             ReportRequest.from_payload(incomplete)
 
 
 class OrchestratorTests(unittest.TestCase):
+
     def test_failure_report_command_delegates_to_the_shared_assembler(self) -> None:
         orchestrator = ExperimentOrchestrator(REPO_ROOT)
         payload = {"attempt": 1}
@@ -368,16 +368,18 @@ class OrchestratorTests(unittest.TestCase):
             transformation_selection_locked=True,
             transformations=[],
         )
-        result = TransformationValidationAdapter(REPO_ROOT).semantic_validation(config, dry_run=True)
+        result = TransformationValidationAdapter(REPO_ROOT).semantic_validation(
+            config, dry_run=True
+        )
         self.assertEqual("skipped", result.status)
-        self.assertEqual("SKIPPED_NO_PARSED_TRANSFORMATIONS", result.details["skip_reason"])
+        self.assertEqual(
+            "SKIPPED_NO_PARSED_TRANSFORMATIONS", result.details["skip_reason"]
+        )
 
     def test_semantic_dry_run_preserves_pairing_and_detail_keys(self) -> None:
         config = PipelineConfig(language="etl", tasks=["Tree2Graph"])
         adapter = TransformationValidationAdapter(REPO_ROOT)
-        suite = Path(
-            "/generated/Tree2Graph/candidates/gpt-5/grammar/suite_001"
-        )
+        suite = Path("/generated/Tree2Graph/candidates/gpt-5/grammar/suite_001")
         transformation = Path("/generated/Tree2Graph.etl")
 
         with patch.object(

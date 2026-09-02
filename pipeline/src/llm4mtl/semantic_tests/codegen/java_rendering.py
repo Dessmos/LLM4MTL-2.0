@@ -53,8 +53,10 @@ def sanitize_method_name(value: str) -> str:
     if not words:
         return "generatedSemanticCase"
     first, *rest = words
-    method = first[:1].lower() + first[1:] + "".join(
-        word[:1].upper() + word[1:] for word in rest
+    method = (
+        first[:1].lower()
+        + first[1:]
+        + "".join(word[:1].upper() + word[1:] for word in rest)
     )
     if not re.match(r"[A-Za-z_]", method[0]):
         method = f"case{method}"

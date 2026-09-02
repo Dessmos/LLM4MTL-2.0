@@ -162,12 +162,7 @@ def default_reactions_metamodels_root() -> Path:
     """Metamodel corpus accepted by the frozen standalone Reactions parser."""
     from llm4mtl.paths import TARGET
 
-    return (
-        TARGET.benchmark
-        / "metamodels"
-        / "additional_models"
-        / "Reaction_model"
-    )
+    return TARGET.benchmark / "metamodels" / "additional_models" / "Reaction_model"
 
 
 def default_test_project_dir(config: LanguageConfig) -> Path:

@@ -32,9 +32,7 @@ from unittest.mock import patch
 from llm4mtl.paths import TARGET, TargetLayout
 from llm4mtl.prompt_assembly.n8n_exports import synchronize_exports
 
-PACKAGE_DIR = Path(
-    TARGET.package / "prompt_assembly" / "n8n_exports"
-)
+PACKAGE_DIR = Path(TARGET.package / "prompt_assembly" / "n8n_exports")
 # Which sibling modules each module of the package may import. prompts and
 # workflow_graph are leaves on purpose: that is what makes either of them
 # readable on its own.
@@ -62,6 +60,7 @@ def sibling_imports(module: Path) -> set[str]:
 
 
 class GeneratedExportsAreInSyncTests(unittest.TestCase):
+
     def test_regenerating_every_export_reproduces_the_committed_bytes(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -95,6 +94,7 @@ class GeneratedExportsAreInSyncTests(unittest.TestCase):
 
 
 class ExportPackageLayeringTests(unittest.TestCase):
+
     def test_each_module_imports_only_the_layer_below_it(self) -> None:
         for name, allowed in sorted(ALLOWED_SIBLING_IMPORTS.items()):
             with self.subTest(module=name):

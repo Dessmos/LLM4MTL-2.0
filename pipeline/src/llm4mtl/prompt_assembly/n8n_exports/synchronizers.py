@@ -139,9 +139,7 @@ def synchronize_prompt_generation(
         f'{language}/{model}/{{{{ $node["{save_name}"].json.baseName }}}}.txt'
     )
     payload["nodes"] = [
-        node
-        for node in payload["nodes"]
-        if node["name"] not in OBSOLETE_INPUT_NODES
+        node for node in payload["nodes"] if node["name"] not in OBSOLETE_INPUT_NODES
     ]
     payload["nodes"].append(_resolver_node(language, position=(-1376, 272)))
     payload["connections"] = _prompt_generation_connections(
@@ -168,9 +166,9 @@ def synchronize_test_generation(
     nodes = {node["name"]: node for node in payload["nodes"]}
     is_qwen = "Read Qwen prompt files" in nodes
     prompt_node_name = "Read Qwen prompt files" if is_qwen else READ_PROMPT_FILES_NODE
-    nodes[prompt_node_name]["parameters"]["fileSelector"] = (
-        f"=/data/task_prompts/{language}/*.txt"
-    )
+    nodes[prompt_node_name]["parameters"][
+        "fileSelector"
+    ] = f"=/data/task_prompts/{language}/*.txt"
     _scope_helper_methods(nodes, language)
 
     if is_qwen:
@@ -221,9 +219,9 @@ def synchronize_transformation_generation(
     if READ_PROMPT_FILES_NODE not in nodes or GENERATE_CODE_NODE not in nodes:
         raise ValueError("not a supported transformation-generation workflow")
 
-    nodes[READ_PROMPT_FILES_NODE]["parameters"]["fileSelector"] = (
-        f"=/data/task_prompts/{language}/*.txt"
-    )
+    nodes[READ_PROMPT_FILES_NODE]["parameters"][
+        "fileSelector"
+    ] = f"=/data/task_prompts/{language}/*.txt"
     _scope_transformation_assets(nodes, language)
     generation = nodes[GENERATE_CODE_NODE]
     generation["parameters"]["text"] = transformation_request()
@@ -231,9 +229,7 @@ def synchronize_transformation_generation(
         {"message": transformation_system_message(language)}
     ]
     save_name = (
-        SAVE_FILE_NAME_NODE
-        if SAVE_FILE_NAME_NODE in nodes
-        else SAVE_REACTION_NAME_NODE
+        SAVE_FILE_NAME_NODE if SAVE_FILE_NAME_NODE in nodes else SAVE_REACTION_NAME_NODE
     )
     return _replace_language_wide_models(
         payload,
@@ -250,9 +246,9 @@ def synchronize_reactions_matrix(
     """Use exact task inputs in the multi-model Reactions matrix workflow."""
     payload = normalize_workflow_shape(payload)
     nodes = {node["name"]: node for node in payload["nodes"]}
-    nodes[READ_PROMPT_FILES_NODE]["parameters"]["fileSelector"] = (
-        "=/data/task_prompts/reactions/*.txt"
-    )
+    nodes[READ_PROMPT_FILES_NODE]["parameters"][
+        "fileSelector"
+    ] = "=/data/task_prompts/reactions/*.txt"
     _scope_transformation_assets(nodes, "reactions")
     for generation_name in (
         "(Re-)Generate code1",
@@ -311,49 +307,55 @@ def synchronize_reactions_matrix(
     remove_connection_targets(connections, obsolete)
 
     trigger = connections[TRIGGER_NODE]["main"][0]
-    trigger[:] = [
-        target for target in trigger if target["node"] not in obsolete
-    ]
+    trigger[:] = [target for target in trigger if target["node"] not in obsolete]
     connections["Extract text from examples file"]["main"][0][0]["index"] = 0
     connections["Extract text from grammar"]["main"][0][0]["index"] = 1
     connections["Extract text from helper methods"]["main"][0][0]["index"] = 2
 
     connections[SAVE_REACTION_NAME_NODE] = {
-        "main": [[
-            {
-                "node": "Extract text from prompt file",
-                "type": "main",
-                "index": 0,
-            },
-            {
-                "node": PROMPT_INPUT_NODE,
-                "type": "main",
-                "index": 0,
-            },
-        ]]
+        "main": [
+            [
+                {
+                    "node": "Extract text from prompt file",
+                    "type": "main",
+                    "index": 0,
+                },
+                {
+                    "node": PROMPT_INPUT_NODE,
+                    "type": "main",
+                    "index": 0,
+                },
+            ]
+        ]
     }
     connections["Extract text from prompt file"] = {
-        "main": [[
-            {
-                "node": MERGE_PROMPT_INPUTS_NODE,
-                "type": "main",
-                "index": 0,
-            }
-        ]]
+        "main": [
+            [
+                {
+                    "node": MERGE_PROMPT_INPUTS_NODE,
+                    "type": "main",
+                    "index": 0,
+                }
+            ]
+        ]
     }
     connections[PROMPT_INPUT_NODE] = {
-        "main": [[
-            {
-                "node": MERGE_PROMPT_INPUTS_NODE,
-                "type": "main",
-                "index": 1,
-            }
-        ]]
+        "main": [
+            [
+                {
+                    "node": MERGE_PROMPT_INPUTS_NODE,
+                    "type": "main",
+                    "index": 1,
+                }
+            ]
+        ]
     }
     connections[MERGE_PROMPT_INPUTS_NODE] = {
-        "main": [[
-            {"node": REACTIONS_MODEL_CASCADE[0], "type": "main", "index": 0},
-        ]]
+        "main": [
+            [
+                {"node": REACTIONS_MODEL_CASCADE[0], "type": "main", "index": 0},
+            ]
+        ]
     }
     _cascade_reactions_model_branches(connections)
     return _convert_every_reactions_response(payload)
@@ -370,9 +372,7 @@ def _cascade_reactions_model_branches(connections: dict[str, Any]) -> None:
     the conditions leaves exactly one live path, ending at the write node, the
     way a single-model language workflow already ends.
     """
-    for current, following in zip(
-        REACTIONS_MODEL_CASCADE, REACTIONS_MODEL_CASCADE[1:]
-    ):
+    for current, following in zip(REACTIONS_MODEL_CASCADE, REACTIONS_MODEL_CASCADE[1:]):
         outputs = connections[current]["main"]
         while len(outputs) < 2:
             outputs.append([])
@@ -432,9 +432,7 @@ def _resolver_node(
             "sendBody": True,
             "specifyBody": "json",
             "jsonBody": (
-                "={{ { language: "
-                f"'{language}', task: $json.baseName"
-                " } }}"
+                "={{ { language: " f"'{language}', task: $json.baseName" " } }}"
             ),
             "options": {},
         },
@@ -497,9 +495,7 @@ def _prompt_generation_connections(
                 language_model,
                 generation_name,
             ):
-                connections[source_name] = {
-                    "ai_languageModel": language_model
-                }
+                connections[source_name] = {"ai_languageModel": language_model}
     connections[CONVERT_PROMPT_FILE_NODE] = {
         "main": [[{"node": WRITE_PROMPT_NODE, "type": "main", "index": 0}]]
     }
@@ -538,7 +534,10 @@ def _scope_transformation_assets(nodes: dict[str, Any], language: str) -> None:
     from shadowing each other.
     """
     for node_name, selector in (
-        ("Read few shot examples", f"=/data/transformations/examples/{language}/Examples.txt"),
+        (
+            "Read few shot examples",
+            f"=/data/transformations/examples/{language}/Examples.txt",
+        ),
         ("Read Grammar", f"/data/transformations/grammar/{language}/EBNF.txt"),
         ("Read helper methods", f"=/data/transformations/helper_methods/{language}/*"),
     ):
@@ -579,9 +578,7 @@ def _replace_language_wide_models(
     )
     if not save_connections:
         save_connections.append([])
-    save_connections[0].append(
-        {"node": PROMPT_INPUT_NODE, "type": "main", "index": 0}
-    )
+    save_connections[0].append({"node": PROMPT_INPUT_NODE, "type": "main", "index": 0})
     connections[PROMPT_INPUT_NODE] = {
         "main": [[{"node": merge_name, "type": "main", "index": merge_input}]]
     }
@@ -646,28 +643,24 @@ def _wire_output_contract(
         {"node": READ_OUTPUT_CONTRACT_NODE, "type": "main", "index": 0}
     )
     connections[READ_OUTPUT_CONTRACT_NODE] = {
-        "main": [[
-            {"node": EXTRACT_CONTRACT_TEXT_NODE, "type": "main", "index": 0}
-        ]]
+        "main": [[{"node": EXTRACT_CONTRACT_TEXT_NODE, "type": "main", "index": 0}]]
     }
     connections[EXTRACT_CONTRACT_TEXT_NODE] = {
-        "main": [[
-            {"node": merge_name, "type": "main", "index": merge_input}
-        ]]
+        "main": [[{"node": merge_name, "type": "main", "index": merge_input}]]
     }
     connections[merge_name] = {
         "main": [[{"node": ASSEMBLE_PROMPT_NODE, "type": "main", "index": 0}]]
     }
     connections[ASSEMBLE_PROMPT_NODE] = {
-        "main": [[
-            {"node": consumer, "type": "main", "index": 0},
-            {"node": CONVERT_PROMPT_TO_FILE_NODE, "type": "main", "index": 0},
-        ]]
+        "main": [
+            [
+                {"node": consumer, "type": "main", "index": 0},
+                {"node": CONVERT_PROMPT_TO_FILE_NODE, "type": "main", "index": 0},
+            ]
+        ]
     }
     connections[CONVERT_PROMPT_TO_FILE_NODE] = {
-        "main": [[
-            {"node": WRITE_PROMPT_NODE, "type": "main", "index": 0}
-        ]]
+        "main": [[{"node": WRITE_PROMPT_NODE, "type": "main", "index": 0}]]
     }
     for node in payload["nodes"]:
         if node["name"] == merge_name:

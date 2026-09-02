@@ -159,7 +159,4 @@ def normalize_models(raw: Any) -> Any:
     """
     if not isinstance(raw, list):
         return raw
-    return [
-        dict(model) if isinstance(model, dict) else model
-        for model in raw
-    ]
+    return [dict(model) if isinstance(model, dict) else model for model in raw]

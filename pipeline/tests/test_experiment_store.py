@@ -11,10 +11,13 @@ from llm4mtl.run_store.manifest import ManifestExistsError
 
 
 class ExperimentStoreTests(unittest.TestCase):
+
     def test_create_index_and_read(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             paths = experiment_store.create_experiment(
-                Path(temp_dir), "exp-1", {"variant": "full", "matrix": "thesis-ablation"}
+                Path(temp_dir),
+                "exp-1",
+                {"variant": "full", "matrix": "thesis-ablation"},
             )
             manifest = experiment_store.read_manifest(paths)
             self.assertEqual("exp-1", manifest["experiment_id"])
@@ -36,7 +39,11 @@ class ExperimentStoreTests(unittest.TestCase):
             run_ids = [f"run-{index}" for index in range(32)]
 
             with ThreadPoolExecutor(max_workers=8) as pool:
-                list(pool.map(lambda run_id: experiment_store.add_run(paths, run_id), run_ids))
+                list(
+                    pool.map(
+                        lambda run_id: experiment_store.add_run(paths, run_id), run_ids
+                    )
+                )
 
             self.assertEqual(set(run_ids), set(experiment_store.list_runs(paths)))
             validate_artifact(

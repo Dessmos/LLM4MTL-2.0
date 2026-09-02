@@ -83,18 +83,24 @@ def _validator(artifact: str) -> Draft202012Validator:
         filename = SCHEMA_FILES[artifact]
     except KeyError as exc:
         known = ", ".join(sorted(SCHEMA_FILES))
-        raise ArtifactSchemaError(f"unknown artifact schema '{artifact}' (known: {known})") from exc
+        raise ArtifactSchemaError(
+            f"unknown artifact schema '{artifact}' (known: {known})"
+        ) from exc
     schema = json.loads((TARGET.schemas / filename).read_text(encoding="utf-8"))
     return Draft202012Validator(schema, format_checker=FORMAT_CHECKER)
 
 
 def validate_artifact(artifact: str, payload: Mapping[str, Any]) -> None:
     """Raise :class:`ArtifactSchemaError` unless ``payload`` conforms to ``artifact``."""
-    errors = sorted(_validator(artifact).iter_errors(payload), key=lambda error: list(error.path))
+    errors = sorted(
+        _validator(artifact).iter_errors(payload), key=lambda error: list(error.path)
+    )
     if not errors:
         return
     details = "; ".join(
         f"{'/'.join(str(part) for part in error.path) or '<root>'}: {error.message}"
         for error in errors
     )
-    raise ArtifactSchemaError(f"{artifact} payload violates {SCHEMA_FILES[artifact]}: {details}")
+    raise ArtifactSchemaError(
+        f"{artifact} payload violates {SCHEMA_FILES[artifact]}: {details}"
+    )

@@ -45,6 +45,7 @@ DATA_PROCESSING_MODULES: tuple[ModuleType, ...] = (
 
 
 class LegacyMcnemarTests(unittest.TestCase):
+
     def test_contingency_table_and_exact_test_options_are_preserved(self) -> None:
         baseline = [True, True, False, False, np.nan]
         strategy = [True, False, True, False, True]
@@ -77,7 +78,9 @@ class LegacyMcnemarTests(unittest.TestCase):
                 self.assertEqual((1.0, 3, "No changes (b+c=0)"), result)
                 mcnemar_mock.assert_not_called()
 
-    def test_statistical_failure_is_returned_as_nan_with_the_original_reason(self) -> None:
+    def test_statistical_failure_is_returned_as_nan_with_the_original_reason(
+        self,
+    ) -> None:
         for module in STATISTICS_MODULES:
             with self.subTest(module=module.__name__):
                 with patch.object(
@@ -113,6 +116,7 @@ class LegacyMcnemarTests(unittest.TestCase):
 
 
 class LegacyGroundTruthDiscoveryTests(unittest.TestCase):
+
     def test_preferred_directories_win_over_populated_fallbacks(self) -> None:
         cases = (
             (atl_file_utils, ".atl", "other_references"),
@@ -166,6 +170,7 @@ class LegacyGroundTruthDiscoveryTests(unittest.TestCase):
 
 
 class LegacySignificanceMarkerTests(unittest.TestCase):
+
     def test_metric_columns_keep_their_processing_order_and_formatting(self) -> None:
         summary = etl_data_processing.pd.DataFrame(
             [
@@ -209,6 +214,7 @@ class LegacySignificanceMarkerTests(unittest.TestCase):
 
 
 class LegacyKruskalSummaryTests(unittest.TestCase):
+
     def test_report_preserves_model_order_and_nan_rendering(self) -> None:
         table = kruskal_wallis_by_mtl.pd.DataFrame(
             [

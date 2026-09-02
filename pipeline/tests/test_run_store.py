@@ -28,10 +28,15 @@ IDENTITY = {
 
 def stage_result(outcome_code: str, status: str = "passed") -> dict[str, object]:
     """A minimal payload conforming to schemas/stage-result.schema.json."""
-    return {"schema_version": STAGE_SCHEMA_VERSION, "status": status, "outcome_code": outcome_code}
+    return {
+        "schema_version": STAGE_SCHEMA_VERSION,
+        "status": status,
+        "outcome_code": outcome_code,
+    }
 
 
 class ManifestTests(unittest.TestCase):
+
     def test_manifest_is_write_once(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             paths = run_store.create_run(Path(temp_dir), "run_001", IDENTITY)
@@ -42,7 +47,9 @@ class ManifestTests(unittest.TestCase):
             with self.assertRaises(ManifestExistsError):
                 run_store.write_manifest(paths, {"run_id": "run_001", **IDENTITY})
 
-    def test_run_creation_prepares_only_configured_initial_generation_paths(self) -> None:
+    def test_run_creation_prepares_only_configured_initial_generation_paths(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             full = run_store.create_run(Path(temp_dir), "run_full", IDENTITY)
             tests_only = run_store.create_run(
@@ -56,14 +63,10 @@ class ManifestTests(unittest.TestCase):
             )
 
             self.assertTrue(
-                full.generation_iteration_dir(
-                    "semantic-test-generation", 0
-                ).is_dir()
+                full.generation_iteration_dir("semantic-test-generation", 0).is_dir()
             )
             self.assertTrue(
-                full.generation_iteration_dir(
-                    "transformation-generation", 0
-                ).is_dir()
+                full.generation_iteration_dir("transformation-generation", 0).is_dir()
             )
             self.assertTrue(
                 tests_only.generation_iteration_dir(
@@ -78,6 +81,7 @@ class ManifestTests(unittest.TestCase):
 
 
 class StageAttemptTests(unittest.TestCase):
+
     def test_attempts_are_immutable_and_latest_tracks_newest(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             paths = run_store.create_run(Path(temp_dir), "run_001", IDENTITY)
@@ -107,7 +111,10 @@ class StageAttemptTests(unittest.TestCase):
                 paths,
                 "extract",
                 stage_result("EXTRACTED"),
-                evidence={"command": ["python", "extract.py"], "stdout": "Extracted: 1; failed: 0"},
+                evidence={
+                    "command": ["python", "extract.py"],
+                    "stdout": "Extracted: 1; failed: 0",
+                },
             )
 
             result = read_json(paths.stage_attempt_result("extract", attempt))
@@ -117,6 +124,7 @@ class StageAttemptTests(unittest.TestCase):
 
 
 class ResponseAttemptTests(unittest.TestCase):
+
     def test_diagnoses_are_stored_as_immutable_attempts(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             paths = run_store.create_run(Path(temp_dir), "run_001", IDENTITY)
@@ -151,12 +159,17 @@ class ResponseAttemptTests(unittest.TestCase):
 
 
 class EventLogTests(unittest.TestCase):
+
     def test_events_are_append_only(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             paths = run_store.create_run(Path(temp_dir), "run_001", IDENTITY)
             run_store.append_event(paths, "stage_started", stage="extract")
             run_store.append_event(
-                paths, "stage_finished", stage="extract", status="passed", outcome_code="EXTRACTED"
+                paths,
+                "stage_finished",
+                stage="extract",
+                status="passed",
+                outcome_code="EXTRACTED",
             )
             events = run_store.read_events(paths)
             self.assertEqual(3, len(events))

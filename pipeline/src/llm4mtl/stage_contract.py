@@ -53,7 +53,9 @@ def contract_stage_id(internal_name: str) -> str:
         return CONTRACT_STAGE_IDS[internal_name]
     except KeyError as exc:
         known = ", ".join(sorted(CONTRACT_STAGE_IDS))
-        raise KeyError(f"unknown pipeline stage '{internal_name}' (known: {known})") from exc
+        raise KeyError(
+            f"unknown pipeline stage '{internal_name}' (known: {known})"
+        ) from exc
 
 
 def is_skipped(stage: str, result: StageResult) -> bool:
@@ -156,7 +158,9 @@ def _artifacts(result: StageResult) -> dict[str, str]:
     return artifacts
 
 
-def to_stage_payload(stage: str, result: StageResult, attempt: int | None = None) -> dict[str, Any]:
+def to_stage_payload(
+    stage: str, result: StageResult, attempt: int | None = None
+) -> dict[str, Any]:
     """Build the standard stage-result payload n8n reads."""
     payload: dict[str, Any] = {
         "schema_version": SCHEMA_VERSION,

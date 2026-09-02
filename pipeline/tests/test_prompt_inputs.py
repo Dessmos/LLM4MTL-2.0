@@ -12,6 +12,7 @@ from llm4mtl.prompt_assembly.task_inputs import (
 
 
 class PromptInputResolutionTests(unittest.TestCase):
+
     def test_every_task_resolves_only_contract_named_metamodels(self) -> None:
         for language, config in LANGUAGE_CONFIGS.items():
             contracts_root = default_task_contracts_root(config)

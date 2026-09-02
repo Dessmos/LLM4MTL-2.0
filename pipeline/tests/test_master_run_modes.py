@@ -23,7 +23,9 @@ from typing import Any
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
-MASTER_WORKFLOW = REPOSITORY_ROOT / "workflows" / "n8n" / "main" / "llm4mtl-agent-workflow.json"
+MASTER_WORKFLOW = (
+    REPOSITORY_ROOT / "workflows" / "n8n" / "main" / "llm4mtl-agent-workflow.json"
+)
 HARNESS = Path(__file__).parent / "fixtures" / "run_master_code_node.js"
 TASK_CONTRACTS = REPOSITORY_ROOT / "benchmark" / "tasks"
 TRANSFORMATION_WORKFLOW = (
@@ -235,12 +237,28 @@ PASSING_RESULTS = {
     "create_run": {"run_id": "etl-tree2graph-0001"},
     "generate_tests": {"status": "completed"},
     "extract": {"stage": "extract", "status": "completed", "outcome_code": "EXTRACTED"},
-    "technical": {"stage": "technical-validation", "status": "completed", "outcome_code": "TECH_VALID"},
-    "reference": {"stage": "reference-validation", "status": "completed", "outcome_code": "REFERENCE_VALIDATED"},
+    "technical": {
+        "stage": "technical-validation",
+        "status": "completed",
+        "outcome_code": "TECH_VALID",
+    },
+    "reference": {
+        "stage": "reference-validation",
+        "status": "completed",
+        "outcome_code": "REFERENCE_VALIDATED",
+    },
     "generate_transformations": {"status": "completed"},
     "record_generation": {"schema_version": "1.0"},
-    "syntax": {"stage": "syntax-validation", "status": "completed", "outcome_code": "SYNTAX_VALID"},
-    "execution": {"stage": "execution", "status": "completed", "outcome_code": "SEMANTIC_PASSED"},
+    "syntax": {
+        "stage": "syntax-validation",
+        "status": "completed",
+        "outcome_code": "SYNTAX_VALID",
+    },
+    "execution": {
+        "stage": "execution",
+        "status": "completed",
+        "outcome_code": "SEMANTIC_PASSED",
+    },
     "final": {"artifacts": {}},
 }
 
@@ -303,6 +321,7 @@ def _drive(
 
 @unittest.skipUnless(shutil.which("node"), "the master workflow's Code nodes need Node")
 class OrchestrationFailureTests(unittest.TestCase):
+
     def test_create_run_persists_the_exact_experiment_configuration(self) -> None:
         create = next(
             node
@@ -411,9 +430,7 @@ class OrchestrationFailureTests(unittest.TestCase):
             "terminal-error-2", finalized["result"]["results"][-1]["run_id"]
         )
 
-        summary = _run_node(
-            "Final Result and Artifacts", inputs=[finalized["result"]]
-        )
+        summary = _run_node("Final Result and Artifacts", inputs=[finalized["result"]])
         self.assertTrue(summary["ok"], summary.get("error"))
         self.assertEqual("failed", summary["result"]["status"])
         self.assertEqual(2, summary["result"]["run_count"])
@@ -431,7 +448,9 @@ class TransformationWorkflowCompatibilityTests(unittest.TestCase):
         workflows = sorted(
             path
             for language in ("etl", "atl", "qvto")
-            for path in (workflows_root / f"{language}_variants").glob("Prompting_*.json")
+            for path in (workflows_root / f"{language}_variants").glob(
+                "Prompting_*.json"
+            )
         )
         workflows.append(
             workflows_root
@@ -466,11 +485,7 @@ class TransformationWorkflowCompatibilityTests(unittest.TestCase):
         workflows = sorted(
             path
             for path in (
-                REPOSITORY_ROOT
-                / "workflows"
-                / "n8n"
-                / "tests"
-                / "workflows"
+                REPOSITORY_ROOT / "workflows" / "n8n" / "tests" / "workflows"
             ).glob("*_variants/test_generation/Prompting_tests_*.json")
             if "qwen2-5-coder-7b" not in path.name
         )
@@ -514,8 +529,7 @@ class TransformationWorkflowCompatibilityTests(unittest.TestCase):
 
         self.assertTrue(adapted["ok"], adapted.get("error"))
         nodes = {
-            node["name"]: node
-            for node in adapted["result"]["workflow_json"]["nodes"]
+            node["name"]: node for node in adapted["result"]["workflow_json"]["nodes"]
         }
         self.assertEqual(
             "=/data/artifacts/runs/run-transform-1/refinements/"
@@ -580,8 +594,7 @@ class TransformationWorkflowCompatibilityTests(unittest.TestCase):
         )
         self.assertTrue(adapted["ok"], adapted.get("error"))
         nodes = {
-            node["name"]: node
-            for node in adapted["result"]["workflow_json"]["nodes"]
+            node["name"]: node for node in adapted["result"]["workflow_json"]["nodes"]
         }
         self.assertEqual(
             "=/data/artifacts/runs/run-tests-1/refinements/"
@@ -636,8 +649,7 @@ class TransformationWorkflowCompatibilityTests(unittest.TestCase):
 
         self.assertTrue(adapted["ok"], adapted.get("error"))
         nodes = {
-            node["name"]: node
-            for node in adapted["result"]["workflow_json"]["nodes"]
+            node["name"]: node for node in adapted["result"]["workflow_json"]["nodes"]
         }
         response_directory = (
             "=/data/artifacts/runs/run-tests-initial/responses/"
@@ -677,6 +689,7 @@ class TransformationWorkflowCompatibilityTests(unittest.TestCase):
 
 @unittest.skipUnless(shutil.which("node"), "the master workflow's Code nodes need Node")
 class RunModeTests(unittest.TestCase):
+
     def test_tests_only_never_routes_into_transformation_generation(self) -> None:
         config = _configure(run_mode="Semantic Tests Only")
         self.assertTrue(config["ok"], config.get("error"))
@@ -684,7 +697,16 @@ class RunModeTests(unittest.TestCase):
         for action in ("generate_transformations", "syntax", "execution", "diagnose"):
             self.assertNotIn(action, actions)
         self.assertEqual(
-            ["create_run", "generate_tests", "record_generation", "extract", "technical", "reference", "final", "complete"],
+            [
+                "create_run",
+                "generate_tests",
+                "record_generation",
+                "extract",
+                "technical",
+                "reference",
+                "final",
+                "complete",
+            ],
             actions,
         )
         self.assertEqual("completed", state["results"][0]["status"])
@@ -694,10 +716,24 @@ class RunModeTests(unittest.TestCase):
         config = _configure(run_mode="Transformations Only")
         self.assertTrue(config["ok"], config.get("error"))
         actions, state = _drive(config["result"])
-        for action in ("generate_tests", "extract", "technical", "reference", "execution", "diagnose"):
+        for action in (
+            "generate_tests",
+            "extract",
+            "technical",
+            "reference",
+            "execution",
+            "diagnose",
+        ):
             self.assertNotIn(action, actions)
         self.assertEqual(
-            ["create_run", "generate_transformations", "record_generation", "syntax", "final", "complete"],
+            [
+                "create_run",
+                "generate_transformations",
+                "record_generation",
+                "syntax",
+                "final",
+                "complete",
+            ],
             actions,
         )
         self.assertEqual("completed", state["results"][0]["status"])
@@ -736,7 +772,9 @@ class RunModeTests(unittest.TestCase):
         # The diagnosed transformation defect sends the run back through
         # transformation generation rather than test generation.
         self.assertEqual("prepare_refinement", actions[actions.index("diagnose") + 1])
-        self.assertEqual("generate_transformations", actions[actions.index("diagnose") + 2])
+        self.assertEqual(
+            "generate_transformations", actions[actions.index("diagnose") + 2]
+        )
 
     def test_a_failure_without_a_prepared_index_says_so(self) -> None:
         """The shortcut report alone is no longer enough to diagnose on."""
@@ -748,7 +786,9 @@ class RunModeTests(unittest.TestCase):
                     "stage": "execution",
                     "status": "completed",
                     "outcome_code": "SEMANTIC_EXECUTION_FAILED",
-                    "artifacts": {"failure_report_path": "artifacts/work/runs/x/r.json"},
+                    "artifacts": {
+                        "failure_report_path": "artifacts/work/runs/x/r.json"
+                    },
                 }
             },
         )
@@ -785,6 +825,7 @@ class RunModeTests(unittest.TestCase):
 
 @unittest.skipUnless(shutil.which("node"), "the master workflow's Code nodes need Node")
 class RefinementOutcomeRoutingTests(unittest.TestCase):
+
     def test_test_failures_share_one_target_budget_and_keep_their_source(self) -> None:
         cases = (
             ("extract", "TEST_SPEC_INVALID", "technical", "technical_refinement"),
@@ -919,15 +960,19 @@ def _drive_diagnosis(
         }
         for index in range(count)
     ]
-    supplied = verdicts if verdicts is not None else [
-        {
-            "classification": value,
-            "confidence": "high",
-            "test_case_id": "case-1",
-            "assertion_id": "assertion-001",
-        }
-        for value in classifications
-    ]
+    supplied = (
+        verdicts
+        if verdicts is not None
+        else [
+            {
+                "classification": value,
+                "confidence": "high",
+                "test_case_id": "case-1",
+                "assertion_id": "assertion-001",
+            }
+            for value in classifications
+        ]
+    )
     calls = {"diagnose": 0, "execution": 0}
 
     def next_verdict() -> dict[str, Any]:
@@ -966,10 +1011,14 @@ class SourceDiagnosisAggregationTests(unittest.TestCase):
         actions, state = _drive_diagnosis(["transformation_defect"])
         self.assertEqual(1, actions.count("diagnose"))
         self.assertEqual("prepare_refinement", actions[actions.index("diagnose") + 1])
-        self.assertEqual("generate_transformations", actions[actions.index("diagnose") + 2])
+        self.assertEqual(
+            "generate_transformations", actions[actions.index("diagnose") + 2]
+        )
 
     def test_agreeing_transformation_defects_refine_the_transformation(self) -> None:
-        actions, _ = _drive_diagnosis(["transformation_defect", "transformation_defect"])
+        actions, _ = _drive_diagnosis(
+            ["transformation_defect", "transformation_defect"]
+        )
         self.assertEqual(2, actions.count("diagnose"))
         last = len(actions) - 1 - actions[::-1].index("diagnose")
         self.assertEqual("prepare_refinement", actions[last + 1])
@@ -1138,7 +1187,9 @@ class SourceDiagnosisAggregationTests(unittest.TestCase):
         )
         self.assertEqual("etl-tree2graph-0001_000", state["results"][0]["suite_id"])
 
-    def test_test_refinement_does_not_change_the_initial_transformation_model(self) -> None:
+    def test_test_refinement_does_not_change_the_initial_transformation_model(
+        self,
+    ) -> None:
         """Artifact-specific iterations select provider and model as one pair."""
         reference_calls = 0
 
@@ -1165,12 +1216,12 @@ class SourceDiagnosisAggregationTests(unittest.TestCase):
             observed_states=observed,
         )
         initial_transformation = next(
-            state
-            for state in observed
-            if state["action"] == "generate_transformations"
+            state for state in observed if state["action"] == "generate_transformations"
         )
 
-        self.assertEqual(0, initial_transformation["current"]["transformation_iteration"])
+        self.assertEqual(
+            0, initial_transformation["current"]["transformation_iteration"]
+        )
         self.assertEqual(
             initial_transformation["config"]["llms"]["transformation"]["provider"],
             initial_transformation["subworkflow_input"]["provider"],
@@ -1192,7 +1243,9 @@ class SourceDiagnosisAggregationTests(unittest.TestCase):
         result = state["results"][0]
         self.assertEqual("completed_with_failures", result["status"])
         self.assertEqual("AMBIGUOUS_SOURCE_DIAGNOSIS", result["reason"])
-        self.assertNotIn("generate_transformations", actions[actions.index("diagnose") :])
+        self.assertNotIn(
+            "generate_transformations", actions[actions.index("diagnose") :]
+        )
 
     def test_one_ambiguous_verdict_makes_the_whole_set_ambiguous(self) -> None:
         for others in (["transformation_defect"], ["test_defect"]):
@@ -1237,7 +1290,9 @@ class SourceDiagnosisAggregationTests(unittest.TestCase):
             ["transformation_defect", "test_defect"],
             [entry["classification"] for entry in diagnosed],
         )
-        aggregated = [entry for entry in timeline if entry.get("action") == "aggregate_diagnosis"]
+        aggregated = [
+            entry for entry in timeline if entry.get("action") == "aggregate_diagnosis"
+        ]
         self.assertEqual(1, len(aggregated))
         self.assertEqual("ambiguous", aggregated[0]["aggregate"])
         self.assertEqual(
@@ -1264,18 +1319,23 @@ class SourceDiagnosisAggregationTests(unittest.TestCase):
         result = state["results"][0]
         self.assertEqual("incomplete", result["status"])
         self.assertEqual("INCOMPLETE_SOURCE_DIAGNOSIS_SET", result["reason"])
-        self.assertNotIn("generate_transformations", actions[actions.index("diagnose") :])
+        self.assertNotIn(
+            "generate_transformations", actions[actions.index("diagnose") :]
+        )
 
 
 @unittest.skipUnless(shutil.which("node"), "the master workflow's Code nodes need Node")
 class RunQueueTests(unittest.TestCase):
+
     def test_the_queue_is_the_selected_languages_and_tasks(self) -> None:
         config = _configure(
             languages="ETL,QVT-O",
             tasks={"etl_tasks": "OO2DB,rss2atom", "qvto_tasks": "ModelExtents"},
         )
         self.assertTrue(config["ok"], config.get("error"))
-        queue = [(spec["language"], spec["task"]) for spec in config["result"]["run_specs"]]
+        queue = [
+            (spec["language"], spec["task"]) for spec in config["result"]["run_specs"]
+        ]
         self.assertEqual(
             [("etl", "OO2DB"), ("etl", "rss2atom"), ("qvto", "ModelExtents")], queue
         )
@@ -1303,13 +1363,16 @@ class RunQueueTests(unittest.TestCase):
             with self.subTest(language=language):
                 contracts = sorted(
                     path.stem
-                    for path in (TASK_CONTRACTS / language / "task_contracts").glob("*.json")
+                    for path in (TASK_CONTRACTS / language / "task_contracts").glob(
+                        "*.json"
+                    )
                 )
                 self.assertEqual(contracts, sorted(_field_options(f"{language}_tasks")))
 
 
 @unittest.skipUnless(shutil.which("node"), "the master workflow's Code nodes need Node")
 class ConditionalLlmRoleTests(unittest.TestCase):
+
     def test_tests_only_does_not_require_a_transformation_model(self) -> None:
         config = _configure(
             run_mode="Semantic Tests Only",
@@ -1324,7 +1387,9 @@ class ConditionalLlmRoleTests(unittest.TestCase):
         self.assertIsNone(spec["transformation_model"])
         self.assertIsNone(spec["transformation_strategy"])
 
-    def test_transformations_only_does_not_require_a_test_generation_model(self) -> None:
+    def test_transformations_only_does_not_require_a_test_generation_model(
+        self,
+    ) -> None:
         config = _configure(
             run_mode="Transformations Only",
             unconfigured_roles=("semantic_test", "source_diagnosis"),
@@ -1414,9 +1479,7 @@ class ConditionalLlmRoleTests(unittest.TestCase):
                     nodes={"State Machine": {"json": create_run["result"]}},
                 )
                 self.assertTrue(captured["ok"], captured.get("error"))
-                generate_tests = _run_node(
-                    "State Machine", inputs=[captured["result"]]
-                )
+                generate_tests = _run_node("State Machine", inputs=[captured["result"]])
                 self.assertTrue(generate_tests["ok"], generate_tests.get("error"))
                 self.assertEqual("generate_tests", generate_tests["result"]["action"])
                 self.assertEqual(
@@ -1427,8 +1490,11 @@ class ConditionalLlmRoleTests(unittest.TestCase):
 
 @unittest.skipUnless(shutil.which("node"), "the master workflow's Code nodes need Node")
 class AblationIdentityTests(unittest.TestCase):
+
     def test_an_ablated_full_run_is_not_a_transformations_only_run(self) -> None:
-        ablated = _configure(ablation_profile="No failure diagnosis")["result"]["config"]
+        ablated = _configure(ablation_profile="No failure diagnosis")["result"][
+            "config"
+        ]
         narrowed = _configure(run_mode="Transformations Only")["result"]["config"]
 
         self.assertEqual("full", ablated["run_mode"])
@@ -1456,7 +1522,8 @@ class AblationIdentityTests(unittest.TestCase):
             ["reference_validation", "parser_feedback"], config["disabled_stages"]
         )
         self.assertEqual(
-            "full:custom:reference_validation+parser_feedback", config["pipeline_variant"]
+            "full:custom:reference_validation+parser_feedback",
+            config["pipeline_variant"],
         )
         self.assertFalse(config["stages"]["reference_validation"])
         self.assertFalse(config["stages"]["parser_feedback"])
@@ -1506,9 +1573,7 @@ class ConfigurationPresentationTests(unittest.TestCase):
     def test_the_strategy_cards_map_onto_the_canonical_strategy_ids(self) -> None:
         for field in ("semantic_test_strategy", "transformation_strategy"):
             with self.subTest(field=field):
-                self.assertEqual(
-                    sorted(STRATEGY_LABELS), sorted(_field_options(field))
-                )
+                self.assertEqual(sorted(STRATEGY_LABELS), sorted(_field_options(field)))
 
     def test_a_selected_strategy_card_records_its_canonical_id(self) -> None:
         for label, expected in STRATEGY_LABELS.items():
@@ -1583,9 +1648,7 @@ class ConfigurationPresentationTests(unittest.TestCase):
             if field["fieldType"] == "html":
                 continue
             with self.subTest(field=field.get("fieldName")):
-                self.assertEqual(
-                    field["fieldName"], _submitted_key(field, version)
-                )
+                self.assertEqual(field["fieldName"], _submitted_key(field, version))
 
     def test_the_form_feeds_the_run_queue_directly(self) -> None:
         connections = _master()["connections"]

@@ -10,7 +10,9 @@ from llm4mtl.transformation_execution.models import TransformationValidationResu
 from llm4mtl.paths import repository_relative
 
 
-def archive_result(result: TransformationValidationResult, artifacts_root: Path) -> TransformationValidationResult:
+def archive_result(
+    result: TransformationValidationResult, artifacts_root: Path
+) -> TransformationValidationResult:
     pair = result.pair
     bundle_dir = (
         artifacts_root.resolve()
@@ -53,14 +55,20 @@ def archive_result(result: TransformationValidationResult, artifacts_root: Path)
     }
     write_json(bundle_dir / "manifest.json", manifest)
     write_json(bundle_dir / "result.json", archived.as_row())
-    (bundle_dir / "maven-output.log").write_text(result.maven_output + "\n", encoding="utf-8")
+    (bundle_dir / "maven-output.log").write_text(
+        result.maven_output + "\n", encoding="utf-8"
+    )
     if result.status == "failed":
-        (bundle_dir / "repair_request.md").write_text(repair_request(archived), encoding="utf-8")
+        (bundle_dir / "repair_request.md").write_text(
+            repair_request(archived), encoding="utf-8"
+        )
     return archived
 
 
 def write_json(path: Path, payload: object) -> None:
-    path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    path.write_text(
+        json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+    )
 
 
 def repair_request(result: TransformationValidationResult) -> str:

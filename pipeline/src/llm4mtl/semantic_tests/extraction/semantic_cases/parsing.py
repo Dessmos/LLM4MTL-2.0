@@ -214,9 +214,7 @@ def _validate_tree_paths_assertion(
 def _validate_collection_size_assertion(
     assertion: dict[str, Any], test_index: int, assertion_index: int
 ) -> None:
-    if (
-        not assertion.get("path") or not isinstance(assertion.get("expected"), int)
-    ):
+    if not assertion.get("path") or not isinstance(assertion.get("expected"), int):
         raise SemanticCasesError(
             f"test #{test_index} collectionSize assertion #{assertion_index} "
             "is incomplete"

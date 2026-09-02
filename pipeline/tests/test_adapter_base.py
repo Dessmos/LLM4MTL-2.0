@@ -10,6 +10,7 @@ from llm4mtl.experiment_runner.adapters.base import hash_paths
 
 
 class HashPathsTests(unittest.TestCase):
+
     def test_hash_is_independent_of_selection_order_and_duplicates(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

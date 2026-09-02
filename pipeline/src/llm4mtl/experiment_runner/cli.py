@@ -141,7 +141,6 @@ def _add_diagnosis_commands(domains: argparse._SubParsersAction) -> None:
         default="text",
     )
 
-
     diagnosis_aggregate = diagnosis_actions.add_parser(
         "aggregate",
         help=(
@@ -333,9 +332,7 @@ def validate_command_constraints(config: PipelineConfig) -> None:
 
 def _validate_extraction_command(config: PipelineConfig) -> None:
     if config.suite_id and len(config.responses) != 1:
-        raise ConfigError(
-            "tests extract: --suite-id requires exactly one --response."
-        )
+        raise ConfigError("tests extract: --suite-id requires exactly one --response.")
     if config.all_tasks and config.responses:
         raise ConfigError(
             "tests extract: --all-tasks cannot be combined with --response."
@@ -420,10 +417,7 @@ def _emit_stage_result(stage: StageResult) -> None:
             "Selected transformations: "
             f"{stage.counts.get('selected_transformations', 0)}"
         )
-        print(
-            "Potential execution pairs: "
-            f"{stage.counts.get('execution_pairs', 0)}"
-        )
+        print("Potential execution pairs: " f"{stage.counts.get('execution_pairs', 0)}")
         for pair in stage.details.get("pairs", []):
             print(pair)
     results_file = stage.details.get("results_file")
@@ -441,9 +435,7 @@ def emit_failure_report_result(
     """Print a compact command result without duplicating the evidence file."""
     source_diagnosis = report.get("source_diagnosis")
     diagnosis_eligible = (
-        source_diagnosis.get("eligible")
-        if isinstance(source_diagnosis, dict)
-        else None
+        source_diagnosis.get("eligible") if isinstance(source_diagnosis, dict) else None
     )
     payload = {
         "status": "created",
@@ -474,9 +466,7 @@ def emit_diagnosis_index(index: dict[str, object], output_format: str) -> None:
                     f"{report['reason']} -> {report['report']}"
                 )
             else:
-                print(
-                    f"{report.get('test_method')}: refused ({report.get('detail')})"
-                )
+                print(f"{report.get('test_method')}: refused ({report.get('detail')})")
         for skipped in pair.get("skipped", []):
             print(f"{pair.get('suite')}: {skipped['reason']} ({skipped['detail']})")
 
@@ -487,7 +477,9 @@ def emit_diagnosis_aggregate(aggregated: dict[str, Any], output_format: str) -> 
         print(json.dumps(aggregated, ensure_ascii=False))
         return
     totals = aggregated.get("totals", {})
-    print(f"Run: {aggregated.get('run_id')} (execution attempt {aggregated.get('attempt')})")
+    print(
+        f"Run: {aggregated.get('run_id')} (execution attempt {aggregated.get('attempt')})"
+    )
     print(f"Totals: {json.dumps(totals, sort_keys=True)}")
     print(f"Aggregate verdict: {aggregated.get('aggregate_verdict')}")
     for pair in aggregated.get("pairs", []):

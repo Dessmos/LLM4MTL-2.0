@@ -18,9 +18,7 @@ def candidate_suite_directories(generated_tests_root: Path) -> list[Path]:
     """
     root = generated_tests_root.resolve()
     return sorted(
-        path.resolve()
-        for path in root.glob("*/candidates/*/*/*")
-        if path.is_dir()
+        path.resolve() for path in root.glob("*/candidates/*/*/*") if path.is_dir()
     )
 
 

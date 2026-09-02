@@ -30,16 +30,16 @@ SUMMARY_CSV = os.path.join(PROJECT_DIR, "etl_pass_rate_summary.csv")
 
 # Mapping from ETL file base name to JUnit test class (fully qualified)
 FILE_TO_TEST = {
-    "OO2DB":            "org.eclipse.epsilon.examples.etl.OO2DBTest",
-    "Tree2Graph":       "org.eclipse.epsilon.examples.etl.Tree2GraphTest",
-    "rss2atom":         "org.eclipse.epsilon.examples.etl.Rss2AtomTest",
-    "base":             "org.eclipse.epsilon.examples.etl.flowchart.BaseTest",
-    "equivalent":       "org.eclipse.epsilon.examples.etl.flowchart.EquivalentTest",
-    "greedy":           "org.eclipse.epsilon.examples.etl.flowchart.GreedyTest",
-    "inheritance":      "org.eclipse.epsilon.examples.etl.flowchart.InheritanceTest",
-    "lazy":             "org.eclipse.epsilon.examples.etl.flowchart.LazyTest",
+    "OO2DB": "org.eclipse.epsilon.examples.etl.OO2DBTest",
+    "Tree2Graph": "org.eclipse.epsilon.examples.etl.Tree2GraphTest",
+    "rss2atom": "org.eclipse.epsilon.examples.etl.Rss2AtomTest",
+    "base": "org.eclipse.epsilon.examples.etl.flowchart.BaseTest",
+    "equivalent": "org.eclipse.epsilon.examples.etl.flowchart.EquivalentTest",
+    "greedy": "org.eclipse.epsilon.examples.etl.flowchart.GreedyTest",
+    "inheritance": "org.eclipse.epsilon.examples.etl.flowchart.InheritanceTest",
+    "lazy": "org.eclipse.epsilon.examples.etl.flowchart.LazyTest",
     "multiple_targets": "org.eclipse.epsilon.examples.etl.flowchart.MultipleTargetsTest",
-    "primary":          "org.eclipse.epsilon.examples.etl.flowchart.PrimaryTest",
+    "primary": "org.eclipse.epsilon.examples.etl.flowchart.PrimaryTest",
 }
 
 
@@ -50,9 +50,13 @@ def _error_detail(output: str) -> str:
         if "Errors:" in line_stripped or "Failures:" in line_stripped:
             if line_stripped not in ("Errors:", "Failures:"):
                 error_detail = line_stripped
-        elif ("expected:" in line_stripped or "Expected" in line_stripped
-              or "NotFound" in line_stripped or "RuntimeException" in line_stripped
-              or "ETL parse errors" in line_stripped):
+        elif (
+            "expected:" in line_stripped
+            or "Expected" in line_stripped
+            or "NotFound" in line_stripped
+            or "RuntimeException" in line_stripped
+            or "ETL parse errors" in line_stripped
+        ):
             return line_stripped
 
     return error_detail
@@ -131,7 +135,9 @@ def write_summary_csv(results):
             s = stats[(llm, strategy)]
             failed = s["total"] - s["passed"]
             rate = s["passed"] / s["total"] * 100 if s["total"] > 0 else 0.0
-            writer.writerow([llm, strategy, s["total"], s["passed"], failed, f"{rate:.1f}%"])
+            writer.writerow(
+                [llm, strategy, s["total"], s["passed"], failed, f"{rate:.1f}%"]
+            )
 
     print(f"\nPass rate summary written to: {SUMMARY_CSV}")
 

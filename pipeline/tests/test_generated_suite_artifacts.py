@@ -62,7 +62,9 @@ def response_markdown(*, with_spec: bool, with_java: bool) -> str:
     blocks = []
     if with_spec:
         blocks.append(
-            "```json file=semantic_cases.json\n" + json.dumps(SEMANTIC_CASES, indent=2) + "\n```"
+            "```json file=semantic_cases.json\n"
+            + json.dumps(SEMANTIC_CASES, indent=2)
+            + "\n```"
         )
     if with_java:
         blocks.append("```java file=GeneratedTest.java\n" + HOSTILE_JAVA + "\n```")
@@ -71,6 +73,7 @@ def response_markdown(*, with_spec: bool, with_java: bool) -> str:
 
 
 class ExtractionArtifactPolicyTests(unittest.TestCase):
+
     def write(
         self,
         root: Path,
@@ -80,7 +83,9 @@ class ExtractionArtifactPolicyTests(unittest.TestCase):
     ):
         response = root / "response.md"
         response.write_text(markdown, encoding="utf-8")
-        target = ResponseTarget(response_path=response, llm="gpt-5", strategy="few_shot", task=task)
+        target = ResponseTarget(
+            response_path=response, llm="gpt-5", strategy="few_shot", task=task
+        )
         args = argparse.Namespace(
             generated_tests_root=root / "generated_tests",
             suite_id=suite_id,
@@ -100,7 +105,9 @@ class ExtractionArtifactPolicyTests(unittest.TestCase):
 
         return extract_files(markdown)
 
-    def test_java_without_a_specification_is_discarded_and_the_suite_is_invalid(self) -> None:
+    def test_java_without_a_specification_is_discarded_and_the_suite_is_invalid(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             suite_dir, validation = self.write(
                 Path(temp_dir), response_markdown(with_spec=False, with_java=True)
@@ -130,7 +137,9 @@ class ExtractionArtifactPolicyTests(unittest.TestCase):
             suite_dir, _ = self.write(
                 Path(temp_dir), response_markdown(with_spec=False, with_java=True)
             )
-            metadata = json.loads((suite_dir / "metadata.json").read_text(encoding="utf-8"))
+            metadata = json.loads(
+                (suite_dir / "metadata.json").read_text(encoding="utf-8")
+            )
 
             self.assertEqual("invalid", metadata["status"])
             self.assertFalse(metadata["artifact_validation"]["valid"])
@@ -181,18 +190,23 @@ class ExtractionArtifactPolicyTests(unittest.TestCase):
                 )
 
             self.assertIn("immutable", str(raised.exception))
-            self.assertEqual(original_metadata, (suite_dir / "metadata.json").read_bytes())
+            self.assertEqual(
+                original_metadata, (suite_dir / "metadata.json").read_bytes()
+            )
             self.assertEqual(1, len(list(suite_dir.glob("*.java"))))
 
 
 class ArtifactValidityReaderTests(unittest.TestCase):
+
     def test_a_suite_without_a_recorded_verdict_is_refused(self) -> None:
         # Suites extracted before the policy may still contain LLM-authored Java,
         # so an absent verdict must not read as a passing one.
         with tempfile.TemporaryDirectory() as temp_dir:
             suite = Path(temp_dir)
             (suite / "metadata.json").write_text(
-                json.dumps({"status": "candidate", "contract_enforcement": {"valid": True}}),
+                json.dumps(
+                    {"status": "candidate", "contract_enforcement": {"valid": True}}
+                ),
                 encoding="utf-8",
             )
             self.assertIn("re-extract", artifact_invalid_reason(suite))

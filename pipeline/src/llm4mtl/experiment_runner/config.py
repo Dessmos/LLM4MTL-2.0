@@ -86,9 +86,7 @@ def load_resolved_config(path: Path) -> PipelineConfig:
     """Load the persisted fields understood by the current runner version."""
     payload = load_mapping(path)
     allowed = {item.name for item in fields(PipelineConfig)}
-    known_values = {
-        key: value for key, value in payload.items() if key in allowed
-    }
+    known_values = {key: value for key, value in payload.items() if key in allowed}
     return PipelineConfig(**known_values)
 
 

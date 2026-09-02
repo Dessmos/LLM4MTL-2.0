@@ -8,6 +8,7 @@ from llm4mtl.external_tools.maven import summarize_error
 
 
 class MavenErrorSummaryTests(unittest.TestCase):
+
     def test_first_three_interesting_lines_are_joined_in_output_order(self) -> None:
         output = (
             "noise\n"

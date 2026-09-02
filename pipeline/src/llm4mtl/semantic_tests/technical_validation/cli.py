@@ -128,7 +128,9 @@ def _execute_suites(
 
     rows: list[dict[str, str]] = []
     for suite in suites:
-        print(f"Checking {suite.task} | {suite.llm} | {suite.strategy} | {suite.suite_id}")
+        print(
+            f"Checking {suite.task} | {suite.llm} | {suite.strategy} | {suite.suite_id}"
+        )
         verdict = check_suite(suite, context)
         row = technical_row(verdict)
         rows.append(row)

@@ -46,6 +46,7 @@ FIXTURES = TARGET.pipeline / "tests/fixtures/walking_skeletons"
 
 
 class FourLanguageCoverageTests(unittest.TestCase):
+
     def test_registry_contains_exactly_the_four_required_adapters(self) -> None:
         self.assertEqual(tuple(sorted(REQUIRED_LANGUAGES)), implemented_languages())
         for language in REQUIRED_LANGUAGES:
@@ -64,7 +65,9 @@ class FourLanguageCoverageTests(unittest.TestCase):
                     path.stem
                     for path in (
                         TARGET.benchmark / "tasks" / language / "references"
-                    ).glob(f"*{language_adapter(language).reference_transformation('_').suffix}")
+                    ).glob(
+                        f"*{language_adapter(language).reference_transformation('_').suffix}"
+                    )
                     if path.name != ".gitkeep"
                 }
                 contracts = {
@@ -84,7 +87,9 @@ class FourLanguageCoverageTests(unittest.TestCase):
                     self.assertEqual(tasks, references)
                     self.assertEqual(tasks, contracts)
                 self.assertTrue(
-                    (TARGET.prompt_assets / f"tests/grammar/{language}/EBNF.txt").is_file()
+                    (
+                        TARGET.prompt_assets / f"tests/grammar/{language}/EBNF.txt"
+                    ).is_file()
                 )
                 self.assertTrue(
                     (
@@ -136,7 +141,9 @@ class FourLanguageCoverageTests(unittest.TestCase):
                         self.assertTrue(model["metamodelFile"], model["runtimeName"])
                 run_specs = expand_matrix(matrix)
                 self.assertTrue(run_specs)
-                self.assertEqual(len(run_specs), len({spec.run_id for spec in run_specs}))
+                self.assertEqual(
+                    len(run_specs), len({spec.run_id for spec in run_specs})
+                )
                 self.assertEqual({language}, {spec.language for spec in run_specs})
 
     def test_all_four_structured_fixtures_render_deterministically(self) -> None:
@@ -150,10 +157,15 @@ class FourLanguageCoverageTests(unittest.TestCase):
                 second, second_validation = adapter.render_suite_artifacts(
                     task, extracted
                 )
-                self.assertEqual(ArtifactValidation(valid=True, contract_applied=True), first_validation)
+                self.assertEqual(
+                    ArtifactValidation(valid=True, contract_applied=True),
+                    first_validation,
+                )
                 self.assertEqual(first_validation, second_validation)
                 self.assertEqual(first, second)
-                self.assertEqual(1, len([name for name in first if name.endswith(".java")]))
+                self.assertEqual(
+                    1, len([name for name in first if name.endswith(".java")])
+                )
                 self.assertIn(
                     adapter.reference_transformation(task).suffix,
                     json.loads(first["semantic_cases.json"])["transformation"],
@@ -224,9 +236,9 @@ class FourLanguageCoverageTests(unittest.TestCase):
         }
         extracted = {
             "semantic_cases.json": json.dumps(spec),
-            "models/in.ecore": (
-                FIXTURES / "qvto/Mappings/models/in.ecore"
-            ).read_text(encoding="utf-8"),
+            "models/in.ecore": (FIXTURES / "qvto/Mappings/models/in.ecore").read_text(
+                encoding="utf-8"
+            ),
         }
         rendered, validation = language_adapter("qvto").render_suite_artifacts(
             "ModelExtents",
@@ -250,6 +262,7 @@ class FourLanguageCoverageTests(unittest.TestCase):
     "set LLM4MTL_RUN_ENGINE_TESTS=1 for real parser and Maven walking skeletons",
 )
 class RealEngineWalkingSkeletonTests(unittest.TestCase):
+
     def test_each_language_runs_reference_and_generated_paths(self) -> None:
         for language, task in SKELETONS.items():
             with self.subTest(language=language, task=task):
@@ -267,11 +280,7 @@ class RealEngineWalkingSkeletonTests(unittest.TestCase):
                         observations_dir=root / "evidence",
                     )
                     reference = adapter.reference_transformation(task)
-                    generated = (
-                        root
-                        / "generated"
-                        / f"{task}{reference.suffix}"
-                    )
+                    generated = root / "generated" / f"{task}{reference.suffix}"
                     generated.parent.mkdir(parents=True)
                     shutil.copyfile(reference, generated)
 
@@ -279,8 +288,12 @@ class RealEngineWalkingSkeletonTests(unittest.TestCase):
                         [reference, generated],
                         workspace,
                     )
-                    self.assertTrue(parse[reference].parsed, parse[reference].diagnostic)
-                    self.assertTrue(parse[generated].parsed, parse[generated].diagnostic)
+                    self.assertTrue(
+                        parse[reference].parsed, parse[reference].diagnostic
+                    )
+                    self.assertTrue(
+                        parse[generated].parsed, parse[generated].diagnostic
+                    )
 
                     reference_observation, reference_evidence = adapter.execute_suite(
                         suite, reference, workspace, 1200
@@ -307,14 +320,16 @@ class RealEngineWalkingSkeletonTests(unittest.TestCase):
                         / "generated_transformations"
                         / file_sha256(generated)
                     )
-                    generated_observation, generated_raw_evidence = adapter.execute_suite(
-                        suite,
-                        generated,
-                        Workspace(
-                            engine_dir=engine_dir,
-                            observations_dir=generated_root,
-                        ),
-                        1200,
+                    generated_observation, generated_raw_evidence = (
+                        adapter.execute_suite(
+                            suite,
+                            generated,
+                            Workspace(
+                                engine_dir=engine_dir,
+                                observations_dir=generated_root,
+                            ),
+                            1200,
+                        )
                     )
                     self.assertTrue(
                         generated_observation.is_reference_valid,
@@ -339,9 +354,9 @@ class RealEngineWalkingSkeletonTests(unittest.TestCase):
                     if language in {"atl", "qvto", "reactions"}:
                         self.assertTrue(
                             any(
-                                snapshot_dir(
-                                    workspace.observations_dir, suite
-                                ).rglob("*.xmi")
+                                snapshot_dir(workspace.observations_dir, suite).rglob(
+                                    "*.xmi"
+                                )
                             )
                         )
                         self.assertTrue(
@@ -384,8 +399,7 @@ def _render_suite(
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(content, encoding="utf-8")
     (destination / "metadata.json").write_text(
-        json.dumps({"artifact_validation": validation.as_metadata()}, indent=2)
-        + "\n",
+        json.dumps({"artifact_validation": validation.as_metadata()}, indent=2) + "\n",
         encoding="utf-8",
     )
     suite = GeneratedSuite(

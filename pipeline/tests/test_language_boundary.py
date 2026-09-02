@@ -40,6 +40,7 @@ from llm4mtl.languages.reactions.adapter import (
 
 
 class RegistryTests(unittest.TestCase):
+
     def test_all_four_thesis_languages_are_declared(self) -> None:
         self.assertEqual(("etl", "atl", "qvto", "reactions"), REQUIRED_LANGUAGES)
 
@@ -60,6 +61,7 @@ class RegistryTests(unittest.TestCase):
 
 
 class PipelineLanguageResolutionTests(unittest.TestCase):
+
     def test_the_runner_accepts_reactions(self) -> None:
         config = PipelineConfig(language="reactions", tasks=["FamiliesToPersons"])
         validate_config(config)
@@ -69,6 +71,7 @@ class PipelineLanguageResolutionTests(unittest.TestCase):
 
 
 class ConventionsTests(unittest.TestCase):
+
     def test_conventions_require_an_explicit_language(self) -> None:
         # A default would silently hand ETL paths to another language.
         self.assertIs(ETL_CONFIG, language_config("etl"))
@@ -223,7 +226,9 @@ class EtlAdapterContractTests(unittest.TestCase):
         self.assertTrue(all(item.parsed for item in observations.values()))
         self.assertTrue(all(not item.diagnostic for item in observations.values()))
 
-    def test_execution_preserves_the_etl_maven_command_and_restores_injections(self) -> None:
+    def test_execution_preserves_the_etl_maven_command_and_restores_injections(
+        self,
+    ) -> None:
         from llm4mtl.languages.base import Workspace
 
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -336,7 +341,9 @@ class EtlAdapterContractTests(unittest.TestCase):
         # an unrecognized throw is a runtime failure of the pairing rather than
         # an unusable observation. Returning None would drop it into the
         # suite-side bucket and out of the semantic-correctness denominator.
-        unclassified_outcome = self.adapter.normalize_transformation_failure(unclassified)
+        unclassified_outcome = self.adapter.normalize_transformation_failure(
+            unclassified
+        )
         self.assertEqual(OutcomeStatus.RUNTIME_FAILED, unclassified_outcome.status)
         self.assertTrue(
             unclassified_outcome.status.is_attributable_to_the_transformation
@@ -344,7 +351,10 @@ class EtlAdapterContractTests(unittest.TestCase):
 
 
 class ReactionsParserNormalizationTests(unittest.TestCase):
-    def test_known_frozen_parser_linkage_false_positives_are_not_syntax_errors(self) -> None:
+
+    def test_known_frozen_parser_linkage_false_positives_are_not_syntax_errors(
+        self,
+    ) -> None:
         diagnostic = "\n".join(
             [
                 "Syntax issues (2):",

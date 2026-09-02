@@ -16,7 +16,9 @@ def file_sha256(path: Path) -> str:
 
 def directory_sha256(path: Path) -> str:
     digest = hashlib.sha256()
-    for child in sorted(candidate for candidate in path.rglob("*") if candidate.is_file()):
+    for child in sorted(
+        candidate for candidate in path.rglob("*") if candidate.is_file()
+    ):
         relative = child.relative_to(path).as_posix().encode("utf-8")
         digest.update(len(relative).to_bytes(8, "big"))
         digest.update(relative)

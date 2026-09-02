@@ -58,7 +58,10 @@ def _pair() -> ValidationPair:
 
 
 class TransformationCliTests(unittest.TestCase):
-    def test_missing_suite_error_keeps_precedence_over_other_empty_selections(self) -> None:
+
+    def test_missing_suite_error_keeps_precedence_over_other_empty_selections(
+        self,
+    ) -> None:
         stderr = StringIO()
         with patch.object(cli, "parse_args", return_value=_args(dry_run=False)):
             with patch.object(cli, "discover_validated_suites", return_value=[]):

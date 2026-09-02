@@ -59,8 +59,12 @@ class ReactionsAdapter:
         references_root: Path | None = None,
         contracts_root: Path | None = None,
     ) -> None:
-        self._references_root = references_root or default_references_root(REACTIONS_CONFIG)
-        self._contracts_root = contracts_root or default_task_contracts_root(REACTIONS_CONFIG)
+        self._references_root = references_root or default_references_root(
+            REACTIONS_CONFIG
+        )
+        self._contracts_root = contracts_root or default_task_contracts_root(
+            REACTIONS_CONFIG
+        )
 
     def runtime_tool_versions(self) -> dict[str, str]:
         return {"vitruv": "3.1.2", "junit": "5.13.2"}
@@ -287,7 +291,9 @@ def _contains_only_unresolved_linkage_diagnostics(diagnostic: str) -> bool:
         "refers to the missing type unknown",
         "The method or field affectedEObject is undefined",
     )
-    return all(any(fragment in line for fragment in allowed_fragments) for line in lines)
+    return all(
+        any(fragment in line for fragment in allowed_fragments) for line in lines
+    )
 
 
 def _merge_reactions(base: str, prerequisites: list[str]) -> str:

@@ -203,9 +203,7 @@ def read_failure_reports_for_attempt(
     return reports
 
 
-def _read_diagnosis_index(
-    paths: RunPaths, attempt: int
-) -> tuple[Path, dict[str, Any]]:
+def _read_diagnosis_index(paths: RunPaths, attempt: int) -> tuple[Path, dict[str, Any]]:
     index_path = _diagnosis_dir(paths, attempt) / INDEX_FILENAME
     if not index_path.is_file():
         raise DiagnosisPreparationError(
@@ -214,7 +212,9 @@ def _read_diagnosis_index(
     index = read_json(index_path)
     validate_artifact("diagnosis-index", index)
     if index.get("run_id") != paths.root.name or index.get("attempt") != attempt:
-        raise DiagnosisPreparationError("diagnosis index identity does not match request")
+        raise DiagnosisPreparationError(
+            "diagnosis index identity does not match request"
+        )
     return index_path, index
 
 
@@ -223,14 +223,14 @@ def _read_indexed_failure_report(
 ) -> IndexedFailureReport:
     reference = entry.get("report")
     if not isinstance(reference, str) or not reference:
-        raise DiagnosisPreparationError("created diagnosis report has no file reference")
+        raise DiagnosisPreparationError(
+            "created diagnosis report has no file reference"
+        )
     candidate = Path(reference)
     if not candidate.is_absolute():
         candidate = REPO_ROOT / candidate
     resolved = candidate.resolve()
-    expected_directory = (
-        _diagnosis_dir(paths, attempt) / REPORTS_DIRNAME
-    ).resolve()
+    expected_directory = (_diagnosis_dir(paths, attempt) / REPORTS_DIRNAME).resolve()
     try:
         relative = resolved.relative_to(expected_directory)
     except ValueError as exc:
@@ -376,7 +376,9 @@ def prepare_execution_diagnosis(run_dir: Path, attempt: int) -> dict[str, Any]:
         "prepared_at": datetime.now(timezone.utc).isoformat(),
         "execution_evidence": repository_relative(evidence_path),
         "syntax_evidence": (
-            repository_relative(syntax_evidence) if syntax_evidence is not None else None
+            repository_relative(syntax_evidence)
+            if syntax_evidence is not None
+            else None
         ),
         "counts": _index_counts(pairs),
         "pairs": pairs,
@@ -472,9 +474,7 @@ def _prepare_pair(
         return entry
 
     execution = read_json(observation_path)
-    suite_dir = _optional_path(
-        execution.get("inputs", {}).get("suite", {}).get("path")
-    )
+    suite_dir = _optional_path(execution.get("inputs", {}).get("suite", {}).get("path"))
     if suite_dir is None or not suite_dir.is_dir():
         entry["skipped"].append(_skip("no_candidate_suite_directory", str(suite_dir)))
         return entry
@@ -749,9 +749,7 @@ def _match_assertion(
     return matching[0]
 
 
-def _matching_assertion_ids(
-    assertions: list[Any], stripped_message: str
-) -> list[str]:
+def _matching_assertion_ids(assertions: list[Any], stripped_message: str) -> list[str]:
     """Return assertion IDs whose rendered messages match the recorded prefix."""
     matching: list[str] = []
     for index, assertion in enumerate(assertions, start=1):
@@ -821,9 +819,7 @@ def _diagnosis_dir(paths: RunPaths, attempt: int) -> Path:
     return paths.root / "diagnosis" / EXECUTION_STAGE / f"attempt-{attempt:03d}"
 
 
-def _pair_report_path(
-    paths: RunPaths, attempt: int, execution: dict[str, Any]
-) -> Path:
+def _pair_report_path(paths: RunPaths, attempt: int, execution: dict[str, Any]) -> Path:
     name = "__".join(
         _safe(part)
         for part in (

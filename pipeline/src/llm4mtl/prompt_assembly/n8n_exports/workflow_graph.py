@@ -136,9 +136,7 @@ def drop_unwired_chat_models(payload: dict[str, Any]) -> dict[str, Any]:
     connections = payload.get("connections", {})
     wired = _wired_chat_models(connections)
     payload["nodes"] = [
-        node
-        for node in payload["nodes"]
-        if _keep_workflow_node(node, wired)
+        node for node in payload["nodes"] if _keep_workflow_node(node, wired)
     ]
     live = {node["name"] for node in payload["nodes"]}
     for name in [name for name in connections if name not in live]:
@@ -173,10 +171,7 @@ def remove_connection_targets(
     value[:] = [
         nested
         for nested in value
-        if not (
-            isinstance(nested, dict)
-            and nested.get("node") in target_names
-        )
+        if not (isinstance(nested, dict) and nested.get("node") in target_names)
     ]
     for nested in value:
         remove_connection_targets(nested, target_names)
@@ -186,24 +181,15 @@ def connection_targets(value: Any, target_name: str) -> bool:
     if isinstance(value, dict):
         if value.get("node") == target_name:
             return True
-        return any(
-            connection_targets(nested, target_name)
-            for nested in value.values()
-        )
+        return any(connection_targets(nested, target_name) for nested in value.values())
     if isinstance(value, list):
-        return any(
-            connection_targets(nested, target_name)
-            for nested in value
-        )
+        return any(connection_targets(nested, target_name) for nested in value)
     return False
 
 
 def rename_connection_node(value: Any, old_name: str, new_name: str) -> Any:
     if isinstance(value, list):
-        return [
-            rename_connection_node(item, old_name, new_name)
-            for item in value
-        ]
+        return [rename_connection_node(item, old_name, new_name) for item in value]
     if isinstance(value, dict):
         return _rename_connection_mapping(value, old_name, new_name)
     return value

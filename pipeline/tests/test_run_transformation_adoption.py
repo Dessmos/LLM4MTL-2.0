@@ -44,6 +44,7 @@ REGENERATED = "rule Tree2Node transform t : Tree!Tree to n : Graph!Node {}\n"
 
 
 class SuiteIterationTests(unittest.TestCase):
+
     def test_the_iteration_is_read_from_the_suite_id_the_master_already_carries(
         self,
     ) -> None:
@@ -56,6 +57,7 @@ class SuiteIterationTests(unittest.TestCase):
 
 
 class TransformationAdoptionTests(unittest.TestCase):
+
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self._tmp.cleanup)
@@ -84,9 +86,7 @@ class TransformationAdoptionTests(unittest.TestCase):
         # The task name is kept: the execution stage pairs a suite with a
         # transformation by that stem.
         self.assertEqual("Tree2Graph.etl", copy.name)
-        self.assertEqual(
-            transformation_dir(self.paths, 0) / "Tree2Graph.etl", copy
-        )
+        self.assertEqual(transformation_dir(self.paths, 0) / "Tree2Graph.etl", copy)
 
         metadata = read_json(adopted.metadata)
         self.assertEqual("1.0", metadata["schema_version"])
@@ -174,9 +174,7 @@ class StageServiceAdoptionTests(unittest.TestCase):
             ("_runs_root", self.root / "runs"),
             ("_diagnoses_root", self._diagnoses),
         ):
-            patcher = patch(
-                f"llm4mtl.stage_service.app.{target}", return_value=value
-            )
+            patcher = patch(f"llm4mtl.stage_service.app.{target}", return_value=value)
             patcher.start()
             self.addCleanup(patcher.stop)
         self.client = TestClient(app)
@@ -233,11 +231,12 @@ class StageServiceAdoptionTests(unittest.TestCase):
         # The shared file changes between the two stages, exactly as a parallel
         # run over the same combination would change it.
         self.shared.write_text(REGENERATED, encoding="utf-8")
-        execution = self._run_stage("execution", "transformations", "semantic_validation")
+        execution = self._run_stage(
+            "execution", "transformations", "semantic_validation"
+        )
 
         self.assertEqual([str(adopted)], execution.transformations)
         self.assertEqual(GENERATED, adopted.read_text(encoding="utf-8"))
-
 
     def test_a_refined_transformation_is_adopted_under_its_own_iteration(self) -> None:
         """The iteration is stated, not inferred from the suite id.

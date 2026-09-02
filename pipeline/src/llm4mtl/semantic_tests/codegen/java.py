@@ -56,7 +56,10 @@ def render_semantic_test(class_name: str, spec: dict[str, Any], task: str) -> st
             "",
             "    @BeforeEach",
             "    public void setUpGeneratedMetamodels() throws Exception {",
-            *[f'        registerMetamodel("{escape_java(path)}");' for path in metamodels],
+            *[
+                f'        registerMetamodel("{escape_java(path)}");'
+                for path in metamodels
+            ],
             "    }",
             "",
             *methods,
@@ -70,7 +73,9 @@ def render_semantic_test(class_name: str, spec: dict[str, Any], task: str) -> st
 def render_test_method(spec: dict[str, Any], test: dict[str, Any], task: str) -> str:
     method_name = sanitize_method_name(str(test["name"]))
     models = effective_models(spec, test)
-    model_vars = {str(model["name"]): f"model{index}" for index, model in enumerate(models)}
+    model_vars = {
+        str(model["name"]): f"model{index}" for index, model in enumerate(models)
+    }
     lines = [
         "    @Test",
         f"    public void {method_name}() throws Exception {{",
@@ -108,13 +113,17 @@ def render_model_creation(model: dict[str, Any], var_name: str, task: str) -> li
     return render_emf_model(model, var_name, role, task)
 
 
-def render_emf_model(model: dict[str, Any], var_name: str, role: str, task: str) -> list[str]:
+def render_emf_model(
+    model: dict[str, Any], var_name: str, role: str, task: str
+) -> list[str]:
     name = escape_java(runtime_model_name(model))
     metamodel_uri = escape_java(str(model["metamodelUri"]))
     read_on_load = java_bool(model.get("readOnLoad", role == "source"))
     store_on_disposal = java_bool(model.get("storeOnDisposal", role == "target"))
     if role == "source":
-        path = model_resource_path(str(model["path"]), task, bool(model.get("generated", True)))
+        path = model_resource_path(
+            str(model["path"]), task, bool(model.get("generated", True))
+        )
         return [
             f'        EmfModel {var_name} = createEmfModel("{name}", "{escape_java(path)}", "{metamodel_uri}", {read_on_load}, {store_on_disposal});'
         ]
@@ -127,14 +136,23 @@ def render_emf_model(model: dict[str, Any], var_name: str, role: str, task: str)
     ]
 
 
-def render_plain_xml_model(model: dict[str, Any], var_name: str, role: str, task: str) -> list[str]:
+def render_plain_xml_model(
+    model: dict[str, Any], var_name: str, role: str, task: str
+) -> list[str]:
     name = escape_java(runtime_model_name(model))
     read_on_load = java_bool(model.get("readOnLoad", role == "source"))
     store_on_disposal = java_bool(model.get("storeOnDisposal", role == "target"))
-    lines = [f"        PlainXmlModel {var_name} = new PlainXmlModel();", f'        {var_name}.setName("{name}");']
+    lines = [
+        f"        PlainXmlModel {var_name} = new PlainXmlModel();",
+        f'        {var_name}.setName("{name}");',
+    ]
     if role == "source":
-        path = model_resource_path(str(model["path"]), task, bool(model.get("generated", True)))
-        lines.append(f'        {var_name}.setFile(new File(getResourcePath("{escape_java(path)}")));')
+        path = model_resource_path(
+            str(model["path"]), task, bool(model.get("generated", True))
+        )
+        lines.append(
+            f'        {var_name}.setFile(new File(getResourcePath("{escape_java(path)}")));'
+        )
     else:
         extension = str(model.get("fileExtension") or ".xml")
         lines.extend(
@@ -163,7 +181,9 @@ def runtime_model_name(model: dict[str, Any]) -> str:
     return str(model["name"])
 
 
-def render_assertion(assertion: dict[str, Any], model_vars: dict[str, str]) -> list[str]:
+def render_assertion(
+    assertion: dict[str, Any], model_vars: dict[str, str]
+) -> list[str]:
     model_var = model_vars[str(assertion["model"])]
     kind = assertion["kind"]
     type_name = escape_java(str(assertion["type"]))
@@ -228,14 +248,10 @@ def _render_object_assertion(
 ) -> list[str]:
     if kind == "collectionSize":
         where = (
-            assertion.get("where")
-            if isinstance(assertion.get("where"), dict)
-            else {}
+            assertion.get("where") if isinstance(assertion.get("where"), dict) else {}
         )
         features = list(where) if where else []
-        expected_signature = (
-            object_signatures([where], features)[0] if features else ""
-        )
+        expected_signature = object_signatures([where], features)[0] if features else ""
         path = escape_java(str(assertion["path"]))
         return [
             f'        assertCollectionSize({model_var}, "{type_name}", {java_string_array(features)}, '
@@ -244,8 +260,7 @@ def _render_object_assertion(
     features = [str(feature) for feature in assertion["features"]]
     expected = object_signatures(assertion["expected"], features)
     actual = (
-        f'signaturesOf({model_var}, "{type_name}", '
-        f"{java_string_array(features)})"
+        f'signaturesOf({model_var}, "{type_name}", ' f"{java_string_array(features)})"
     )
     return render_count_assertion(
         java_string_list(expected), actual, assertion, message
@@ -258,13 +273,13 @@ def _render_relationship_assertion(
     if assertion["kind"] == "treePaths":
         expected = java_string_list([str(value) for value in assertion["expected"]])
         label_feature = escape_java(str(assertion.get("labelFeature") or "label"))
-        children_feature = escape_java(str(assertion.get("childrenFeature") or "children"))
+        children_feature = escape_java(
+            str(assertion.get("childrenFeature") or "children")
+        )
         actual = f'treePaths({model_var}, "{type_name}", "{label_feature}", "{children_feature}")'
         return render_count_assertion(expected, actual, assertion, message)
 
-    expected = [
-        f"{pair['source']}->{pair['target']}" for pair in assertion["expected"]
-    ]
+    expected = [f"{pair['source']}->{pair['target']}" for pair in assertion["expected"]]
     source = escape_java(str(assertion["source"]))
     target = escape_java(str(assertion["target"]))
     actual = f'referencePairs({model_var}, "{type_name}", "{source}", "{target}")'
@@ -273,7 +288,9 @@ def _render_relationship_assertion(
     )
 
 
-def render_count_assertion(expected: str, actual: str, assertion: dict[str, Any], message: str) -> list[str]:
+def render_count_assertion(
+    expected: str, actual: str, assertion: dict[str, Any], message: str
+) -> list[str]:
     if assertion.get("contains") is True:
         return [f'        assertContainsCounts({expected}, {actual}, "{message}");']
     return [f'        assertEquals(counts({expected}), counts({actual}), "{message}");']
@@ -285,12 +302,12 @@ def java_helpers() -> list[str]:
         # live EMF resource. A blank property means no observation directory was
         # configured, and then nothing is written — never a partial file.
         "    private void writeSnapshot(String relativePath, EmfModel model) throws Exception {",
-        "        String configured = System.getProperty(\"llm4mtl.observations.dir\", \"\");",
+        '        String configured = System.getProperty("llm4mtl.observations.dir", "");',
         "        if (configured.isBlank()) return;",
         "        java.nio.file.Path target = java.nio.file.Path.of(configured).resolve(relativePath);",
         "        java.nio.file.Files.createDirectories(target.getParent());",
         "        ResourceSet snapshotSet = new ResourceSetImpl();",
-        "        snapshotSet.getResourceFactoryRegistry().getExtensionToFactoryMap().put(\"xmi\", new XMIResourceFactoryImpl());",
+        '        snapshotSet.getResourceFactoryRegistry().getExtensionToFactoryMap().put("xmi", new XMIResourceFactoryImpl());',
         "        Resource snapshot = snapshotSet.createResource(",
         "            org.eclipse.emf.common.util.URI.createFileURI(target.toString()));",
         "        snapshot.getContents().addAll(EcoreUtil.copyAll(model.getResource().getContents()));",
@@ -318,7 +335,7 @@ def java_helpers() -> list[str]:
         "            List<Object> targets = pathValuesFrom(object, targetPath);",
         "            for (Object source : sources) {",
         "                for (Object target : targets) {",
-        "                    pairs.add(stringValue(source) + \"->\" + stringValue(target));",
+        '                    pairs.add(stringValue(source) + "->" + stringValue(target));',
         "                }",
         "            }",
         "        }",
@@ -329,14 +346,14 @@ def java_helpers() -> list[str]:
         "        List<String> paths = new ArrayList<>();",
         ALL_OF_TYPE_LOOP,
         "            if (object instanceof EObject && ((EObject) object).eContainer() == null) {",
-        "                collectTreePaths(object, \"\", labelFeature, childrenFeature, paths);",
+        '                collectTreePaths(object, "", labelFeature, childrenFeature, paths);',
         "            }",
         "        }",
         "        return paths;",
         "    }",
         "",
         "    private void collectTreePaths(Object object, String prefix, String labelFeature, String childrenFeature, List<String> paths) {",
-        "        String currentPath = prefix + \"/\" + stringValue(pathValue(object, labelFeature));",
+        '        String currentPath = prefix + "/" + stringValue(pathValue(object, labelFeature));',
         "        paths.add(currentPath);",
         "        for (Object child : pathValuesFrom(object, childrenFeature)) {",
         "            collectTreePaths(child, currentPath, labelFeature, childrenFeature, paths);",
@@ -348,9 +365,9 @@ def java_helpers() -> list[str]:
         ALL_OF_TYPE_LOOP,
         "            List<String> parts = new ArrayList<>();",
         "            for (String feature : features) {",
-        "                parts.add(feature + \"=\" + stringValue(pathValue(object, feature)));",
+        '                parts.add(feature + "=" + stringValue(pathValue(object, feature)));',
         "            }",
-        "            signatures.add(String.join(\"|\", parts));",
+        '            signatures.add(String.join("|", parts));',
         "        }",
         "        return signatures;",
         "    }",
@@ -363,20 +380,20 @@ def java_helpers() -> list[str]:
         "                assertEquals(expectedSize, pathValuesFrom(object, path).size(), message);",
         "            }",
         "        }",
-        "        assertTrue(matched, message + \" missing object \" + expectedSignature);",
+        '        assertTrue(matched, message + " missing object " + expectedSignature);',
         "    }",
         "",
         "    private String signatureOf(Object object, String[] features) {",
         "        List<String> parts = new ArrayList<>();",
         "        for (String feature : features) {",
-        "            parts.add(feature + \"=\" + stringValue(pathValue(object, feature)));",
+        '            parts.add(feature + "=" + stringValue(pathValue(object, feature)));',
         "        }",
-        "        return String.join(\"|\", parts);",
+        '        return String.join("|", parts);',
         "    }",
         "",
         "    private Object pathValue(Object object, String path) {",
         "        Object current = object;",
-        "        for (String part : path.split(\"\\\\.\")) {",
+        '        for (String part : path.split("\\\\.")) {',
         "            current = featureValue(current, part);",
         "            if (current == null) {",
         "                return null;",
@@ -393,7 +410,7 @@ def java_helpers() -> list[str]:
         "        }",
         "        int dot = path.indexOf('.');",
         "        String first = dot >= 0 ? path.substring(0, dot) : path;",
-        "        String rest = dot >= 0 ? path.substring(dot + 1) : \"\";",
+        '        String rest = dot >= 0 ? path.substring(dot + 1) : "";',
         "        List<Object> currentValues = new ArrayList<>();",
         "        addFlattened(currentValues, object);",
         "        for (Object current : currentValues) {",
@@ -421,10 +438,10 @@ def java_helpers() -> list[str]:
         "        if (object instanceof EObject) {",
         "            EObject eObject = (EObject) object;",
         "            EStructuralFeature feature = eObject.eClass().getEStructuralFeature(featureName);",
-        "            assertNotNull(feature, \"Missing feature \" + featureName + \" on \" + eObject.eClass().getName());",
+        '            assertNotNull(feature, "Missing feature " + featureName + " on " + eObject.eClass().getName());',
         "            return eObject.eGet(feature);",
         "        }",
-        "        fail(\"Feature assertions are only supported for EMF EObject instances: \" + object);",
+        '        fail("Feature assertions are only supported for EMF EObject instances: " + object);',
         "        return null;",
         "    }",
         "",
@@ -443,7 +460,7 @@ def java_helpers() -> list[str]:
         "    private void assertContainsCounts(Collection<String> expected, Collection<String> actual, String message) {",
         "        Map<String, Integer> actualCounts = counts(actual);",
         "        for (Map.Entry<String, Integer> expectedEntry : counts(expected).entrySet()) {",
-        "            assertTrue(actualCounts.getOrDefault(expectedEntry.getKey(), 0) >= expectedEntry.getValue(), message + \" missing \" + expectedEntry.getKey());",
+        '            assertTrue(actualCounts.getOrDefault(expectedEntry.getKey(), 0) >= expectedEntry.getValue(), message + " missing " + expectedEntry.getKey());',
         "        }",
         "    }",
         "",

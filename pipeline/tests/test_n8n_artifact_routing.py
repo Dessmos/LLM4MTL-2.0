@@ -31,7 +31,9 @@ def _connected_models(document: dict[str, Any]) -> list[str]:
                 continue
             node = nodes_by_name[source_name]
             parameters = node.get("parameters", {})
-            model = parameters.get("model", {}).get("value") or parameters.get("modelName")
+            model = parameters.get("model", {}).get("value") or parameters.get(
+                "modelName"
+            )
             if model:
                 models.append(_model_path_alias(model))
     for node in document["nodes"]:
@@ -76,6 +78,7 @@ def _writes_inside_artifacts(document: dict[str, Any], file_name: str) -> bool:
 
 
 class N8nArtifactRoutingTests(unittest.TestCase):
+
     def test_generated_file_writes_target_artifacts(self) -> None:
         write_count = 0
         for path, document in _workflow_documents():
@@ -165,7 +168,12 @@ class N8nArtifactRoutingTests(unittest.TestCase):
         # one from $json after a Convert to File node resolves it to undefined.
         build_node = "Build Diagnosis Request Artifact"
         build_code = nodes[build_node]["parameters"]["jsCode"]
-        for derived in ("artifact_directory", "request_path", "raw_response_path", "result_path"):
+        for derived in (
+            "artifact_directory",
+            "request_path",
+            "raw_response_path",
+            "result_path",
+        ):
             self.assertIn(f"{derived}:", build_code)
 
         # The directory the workflow writes into is the one the stage service
@@ -175,19 +183,25 @@ class N8nArtifactRoutingTests(unittest.TestCase):
         from llm4mtl.semantic_tests.diagnosis_preparation import diagnosis_response_dir
 
         prepared = diagnosis_response_dir(Path("/run"), 1).as_posix()
-        self.assertTrue(prepared.endswith("responses/source-diagnosis/execution-attempt-001"))
+        self.assertTrue(
+            prepared.endswith("responses/source-diagnosis/execution-attempt-001")
+        )
         self.assertIn(
             "/responses/source-diagnosis/execution-attempt-${executionAttempt}`",
             build_code,
         )
-        self.assertIn("const artifactPrefix = `${artifactDirectory}/n8n-execution-", build_code)
+        self.assertIn(
+            "const artifactPrefix = `${artifactDirectory}/n8n-execution-", build_code
+        )
         for derived, suffix in (
             ("request_path", "__diagnosis_request.json"),
             ("raw_response_path", "__diagnosis_raw_response.txt"),
             ("result_path", "__diagnosis_result.json"),
         ):
             self.assertIn(f"{derived}: `${{artifactPrefix}}{suffix}`", build_code)
-        self.assertNotIn("n8n-execution-${executionId}`;", build_code.split("artifactPrefix")[0])
+        self.assertNotIn(
+            "n8n-execution-${executionId}`;", build_code.split("artifactPrefix")[0]
+        )
         # Python prepares the per-attempt parent directory before this workflow
         # is exposed. Execute Command is unavailable in a default n8n container,
         # where it imports as an unrecognized node and takes its neighbours'
@@ -283,8 +297,12 @@ class N8nArtifactRoutingTests(unittest.TestCase):
         nodes = {node["name"]: node for node in document["nodes"]}
         validation_code = nodes["Validate Evidence Bundle"]["parameters"]["jsCode"]
 
-        self.assertIn("semanticStatuses: ['failed', 'execution_error']", validation_code)
-        self.assertIn("spec.semanticStatuses.includes(result.semantic_status)", validation_code)
+        self.assertIn(
+            "semanticStatuses: ['failed', 'execution_error']", validation_code
+        )
+        self.assertIn(
+            "spec.semanticStatuses.includes(result.semantic_status)", validation_code
+        )
         # A single expected status is what refused the runtime failures.
         self.assertNotIn("semanticStatus:", validation_code)
         # The case is required; the assertion is allowed to be null.
@@ -341,9 +359,7 @@ class N8nArtifactRoutingTests(unittest.TestCase):
         # the run's copy of the transformation is filed under the right one even
         # when the suite id deliberately stays behind.
         stage_body = nodes["Run Existing Python Stage"]["parameters"]["jsonBody"]
-        self.assertIn(
-            "refinement_iteration: $json.stage_iteration", stage_body
-        )
+        self.assertIn("refinement_iteration: $json.stage_iteration", stage_body)
 
         # The final branch records the ending before it reads the artifacts.
         final_branch = connections["Route Next Action"]["main"][4]

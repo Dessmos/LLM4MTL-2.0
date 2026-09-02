@@ -55,6 +55,7 @@ def verdicts(*statuses: str) -> list[SuiteVerdict]:
 
 
 class ReferenceStageCountTests(unittest.TestCase):
+
     def test_only_judged_suites_reach_the_oracle_verdicts(self) -> None:
         counts = reference_counts(
             verdicts(VALIDATED, REFERENCE_INVALID, NOT_EXECUTABLE, ARTIFACT_INVALID), 4
@@ -70,16 +71,24 @@ class ReferenceStageCountTests(unittest.TestCase):
         result = StageResult("reference_validation", "completed", counts)
 
         self.assertEqual("skipped", stage_status("reference-validation", result))
-        self.assertNotEqual("REFERENCE_VALIDATED", outcome_code("reference-validation", result))
+        self.assertNotEqual(
+            "REFERENCE_VALIDATED", outcome_code("reference-validation", result)
+        )
 
     def test_suites_that_produced_no_verdict_are_counted_as_skipped(self) -> None:
         self.assertEqual(2, reference_counts(verdicts(VALIDATED), 3)["skipped"])
 
 
 class TechnicalStageCountTests(unittest.TestCase):
+
     def test_executability_and_artifact_validity_are_separate_buckets(self) -> None:
         counts = technical_counts(
-            verdicts(TECHNICALLY_EXECUTABLE, NOT_EXECUTABLE, ARTIFACT_INVALID, INFRASTRUCTURE_ERROR),
+            verdicts(
+                TECHNICALLY_EXECUTABLE,
+                NOT_EXECUTABLE,
+                ARTIFACT_INVALID,
+                INFRASTRUCTURE_ERROR,
+            ),
             4,
         )
 
@@ -92,10 +101,13 @@ class TechnicalStageCountTests(unittest.TestCase):
         counts = technical_counts(verdicts(TECHNICALLY_EXECUTABLE, ARTIFACT_INVALID), 2)
         result = StageResult("technical_validation", "completed", counts)
 
-        self.assertEqual("TEST_SPEC_INVALID", outcome_code("technical-validation", result))
+        self.assertEqual(
+            "TEST_SPEC_INVALID", outcome_code("technical-validation", result)
+        )
 
 
 class TestGenerationAdapterValidationTests(unittest.TestCase):
+
     def test_run_specific_opaque_suite_id_is_selected_for_validation(self) -> None:
         """n8n suite ids are attributable to a run, not named ``suite_*``."""
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -179,6 +191,7 @@ class TestGenerationAdapterValidationTests(unittest.TestCase):
 
 
 class ObservationScopeTests(unittest.TestCase):
+
     def test_observations_are_scoped_to_the_run(self) -> None:
         from llm4mtl.experiment_runner.adapters.test_generation import (
             TestGenerationAdapter as GenerationAdapter,
@@ -256,7 +269,9 @@ class ObservationScopeTests(unittest.TestCase):
             ):
                 self.assertEqual([], adapter.select_validated_suites(config))
 
-    def test_dry_run_selects_candidates_without_requiring_run_observations(self) -> None:
+    def test_dry_run_selects_candidates_without_requiring_run_observations(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             suite_path = (
                 Path(temp_dir)
@@ -287,7 +302,10 @@ class ObservationScopeTests(unittest.TestCase):
 
 
 class TransformationExecutionCountTests(unittest.TestCase):
-    def unclassified_observation(self, **overrides: object) -> SuiteExecutionObservation:
+
+    def unclassified_observation(
+        self, **overrides: object
+    ) -> SuiteExecutionObservation:
         fields = dict(
             compiled=True,
             tests_discovered=True,
@@ -309,7 +327,9 @@ class TransformationExecutionCountTests(unittest.TestCase):
             [(observation, adapter.normalize_transformation_failure(observation))]
         )
 
-    def test_unclassified_runtime_on_a_validated_suite_is_a_semantic_failure(self) -> None:
+    def test_unclassified_runtime_on_a_validated_suite_is_a_semantic_failure(
+        self,
+    ) -> None:
         """Pairs reaching this stage have already passed reference validation.
 
         The suite compiled, ran, and its assertions held against the trusted
@@ -336,7 +356,9 @@ class TransformationExecutionCountTests(unittest.TestCase):
                     counts["evaluated"], counts["passed"] + counts["failed"]
                 )
 
-    def test_a_pair_the_harness_could_not_run_stays_out_of_the_denominator(self) -> None:
+    def test_a_pair_the_harness_could_not_run_stays_out_of_the_denominator(
+        self,
+    ) -> None:
         counts = self.counts_for(
             self.unclassified_observation(failure_stage="model_loading")
         )

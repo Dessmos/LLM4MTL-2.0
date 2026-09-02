@@ -27,6 +27,7 @@ IDENTITY = {
 
 
 class RefinementGenerationContractTests(unittest.TestCase):
+
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self._tmp.cleanup)
@@ -138,7 +139,10 @@ class RefinementGenerationContractTests(unittest.TestCase):
             "transformation-generation", 0, "Tree2Graph.etl"
         )
         previous.parent.mkdir(parents=True, exist_ok=True)
-        previous.write_text("rule Broken { transform s : Tree!Tree to t : Graph!Graph {} }\n", encoding="utf-8")
+        previous.write_text(
+            "rule Broken { transform s : Tree!Tree to t : Graph!Graph {} }\n",
+            encoding="utf-8",
+        )
         run_store.record_attempt(
             self.paths,
             "syntax-validation",
@@ -179,9 +183,7 @@ class RefinementGenerationContractTests(unittest.TestCase):
         self.assertIn("Preserve behavior unrelated", prompt)
         self.assertIn("prompt_assets/transformations/few_shot/etl/Examples.txt", prompt)
         self.assertTrue(
-            self.paths.generation_iteration_dir(
-                "transformation-generation", 1
-            ).is_dir()
+            self.paths.generation_iteration_dir("transformation-generation", 1).is_dir()
         )
 
     def test_generation_record_uses_actual_n8n_model_and_links_both_iterations(
@@ -246,8 +248,12 @@ class RefinementGenerationContractTests(unittest.TestCase):
         )
         self.assertEqual(0, second["input_artifact_iteration"])
         self.assertEqual(1, second["created_artifact_iteration"])
-        self.assertEqual(first["output_artifact"]["sha256"], second["input_artifact"]["sha256"])
-        self.assertNotEqual(second["input_artifact"]["sha256"], second["output_artifact"]["sha256"])
+        self.assertEqual(
+            first["output_artifact"]["sha256"], second["input_artifact"]["sha256"]
+        )
+        self.assertNotEqual(
+            second["input_artifact"]["sha256"], second["output_artifact"]["sha256"]
+        )
         self.assertIsNotNone(second["refinement_request"])
 
     def test_refinement_stops_before_prompt_handoff_when_response_path_is_blocked(
@@ -369,9 +375,7 @@ class RefinementGenerationContractTests(unittest.TestCase):
         self.assertNotIn("OLD_TRANSFORMATION_DIAGNOSIS", prompt)
         self.assertNotIn("attempt-1-feedback", prompt)
         self.assertTrue(
-            self.paths.generation_iteration_dir(
-                "semantic-test-generation", 1
-            ).is_dir()
+            self.paths.generation_iteration_dir("semantic-test-generation", 1).is_dir()
         )
 
     def test_diagnosis_resume_refuses_an_index_outside_its_schema(self) -> None:

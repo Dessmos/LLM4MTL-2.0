@@ -18,10 +18,7 @@ from llm4mtl.semantic_tests.suites.java import slug
 
 
 def render_atl_test(class_name: str, spec: dict[str, Any], task: str) -> str:
-    methods = [
-        _render_method(spec, test, task)
-        for test in spec["tests"]
-    ]
+    methods = [_render_method(spec, test, task) for test in spec["tests"]]
     return "\n".join(
         [
             "package org.example.generated;",
@@ -137,7 +134,9 @@ def _metamodel_uri(model: dict[str, Any]) -> str:
 def _metamodel_name(model: dict[str, Any]) -> str:
     path = model.get("metamodelFile")
     if not path:
-        raise ValueError(f"ATL model {model.get('name')} has no deterministic metamodel file")
+        raise ValueError(
+            f"ATL model {model.get('name')} has no deterministic metamodel file"
+        )
     return str(path).replace("\\", "/").split("/")[-1]
 
 
@@ -154,13 +153,13 @@ def _atl_helpers() -> list[str]:
         "        ResourceSet resourceSet = new ResourceSetImpl();",
         "        loadMetamodel(resourceSet, ecoreName, nsUri);",
         "        URL url = getClass().getClassLoader().getResource(resourcePath);",
-        "        if (url == null) throw new IllegalArgumentException(\"Resource not found: \" + resourcePath);",
+        '        if (url == null) throw new IllegalArgumentException("Resource not found: " + resourcePath);',
         "        return resourceSet.getResource(URI.createURI(url.toString()), true);",
         "    }",
         "",
         "    private EPackage loadMetamodel(ResourceSet resourceSet, String name, String nsUri) {",
-        "        URL url = getClass().getClassLoader().getResource(\"metamodels/\" + name);",
-        "        if (url == null) throw new IllegalArgumentException(\"Resource not found: metamodels/\" + name);",
+        '        URL url = getClass().getClassLoader().getResource("metamodels/" + name);',
+        '        if (url == null) throw new IllegalArgumentException("Resource not found: metamodels/" + name);',
         "        Resource resource = resourceSet.getResource(URI.createURI(url.toString()), true);",
         "        EPackage selected = null;",
         "        for (EObject root : resource.getContents()) {",
@@ -169,19 +168,19 @@ def _atl_helpers() -> list[str]:
         "            resourceSet.getPackageRegistry().put(candidate.getNsURI(), candidate);",
         "            if (selected == null || candidate.getNsURI().equals(nsUri)) selected = candidate;",
         "        }",
-        "        if (selected == null) throw new IllegalStateException(\"No EPackage in metamodels/\" + name);",
+        '        if (selected == null) throw new IllegalStateException("No EPackage in metamodels/" + name);',
         "        return selected;",
         "    }",
         "",
         "    private File compileAtl(String transformation) throws Exception {",
-        "        File source = new File(\"src/main/atl\", transformation);",
-        "        if (!source.isFile()) throw new IllegalArgumentException(\"Transformation not found: \" + source);",
-        "        File asm = Files.createTempFile(\"llm4mtl-atl\", \".asm\").toFile();",
+        '        File source = new File("src/main/atl", transformation);',
+        '        if (!source.isFile()) throw new IllegalArgumentException("Transformation not found: " + source);',
+        '        File asm = Files.createTempFile("llm4mtl-atl", ".asm").toFile();',
         "        asm.deleteOnExit();",
         "        try (Reader reader = new FileReader(source)) {",
         "            new Atl2006Compiler().compile(reader, asm.getAbsolutePath());",
         "        }",
-        "        if (asm.length() == 0) throw new IllegalStateException(\"ATL parse errors: empty compiled module\");",
+        '        if (asm.length() == 0) throw new IllegalStateException("ATL parse errors: empty compiled module");',
         "        return asm;",
         "    }",
         "",
@@ -190,9 +189,9 @@ def _atl_helpers() -> list[str]:
         "        IInjector injector = new EMFInjector();",
         "        IReferenceModel sourceMetamodel = factory.newReferenceModel();",
         "        IReferenceModel targetMetamodel = factory.newReferenceModel();",
-        "        URL sourceMm = getClass().getClassLoader().getResource(\"metamodels/\" + sourceEcore);",
-        "        URL targetMm = getClass().getClassLoader().getResource(\"metamodels/\" + targetEcore);",
-        "        if (sourceMm == null || targetMm == null) throw new IllegalArgumentException(\"Resource not found: ATL metamodel\");",
+        '        URL sourceMm = getClass().getClassLoader().getResource("metamodels/" + sourceEcore);',
+        '        URL targetMm = getClass().getClassLoader().getResource("metamodels/" + targetEcore);',
+        '        if (sourceMm == null || targetMm == null) throw new IllegalArgumentException("Resource not found: ATL metamodel");',
         "        injector.inject(sourceMetamodel, sourceMm.toString());",
         "        injector.inject(targetMetamodel, targetMm.toString());",
         "        IModel source = factory.newModel(sourceMetamodel);",
@@ -200,12 +199,12 @@ def _atl_helpers() -> list[str]:
         "        IModel target = factory.newModel(targetMetamodel);",
         "        EMFVMLauncher launcher = new EMFVMLauncher();",
         "        launcher.initialize(null);",
-        "        launcher.addInModel(source, \"IN\", sourceAlias);",
-        "        launcher.addOutModel(target, \"OUT\", targetAlias);",
+        '        launcher.addInModel(source, "IN", sourceAlias);',
+        '        launcher.addOutModel(target, "OUT", targetAlias);',
         "        try (java.io.InputStream stream = new java.io.FileInputStream(compileAtl(transformation))) {",
-        "            launcher.launch(\"run\", null, new HashMap<>(), stream);",
+        '            launcher.launch("run", null, new HashMap<>(), stream);',
         "        }",
-        "        File output = Files.createTempFile(\"llm4mtl-atl-output\", \".xmi\").toFile();",
+        '        File output = Files.createTempFile("llm4mtl-atl-output", ".xmi").toFile();',
         "        output.deleteOnExit();",
         "        IExtractor extractor = new EMFExtractor();",
         "        extractor.extract(target, URI.createFileURI(output.getAbsolutePath()).toString());",

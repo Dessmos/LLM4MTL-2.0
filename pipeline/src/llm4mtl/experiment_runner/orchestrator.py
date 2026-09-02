@@ -585,9 +585,7 @@ def stable_hash(
 ) -> str:
     excluded_fields = ignored or set()
     normalized = {
-        key: value
-        for key, value in payload.items()
-        if key not in excluded_fields
+        key: value for key, value in payload.items() if key not in excluded_fields
     }
     encoded = json.dumps(
         normalized,
@@ -599,8 +597,7 @@ def stable_hash(
 
 def run_status(results: list[StageResult]) -> str:
     statuses = [
-        stage_status(contract_stage_id(result.name), result)
-        for result in results
+        stage_status(contract_stage_id(result.name), result) for result in results
     ]
     if any(status == "infrastructure_error" for status in statuses):
         return "failed"

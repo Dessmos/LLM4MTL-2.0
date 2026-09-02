@@ -53,7 +53,9 @@ LONG_STDOUT = "\n".join(f"[INFO] reactor line {index:04d}" for index in range(40
 def _suite(root: Path, suite_id: str = "suite_001") -> GeneratedSuite:
     path = root / "suites" / suite_id
     (path / "models").mkdir(parents=True, exist_ok=True)
-    (path / "GeneratedTest.java").write_text("class GeneratedTest {}\n", encoding="utf-8")
+    (path / "GeneratedTest.java").write_text(
+        "class GeneratedTest {}\n", encoding="utf-8"
+    )
     return GeneratedSuite(
         language="etl",
         path=path,
@@ -96,6 +98,7 @@ class _Harness:
 
 
 class EvidenceSurvivesTheWorkspaceTests(unittest.TestCase):
+
     def test_pair_n_evidence_survives_pair_n_plus_1_running_maven_clean(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -143,7 +146,9 @@ class EvidenceSurvivesTheWorkspaceTests(unittest.TestCase):
             archived = archived_execution_evidence(first_path)
             self.assertIsNotNone(archived.directory)
             self.assertEqual(1, len(archived.surefire_reports))
-            self.assertEqual(REPORT_XML, archived.surefire_reports[0].read_text(encoding="utf-8"))
+            self.assertEqual(
+                REPORT_XML, archived.surefire_reports[0].read_text(encoding="utf-8")
+            )
             self.assertEqual(
                 "[ERROR] first pair stderr",
                 (archived.directory / STDERR_FILENAME).read_text(encoding="utf-8"),
@@ -207,7 +212,8 @@ class EvidenceSurvivesTheWorkspaceTests(unittest.TestCase):
                 sorted(item.name for item in surefire.iterdir()),
             )
             self.assertEqual(
-                REPORT_XML, (surefire / "TEST-GeneratedTest.xml").read_text(encoding="utf-8")
+                REPORT_XML,
+                (surefire / "TEST-GeneratedTest.xml").read_text(encoding="utf-8"),
             )
             self.assertEqual(
                 second, (surefire / "TEST-OtherTest.xml").read_text(encoding="utf-8")
@@ -215,6 +221,7 @@ class EvidenceSurvivesTheWorkspaceTests(unittest.TestCase):
 
 
 class EvidenceAttributionTests(unittest.TestCase):
+
     def manifest_for(self, role: str) -> dict:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -275,10 +282,13 @@ class EvidenceAttributionTests(unittest.TestCase):
         self.assertEqual(2, manifest["surefire"]["tests"])
         self.assertEqual(1, manifest["surefire"]["failures"])
         self.assertEqual(0, manifest["surefire"]["errors"])
-        self.assertEqual("assertion_failure", manifest["classification"]["failure_stage"])
+        self.assertEqual(
+            "assertion_failure", manifest["classification"]["failure_stage"]
+        )
 
 
 class MissingReportsTests(unittest.TestCase):
+
     def test_absent_surefire_reports_are_recorded_as_absent_not_as_zero(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -333,6 +343,7 @@ class MissingReportsTests(unittest.TestCase):
 
 
 class VerdictIsUnaffectedTests(unittest.TestCase):
+
     def test_archiving_does_not_change_the_recorded_observation(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

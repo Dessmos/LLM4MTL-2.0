@@ -52,7 +52,9 @@ def spec_with(assertion: dict, *, models: list[dict] | None = None) -> str:
             "tests": [
                 {
                     "name": "case",
-                    "models": models if models is not None else [SOURCE_MODEL, TARGET_MODEL],
+                    "models": models
+                    if models is not None
+                    else [SOURCE_MODEL, TARGET_MODEL],
                     "assertions": [assertion],
                 }
             ],
@@ -80,7 +82,9 @@ class NoAssertionKindRewritingTests(unittest.TestCase):
                 )
             )
 
-    def test_feature_values_carrying_size_is_not_turned_into_collection_size(self) -> None:
+    def test_feature_values_carrying_size_is_not_turned_into_collection_size(
+        self,
+    ) -> None:
         with self.assertRaises(SemanticCasesError):
             parse(
                 spec_with(
@@ -95,7 +99,9 @@ class NoAssertionKindRewritingTests(unittest.TestCase):
                 )
             )
 
-    def test_reference_pairs_carrying_expected_targets_is_not_turned_into_path_values(self) -> None:
+    def test_reference_pairs_carrying_expected_targets_is_not_turned_into_path_values(
+        self,
+    ) -> None:
         with self.assertRaises(SemanticCasesError):
             parse(
                 spec_with(
@@ -132,7 +138,15 @@ class NoExpectedScavengingTests(unittest.TestCase):
             )
 
     def test_no_alternate_primary_key_stands_in_for_expected(self) -> None:
-        for alternate in ("equals", "values", "value", "equalsSet", "match", "ids", "pairs"):
+        for alternate in (
+            "equals",
+            "values",
+            "value",
+            "equalsSet",
+            "match",
+            "ids",
+            "pairs",
+        ):
             with self.subTest(alternate=alternate):
                 with self.assertRaises(SemanticCasesError):
                     parse(
@@ -149,6 +163,7 @@ class NoExpectedScavengingTests(unittest.TestCase):
 
 
 class NoInventedModelsTests(unittest.TestCase):
+
     def test_a_target_model_the_response_never_declared_is_not_created(self) -> None:
         raw = json.dumps(
             {
@@ -175,7 +190,10 @@ class NoInventedModelsTests(unittest.TestCase):
             {
                 "schemaVersion": 1,
                 "transformation": "transformations/Tree2Graph.etl",
-                "metamodels": [{"name": "Tree", "uri": "Tree"}, {"name": "Graph", "uri": "Graph"}],
+                "metamodels": [
+                    {"name": "Tree", "uri": "Tree"},
+                    {"name": "Graph", "uri": "Graph"},
+                ],
                 "tests": [
                     {
                         "name": "case",
@@ -188,7 +206,9 @@ class NoInventedModelsTests(unittest.TestCase):
 
         spec = parse(raw)
 
-        self.assertEqual(["Tree", "Graph"], [m["name"] for m in spec["tests"][0]["models"]])
+        self.assertEqual(
+            ["Tree", "Graph"], [m["name"] for m in spec["tests"][0]["models"]]
+        )
 
 
 class RepresentationNormalizationStillAppliesTests(unittest.TestCase):
@@ -230,7 +250,9 @@ class RepresentationNormalizationStillAppliesTests(unittest.TestCase):
 
         spec = parse(raw)
 
-        self.assertEqual(["Tree", "Graph"], [m["name"] for m in spec["tests"][0]["models"]])
+        self.assertEqual(
+            ["Tree", "Graph"], [m["name"] for m in spec["tests"][0]["models"]]
+        )
 
     def test_metamodel_path_precedence_and_passthrough_are_preserved(self) -> None:
         malformed = {"unexpected": "shape"}
@@ -293,11 +315,14 @@ class NoUndefinedExpectedValuesTests(unittest.TestCase):
         spec = parse(self.reference_pairs([{"source": "a", "target": "b"}]))
 
         self.assertEqual(
-            [{"source": "a", "target": "b"}], spec["tests"][0]["assertions"][0]["expected"]
+            [{"source": "a", "target": "b"}],
+            spec["tests"][0]["assertions"][0]["expected"],
         )
 
     def test_an_expected_object_missing_a_declared_feature_is_rejected(self) -> None:
-        with self.assertRaisesRegex(SemanticCasesError, "no value for declared feature"):
+        with self.assertRaisesRegex(
+            SemanticCasesError, "no value for declared feature"
+        ):
             parse(
                 spec_with(
                     {
@@ -313,7 +338,11 @@ class NoUndefinedExpectedValuesTests(unittest.TestCase):
     def test_no_java_is_rendered_for_a_specification_with_a_null_endpoint(self) -> None:
         generated, validation = render_generated_suite(
             "Tree2Graph",
-            {SEMANTIC_CASES_FILE: self.reference_pairs([{"source": "a", "target": None}])},
+            {
+                SEMANTIC_CASES_FILE: self.reference_pairs(
+                    [{"source": "a", "target": None}]
+                )
+            },
             language="etl",
             config=ETL_CONFIG,
             transformation_extension=".etl",
@@ -328,7 +357,10 @@ class NoUndefinedExpectedValuesTests(unittest.TestCase):
 
 
 class AmbiguityBecomesAnInvalidCandidateTests(unittest.TestCase):
-    def test_a_malformed_specification_yields_an_invalid_artifact_not_a_crash(self) -> None:
+
+    def test_a_malformed_specification_yields_an_invalid_artifact_not_a_crash(
+        self,
+    ) -> None:
         extracted = {
             SEMANTIC_CASES_FILE: spec_with(
                 {

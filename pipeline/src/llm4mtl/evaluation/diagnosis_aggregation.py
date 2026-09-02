@@ -187,9 +187,7 @@ def _aggregate_pair(
         cluster["agreement"] = _agreement(cluster["classifications"])
 
     ordered = list(clusters.values())
-    affected = {
-        case for cluster in ordered for case in cluster["test_cases"]
-    }
+    affected = {case for cluster in ordered for case in cluster["test_cases"]}
     return {
         "pair_id": _pair_id(pair),
         "suite": pair.get("suite"),

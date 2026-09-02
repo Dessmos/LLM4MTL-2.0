@@ -62,7 +62,9 @@ class QvtoAdapter:
         contracts_root: Path | None = None,
     ) -> None:
         self._references_root = references_root or default_references_root(QVTO_CONFIG)
-        self._contracts_root = contracts_root or default_task_contracts_root(QVTO_CONFIG)
+        self._contracts_root = contracts_root or default_task_contracts_root(
+            QVTO_CONFIG
+        )
 
     def runtime_tool_versions(self) -> dict[str, str]:
         return {"qvto-harness": "1.0.0", "junit": "5.10.2"}
@@ -107,9 +109,7 @@ class QvtoAdapter:
             ),
             java_root=actual / "src/test/java",
             models_root=(
-                actual
-                / "src/test/resources/generated-models"
-                / slug(suite.task)
+                actual / "src/test/resources/generated-models" / slug(suite.task)
             ),
             maven_cwd=project,
             maven_command=[
@@ -143,10 +143,7 @@ class QvtoAdapter:
             workspace,
             self.language_id,
         )
-        probe = (
-            parser_dir
-            / "src/test/java/org/qvto/parser/Llm4mtlParserProbeTest.java"
-        )
+        probe = parser_dir / "src/test/java/org/qvto/parser/Llm4mtlParserProbeTest.java"
         probe.parent.mkdir(parents=True, exist_ok=True)
         probe.write_text(PARSER_PROBE, encoding="utf-8")
         requested = os.pathsep.join(str(path.resolve()) for path in transformations)

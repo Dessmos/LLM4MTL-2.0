@@ -12,6 +12,7 @@ from llm4mtl.evaluation.experiment_significance import mcnemar
 
 
 class AggregationTests(unittest.TestCase):
+
     def test_aggregate_stage_over_runs(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -127,9 +128,11 @@ class AggregationTests(unittest.TestCase):
                 model="claude-sonnet-4-20250514",
                 strategy="few_shots_AND_grammar",
             )
-            generation_reference = paths.generation_record(
-                "transformation", 1
-            ).relative_to(paths.root).as_posix()
+            generation_reference = (
+                paths.generation_record("transformation", 1)
+                .relative_to(paths.root)
+                .as_posix()
+            )
             run_store.record_attempt(
                 paths,
                 "syntax-validation",
@@ -163,6 +166,7 @@ class AggregationTests(unittest.TestCase):
 
 
 class SignificanceTests(unittest.TestCase):
+
     def test_contingency_cells_preserve_pair_ordering(self) -> None:
         result = mcnemar(
             [True, True, False, False],

@@ -60,7 +60,11 @@ def extraction_result() -> StageResult:
 def stage_events(paths: run_store.RunPaths) -> list[dict[str, object]]:
     """Stage-scoped events without their wall-clock timestamps."""
     return [
-        {key: value for key, value in event.items() if key not in {"ts", "schema_version"}}
+        {
+            key: value
+            for key, value in event.items()
+            if key not in {"ts", "schema_version"}
+        }
         for event in run_store.read_events(paths)
         if str(event["event"]).startswith("stage_")
     ]
@@ -77,7 +81,9 @@ class SharedOwnerContractTests(unittest.TestCase):
     def test_returned_payload_is_the_payload_that_was_persisted(self) -> None:
         recorded = record_stage_attempt(self.paths, "extract", extraction_result())
 
-        persisted = read_json(self.paths.stage_attempt_result("extract", recorded.attempt))
+        persisted = read_json(
+            self.paths.stage_attempt_result("extract", recorded.attempt)
+        )
         self.assertEqual(persisted, recorded.payload)
         # The attempt number is part of the contract a caller may hand to n8n,
         # so it must not be something only the persisted copy knows.
@@ -86,7 +92,9 @@ class SharedOwnerContractTests(unittest.TestCase):
     def test_internal_evidence_is_stored_beside_the_contract_result(self) -> None:
         recorded = record_stage_attempt(self.paths, "extract", extraction_result())
 
-        evidence = read_json(self.paths.stage_attempt_evidence("extract", recorded.attempt))
+        evidence = read_json(
+            self.paths.stage_attempt_evidence("extract", recorded.attempt)
+        )
         self.assertEqual(EXTRACTION_COUNTS, evidence["counts"])
         self.assertEqual(EXTRACTION_DETAILS, evidence["details"])
         # Evidence is not the n8n contract and must not be confused with it.
@@ -113,10 +121,14 @@ class SharedOwnerContractTests(unittest.TestCase):
             self.paths,
             "extract",
             extraction_result(),
-            artifacts={"semantic_test_generation_record": "generations/semantic-test.json"},
+            artifacts={
+                "semantic_test_generation_record": "generations/semantic-test.json"
+            },
         )
 
-        persisted = read_json(self.paths.stage_attempt_result("extract", recorded.attempt))
+        persisted = read_json(
+            self.paths.stage_attempt_result("extract", recorded.attempt)
+        )
         self.assertEqual(
             {
                 "results_file": "artifacts/work/extraction.csv",
@@ -139,8 +151,11 @@ class SharedOwnerContractTests(unittest.TestCase):
 
 
 class InfrastructureErrorResultTests(unittest.TestCase):
+
     def test_a_raised_exception_becomes_an_observation_free_result(self) -> None:
-        result = infrastructure_error_result("extraction", RuntimeError("adapter failed"))
+        result = infrastructure_error_result(
+            "extraction", RuntimeError("adapter failed")
+        )
 
         self.assertEqual("infrastructure_error", result.status)
         self.assertEqual({"infrastructure_errors": 1}, result.counts)

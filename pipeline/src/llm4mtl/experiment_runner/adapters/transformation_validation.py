@@ -158,8 +158,7 @@ class TransformationValidationAdapter:
         observed_pairs = self._execute_pairs(config, pairs)
         counts.update(
             execution_counts(
-                (pair.observation, pair.failure_outcome)
-                for pair in observed_pairs
+                (pair.observation, pair.failure_outcome) for pair in observed_pairs
             )
         )
         details["pairs"] = [pair.to_detail() for pair in observed_pairs]

@@ -99,9 +99,7 @@ class ReportRequest:
                 request_payload.get("actual_target_models"), "actual_target_models"
             ),
             surefire_reports=(
-                _input_paths(
-                    request_payload["surefire_reports"], "surefire_reports"
-                )
+                _input_paths(request_payload["surefire_reports"], "surefire_reports")
                 if "surefire_reports" in request_payload
                 else archived.surefire_reports
             ),
@@ -162,9 +160,7 @@ class PairReportRequest:
             ),
             attempt=attempt,
             surefire_reports=(
-                _input_paths(
-                    request_payload["surefire_reports"], "surefire_reports"
-                )
+                _input_paths(request_payload["surefire_reports"], "surefire_reports")
                 if "surefire_reports" in request_payload
                 else archived.surefire_reports
             ),
@@ -176,6 +172,7 @@ class PairReportRequest:
                 else archived.execution_log
             ),
         )
+
 
 REQUEST_TYPES: dict[str, type] = {}
 
@@ -273,9 +270,7 @@ def _difference_shape_problems(value: dict[Any, Any]) -> list[str]:
     return problems
 
 
-def _input_path(
-    value: object, label: str, *, require_file: bool = True
-) -> Path:
+def _input_path(value: object, label: str, *, require_file: bool = True) -> Path:
     if isinstance(value, Path):
         candidate = value
     elif isinstance(value, str) and value:
@@ -308,8 +303,7 @@ def _input_paths(value: object, label: str) -> tuple[Path, ...]:
     if not isinstance(value, list):
         raise FailureReportError(f"{label} must be an array of paths")
     return tuple(
-        _input_path(path, f"{label}[{index}]")
-        for index, path in enumerate(value)
+        _input_path(path, f"{label}[{index}]") for index, path in enumerate(value)
     )
 
 
@@ -323,6 +317,4 @@ def _output_path(value: Path) -> Path:
     return resolved
 
 
-REQUEST_TYPES.update(
-    {"test_case": ReportRequest, "execution_pair": PairReportRequest}
-)
+REQUEST_TYPES.update({"test_case": ReportRequest, "execution_pair": PairReportRequest})

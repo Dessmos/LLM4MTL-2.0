@@ -32,16 +32,21 @@ CONSOLE = CommandResult(
 )
 
 
-def report_of(*, tests: int, failures: int, errors: int, messages: tuple[str, ...] = ()) -> SurefireReport:
+def report_of(
+    *, tests: int, failures: int, errors: int, messages: tuple[str, ...] = ()
+) -> SurefireReport:
     return SurefireReport(
         tests=tests, failures=failures, errors=errors, error_messages=messages
     )
 
 
 class RealHarnessReportTests(unittest.TestCase):
+
     def setUp(self) -> None:
         self.report = read_surefire_reports(FIXTURES)
-        self.assertIsNotNone(self.report, "the recorded harness report must be readable")
+        self.assertIsNotNone(
+            self.report, "the recorded harness report must be readable"
+        )
 
     def test_the_real_report_separates_failures_from_errors(self) -> None:
         self.assertEqual(3, self.report.tests)
@@ -49,12 +54,20 @@ class RealHarnessReportTests(unittest.TestCase):
         self.assertEqual(2, self.report.errors)
 
     def test_a_missing_input_model_is_a_model_loading_failure(self) -> None:
-        errors = [message for message in self.report.error_messages if "modelLoading" in message]
+        errors = [
+            message
+            for message in self.report.error_messages
+            if "modelLoading" in message
+        ]
         self.assertTrue(errors, "the fixture must contain the model-loading error")
         self.assertIn("Resource not found", errors[0])
 
     def test_a_wrong_engine_invocation_surfaces_as_an_epsilon_error(self) -> None:
-        errors = [message for message in self.report.error_messages if "engineRuntime" in message]
+        errors = [
+            message
+            for message in self.report.error_messages
+            if "engineRuntime" in message
+        ]
         self.assertTrue(errors, "the fixture must contain the engine-runtime error")
         self.assertIn("not found", errors[0])
 
@@ -70,6 +83,7 @@ class RealHarnessReportTests(unittest.TestCase):
 
 
 class PhaseClassificationTests(unittest.TestCase):
+
     def test_a_model_loading_error_is_not_technically_executable(self) -> None:
         observation = classify_maven_run(
             CONSOLE,
@@ -77,7 +91,9 @@ class PhaseClassificationTests(unittest.TestCase):
                 tests=1,
                 failures=0,
                 errors=1,
-                messages=("modelLoadingFails: Resource not found: does-not-exist.model",),
+                messages=(
+                    "modelLoadingFails: Resource not found: does-not-exist.model",
+                ),
             ),
         )
 
@@ -94,7 +110,9 @@ class PhaseClassificationTests(unittest.TestCase):
                 tests=1,
                 failures=0,
                 errors=1,
-                messages=("engineRuntimeFails: Type 'Tree!Tree' not found at org.eclipse.epsilon",),
+                messages=(
+                    "engineRuntimeFails: Type 'Tree!Tree' not found at org.eclipse.epsilon",
+                ),
             ),
         )
 
@@ -104,7 +122,9 @@ class PhaseClassificationTests(unittest.TestCase):
         self.assertEqual("engine_runtime", observation.failure_stage)
 
     def test_only_an_assertion_failure_is_an_oracle_disagreement(self) -> None:
-        observation = classify_maven_run(CONSOLE, report_of(tests=1, failures=1, errors=0))
+        observation = classify_maven_run(
+            CONSOLE, report_of(tests=1, failures=1, errors=0)
+        )
 
         self.assertTrue(observation.is_technically_executable)
         self.assertFalse(observation.assertions_passed)
@@ -120,7 +140,9 @@ class PhaseClassificationTests(unittest.TestCase):
                 tests=3,
                 failures=1,
                 errors=2,
-                messages=("modelLoadingFails: Resource not found: does-not-exist.model",),
+                messages=(
+                    "modelLoadingFails: Resource not found: does-not-exist.model",
+                ),
             ),
         )
 
@@ -128,8 +150,12 @@ class PhaseClassificationTests(unittest.TestCase):
         self.assertEqual("model_loading", observation.failure_stage)
 
     def test_a_clean_run_passes(self) -> None:
-        passing = CommandResult(exit_code=0, stdout="Tests run: 3, Failures: 0, Errors: 0", stderr="")
-        observation = classify_maven_run(passing, report_of(tests=3, failures=0, errors=0))
+        passing = CommandResult(
+            exit_code=0, stdout="Tests run: 3, Failures: 0, Errors: 0", stderr=""
+        )
+        observation = classify_maven_run(
+            passing, report_of(tests=3, failures=0, errors=0)
+        )
 
         self.assertTrue(observation.is_technically_executable)
         self.assertTrue(observation.is_reference_valid)

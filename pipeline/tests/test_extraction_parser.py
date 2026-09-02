@@ -37,6 +37,7 @@ def block(info: str, content: str = CASES) -> str:
 
 
 class DeclaredNamesOnlyTests(unittest.TestCase):
+
     def test_a_named_block_is_extracted(self) -> None:
         extracted = extract_files(block("json file=semantic_cases.json"))
 
@@ -51,7 +52,9 @@ class DeclaredNamesOnlyTests(unittest.TestCase):
             "semantic_cases.json",
         ):
             with self.subTest(info=info):
-                self.assertEqual(["semantic_cases.json"], sorted(extract_files(block(info))))
+                self.assertEqual(
+                    ["semantic_cases.json"], sorted(extract_files(block(info)))
+                )
 
     def test_prose_before_a_block_is_not_used_as_its_name(self) -> None:
         markdown = (
@@ -75,6 +78,7 @@ class DeclaredNamesOnlyTests(unittest.TestCase):
 
 
 class UniqueIdentityTests(unittest.TestCase):
+
     def test_two_blocks_claiming_one_artifact_are_refused(self) -> None:
         markdown = block("xml file=models/input.model", "<a/>") + block(
             "xml file=models/input.model", "<b/>"
@@ -107,10 +111,13 @@ class UniqueIdentityTests(unittest.TestCase):
 
 
 class KnownArtifactRoleTests(unittest.TestCase):
+
     def test_a_file_the_contract_does_not_define_is_refused(self) -> None:
         for declared in ("pom.xml.bak", "build.gradle", "notes.md", "run.sh"):
             with self.subTest(declared=declared):
-                with self.assertRaisesRegex(ExtractionError, "role the contract does not define"):
+                with self.assertRaisesRegex(
+                    ExtractionError, "role the contract does not define"
+                ):
                     extract_files(block(f"text file={declared}", "x"))
 
     def test_a_model_file_outside_models_is_not_relocated(self) -> None:
@@ -180,12 +187,18 @@ class ExtractionFailureStaysInTheFunnelTests(unittest.TestCase):
 
         candidates = self.candidates()
         self.assertEqual(1, len(candidates))
-        metadata = json.loads((candidates[0] / "metadata.json").read_text(encoding="utf-8"))
+        metadata = json.loads(
+            (candidates[0] / "metadata.json").read_text(encoding="utf-8")
+        )
         self.assertEqual("invalid", metadata["status"])
         self.assertFalse(metadata["artifact_validation"]["valid"])
-        self.assertEqual(EXTRACTION_FAILED, metadata["artifact_validation"]["reason_code"])
+        self.assertEqual(
+            EXTRACTION_FAILED, metadata["artifact_validation"]["reason_code"]
+        )
 
-    def test_the_candidate_keeps_the_identity_of_the_response_it_came_from(self) -> None:
+    def test_the_candidate_keeps_the_identity_of_the_response_it_came_from(
+        self,
+    ) -> None:
         self.extract()
         metadata = json.loads(
             (self.candidates()[0] / "metadata.json").read_text(encoding="utf-8")
@@ -211,7 +224,9 @@ class ExtractionFailureStaysInTheFunnelTests(unittest.TestCase):
         )
         context = ValidationContext(adapter=self.adapter, workspace=None, timeout=1)
 
-        def must_not_run(*_args, **_kwargs):  # pragma: no cover - the point is it is unused
+        def must_not_run(
+            *_args, **_kwargs
+        ):  # pragma: no cover - the point is it is unused
             raise AssertionError("an unreadable response must never reach Maven")
 
         with patch.object(self.adapter, "execute_suite", side_effect=must_not_run):
@@ -224,8 +239,14 @@ class ExtractionFailureStaysInTheFunnelTests(unittest.TestCase):
         # executable and none reference-validated.
         technical = technical_counts([verdict], 1)
         reference = reference_counts([verdict], 1)
-        self.assertEqual({"selected": 1, "invalid": 1, "passed": 0}, {k: technical[k] for k in ("selected", "invalid", "passed")})
-        self.assertEqual({"selected": 1, "validated": 0, "invalid": 0}, {k: reference[k] for k in ("selected", "validated", "invalid")})
+        self.assertEqual(
+            {"selected": 1, "invalid": 1, "passed": 0},
+            {k: technical[k] for k in ("selected", "invalid", "passed")},
+        )
+        self.assertEqual(
+            {"selected": 1, "validated": 0, "invalid": 0},
+            {k: reference[k] for k in ("selected", "validated", "invalid")},
+        )
 
 
 def metadata_free_files(suite: Path) -> list[str]:

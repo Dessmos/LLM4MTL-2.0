@@ -18,6 +18,7 @@ def snapshot(slot: str) -> ModelSnapshot:
 
 
 class OutcomeTests(unittest.TestCase):
+
     def test_success_carries_a_snapshot_per_slot(self) -> None:
         outcome = TransformationOutcome(
             status=OutcomeStatus.SUCCESS,

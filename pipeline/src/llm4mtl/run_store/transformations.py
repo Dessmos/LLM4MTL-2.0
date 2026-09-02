@@ -132,7 +132,10 @@ def adopted_transformations(
             + ", ".join(str(path) for path in missing)
         )
     for path, entry in zip(adopted, metadata["transformations"], strict=True):
-        if path.stat().st_size != entry["bytes"] or file_sha256(path) != entry["sha256"]:
+        if (
+            path.stat().st_size != entry["bytes"]
+            or file_sha256(path) != entry["sha256"]
+        ):
             raise TransformationAdoptionError(
                 f"the run's adopted transformation changed after adoption: {path}"
             )

@@ -63,13 +63,12 @@ def _report(
 
 
 class FailureFingerprintTests(unittest.TestCase):
+
     def test_the_same_fault_in_different_cases_has_one_fingerprint(self) -> None:
         first = failure_fingerprint(_report(method="singleRootTree"))
         second = failure_fingerprint(_report(method="threeLevelTree"))
 
-        self.assertEqual(
-            first["failure_fingerprint"], second["failure_fingerprint"]
-        )
+        self.assertEqual(first["failure_fingerprint"], second["failure_fingerprint"])
         # The method prefix is what differed, and normalization drops it.
         self.assertEqual(
             "Type 'Source!Tree' not found", first["normalized_error_summary"]
@@ -94,7 +93,7 @@ class FailureFingerprintTests(unittest.TestCase):
         other_transformation_report = _report(method="a")
         other_transformation_report["test_case_result"]["versions"][
             "generated_transformation"
-        ]["sha256"] = "b" * 64
+        ]["sha256"] = ("b" * 64)
 
         self.assertNotEqual(
             here["failure_fingerprint"], elsewhere["failure_fingerprint"]
@@ -106,6 +105,7 @@ class FailureFingerprintTests(unittest.TestCase):
 
 
 class RunAggregationTests(unittest.TestCase):
+
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self._tmp.cleanup)

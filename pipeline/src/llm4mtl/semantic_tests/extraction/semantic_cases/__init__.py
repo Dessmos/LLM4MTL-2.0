@@ -45,6 +45,7 @@ __all__ = [
     "CONTRACT_VIOLATIONS_FILE",
 ]
 
+
 def render_generated_suite(
     target_task: str,
     extracted: dict[str, str],
@@ -64,7 +65,11 @@ def render_generated_suite(
     model produced is dropped in every path; the only Java that can survive is
     the harness rendered here from the validated specification.
     """
-    generated = {path: content for path, content in extracted.items() if not path.endswith(".java")}
+    generated = {
+        path: content
+        for path, content in extracted.items()
+        if not path.endswith(".java")
+    }
 
     cases_json = extracted.get(SEMANTIC_CASES_FILE)
     if not cases_json:
@@ -133,4 +138,6 @@ def render_generated_suite(
         target_task,
     )
     generated[f"{class_name}.java"] = render_test(class_name, spec, target_task)
-    return generated, ArtifactValidation(valid=True, contract_applied=contract is not None)
+    return generated, ArtifactValidation(
+        valid=True, contract_applied=contract is not None
+    )

@@ -103,8 +103,7 @@ TASK_SPECIFICATION_HEADER = (
     "write tests for it, do not implement it)\\n"
 )
 CONTRACT_SECTION_HEADER = (
-    "\\n\\n## REQUIRED OUTPUT CONTRACT "
-    "(binding, overrides every other section)\\n"
+    "\\n\\n## REQUIRED OUTPUT CONTRACT " "(binding, overrides every other section)\\n"
 )
 FEW_SHOT_SECTION_HEADER = (
     "\\n\\n## Few-shot examples (they illustrate the binding contract above; "
@@ -209,7 +208,9 @@ def qwen_prompt_request(language: str) -> str:
         prompt_generation_system_message(language),
         ensure_ascii=False,
     )
-    requirements = json.dumps(_prompt_language_requirements(language), ensure_ascii=False)
+    requirements = json.dumps(
+        _prompt_language_requirements(language), ensure_ascii=False
+    )
     return (
         "={{ JSON.stringify({ model: 'qwen2.5-coder:7b', stream: false, "
         f"messages: [{{ role: 'system', content: {system} }}, "
@@ -250,7 +251,7 @@ def cloud_test_request(language: str) -> str:
         '($json.metamodel_text || "") + '
         '$if(($json.prerequisite_prompt_text || "") != "", '
         '"\\n\\n## Reactions that run beside this one (their tasks, not yours to '
-        'implement; a test builds its pre-state through the changes they react '
+        "implement; a test builds its pre-state through the changes they react "
         'to)\\n" + $json.prerequisite_prompt_text, "") + '
         f'"{CONTRACT_SECTION_HEADER}" + ($json.output_contract || "") + '
         '$if($("Extract text from examples file").isExecuted, '

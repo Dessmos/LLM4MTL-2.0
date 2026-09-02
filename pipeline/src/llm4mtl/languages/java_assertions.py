@@ -73,9 +73,7 @@ def _render_path_collection_assertion(
         actual = f'pathValues({model}, "{type_name}", "{path}")'
     else:
         label = escape_java(str(assertion.get("labelFeature") or "label"))
-        children = escape_java(
-            str(assertion.get("childrenFeature") or "children")
-        )
+        children = escape_java(str(assertion.get("childrenFeature") or "children"))
         actual = f'treePaths({model}, "{type_name}", "{label}", "{children}")'
     return _collection_assertion(expected, actual, assertion, message)
 
@@ -117,11 +115,7 @@ def _render_collection_size_assertion(
     type_name: str,
     message: str,
 ) -> list[str]:
-    where = (
-        assertion.get("where")
-        if isinstance(assertion.get("where"), dict)
-        else {}
-    )
+    where = assertion.get("where") if isinstance(assertion.get("where"), dict) else {}
     features = [str(feature) for feature in where]
     expected_signature = object_signatures([where], features)[0] if features else ""
     path = escape_java(str(assertion["path"]))
@@ -139,10 +133,7 @@ def _render_objects_assertion(
 ) -> list[str]:
     features = [str(feature) for feature in assertion["features"]]
     expected = object_signatures(assertion["expected"], features)
-    actual = (
-        f'signaturesOf({model}, "{type_name}", '
-        f"{java_string_array(features)})"
-    )
+    actual = f'signaturesOf({model}, "{type_name}", ' f"{java_string_array(features)})"
     return _collection_assertion(
         java_string_list(expected),
         actual,
@@ -157,10 +148,7 @@ def _render_reference_pairs_assertion(
     type_name: str,
     message: str,
 ) -> list[str]:
-    expected = [
-        f"{pair['source']}->{pair['target']}"
-        for pair in assertion["expected"]
-    ]
+    expected = [f"{pair['source']}->{pair['target']}" for pair in assertion["expected"]]
     source = escape_java(str(assertion["source"]))
     target = escape_java(str(assertion["target"]))
     actual = f'referencePairs({model}, "{type_name}", "{source}", "{target}")'
@@ -214,12 +202,12 @@ def helpers() -> list[str]:
         # slot. Creating the parent rather than the configured root is what lets
         # the case be a directory.
         "    private void writeSnapshot(String relativePath, List<EObject> roots) throws Exception {",
-        "        String configured = System.getProperty(\"llm4mtl.observations.dir\", \"\");",
+        '        String configured = System.getProperty("llm4mtl.observations.dir", "");',
         "        if (configured.isBlank()) return;",
         "        Path target = Path.of(configured).resolve(relativePath);",
         "        Files.createDirectories(target.getParent());",
         "        ResourceSetImpl resourceSet = new ResourceSetImpl();",
-        "        resourceSet.getResourceFactoryRegistry().getExtensionToFactoryMap().put(\"xmi\", new XMIResourceFactoryImpl());",
+        '        resourceSet.getResourceFactoryRegistry().getExtensionToFactoryMap().put("xmi", new XMIResourceFactoryImpl());',
         "        Resource resource = resourceSet.createResource(URI.createFileURI(target.toString()));",
         "        resource.getContents().addAll(EcoreUtil.copyAll(roots));",
         "        resource.save(Map.of());",
@@ -251,7 +239,7 @@ def helpers() -> list[str]:
         ALL_OF_TYPE_LOOP,
         "            for (Object source : pathValuesFrom(object, sourcePath)) {",
         "                for (Object target : pathValuesFrom(object, targetPath)) {",
-        "                    pairs.add(stringValue(source) + \"->\" + stringValue(target));",
+        '                    pairs.add(stringValue(source) + "->" + stringValue(target));',
         "                }",
         "            }",
         "        }",
@@ -261,13 +249,13 @@ def helpers() -> list[str]:
         "    private List<String> treePaths(List<EObject> roots, String typeName, String labelFeature, String childrenFeature) {",
         "        List<String> paths = new ArrayList<>();",
         ALL_OF_TYPE_LOOP,
-        "            if (object.eContainer() == null) collectTreePaths(object, \"\", labelFeature, childrenFeature, paths);",
+        '            if (object.eContainer() == null) collectTreePaths(object, "", labelFeature, childrenFeature, paths);',
         "        }",
         "        return paths;",
         "    }",
         "",
         "    private void collectTreePaths(EObject object, String prefix, String labelFeature, String childrenFeature, List<String> paths) {",
-        "        String current = prefix + \"/\" + stringValue(pathValue(object, labelFeature));",
+        '        String current = prefix + "/" + stringValue(pathValue(object, labelFeature));',
         "        paths.add(current);",
         "        for (Object child : pathValuesFrom(object, childrenFeature)) {",
         "            if (child instanceof EObject) collectTreePaths((EObject) child, current, labelFeature, childrenFeature, paths);",
@@ -288,18 +276,18 @@ def helpers() -> list[str]:
         "                assertEquals(expectedSize, pathValuesFrom(object, path).size(), message);",
         "            }",
         "        }",
-        "        assertTrue(matched, message + \" missing object \" + expectedSignature);",
+        '        assertTrue(matched, message + " missing object " + expectedSignature);',
         "    }",
         "",
         "    private String signatureOf(EObject object, String[] features) {",
         "        List<String> parts = new ArrayList<>();",
-        "        for (String feature : features) parts.add(feature + \"=\" + stringValue(pathValue(object, feature)));",
-        "        return String.join(\"|\", parts);",
+        '        for (String feature : features) parts.add(feature + "=" + stringValue(pathValue(object, feature)));',
+        '        return String.join("|", parts);',
         "    }",
         "",
         "    private Object pathValue(Object object, String path) {",
         "        Object current = object;",
-        "        for (String part : path.split(\"\\\\.\")) {",
+        '        for (String part : path.split("\\\\.")) {',
         "            current = featureValue(current, part);",
         "            if (current == null) return null;",
         "        }",
@@ -312,7 +300,7 @@ def helpers() -> list[str]:
         "        if (path == null || path.isEmpty()) { addFlattened(values, object); return values; }",
         "        int dot = path.indexOf('.');",
         "        String first = dot >= 0 ? path.substring(0, dot) : path;",
-        "        String rest = dot >= 0 ? path.substring(dot + 1) : \"\";",
+        '        String rest = dot >= 0 ? path.substring(dot + 1) : "";',
         "        List<Object> current = new ArrayList<>();",
         "        addFlattened(current, object);",
         "        for (Object value : current) {",
@@ -336,10 +324,10 @@ def helpers() -> list[str]:
         "    }",
         "",
         "    private String stringValue(Object value) {",
-        "        if (value == null) return \"null\";",
+        '        if (value == null) return "null";',
         "        if (value instanceof EObject) {",
         "            EObject object = (EObject) value;",
-        "            for (String candidate : new String[] {\"name\", \"label\", \"id\", \"value\"}) {",
+        '            for (String candidate : new String[] {"name", "label", "id", "value"}) {',
         "                EStructuralFeature feature = object.eClass().getEStructuralFeature(candidate);",
         "                if (feature != null && object.eGet(feature) != null) return String.valueOf(object.eGet(feature));",
         "            }",
@@ -358,7 +346,7 @@ def helpers() -> list[str]:
         "    private void assertContainsCounts(List<String> expected, List<String> actual, String message) {",
         "        Map<String, Integer> remaining = counts(actual);",
         "        for (Map.Entry<String, Integer> entry : counts(expected).entrySet()) {",
-        "            assertTrue(remaining.getOrDefault(entry.getKey(), 0) >= entry.getValue(), message + \" missing \" + entry.getKey());",
+        '            assertTrue(remaining.getOrDefault(entry.getKey(), 0) >= entry.getValue(), message + " missing " + entry.getKey());',
         "        }",
         "    }",
     ]

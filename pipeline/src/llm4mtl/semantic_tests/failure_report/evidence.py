@@ -56,9 +56,7 @@ def _identity(manifest: dict[str, Any], attempt: int) -> dict[str, Any]:
     }
 
 
-def _read_execution(
-    path: Path, identity: dict[str, Any], label: str
-) -> dict[str, Any]:
+def _read_execution(path: Path, identity: dict[str, Any], label: str) -> dict[str, Any]:
     payload = _read_object(path, label)
     expected = {
         "language": identity["language"],
@@ -154,9 +152,9 @@ def _execution_stage_evidence(
         raise FailureReportError(
             "execution pair inputs disagree with recorded observation"
         )
-    assertions_passed = _observation(
-        generated_execution, GENERATED_EXECUTION_LABEL
-    )["assertions_passed"]
+    assertions_passed = _observation(generated_execution, GENERATED_EXECUTION_LABEL)[
+        "assertions_passed"
+    ]
     if pair.get("assertions_passed") is not assertions_passed:
         raise FailureReportError(
             "execution pair assertion result disagrees with recorded observation"
@@ -252,9 +250,7 @@ def _semantic_status(observation: dict[str, Any]) -> str:
     return "passed" if observation["assertions_passed"] else "failed"
 
 
-def _reference_result(
-    path: Path | None, identity: dict[str, Any]
-) -> dict[str, Any]:
+def _reference_result(path: Path | None, identity: dict[str, Any]) -> dict[str, Any]:
     if path is None:
         return {"status": "not_run", "observation": None, "evidence": None}
     execution = _read_execution(path, identity, "reference execution")
@@ -282,9 +278,7 @@ def _task_description(
     )
     artifact = _text_artifact(_input_path(path, "task description"))
     recorded_hash = (
-        manifest.get("provenance", {})
-        .get("input_hashes", {})
-        .get("task_prompt")
+        manifest.get("provenance", {}).get("input_hashes", {}).get("task_prompt")
     )
     if recorded_hash is not None and artifact["sha256"] != recorded_hash:
         raise FailureReportError(
@@ -294,11 +288,7 @@ def _task_description(
 
 
 def _metamodel_artifacts(manifest: dict[str, Any]) -> list[dict[str, Any]]:
-    recorded = (
-        manifest.get("provenance", {})
-        .get("input_hashes", {})
-        .get("metamodels")
-    )
+    recorded = manifest.get("provenance", {}).get("input_hashes", {}).get("metamodels")
     if not isinstance(recorded, dict) or not recorded:
         raise FailureReportError("manifest provenance contains no exact metamodels")
     artifacts: list[dict[str, Any]] = []
@@ -394,7 +384,9 @@ def resolve_report_context(request: Any, recorded: RecordedExecution) -> ReportC
         ),
         observation=observation,
         semantic_status=_semantic_status(observation),
-        reference_result=_reference_result(request.reference_execution, identity=recorded.identity),
+        reference_result=_reference_result(
+            request.reference_execution, identity=recorded.identity
+        ),
         task_description=_task_description(recorded.identity, recorded.manifest),
         metamodels=_metamodel_artifacts(recorded.manifest),
     )

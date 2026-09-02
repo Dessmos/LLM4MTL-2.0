@@ -79,12 +79,8 @@ def aggregate_stage(runs_root: Path, run_ids: list[str], stage: str) -> dict[str
             }
             generation_groups[generation_key] = {
                 "configured": {
-                    "pipeline_variant": str(
-                        manifest.get("pipeline_variant", "full")
-                    ),
-                    "transformation_model_family": manifest.get(
-                        "transformation_model"
-                    ),
+                    "pipeline_variant": str(manifest.get("pipeline_variant", "full")),
+                    "transformation_model_family": manifest.get("transformation_model"),
                     "transformation_strategy": manifest.get("transformation_strategy"),
                     "test_generation_model_family": manifest.get(
                         "test_generation_model"

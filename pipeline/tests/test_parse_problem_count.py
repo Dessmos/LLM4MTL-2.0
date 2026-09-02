@@ -53,7 +53,8 @@ class QvtoProblemCountTests(unittest.TestCase):
             ):
                 (root / "parser" / "src/test/java/org/qvto/parser").mkdir(parents=True)
                 result = QvtoAdapter().parse_transformations(
-                    [measured, missing], Workspace(root / "engine", root / "observations")
+                    [measured, missing],
+                    Workspace(root / "engine", root / "observations"),
                 )
             return result[measured], result[missing]
 
@@ -88,18 +89,23 @@ class QvtoProblemCountTests(unittest.TestCase):
 
 
 class DefaultIsUnmeasuredTests(unittest.TestCase):
+
     def test_an_observation_that_states_no_count_reports_none(self) -> None:
         # ETL's parser driver reports pass/fail lists and no counts at all.
         self.assertIsNone(ParseObservation(parsed=False).problem_count)
 
     def test_a_stated_zero_is_kept(self) -> None:
-        self.assertEqual(0, ParseObservation(parsed=True, problem_count=0).problem_count)
+        self.assertEqual(
+            0, ParseObservation(parsed=True, problem_count=0).problem_count
+        )
 
 
 class SerializationTests(unittest.TestCase):
     """The stage's persisted evidence must keep the distinction readable."""
 
-    def stage_details(self, observations: dict[Path, ParseObservation], paths: list[Path]):
+    def stage_details(
+        self, observations: dict[Path, ParseObservation], paths: list[Path]
+    ):
         adapter = TransformationParserAdapter(REPO_ROOT)
         config = PipelineConfig(
             language="qvto",
@@ -108,7 +114,9 @@ class SerializationTests(unittest.TestCase):
             engine_dir=str(REPO_ROOT),
         )
         with (
-            patch.object(adapter.selector, "select_transformations", return_value=paths),
+            patch.object(
+                adapter.selector, "select_transformations", return_value=paths
+            ),
             patch(
                 "llm4mtl.experiment_runner.adapters.transformation_parser.language_adapter"
             ) as language,
@@ -144,9 +152,7 @@ class SerializationTests(unittest.TestCase):
             [measured, missing],
         )
 
-        self.assertEqual(
-            {str(measured), str(missing)}, set(details["problem_counts"])
-        )
+        self.assertEqual({str(measured), str(missing)}, set(details["problem_counts"]))
 
 
 if __name__ == "__main__":

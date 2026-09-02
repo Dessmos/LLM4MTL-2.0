@@ -144,10 +144,7 @@ def execute_maven_suite(
                 )
 
             selectors = ",".join(infer_fqcn(path) for path in java_paths)
-            command = [
-                part.replace("{selectors}", selectors)
-                for part in maven_command
-            ]
+            command = [part.replace("{selectors}", selectors) for part in maven_command]
             command.append(
                 "-Dllm4mtl.observations.dir="
                 f"{snapshot_dir(workspace.observations_dir, suite)}"

@@ -58,8 +58,7 @@ class SuiteVerdict:
     @property
     def is_technically_executable(self) -> bool:
         return (
-            self.observation is not None
-            and self.observation.is_technically_executable
+            self.observation is not None and self.observation.is_technically_executable
         )
 
     @property

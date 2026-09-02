@@ -155,9 +155,7 @@ def build_metadata(
             repository_relative(prompt_path) if prompt_path.exists() else None
         ),
         "workflow_file": (
-            repository_relative(workflow_path)
-            if workflow_path.exists()
-            else None
+            repository_relative(workflow_path) if workflow_path.exists() else None
         ),
         "raw_output_file": repository_relative(target.response_path),
         "status": "candidate" if validation.valid else "invalid",

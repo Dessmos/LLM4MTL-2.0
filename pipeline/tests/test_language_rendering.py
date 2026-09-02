@@ -9,7 +9,10 @@ from llm4mtl.languages.reactions.rendering import _java_value, _render_change
 
 
 class QvtoRenderingTests(unittest.TestCase):
-    def test_single_output_method_preserves_paths_variables_and_assertions(self) -> None:
+
+    def test_single_output_method_preserves_paths_variables_and_assertions(
+        self,
+    ) -> None:
         spec = {
             "transformation": "transformations/Tree2Graph.qvto",
             "models": [
@@ -59,7 +62,10 @@ class QvtoRenderingTests(unittest.TestCase):
 
 
 class ReactionsRenderingTests(unittest.TestCase):
-    def test_java_values_preserve_scalar_reference_and_created_object_forms(self) -> None:
+
+    def test_java_values_preserve_scalar_reference_and_created_object_forms(
+        self,
+    ) -> None:
         slot_uris = {"families": "families-uri"}
         cases = (
             (None, "null"),

@@ -71,7 +71,8 @@ def prepare_refinement(
     original_context = {
         "prompt": _text_artifact(prompt_path),
         "metamodels": [
-            _text_artifact(REPO_ROOT / metamodel.path) for metamodel in context.metamodels
+            _text_artifact(REPO_ROOT / metamodel.path)
+            for metamodel in context.metamodels
         ],
         "supporting_files": _supporting_context(
             language, artifact_type, manifest, context.grammar.path
@@ -185,11 +186,15 @@ def _previous_artifact_files(
         if not candidates:
             suffix = language_config(str(manifest["language"])).language_key
             candidates = [
-                paths.generation_response("transformation-generation", iteration, f"{task}.{suffix}")
+                paths.generation_response(
+                    "transformation-generation", iteration, f"{task}.{suffix}"
+                )
             ]
     else:
         candidates = [
-            paths.generation_response("semantic-test-generation", iteration, f"{task}.md")
+            paths.generation_response(
+                "semantic-test-generation", iteration, f"{task}.md"
+            )
         ]
         suite = (
             default_generated_tests_root(language_config(str(manifest["language"])))
@@ -201,7 +206,8 @@ def _previous_artifact_files(
         )
         if suite.is_dir():
             candidates.extend(
-                path for path in sorted(suite.rglob("*"))
+                path
+                for path in sorted(suite.rglob("*"))
                 if path.is_file() and path.suffix.lower() in {".json", ".xmi"}
             )
     existing = [path for path in candidates if path.is_file()]
@@ -297,14 +303,16 @@ def _stage_facts(
         evidence_path = paths.stage_attempt_evidence(stage, attempt)
         result = read_json(result_path) if result_path.is_file() else {}
         evidence = read_json(evidence_path) if evidence_path.is_file() else {}
-        facts.append({
-            "stage": stage,
-            "attempt": attempt,
-            "status": result.get("status"),
-            "outcome_code": result.get("outcome_code"),
-            "counts": result.get("counts", {}),
-            "details": evidence.get("details", {}),
-        })
+        facts.append(
+            {
+                "stage": stage,
+                "attempt": attempt,
+                "status": result.get("status"),
+                "outcome_code": result.get("outcome_code"),
+                "counts": result.get("counts", {}),
+                "details": evidence.get("details", {}),
+            }
+        )
     if not facts:
         raise RefinementPreparationError(f"no recorded {source} feedback exists")
     return facts
@@ -322,12 +330,14 @@ def _failure_report_facts(
     facts: list[dict[str, Any]] = []
     for indexed in read_failure_reports_for_attempt(paths.root, execution_attempt):
         report = indexed.payload
-        facts.append({
-            "report": indexed.reference,
-            "identity": report.get("identity"),
-            "failure": report.get("failure"),
-            "source_diagnosis": report.get("source_diagnosis"),
-        })
+        facts.append(
+            {
+                "report": indexed.reference,
+                "identity": report.get("identity"),
+                "failure": report.get("failure"),
+                "source_diagnosis": report.get("source_diagnosis"),
+            }
+        )
     return facts
 
 
@@ -336,9 +346,7 @@ def _diagnosis_facts(
 ) -> list[dict[str, Any]]:
     facts: list[dict[str, Any]] = []
     run_root = Path(diagnoses_root) / paths.root.name
-    evidence_prefix = (
-        f"diagnosis/execution/attempt-{execution_attempt:03d}/reports/"
-    )
+    evidence_prefix = f"diagnosis/execution/attempt-{execution_attempt:03d}/reports/"
     for path in sorted(run_root.glob("attempt-*/diagnosis.json")):
         diagnosis = read_json(path)
         if not str(diagnosis.get("evidence_ref") or "").startswith(evidence_prefix):
@@ -360,18 +368,27 @@ def _text_artifact(path: Path) -> dict[str, Any]:
 def _render_prompt(payload: dict[str, Any]) -> str:
     context = payload["original_task_context"]
     previous = payload["previous_artifact"]["files"]
-    return "\n\n".join([
-        "# Original task\n" + context["prompt"]["content"],
-        "# Relevant metamodel/context\n" + "\n\n".join(
-            f"## {entry['path']}\n{entry['content']}" for entry in context["metamodels"]
-            + context["supporting_files"]
-        ),
-        "# CURRENT ARTIFACT\n" + "\n\n".join(
-            f"## {entry['path']}\n{entry['content']}" for entry in previous
-        ),
-        "# FEEDBACK\n```json\n" + json.dumps(payload["feedback"], indent=2, ensure_ascii=False) + "\n```",
-        "# Refinement instruction\n" + payload["instruction"],
-    ]) + "\n"
+    return (
+        "\n\n".join(
+            [
+                "# Original task\n" + context["prompt"]["content"],
+                "# Relevant metamodel/context\n"
+                + "\n\n".join(
+                    f"## {entry['path']}\n{entry['content']}"
+                    for entry in context["metamodels"] + context["supporting_files"]
+                ),
+                "# CURRENT ARTIFACT\n"
+                + "\n\n".join(
+                    f"## {entry['path']}\n{entry['content']}" for entry in previous
+                ),
+                "# FEEDBACK\n```json\n"
+                + json.dumps(payload["feedback"], indent=2, ensure_ascii=False)
+                + "\n```",
+                "# Refinement instruction\n" + payload["instruction"],
+            ]
+        )
+        + "\n"
+    )
 
 
 def _write_text_once(path: Path, content: str) -> None:
@@ -398,9 +415,7 @@ def _cited_path(path: Path) -> str:
 
 
 def _without_time(payload: dict[str, Any]) -> dict[str, Any]:
-    comparable = {
-        key: value for key, value in payload.items() if key != "prepared_at"
-    }
+    comparable = {key: value for key, value in payload.items() if key != "prepared_at"}
     # The selector was added compatibly to schema 1.0. An old non-semantic
     # request omitted it; that is equivalent to the explicit null new writers use.
     comparable.setdefault("execution_attempt", None)

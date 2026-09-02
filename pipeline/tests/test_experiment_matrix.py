@@ -8,6 +8,7 @@ from llm4mtl.paths import TARGET
 
 
 class MatrixTests(unittest.TestCase):
+
     def test_thesis_ablation_expands_to_a_set_of_runs(self) -> None:
         matrix = load_matrix(TARGET.experiments_matrices / "thesis-ablation.yaml")
         specs = expand_matrix(matrix)
@@ -17,7 +18,12 @@ class MatrixTests(unittest.TestCase):
         self.assertEqual(len(specs), len({spec.run_id for spec in specs}))
         self.assertTrue(all(spec.experiment_id == "thesis-ablation" for spec in specs))
         self.assertEqual(
-            {"full", "no-parser-feedback", "no-semantic-feedback", "no-failure-diagnosis"},
+            {
+                "full",
+                "no-parser-feedback",
+                "no-semantic-feedback",
+                "no-failure-diagnosis",
+            },
             {spec.variant for spec in specs},
         )
 

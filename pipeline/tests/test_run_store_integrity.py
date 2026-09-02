@@ -29,15 +29,28 @@ IDENTITY = {
 
 
 def stage_result(outcome_code: str) -> dict[str, object]:
-    return {"schema_version": STAGE_SCHEMA_VERSION, "status": "passed", "outcome_code": outcome_code}
+    return {
+        "schema_version": STAGE_SCHEMA_VERSION,
+        "status": "passed",
+        "outcome_code": outcome_code,
+    }
 
 
 class RunIdContainmentTests(unittest.TestCase):
+
     def test_ids_that_escape_the_runs_root_are_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             runs_root = Path(temp_dir) / "runs"
             runs_root.mkdir()
-            for run_id in ("../escape", "..", ".", "nested/run", "/absolute", "", "run id"):
+            for run_id in (
+                "../escape",
+                "..",
+                ".",
+                "nested/run",
+                "/absolute",
+                "",
+                "run id",
+            ):
                 with self.subTest(run_id=run_id):
                     with self.assertRaises(InvalidRunIdError):
                         run_store.open_run(runs_root, run_id)
@@ -54,9 +67,16 @@ class RunIdContainmentTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             runs_root = Path(temp_dir) / "runs"
             runs_root.mkdir()
-            for run_id in ("etl-tree2graph-20260729-120000-000001", "exp__etl__seed1", "run.1"):
+            for run_id in (
+                "etl-tree2graph-20260729-120000-000001",
+                "exp__etl__seed1",
+                "run.1",
+            ):
                 with self.subTest(run_id=run_id):
-                    self.assertEqual(runs_root.resolve() / run_id, run_store.open_run(runs_root, run_id).root)
+                    self.assertEqual(
+                        runs_root.resolve() / run_id,
+                        run_store.open_run(runs_root, run_id).root,
+                    )
 
     def test_experiment_ids_are_contained_too(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -65,6 +85,7 @@ class RunIdContainmentTests(unittest.TestCase):
 
 
 class AttemptAtomicityTests(unittest.TestCase):
+
     def test_concurrent_run_creation_has_exactly_one_manifest_writer(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -107,7 +128,9 @@ class AttemptAtomicityTests(unittest.TestCase):
             self.assertEqual(recorded, len(set(attempts)))
             self.assertEqual(set(range(1, recorded + 1)), set(attempts))
             for attempt in attempts:
-                self.assertTrue(paths.stage_attempt_result("execution", attempt).is_file())
+                self.assertTrue(
+                    paths.stage_attempt_result("execution", attempt).is_file()
+                )
 
     def test_concurrent_diagnoses_never_share_a_number(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -135,15 +158,20 @@ class AttemptAtomicityTests(unittest.TestCase):
 
 
 class PersistedSchemaTests(unittest.TestCase):
+
     def test_manifest_without_identity_is_refused(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             with self.assertRaises(ArtifactSchemaError):
-                run_store.create_run(Path(temp_dir), "run_001", {"language": "etl", "task": "T"})
+                run_store.create_run(
+                    Path(temp_dir), "run_001", {"language": "etl", "task": "T"}
+                )
 
     def test_manifest_with_unknown_language_is_refused(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             with self.assertRaises(ArtifactSchemaError):
-                run_store.create_run(Path(temp_dir), "run_001", {**IDENTITY, "language": "cobol"})
+                run_store.create_run(
+                    Path(temp_dir), "run_001", {**IDENTITY, "language": "cobol"}
+                )
 
     def test_stage_result_outside_the_contract_is_refused(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -154,7 +182,11 @@ class PersistedSchemaTests(unittest.TestCase):
                 run_store.record_attempt(
                     paths,
                     "execution",
-                    {"schema_version": STAGE_SCHEMA_VERSION, "status": "completed", "outcome_code": "X"},
+                    {
+                        "schema_version": STAGE_SCHEMA_VERSION,
+                        "status": "completed",
+                        "outcome_code": "X",
+                    },
                 )
             self.assertFalse(paths.stage_attempts_dir("execution").exists())
 

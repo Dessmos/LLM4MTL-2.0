@@ -26,6 +26,7 @@ def _model_contract(*, kind: str = "emf") -> ModelContract:
 
 
 class DeclaredMetamodelTests(unittest.TestCase):
+
     def test_declarations_preserve_order_and_key_precedence(self) -> None:
         spec = {
             "metamodels": [
@@ -44,6 +45,7 @@ class DeclaredMetamodelTests(unittest.TestCase):
 
 
 class AssertionTypeValidationTests(unittest.TestCase):
+
     def test_only_unknown_emf_types_add_a_violation(self) -> None:
         assertions = [
             {"model": "OUT", "type": "Missing"},

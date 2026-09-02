@@ -52,7 +52,7 @@ warnings.filterwarnings("ignore")
 # ── Constants ────────────────────────────────────────────────────────────────
 STRATEGY_NORMALIZE = {
     "only_prompt/zero_shot": "only_prompt",
-    "zero_shot":             "only_prompt",
+    "zero_shot": "only_prompt",
 }
 
 STRATEGY_ORDER = ["only_prompt", "few_shot", "grammar", "few_shot_AND_grammar"]
@@ -60,17 +60,17 @@ STRATEGY_ORDER = ["only_prompt", "few_shot", "grammar", "few_shot_AND_grammar"]
 METRICS = ["chrf", "unparsed_rate", "problems_per_LOC", "pass_at_1"]
 
 METRIC_LABELS = {
-    "chrf":             "ChrF",
-    "unparsed_rate":    "Unparsed Rate",
+    "chrf": "ChrF",
+    "unparsed_rate": "Unparsed Rate",
     "problems_per_LOC": "Problems/LOC",
-    "pass_at_1":        "Pass@1",
+    "pass_at_1": "Pass@1",
 }
 
 MODEL_ORDER = ["claude-sonnet-4", "gemini-2-5-pro", "gpt-5"]
-MODEL_SHORT  = {
+MODEL_SHORT = {
     "claude-sonnet-4": "Claude",
-    "gemini-2-5-pro":  "Gemini",
-    "gpt-5":           "GPT-5",
+    "gemini-2-5-pro": "Gemini",
+    "gpt-5": "GPT-5",
 }
 
 
@@ -84,8 +84,9 @@ def load_data(csv_path: str) -> pd.DataFrame:
     )
     if "test_pass" in df.columns:
         df["test_pass"] = df["test_pass"].map(
-            lambda x: 1.0 if str(x).strip().lower() == "true"
-                      else (0.0 if str(x).strip().lower() == "false" else np.nan)
+            lambda x: 1.0
+            if str(x).strip().lower() == "true"
+            else (0.0 if str(x).strip().lower() == "false" else np.nan)
         )
     else:
         df["test_pass"] = np.nan
@@ -127,18 +128,42 @@ def run_kruskal_wallis(df: pd.DataFrame) -> pd.DataFrame:
 def _kruskal_record(df_mtl: pd.DataFrame, mtl: str, metric: str) -> dict:
     groups = _model_groups(df_mtl, metric)
     if len(groups) < 2:
-        return dict(file=mtl, metric=metric, H=np.nan, p_value=np.nan,
-                    n_groups=len(groups), reason="fewer than 2 non-empty groups")
+        return dict(
+            file=mtl,
+            metric=metric,
+            H=np.nan,
+            p_value=np.nan,
+            n_groups=len(groups),
+            reason="fewer than 2 non-empty groups",
+        )
     if len(np.unique(np.concatenate(groups))) == 1:
-        return dict(file=mtl, metric=metric, H=0.0, p_value=np.nan,
-                    n_groups=len(groups), reason="all values identical")
+        return dict(
+            file=mtl,
+            metric=metric,
+            H=0.0,
+            p_value=np.nan,
+            n_groups=len(groups),
+            reason="all values identical",
+        )
     try:
         h_value, p_value = kruskal(*groups)
-        return dict(file=mtl, metric=metric, H=round(h_value, 4),
-                    p_value=round(p_value, 6), n_groups=len(groups), reason="")
+        return dict(
+            file=mtl,
+            metric=metric,
+            H=round(h_value, 4),
+            p_value=round(p_value, 6),
+            n_groups=len(groups),
+            reason="",
+        )
     except Exception as exc:
-        return dict(file=mtl, metric=metric, H=np.nan, p_value=np.nan,
-                    n_groups=len(groups), reason=str(exc))
+        return dict(
+            file=mtl,
+            metric=metric,
+            H=np.nan,
+            p_value=np.nan,
+            n_groups=len(groups),
+            reason=str(exc),
+        )
 
 
 def _model_groups(df_mtl: pd.DataFrame, metric: str) -> list:
@@ -178,7 +203,9 @@ def build_paper_style_table(df: pd.DataFrame, kw_results: pd.DataFrame) -> pd.Da
             rows.append(_paper_row(df_mtl, kw_results, mtl, metric))
 
     model_labels = [MODEL_SHORT[m] for m in MODEL_ORDER]
-    return pd.DataFrame(rows, columns=["MTL", "Metric"] + model_labels + ["p-value", "sig"])
+    return pd.DataFrame(
+        rows, columns=["MTL", "Metric"] + model_labels + ["p-value", "sig"]
+    )
 
 
 def _paper_row(df_mtl, kw_results, mtl, metric):
@@ -212,8 +239,12 @@ def build_detailed_table(df: pd.DataFrame, kw_results: pd.DataFrame) -> pd.DataF
             rows.extend(_model_detail_rows(df_mtl, mtl, metric))
             rows.append(_kw_detail_row(kw_results, mtl, metric))
 
-    return pd.DataFrame(rows,
-        columns=["file", "metric", "model"] + STRATEGY_ORDER + ["mean_across_strategies"])
+    return pd.DataFrame(
+        rows,
+        columns=["file", "metric", "model"]
+        + STRATEGY_ORDER
+        + ["mean_across_strategies"],
+    )
 
 
 def _model_detail_rows(df_mtl, mtl, metric):
@@ -267,9 +298,7 @@ def print_report(paper_table: pd.DataFrame) -> None:
         _print_mtl_report(mtl, sub, model_labels)
 
 
-def _print_mtl_report(
-    mtl: object, rows: pd.DataFrame, model_labels: list[str]
-) -> None:
+def _print_mtl_report(mtl: object, rows: pd.DataFrame, model_labels: list[str]) -> None:
     """Print one MTL section while preserving row and model-column order."""
     print(f"\n-- {mtl} " + "-" * 45)
     print(f"  {'Metric':<20}", end="")
@@ -317,10 +346,10 @@ def _resolve_csv_path(requested_path: str | None, repo_root: Path) -> Path:
 def main():
     """Run the legacy QVT-O significance analysis and write its reports."""
     ap = argparse.ArgumentParser(description="KW test comparing 3 LLM models per MTL")
-    ap.add_argument("--csv", default=None,
-                    help="Input CSV path (default: auto-detect)")
-    ap.add_argument("--gt_dir", default="auto",
-                    help="Ground-truth .qvto directory (default: auto)")
+    ap.add_argument("--csv", default=None, help="Input CSV path (default: auto-detect)")
+    ap.add_argument(
+        "--gt_dir", default="auto", help="Ground-truth .qvto directory (default: auto)"
+    )
     args = ap.parse_args()
 
     repo_root = SCRIPT_DIR.parent
@@ -361,8 +390,8 @@ def main():
     kw_results = run_kruskal_wallis(df)
 
     # Build tables
-    pvalue_table   = build_pvalue_table(kw_results)
-    paper_table    = build_paper_style_table(df, kw_results)
+    pvalue_table = build_pvalue_table(kw_results)
+    paper_table = build_paper_style_table(df, kw_results)
     detailed_table = build_detailed_table(df, kw_results)
 
     # Save outputs

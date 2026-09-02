@@ -54,9 +54,12 @@ def config(**overrides: object) -> PipelineConfig:
 
 
 class IdentityAxisTests(unittest.TestCase):
+
     def test_several_values_on_one_axis_are_refused(self) -> None:
         with self.assertRaises(ConfigError):
-            exactly_one("test-generation model", ["gpt-5", "claude-sonnet-4"], required=False)
+            exactly_one(
+                "test-generation model", ["gpt-5", "claude-sonnet-4"], required=False
+            )
 
     def test_an_axis_no_stage_uses_is_recorded_as_not_applicable(self) -> None:
         # Null means "not applicable to this run", never "any value".
@@ -72,7 +75,9 @@ class IdentityAxisTests(unittest.TestCase):
         with self.assertRaises(ConfigError):
             validate_config(config(tasks=[], all_tasks=True))
 
-    def test_test_and_transformation_strategies_are_distinct_identity_axes(self) -> None:
+    def test_test_and_transformation_strategies_are_distinct_identity_axes(
+        self,
+    ) -> None:
         identity = run_identity(
             config(transformation_strategies=["grammar"]),
             "hash",
@@ -98,6 +103,7 @@ class IdentityAxisTests(unittest.TestCase):
 
 
 class SelectionTests(unittest.TestCase):
+
     def test_a_stage_refuses_to_select_every_value(self) -> None:
         with self.assertRaises(ConfigError) as raised:
             fixed_selection("test-generation model", [])
@@ -108,6 +114,7 @@ class SelectionTests(unittest.TestCase):
 
 
 class ManifestImmutabilityTests(unittest.TestCase):
+
     def test_a_manifest_can_never_be_replaced(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             paths = create_run(Path(temp_dir), "run_001", IDENTITY)
@@ -121,7 +128,9 @@ class ManifestImmutabilityTests(unittest.TestCase):
         self.assertIn("task", str(raised.exception))
 
     def test_the_same_identity_may_re_enter_its_run(self) -> None:
-        reject_identity_drift({"run_id": "run_001", **IDENTITY}, dict(IDENTITY), "run_001")
+        reject_identity_drift(
+            {"run_id": "run_001", **IDENTITY}, dict(IDENTITY), "run_001"
+        )
 
     def test_rejected_resume_does_not_overwrite_the_resolved_config(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -129,7 +138,9 @@ class ManifestImmutabilityTests(unittest.TestCase):
             runner.runs_root = Path(temp_dir) / "runs"
             runner.runs_root.mkdir()
             original = config(run_id="same", command="tests.extract")
-            paths = create_run(runner.runs_root, "same", run_identity(original, "original"))
+            paths = create_run(
+                runner.runs_root, "same", run_identity(original, "original")
+            )
             paths.root.joinpath("config.resolved.yaml").write_text(
                 json.dumps({"task": "original"}),
                 encoding="utf-8",
@@ -147,12 +158,15 @@ class ManifestImmutabilityTests(unittest.TestCase):
             self.assertEqual(
                 {"task": "original"},
                 json.loads(
-                    paths.root.joinpath("config.resolved.yaml").read_text(encoding="utf-8")
+                    paths.root.joinpath("config.resolved.yaml").read_text(
+                        encoding="utf-8"
+                    )
                 ),
             )
 
 
 class RunDirectoryContainmentTests(unittest.TestCase):
+
     def test_a_traversing_run_id_writes_nothing_before_it_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             orchestrator = ExperimentOrchestrator()
@@ -166,6 +180,7 @@ class RunDirectoryContainmentTests(unittest.TestCase):
 
 
 class WorkspaceIsolationTests(unittest.TestCase):
+
     def test_workspace_is_materialized_once_inside_the_run(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

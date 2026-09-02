@@ -23,7 +23,9 @@ def make_run_id() -> str:
     return datetime.now(timezone.utc).strftime("run_%Y%m%dT%H%M%S_%fZ")
 
 
-def validate_pair(pair: ValidationPair, etl_test_dir: Path, timeout: int) -> TransformationValidationResult:
+def validate_pair(
+    pair: ValidationPair, etl_test_dir: Path, timeout: int
+) -> TransformationValidationResult:
     transformation_hash = file_sha256(pair.transformation.path)
     suite_hash = directory_sha256(pair.suite.path)
     run_id = make_run_id()
@@ -88,7 +90,11 @@ def validate_pair(pair: ValidationPair, etl_test_dir: Path, timeout: int) -> Tra
         transformation_sha256=transformation_hash,
         suite_sha256=suite_hash,
         status="passed" if passed else "failed",
-        failure_stage="" if passed else failure_stage(maven_result.output, did_compile, did_execute, maven_result.timed_out),
+        failure_stage=""
+        if passed
+        else failure_stage(
+            maven_result.output, did_compile, did_execute, maven_result.timed_out
+        ),
         compiles=did_compile,
         executes=did_execute,
         tests_pass=passed,
@@ -111,7 +117,9 @@ def validate_inputs(pair: ValidationPair) -> str:
     return ""
 
 
-def failure_stage(output: str, did_compile: bool, did_execute: bool, timed_out: bool) -> str:
+def failure_stage(
+    output: str, did_compile: bool, did_execute: bool, timed_out: bool
+) -> str:
     if timed_out:
         return "timeout"
     if not did_compile:

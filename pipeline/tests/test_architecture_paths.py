@@ -68,6 +68,7 @@ def _nested_strings(value: object) -> list[str]:
 
 
 class ActivePathTests(unittest.TestCase):
+
     def test_active_runtime_uses_existing_repository_root(self) -> None:
         self.assertEqual(REPO_ROOT, ExperimentOrchestrator().repo_root)
         self.assertTrue(REPO_ROOT.is_dir())
@@ -98,6 +99,7 @@ class ActivePathTests(unittest.TestCase):
 
 
 class N8nWorkflowTests(unittest.TestCase):
+
     def test_node_entry_ids_preserve_holder_and_list_positions(self) -> None:
         node = {
             "name": "Save File Name!",
@@ -153,9 +155,7 @@ class N8nWorkflowTests(unittest.TestCase):
 
     def test_connection_renaming_updates_source_keys_and_nested_targets(self) -> None:
         connections = {
-            "Old node": {
-                "main": [[{"node": "Old node", "type": "main", "index": 0}]]
-            },
+            "Old node": {"main": [[{"node": "Old node", "type": "main", "index": 0}]]},
             "Unchanged": {"node": "Old node"},
         }
 
@@ -260,9 +260,7 @@ class N8nWorkflowTests(unittest.TestCase):
                             f"{language}/references/*."
                             f"{INPUTS[language].reference_extension}"
                         ),
-                        nodes["Read reference file"]["parameters"][
-                            "fileSelector"
-                        ],
+                        nodes["Read reference file"]["parameters"]["fileSelector"],
                     )
                     self.assertNotIn("Read model files", nodes)
                     self.assertIn(PROMPT_INPUT_NODE, nodes)
@@ -272,12 +270,7 @@ class N8nWorkflowTests(unittest.TestCase):
                     )
                     self.assertTrue(
                         list(
-                            (
-                                TARGET.benchmark
-                                / "tasks"
-                                / language
-                                / "references"
-                            ).glob(
+                            (TARGET.benchmark / "tasks" / language / "references").glob(
                                 f"*.{INPUTS[language].reference_extension}"
                             )
                         )
@@ -515,12 +508,24 @@ class N8nWorkflowTests(unittest.TestCase):
             / "tests"
             / "QvtoTestBase.java"
         ).read_text(encoding="utf-8")
-        loadable = set(re.findall(r'\.put\("([a-z]+)",\s*new \w*ResourceFactoryImpl', registrations))
+        loadable = set(
+            re.findall(
+                r'\.put\("([a-z]+)",\s*new \w*ResourceFactoryImpl', registrations
+            )
+        )
         self.assertIn("xmi", loadable)
 
         for asset in (
-            TARGET.prompt_assets / "tests" / "contract" / "qvto" / "semantic_cases_contract.txt",
-            TARGET.prompt_assets / "tests" / "few_shot" / "qvto" / "test_generation_examples.txt",
+            TARGET.prompt_assets
+            / "tests"
+            / "contract"
+            / "qvto"
+            / "semantic_cases_contract.txt",
+            TARGET.prompt_assets
+            / "tests"
+            / "few_shot"
+            / "qvto"
+            / "test_generation_examples.txt",
         ):
             text = asset.read_text(encoding="utf-8")
             for path in re.findall(r"models/[^\s\"`]+", text):
@@ -542,14 +547,22 @@ class N8nWorkflowTests(unittest.TestCase):
         """
         contract = (
             TARGET.prompt_assets
-            / "tests" / "contract" / "reactions" / "semantic_cases_contract.txt"
+            / "tests"
+            / "contract"
+            / "reactions"
+            / "semantic_cases_contract.txt"
         ).read_text(encoding="utf-8")
         examples = (
             TARGET.prompt_assets
-            / "tests" / "few_shot" / "reactions" / "test_generation_examples.txt"
+            / "tests"
+            / "few_shot"
+            / "reactions"
+            / "test_generation_examples.txt"
         ).read_text(encoding="utf-8")
 
-        self.assertIn("NEITHER GENERATED MODEL FILE MAY CONTAIN A ROOT OBJECT", contract)
+        self.assertIn(
+            "NEITHER GENERATED MODEL FILE MAY CONTAIN A ROOT OBJECT", contract
+        )
         self.assertNotIn("Each has a generated initial file", contract)
 
         blocks = re.findall(r"```xml file=[^\n]+\n(.*?)```", contract + examples, re.S)
@@ -573,7 +586,10 @@ class N8nWorkflowTests(unittest.TestCase):
         """
         examples = (
             TARGET.prompt_assets
-            / "tests" / "few_shot" / "reactions" / "test_generation_examples.txt"
+            / "tests"
+            / "few_shot"
+            / "reactions"
+            / "test_generation_examples.txt"
         ).read_text(encoding="utf-8")
         block = re.search(
             r"```json file=semantic_cases\.json\n(.*?)```", examples, re.S
@@ -639,23 +655,17 @@ class N8nWorkflowTests(unittest.TestCase):
                             asset_node=asset_node,
                         ):
                             self.assertTrue(
-                                (
-                                    f'$("{asset_node}").isExecuted'
-                                    in expression
-                                )
-                                or (
-                                    f"$('{asset_node}').isExecuted"
-                                    in expression
-                                )
+                                (f'$("{asset_node}").isExecuted' in expression)
+                                or (f"$('{asset_node}').isExecuted" in expression)
                             )
 
     def test_frozen_task_prompts_cover_every_task_exactly_once(self) -> None:
         for language, inputs in INPUTS.items():
             references = {
                 path.stem
-                for path in (
-                    TARGET.benchmark / "tasks" / language / "references"
-                ).glob(f"*.{inputs.reference_extension}")
+                for path in (TARGET.benchmark / "tasks" / language / "references").glob(
+                    f"*.{inputs.reference_extension}"
+                )
             }
             contracts = {
                 path.stem
@@ -665,9 +675,9 @@ class N8nWorkflowTests(unittest.TestCase):
             }
             prompts = {
                 path.stem
-                for path in (
-                    TARGET.prompt_assets / "task_prompts" / language
-                ).glob("*.txt")
+                for path in (TARGET.prompt_assets / "task_prompts" / language).glob(
+                    "*.txt"
+                )
             }
             with self.subTest(language=language):
                 self.assertEqual(references, contracts)
@@ -706,9 +716,7 @@ class N8nWorkflowTests(unittest.TestCase):
         Every one of them used to end with a stray "+" left by the export step.
         It reached both downstream generators and the provenance hash.
         """
-        for prompt in sorted(
-            (TARGET.prompt_assets / "task_prompts").rglob("*.txt")
-        ):
+        for prompt in sorted((TARGET.prompt_assets / "task_prompts").rglob("*.txt")):
             text = prompt.read_text(encoding="utf-8")
             with self.subTest(prompt=prompt.name):
                 self.assertTrue(text.strip())
@@ -798,7 +806,9 @@ class N8nWorkflowTests(unittest.TestCase):
             with self.subTest(workflow=workflow.name):
                 self.assertIn(model, MODELS)
                 self.assertIn(strategy, STRATEGIES)
-                self.assertEqual(f"{language.upper()}_{model}_{strategy}", payload["name"])
+                self.assertEqual(
+                    f"{language.upper()}_{model}_{strategy}", payload["name"]
+                )
                 self.assertIn(
                     f"/transformation_generation/{language}/responses/"
                     f"{model}/{strategy}/",

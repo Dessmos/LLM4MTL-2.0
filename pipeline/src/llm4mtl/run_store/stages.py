@@ -55,7 +55,9 @@ def read_latest(paths: RunPaths, stage: str) -> dict[str, Any] | None:
 
     Derived on read, so it can never regress to an earlier attempt.
     """
-    for attempt in sorted(existing_attempts(paths.stage_attempts_dir(stage)), reverse=True):
+    for attempt in sorted(
+        existing_attempts(paths.stage_attempts_dir(stage)), reverse=True
+    ):
         result = paths.stage_attempt_result(stage, attempt)
         if result.is_file():
             payload = read_json(result)

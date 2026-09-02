@@ -36,6 +36,7 @@ SUITE = GeneratedSuite(
 
 
 class ValidationCliSelectionTests(unittest.TestCase):
+
     def test_empty_selection_messages_and_exit_codes_are_preserved(self) -> None:
         cases = (
             (reference_cli, "No candidate suites found for task Tree2Graph\n"),
@@ -44,7 +45,9 @@ class ValidationCliSelectionTests(unittest.TestCase):
         for module, expected in cases:
             with self.subTest(module=module.__name__):
                 stderr = StringIO()
-                with patch.object(module, "parse_args", return_value=_args(dry_run=False)):
+                with patch.object(
+                    module, "parse_args", return_value=_args(dry_run=False)
+                ):
                     with patch.object(module, "discover_suites", return_value=[]):
                         with redirect_stderr(stderr):
                             exit_code = module.main([])
@@ -60,7 +63,9 @@ class ValidationCliSelectionTests(unittest.TestCase):
         for module, expected in cases:
             with self.subTest(module=module.__name__):
                 stdout = StringIO()
-                with patch.object(module, "parse_args", return_value=_args(dry_run=True)):
+                with patch.object(
+                    module, "parse_args", return_value=_args(dry_run=True)
+                ):
                     with patch.object(module, "discover_suites", return_value=[SUITE]):
                         with patch.object(module, "materialize_engine") as materialize:
                             with redirect_stdout(stdout):
@@ -72,6 +77,7 @@ class ValidationCliSelectionTests(unittest.TestCase):
 
 
 class ValidationCliExecutionTests(unittest.TestCase):
+
     def test_failed_verdicts_are_written_and_return_failure(self) -> None:
         cases = (
             (
@@ -107,7 +113,9 @@ class ValidationCliExecutionTests(unittest.TestCase):
                 stdout = StringIO()
                 with ExitStack() as stack:
                     stack.enter_context(
-                        patch.object(module, "materialize_engine", return_value=Path("engine"))
+                        patch.object(
+                            module, "materialize_engine", return_value=Path("engine")
+                        )
                     )
                     stack.enter_context(
                         patch.object(module, "language_adapter", return_value=object())

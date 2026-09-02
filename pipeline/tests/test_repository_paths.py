@@ -49,6 +49,7 @@ OUTSIDE = Path("/tmp/not-in-this-repository/run.json")
 
 
 class RepositoryRelativeTests(unittest.TestCase):
+
     def test_a_path_inside_the_repository_is_written_relative_to_it(self) -> None:
         for name, (given, expected) in INSIDE.items():
             with self.subTest(path=name):
@@ -62,6 +63,7 @@ class RepositoryRelativeTests(unittest.TestCase):
 
 
 class RequireRepositoryRelativeTests(unittest.TestCase):
+
     def test_it_spells_an_inside_path_exactly_as_the_other_variant_does(self) -> None:
         for name, (given, expected) in INSIDE.items():
             with self.subTest(path=name):
@@ -75,6 +77,7 @@ class RequireRepositoryRelativeTests(unittest.TestCase):
 
 
 class FailureReportBoundaryTests(unittest.TestCase):
+
     def test_an_escaping_cited_path_becomes_the_package_error(self) -> None:
         """The assembler handles FailureReportError; a bare ValueError would escape."""
         with self.assertRaises(FailureReportError) as raised:

@@ -52,5 +52,5 @@ def _exact_p(baseline_only: int, variant_only: int) -> float:
     if n == 0:
         return 1.0
     k = min(baseline_only, variant_only)
-    tail = sum(comb(n, i) for i in range(0, k + 1)) / (2 ** n)
+    tail = sum(comb(n, i) for i in range(0, k + 1)) / (2**n)
     return min(1.0, 2.0 * tail)

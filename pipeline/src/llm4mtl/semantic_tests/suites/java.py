@@ -12,12 +12,7 @@ def java_destination(test_project_dir: Path, fqcn: str) -> Path:
     class_name = parts[-1] + ".java"
     package_parts = parts[:-1]
     return (
-        test_project_dir
-        / "src"
-        / "test"
-        / "java"
-        / Path(*package_parts)
-        / class_name
+        test_project_dir / "src" / "test" / "java" / Path(*package_parts) / class_name
     )
 
 

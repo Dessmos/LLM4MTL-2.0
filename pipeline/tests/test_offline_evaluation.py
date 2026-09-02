@@ -48,6 +48,7 @@ EXPERIMENT_CONFIG = {
 
 
 class EvaluationPreflightTests(unittest.TestCase):
+
     def test_preflight_rejects_entire_selection_without_experiment_config(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -75,6 +76,7 @@ class EvaluationPreflightTests(unittest.TestCase):
 
 
 class HeldoutEvidenceTests(unittest.TestCase):
+
     def test_surefire_cases_map_back_to_stable_semantic_ids(self) -> None:
         xml = """<testsuite tests="3" failures="1" errors="1">
           <testcase name="h001"/>
@@ -107,6 +109,7 @@ class HeldoutEvidenceTests(unittest.TestCase):
 
 
 class MutationToolTests(unittest.TestCase):
+
     def test_generator_applies_one_deterministic_change_and_leaves_qualification_blank(
         self,
     ) -> None:
@@ -149,13 +152,16 @@ class MutationToolTests(unittest.TestCase):
             {"mutant_id": "M3", "test_source": "generated", "killed": "true"},
         ]
 
-        metrics = {row["metric"]: row for row in _mutation_metrics(catalog, observations)}
+        metrics = {
+            row["metric"]: row for row in _mutation_metrics(catalog, observations)
+        }
 
         self.assertEqual(1.0, metrics["qualified_mutation_score"]["value"])
         self.assertEqual(0.5, metrics["incremental_mutation_score"]["value"])
 
 
 class CoverageEvaluationTests(unittest.TestCase):
+
     def test_coverage_counts_nested_input_instances_and_reaction_changes(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             suite = Path(temporary)
@@ -212,6 +218,7 @@ class CoverageEvaluationTests(unittest.TestCase):
 
 
 class MetricAggregationTests(unittest.TestCase):
+
     def test_heldout_metrics_compare_only_t0_to_final(self) -> None:
         runs = (_selected_run("R1"), _selected_run("R2"))
         heldout = [
@@ -228,9 +235,7 @@ class MetricAggregationTests(unittest.TestCase):
         ]
 
         counts = _heldout_counts(runs, heldout)
-        aggregate = {
-            row["metric"]: row for row in _aggregate_heldout_metrics(counts)
-        }
+        aggregate = {row["metric"]: row for row in _aggregate_heldout_metrics(counts)}
 
         self.assertEqual(0.5, aggregate["heldout_semantic_pass_rate"]["value"])
         self.assertEqual(1.0, aggregate["heldout_repair_success_rate"]["value"])
@@ -244,7 +249,9 @@ class MetricAggregationTests(unittest.TestCase):
             run = _selected_run("R1", root / "run")
             generated = root / "generated"
             for suite_id in ("R1_000", "R1_001"):
-                suite = generated / "Task" / "candidates" / "model" / "strategy" / suite_id
+                suite = (
+                    generated / "Task" / "candidates" / "model" / "strategy" / suite_id
+                )
                 suite.mkdir(parents=True)
                 (suite / "metadata.json").write_text(
                     json.dumps(
@@ -329,9 +336,7 @@ def _write_run(
     }
     if experiment_config is not None:
         manifest["experiment_config"] = experiment_config
-    (run_root / "manifest.json").write_text(
-        json.dumps(manifest), encoding="utf-8"
-    )
+    (run_root / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
     (run_root / "result.json").write_text(
         json.dumps(
             {

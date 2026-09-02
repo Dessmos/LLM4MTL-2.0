@@ -70,12 +70,8 @@ def synchronize_exports() -> tuple[int, int, int]:
         test_count += language_test_count
 
     transformation_root = TARGET.workflows / "transformations" / "workflows"
-    prompt_count += _synchronize_transformation_prompt_workflows(
-        transformation_root
-    )
-    transformation_count = _synchronize_transformation_workflows(
-        transformation_root
-    )
+    prompt_count += _synchronize_transformation_prompt_workflows(transformation_root)
+    transformation_count = _synchronize_transformation_workflows(transformation_root)
     transformation_count += _synchronize_reactions_matrix(transformation_root)
     return prompt_count, test_count, transformation_count
 

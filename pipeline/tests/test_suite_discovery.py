@@ -11,6 +11,7 @@ from llm4mtl.semantic_tests.suites.discovery import discover_suites
 
 
 class SuiteDiscoveryTests(unittest.TestCase):
+
     def test_discovered_suites_are_sorted_and_must_be_directories(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

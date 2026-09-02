@@ -282,9 +282,7 @@ def _suite_artifact_paths(suite: GeneratedSuite) -> tuple[list[Path], list[Path]
     """Return deterministic Java and model input paths for ``suite``."""
     java_paths = sorted(suite.path.glob("*.java"))
     model_paths = sorted(
-        path
-        for path in (suite.path / "models").rglob("*")
-        if path.is_file()
+        path for path in (suite.path / "models").rglob("*") if path.is_file()
     )
     return java_paths, model_paths
 

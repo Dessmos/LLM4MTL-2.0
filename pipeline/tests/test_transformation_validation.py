@@ -43,11 +43,19 @@ def discover_for_run(root: Path) -> list[ValidatedSuite]:
 
 
 class DiscoveryTests(unittest.TestCase):
+
     def test_matches_only_same_task(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             validated_root = root / "generated_tests" / "etl"
-            suite = validated_root / "Tree2Graph" / "candidates" / "gpt-5" / "few_shot" / "suite_001"
+            suite = (
+                validated_root
+                / "Tree2Graph"
+                / "candidates"
+                / "gpt-5"
+                / "few_shot"
+                / "suite_001"
+            )
             suite.mkdir(parents=True)
             transformations_root = root / "resources"
             tree = transformations_root / "gpt-5" / "grammar" / "Tree2Graph.etl"
@@ -68,12 +76,7 @@ class DiscoveryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir) / "generated_tests" / "etl"
             suite = (
-                root
-                / "Tree2Graph"
-                / "candidates"
-                / "gpt-5"
-                / "few_shot"
-                / "suite_001"
+                root / "Tree2Graph" / "candidates" / "gpt-5" / "few_shot" / "suite_001"
             )
             suite.mkdir(parents=True)
 
@@ -95,12 +98,7 @@ class DiscoveryTests(unittest.TestCase):
                 ("OO2DB", "gpt-5", "few_shot"),
             ):
                 (
-                    suites_root
-                    / task
-                    / "candidates"
-                    / llm
-                    / strategy
-                    / "suite_001"
+                    suites_root / task / "candidates" / llm / strategy / "suite_001"
                 ).mkdir(parents=True)
 
             with patch(
@@ -122,16 +120,30 @@ class DiscoveryTests(unittest.TestCase):
 
 
 class ArtifactTests(unittest.TestCase):
+
     def test_failed_result_is_archived_with_repair_payload(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             validated_root = root / "generated_tests" / "etl"
-            suite_dir = validated_root / "Tree2Graph" / "candidates" / "gpt-5" / "few_shot" / "suite_001"
+            suite_dir = (
+                validated_root
+                / "Tree2Graph"
+                / "candidates"
+                / "gpt-5"
+                / "few_shot"
+                / "suite_001"
+            )
             (suite_dir / "models").mkdir(parents=True)
-            (suite_dir / "GeneratedTest.java").write_text("class GeneratedTest {}\n", encoding="utf-8")
-            (suite_dir / "models" / "input.model").write_text("<model/>\n", encoding="utf-8")
+            (suite_dir / "GeneratedTest.java").write_text(
+                "class GeneratedTest {}\n", encoding="utf-8"
+            )
+            (suite_dir / "models" / "input.model").write_text(
+                "<model/>\n", encoding="utf-8"
+            )
             transformations_root = root / "resources"
-            transformation_path = transformations_root / "gpt-5" / "grammar" / "Tree2Graph.etl"
+            transformation_path = (
+                transformations_root / "gpt-5" / "grammar" / "Tree2Graph.etl"
+            )
             transformation_path.parent.mkdir(parents=True)
             transformation_path.write_text("invalid ETL\n", encoding="utf-8")
 
@@ -156,7 +168,11 @@ class ArtifactTests(unittest.TestCase):
             )
 
             archived = archive_result(result, root / "artifacts")
-            bundle = root / archived.artifact_dir if not Path(archived.artifact_dir).is_absolute() else Path(archived.artifact_dir)
+            bundle = (
+                root / archived.artifact_dir
+                if not Path(archived.artifact_dir).is_absolute()
+                else Path(archived.artifact_dir)
+            )
             self.assertTrue((bundle / "transformation.etl").is_file())
             self.assertTrue((bundle / "suite" / "GeneratedTest.java").is_file())
             self.assertTrue((bundle / "result.json").is_file())
@@ -164,25 +180,44 @@ class ArtifactTests(unittest.TestCase):
 
 
 class FailureStageTests(unittest.TestCase):
+
     def test_classifies_etl_parse_error(self) -> None:
         self.assertEqual(
             "transformation_parse",
-            failure_stage("RuntimeException: ETL parse errors: unexpected token", True, True, False),
+            failure_stage(
+                "RuntimeException: ETL parse errors: unexpected token",
+                True,
+                True,
+                False,
+            ),
         )
 
     def test_classifies_assertion_failure(self) -> None:
-        self.assertEqual("test_failure", failure_stage("Tests run: 3, Failures: 1", True, True, False))
+        self.assertEqual(
+            "test_failure",
+            failure_stage("Tests run: 3, Failures: 1", True, True, False),
+        )
 
 
 class ReadableReportTests(unittest.TestCase):
+
     def test_writes_labelled_pass_fail_rows(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             validated_root = root / "generated_tests" / "etl"
-            suite_dir = validated_root / "Tree2Graph" / "candidates" / "gpt-5" / "few_shot" / "suite_001"
+            suite_dir = (
+                validated_root
+                / "Tree2Graph"
+                / "candidates"
+                / "gpt-5"
+                / "few_shot"
+                / "suite_001"
+            )
             suite_dir.mkdir(parents=True)
             transformations_root = root / "transformations"
-            transformation_path = transformations_root / "claude-sonnet-4" / "grammar" / "Tree2Graph.etl"
+            transformation_path = (
+                transformations_root / "claude-sonnet-4" / "grammar" / "Tree2Graph.etl"
+            )
             transformation_path.parent.mkdir(parents=True)
             transformation_path.write_text("rule Tree2Graph {}\n", encoding="utf-8")
             pair = match_pairs(
@@ -209,11 +244,16 @@ class ReadableReportTests(unittest.TestCase):
             paths = write_results([result], root / "results", append=False)
 
             report_path = (
-                root / "results" / "Tree2Graph" / "generated_transformation_validation_report.csv"
+                root
+                / "results"
+                / "Tree2Graph"
+                / "generated_transformation_validation_report.csv"
             ).resolve()
             self.assertIn(report_path, paths)
             report = report_path.read_text(encoding="utf-8")
-            self.assertIn("=== Task: Tree2Graph | Transformation: claude-sonnet-4/grammar", report)
+            self.assertIn(
+                "=== Task: Tree2Graph | Transformation: claude-sonnet-4/grammar", report
+            )
             self.assertIn("Test result,FAIL", report)
             self.assertIn("Compilation,PASS", report)
             self.assertIn("Test execution,PASS", report)

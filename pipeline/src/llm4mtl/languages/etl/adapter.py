@@ -61,13 +61,11 @@ def _completed_parse_observations(
     payload: dict[str, object],
 ) -> dict[Path, ParseObservation]:
     parsed_paths = {
-        Path(str(item)).resolve()
-        for item in payload.get("passed_transformations", [])
+        Path(str(item)).resolve() for item in payload.get("passed_transformations", [])
     }
-    all_selected_passed = (
-        len(transformations) == int(payload.get("selected") or 0)
-        and len(transformations) == int(payload.get("passed") or 0)
-    )
+    all_selected_passed = len(transformations) == int(
+        payload.get("selected") or 0
+    ) and len(transformations) == int(payload.get("passed") or 0)
     diagnostic = json.dumps(payload, ensure_ascii=False)
     observations: dict[Path, ParseObservation] = {}
     for path in transformations:
@@ -170,7 +168,9 @@ class EtlAdapter:
         }.get(observation.failure_stage)
         if status is None:
             return None
-        return TransformationOutcome(status=status, diagnostic=observation.error_summary)
+        return TransformationOutcome(
+            status=status, diagnostic=observation.error_summary
+        )
 
     def parse_transformations(
         self,
@@ -208,7 +208,9 @@ class EtlAdapter:
         for transformation in transformations:
             command.extend(("--transformation", str(transformation)))
         workspace.observations_dir.mkdir(parents=True, exist_ok=True)
-        results_file = workspace.observations_dir / "generated_transformation_syntax.csv"
+        results_file = (
+            workspace.observations_dir / "generated_transformation_syntax.csv"
+        )
         command.extend(
             (
                 "--results-file",
@@ -235,6 +237,7 @@ class EtlAdapter:
             return _failed_parse_observations(transformations, diagnostic)
 
         return _completed_parse_observations(transformations, payload)
+
 
 def _last_json_object(stdout: str) -> dict[str, object]:
     """The driver prints its JSON report last; anything before it is noise."""

@@ -24,6 +24,7 @@ def _args(root: Path, **overrides: object) -> argparse.Namespace:
 
 
 class ResponseDiscoveryTests(unittest.TestCase):
+
     def test_discovered_responses_are_sorted_and_hidden_files_are_ignored(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

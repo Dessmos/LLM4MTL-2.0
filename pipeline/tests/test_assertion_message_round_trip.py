@@ -96,6 +96,7 @@ def emitted_literal(emitter, assertion: dict[str, object]) -> str:
 
 
 class AssertionMessageTests(unittest.TestCase):
+
     def test_the_rule_produces_the_expected_message(self) -> None:
         for name, (assertion, expected) in CASES.items():
             with self.subTest(assertion=name):

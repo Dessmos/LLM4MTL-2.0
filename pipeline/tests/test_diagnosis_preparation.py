@@ -77,7 +77,12 @@ SEMANTIC_CASES: dict[str, Any] = {
             ],
             "assertions": [
                 {"kind": "count", "model": "OUT", "type": "AscetModule", "expected": 1},
-                {"kind": "count", "model": "OUT", "type": "SoftwareTask", "expected": 2},
+                {
+                    "kind": "count",
+                    "model": "OUT",
+                    "type": "SoftwareTask",
+                    "expected": 2,
+                },
             ],
         }
     ],
@@ -85,6 +90,7 @@ SEMANTIC_CASES: dict[str, Any] = {
 
 
 class DiagnosisIndexCountTests(unittest.TestCase):
+
     def test_prepared_report_counts_preserve_status_scope_and_eligibility(self) -> None:
         pairs = [
             {
@@ -114,6 +120,7 @@ class DiagnosisIndexCountTests(unittest.TestCase):
 
 
 class SurefireTestCaseTests(unittest.TestCase):
+
     def test_failure_evidence_keeps_missing_field_errors_and_trace_rules(self) -> None:
         with self.assertRaises(KeyError):
             _failure_evidence({"kind": "runtime_error"}, ["trace"])
@@ -127,7 +134,7 @@ class SurefireTestCaseTests(unittest.TestCase):
             '<testcase classname="Example" name="fails" time="0.2">'
             '<failure type="AssertionError" message="failure">failure trace</failure>'
             '<error type="RuntimeException" message="runtime">runtime trace</error>'
-            '</testcase>'
+            "</testcase>"
         )
 
         test_case, exception, trace = _surefire_test_case(
@@ -193,6 +200,7 @@ def _surefire_xml(message: str, element: str = "failure") -> str:
 
 
 class AssertionMatchingTests(unittest.TestCase):
+
     def test_explicit_assertion_id_is_selected_by_message_prefix(self) -> None:
         semantic_cases = {
             "tests": [
@@ -232,6 +240,7 @@ class AssertionMatchingTests(unittest.TestCase):
 
 
 class DiagnosisPreparationTests(unittest.TestCase):
+
     def setUp(self) -> None:
         self.run_id = f"test-diagnosis-preparation-{uuid.uuid4().hex[:8]}"
         self.run_dir = TARGET.runs / self.run_id
@@ -290,14 +299,7 @@ class DiagnosisPreparationTests(unittest.TestCase):
         assertions_passed: bool = False,
         failure_stage: str = "assertion_failure",
     ) -> Path:
-        path = (
-            root
-            / TASK
-            / "gpt-5"
-            / "few_shot"
-            / "suite_001"
-            / "suite_execution.json"
-        )
+        path = root / TASK / "gpt-5" / "few_shot" / "suite_001" / "suite_execution.json"
         write_json(
             path,
             {
@@ -343,7 +345,9 @@ class DiagnosisPreparationTests(unittest.TestCase):
         (directory / SUREFIRE_DIRNAME / "TEST-GeneratedSemanticTest.xml").write_text(
             xml, encoding="utf-8"
         )
-        (directory / STDOUT_FILENAME).write_text("[INFO] BUILD FAILURE\n", encoding="utf-8")
+        (directory / STDOUT_FILENAME).write_text(
+            "[INFO] BUILD FAILURE\n", encoding="utf-8"
+        )
 
     def _write_snapshot(self) -> Path:
         # Beside the suite observation, under the case that produced it.
@@ -361,9 +365,16 @@ class DiagnosisPreparationTests(unittest.TestCase):
         path.write_text("<ascet/>\n", encoding="utf-8")
         return path
 
-    def _write_stage_attempts(self, observation: Path, *, syntax_passed: bool = True) -> None:
+    def _write_stage_attempts(
+        self, observation: Path, *, syntax_passed: bool = True
+    ) -> None:
         write_json(
-            self.run_dir / "stages" / "syntax-validation" / "attempts" / "attempt-001" / "evidence.json",
+            self.run_dir
+            / "stages"
+            / "syntax-validation"
+            / "attempts"
+            / "attempt-001"
+            / "evidence.json",
             {
                 "name": "transformation_parsing",
                 "status": "completed",
@@ -376,12 +387,19 @@ class DiagnosisPreparationTests(unittest.TestCase):
                     "failed_transformations": (
                         [] if syntax_passed else [str(self.transformation)]
                     ),
-                    "diagnostics": {} if syntax_passed else {str(self.transformation): "parse error"},
+                    "diagnostics": {}
+                    if syntax_passed
+                    else {str(self.transformation): "parse error"},
                 },
             },
         )
         write_json(
-            self.run_dir / "stages" / "execution" / "attempts" / "attempt-001" / "result.json",
+            self.run_dir
+            / "stages"
+            / "execution"
+            / "attempts"
+            / "attempt-001"
+            / "result.json",
             {
                 "schema_version": "2.0",
                 "stage": "execution",
@@ -402,7 +420,12 @@ class DiagnosisPreparationTests(unittest.TestCase):
             },
         )
         write_json(
-            self.run_dir / "stages" / "execution" / "attempts" / "attempt-001" / "evidence.json",
+            self.run_dir
+            / "stages"
+            / "execution"
+            / "attempts"
+            / "attempt-001"
+            / "evidence.json",
             {
                 "name": "transformation_validation",
                 "status": "completed",
@@ -432,10 +455,15 @@ class DiagnosisPreparationTests(unittest.TestCase):
         )
 
     def _complete_failing_run(self, message: str | None = None) -> Path:
-        observation = self._write_observation(root=self._pair_root(), role="generated_transformation")
+        observation = self._write_observation(
+            root=self._pair_root(), role="generated_transformation"
+        )
         self._archive_evidence(
             observation,
-            _surefire_xml(message or f"{ASSERTION_MESSAGE} ==&gt; expected: &lt;1&gt; but was: &lt;0&gt;"),
+            _surefire_xml(
+                message
+                or f"{ASSERTION_MESSAGE} ==&gt; expected: &lt;1&gt; but was: &lt;0&gt;"
+            ),
         )
         self._write_observation(
             root=self.run_dir / "observations",
@@ -471,9 +499,7 @@ class DiagnosisPreparationTests(unittest.TestCase):
         self.assertEqual("junit_assertion_message", result["failure"]["extraction"])
         self.assertEqual(1, len(result["actual_target_model"]))
         self.assertTrue(report["source_diagnosis"]["eligible"])
-        self.assertEqual(
-            "passed", result["reference_transformation_result"]["status"]
-        )
+        self.assertEqual("passed", result["reference_transformation_result"]["status"])
 
     def test_the_bundle_satisfies_what_source_diagnosis_requires(self) -> None:
         """The two ends of the evidence contract are pinned to each other.
@@ -725,7 +751,9 @@ class DiagnosisPreparationTests(unittest.TestCase):
         )
         self._archive_evidence(
             observation,
-            _surefire_xml(f"{ASSERTION_MESSAGE} ==&gt; expected: &lt;1&gt; but was: &lt;0&gt;"),
+            _surefire_xml(
+                f"{ASSERTION_MESSAGE} ==&gt; expected: &lt;1&gt; but was: &lt;0&gt;"
+            ),
         )
         self._write_stage_attempts(observation)
 
@@ -754,7 +782,9 @@ class DiagnosisPreparationTests(unittest.TestCase):
         self._write_stage_attempts(observation)
         return observation
 
-    def test_a_failure_before_any_test_method_yields_one_pair_level_report(self) -> None:
+    def test_a_failure_before_any_test_method_yields_one_pair_level_report(
+        self,
+    ) -> None:
         self._failure_before_any_test_method()
 
         index = prepare_execution_diagnosis(self.run_dir, 1)
@@ -843,7 +873,12 @@ class DiagnosisPreparationTests(unittest.TestCase):
         relative = report_path.relative_to(REPO_ROOT).as_posix()
         spec = {
             "workflow": str(
-                REPO_ROOT / "workflows" / "n8n" / "subworkflows" / "diagnosis" / "llm-diagnosis.json"
+                REPO_ROOT
+                / "workflows"
+                / "n8n"
+                / "subworkflows"
+                / "diagnosis"
+                / "llm-diagnosis.json"
             ),
             "node": "Validate Evidence Bundle",
             "input": [{"failure_report_text": report_path.read_text(encoding="utf-8")}],
@@ -866,7 +901,13 @@ class DiagnosisPreparationTests(unittest.TestCase):
             completed = subprocess.run(
                 [
                     "node",
-                    str(REPO_ROOT / "pipeline" / "tests" / "fixtures" / "run_master_code_node.js"),
+                    str(
+                        REPO_ROOT
+                        / "pipeline"
+                        / "tests"
+                        / "fixtures"
+                        / "run_master_code_node.js"
+                    ),
                     spec_path,
                 ],
                 capture_output=True,
@@ -917,7 +958,11 @@ class DiagnosisPreparationTests(unittest.TestCase):
         # The whole suite stands in for the case that never ran, and the fields a
         # case-level bundle carries are absent rather than faked empty.
         self.assertIn("generated_test", bundle)
-        for absent in ("input_model", "expected_output_or_properties", "actual_target_model"):
+        for absent in (
+            "input_model",
+            "expected_output_or_properties",
+            "actual_target_model",
+        ):
             with self.subTest(absent=absent):
                 self.assertNotIn(absent, bundle)
 
@@ -1016,18 +1061,14 @@ class DiagnosisPreparationTests(unittest.TestCase):
 
     def test_preparation_leaves_the_recorded_execution_stage_untouched(self) -> None:
         self._failure_before_any_test_method()
-        attempt_dir = (
-            self.run_dir / "stages" / "execution" / "attempts" / "attempt-001"
-        )
+        attempt_dir = self.run_dir / "stages" / "execution" / "attempts" / "attempt-001"
         before = {
             path.name: path.read_bytes() for path in sorted(attempt_dir.iterdir())
         }
 
         index = prepare_execution_diagnosis(self.run_dir, 1)
 
-        after = {
-            path.name: path.read_bytes() for path in sorted(attempt_dir.iterdir())
-        }
+        after = {path.name: path.read_bytes() for path in sorted(attempt_dir.iterdir())}
         self.assertEqual(before, after)
         # The stage's own counts are the semantic result and stay exactly what
         # the execution observed; the index counts describe evidence only.
@@ -1056,7 +1097,14 @@ class DiagnosisPreparationTests(unittest.TestCase):
             failure_stage="",
         )
         self._write_stage_attempts(observation)
-        evidence = self.run_dir / "stages" / "execution" / "attempts" / "attempt-001" / "evidence.json"
+        evidence = (
+            self.run_dir
+            / "stages"
+            / "execution"
+            / "attempts"
+            / "attempt-001"
+            / "evidence.json"
+        )
         payload = read_json(evidence)
         payload["details"]["pairs"][0]["assertions_passed"] = True
         write_json(evidence, payload)
@@ -1109,7 +1157,9 @@ class DiagnosisPreparationTests(unittest.TestCase):
         self.assertIn("[ERROR] BUILD FAILURE", cited["excerpt"])
         self.assertEqual(64, len(cited["sha256"]))
 
-    def test_an_unassemblable_attempt_records_the_error_instead_of_vanishing(self) -> None:
+    def test_an_unassemblable_attempt_records_the_error_instead_of_vanishing(
+        self,
+    ) -> None:
         index = prepare_after_execution_stage(
             self.run_dir, "execution", {"counts": {"failed": 1}}, 7
         )
@@ -1123,9 +1173,7 @@ class DiagnosisPreparationTests(unittest.TestCase):
         self._write_snapshot()
         response_directory = diagnosis_response_dir(self.run_dir, 1)
         response_directory.parent.mkdir(parents=True, exist_ok=True)
-        response_directory.write_text(
-            "blocks directory creation\n", encoding="utf-8"
-        )
+        response_directory.write_text("blocks directory creation\n", encoding="utf-8")
 
         index = prepare_after_execution_stage(
             self.run_dir, "execution", {"counts": {"failed": 1}}, 1
@@ -1151,7 +1199,9 @@ class DiagnosisPreparationTests(unittest.TestCase):
         )
         self._archive_evidence(
             observation,
-            _surefire_xml(f"{ASSERTION_MESSAGE} ==&gt; expected: &lt;1&gt; but was: &lt;0&gt;"),
+            _surefire_xml(
+                f"{ASSERTION_MESSAGE} ==&gt; expected: &lt;1&gt; but was: &lt;0&gt;"
+            ),
         )
         self._write_stage_attempts(observation, syntax_passed=False)
 

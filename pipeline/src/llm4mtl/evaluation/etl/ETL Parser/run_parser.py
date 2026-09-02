@@ -20,18 +20,19 @@ from collections.abc import Iterable
 # Optional dependencies
 try:
     from fastchrf import aggregate_chrf
+
     FASTCHRF_AVAILABLE = True
 except ImportError:
     FASTCHRF_AVAILABLE = False
 
 # Configuration
-LLM_DIRS = ['claude-sonnet-4', 'gemini-2-5-pro', 'gpt-5']
-STRATEGY_DIRS = ['few_shot', 'few_shots_AND_grammar', 'grammar', 'only_prompt']
+LLM_DIRS = ["claude-sonnet-4", "gemini-2-5-pro", "gpt-5"]
+STRATEGY_DIRS = ["few_shot", "few_shots_AND_grammar", "grammar", "only_prompt"]
 
 # Paths
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-ETL_RESOURCES_PATH = os.path.join(SCRIPT_DIR, 'src', 'main', 'resources')
-ETL_REFERENCES_PATH = os.path.join(ETL_RESOURCES_PATH, 'transformations')
+ETL_RESOURCES_PATH = os.path.join(SCRIPT_DIR, "src", "main", "resources")
+ETL_REFERENCES_PATH = os.path.join(ETL_RESOURCES_PATH, "transformations")
 
 
 def get_llm_generated_etl_files():
@@ -48,14 +49,16 @@ def get_llm_generated_etl_files():
         for strategy in STRATEGY_DIRS:
             etl_dir = os.path.join(ETL_RESOURCES_PATH, llm, strategy)
             if os.path.exists(etl_dir):
-                for etl_path in glob.glob(os.path.join(etl_dir, '*.etl')):
+                for etl_path in glob.glob(os.path.join(etl_dir, "*.etl")):
                     filename = os.path.splitext(os.path.basename(etl_path))[0]
-                    etl_files.append({
-                        'path': os.path.abspath(etl_path),
-                        'llm': llm,
-                        'strategy': strategy,
-                        'filename': filename
-                    })
+                    etl_files.append(
+                        {
+                            "path": os.path.abspath(etl_path),
+                            "llm": llm,
+                            "strategy": strategy,
+                            "filename": filename,
+                        }
+                    )
 
     return etl_files
 
@@ -71,7 +74,7 @@ def get_etl_reference_files():
     references = {}
 
     if os.path.exists(ETL_REFERENCES_PATH):
-        for etl_path in glob.glob(os.path.join(ETL_REFERENCES_PATH, '*.etl')):
+        for etl_path in glob.glob(os.path.join(ETL_REFERENCES_PATH, "*.etl")):
             filename = os.path.splitext(os.path.basename(etl_path))[0]
             references[filename] = os.path.abspath(etl_path)
 
@@ -90,28 +93,32 @@ def check_etl_syntax(etl_file_path):
         tuple: (is_valid: bool, problem_count: int)
     """
     try:
-        use_shell = os.name == 'nt'
-        mvn_cmd = 'mvn.cmd' if os.name == 'nt' else 'mvn'
+        use_shell = os.name == "nt"
+        mvn_cmd = "mvn.cmd" if os.name == "nt" else "mvn"
 
         # Use relative path to avoid spaces in path on Windows
         rel_path = os.path.relpath(etl_file_path, SCRIPT_DIR)
 
         result = subprocess.run(
-            [mvn_cmd, '-q', 'exec:java',
-             '-Dexec.mainClass=com.example.etlparser.ETLParserMain',
-             f'-Dexec.args={rel_path}'],
+            [
+                mvn_cmd,
+                "-q",
+                "exec:java",
+                "-Dexec.mainClass=com.example.etlparser.ETLParserMain",
+                f"-Dexec.args={rel_path}",
+            ],
             cwd=SCRIPT_DIR,
             capture_output=True,
             text=True,
             timeout=60,
-            shell=use_shell
+            shell=use_shell,
         )
 
         # Parse output: RESULT:OK:0 or RESULT:FAIL:N
         problem_count = 0
-        for line in result.stdout.split('\n'):
-            if line.startswith('RESULT:'):
-                parts = line.split(':')
+        for line in result.stdout.split("\n"):
+            if line.startswith("RESULT:"):
+                parts = line.split(":")
                 if len(parts) >= 3:
                     problem_count = int(parts[2])
                 break
@@ -124,7 +131,7 @@ def check_etl_syntax(etl_file_path):
         return (False, -1)
 
 
-def generate_etl_parsed_rate_csv(output_csv='etl_parsed_rate.csv'):
+def generate_etl_parsed_rate_csv(output_csv="etl_parsed_rate.csv"):
     """Generate ETL parsed rate CSV.
 
     Uses Eclipse Epsilon ETL Parser to validate ETL syntax.
@@ -142,22 +149,28 @@ def generate_etl_parsed_rate_csv(output_csv='etl_parsed_rate.csv'):
     total = len(etl_files)
 
     for idx, etl in enumerate(etl_files, 1):
-        is_valid, problem_count = check_etl_syntax(etl['path'])
+        is_valid, problem_count = check_etl_syntax(etl["path"])
 
-        csv_data.append({
-            'LLM': etl['llm'],
-            'Strategy': etl['strategy'],
-            'File': etl['filename'],
-            'Parsed': is_valid,
-            'ProblemCount': problem_count
-        })
+        csv_data.append(
+            {
+                "LLM": etl["llm"],
+                "Strategy": etl["strategy"],
+                "File": etl["filename"],
+                "Parsed": is_valid,
+                "ProblemCount": problem_count,
+            }
+        )
 
         status = "OK" if is_valid else f"FAIL({problem_count})"
-        print(f"[{idx}/{total}] [{status}] {etl['llm']}/{etl['strategy']}/{etl['filename']}.etl")
+        print(
+            f"[{idx}/{total}] [{status}] {etl['llm']}/{etl['strategy']}/{etl['filename']}.etl"
+        )
 
     # Write CSV
-    with open(output_csv, 'w', newline='', encoding='utf-8') as f:
-        writer = csv.DictWriter(f, fieldnames=['LLM', 'Strategy', 'File', 'Parsed', 'ProblemCount'])
+    with open(output_csv, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(
+            f, fieldnames=["LLM", "Strategy", "File", "Parsed", "ProblemCount"]
+        )
         writer.writeheader()
         writer.writerows(csv_data)
 
@@ -170,14 +183,14 @@ def generate_etl_parsed_rate_csv(output_csv='etl_parsed_rate.csv'):
 def _etl_parse_stats(
     csv_data: Iterable[dict[str, object]],
 ) -> defaultdict[tuple[object, object], dict[str, int]]:
-    stats = defaultdict(lambda: {'total': 0, 'valid': 0, 'problems': 0})
+    stats = defaultdict(lambda: {"total": 0, "valid": 0, "problems": 0})
     for row in csv_data:
-        key = (row['LLM'], row['Strategy'])
-        stats[key]['total'] += 1
-        if row['Parsed']:
-            stats[key]['valid'] += 1
-        if row['ProblemCount'] > 0:
-            stats[key]['problems'] += row['ProblemCount']
+        key = (row["LLM"], row["Strategy"])
+        stats[key]["total"] += 1
+        if row["Parsed"]:
+            stats[key]["valid"] += 1
+        if row["ProblemCount"] > 0:
+            stats[key]["problems"] += row["ProblemCount"]
 
     return stats
 
@@ -195,18 +208,22 @@ def print_etl_parsed_rate_summary(
     print("-" * 85)
 
     for (llm, strategy), s in sorted(stats.items()):
-        rate = s['valid'] / s['total'] * 100 if s['total'] > 0 else 0
-        print(f"{llm:<20} {strategy:<25} {rate:>6.1f}% ({s['valid']}/{s['total']})      {s['problems']:>5}")
+        rate = s["valid"] / s["total"] * 100 if s["total"] > 0 else 0
+        print(
+            f"{llm:<20} {strategy:<25} {rate:>6.1f}% ({s['valid']}/{s['total']})      {s['problems']:>5}"
+        )
 
-    total_valid = sum(s['valid'] for s in stats.values())
-    total_files = sum(s['total'] for s in stats.values())
-    total_problems = sum(s['problems'] for s in stats.values())
+    total_valid = sum(s["valid"] for s in stats.values())
+    total_files = sum(s["total"] for s in stats.values())
+    total_problems = sum(s["problems"] for s in stats.values())
     overall = total_valid / total_files * 100 if total_files > 0 else 0
     print("-" * 85)
-    print(f"{'OVERALL':<46} {overall:>6.1f}% ({total_valid}/{total_files})      {total_problems:>5}")
+    print(
+        f"{'OVERALL':<46} {overall:>6.1f}% ({total_valid}/{total_files})      {total_problems:>5}"
+    )
 
 
-def generate_etl_chrf_csv(output_csv='etl_chrf_similarity.csv'):
+def generate_etl_chrf_csv(output_csv="etl_chrf_similarity.csv"):
     """Generate ETL CHRF similarity CSV.
 
     Compares LLM ETL with reference ETL in transformations/.
@@ -232,24 +249,26 @@ def generate_etl_chrf_csv(output_csv='etl_chrf_similarity.csv'):
     csv_data = []
 
     for etl in etl_files:
-        if etl['filename'] not in references:
+        if etl["filename"] not in references:
             print(f"Warning: No reference for {etl['filename']}.etl")
             continue
 
         try:
-            with open(etl['path'], 'r', encoding='utf-8') as f:
+            with open(etl["path"], "r", encoding="utf-8") as f:
                 generated = f.read()
-            with open(references[etl['filename']], 'r', encoding='utf-8') as f:
+            with open(references[etl["filename"]], "r", encoding="utf-8") as f:
                 reference = f.read()
 
             score = float(aggregate_chrf([[generated]], [[reference]])[0][0])
 
-            csv_data.append({
-                'LLM': etl['llm'],
-                'Strategy': etl['strategy'],
-                'File': etl['filename'],
-                'CHRF_Score': round(score, 4)
-            })
+            csv_data.append(
+                {
+                    "LLM": etl["llm"],
+                    "Strategy": etl["strategy"],
+                    "File": etl["filename"],
+                    "CHRF_Score": round(score, 4),
+                }
+            )
 
             print(f"{etl['llm']}/{etl['strategy']}/{etl['filename']}.etl: {score:.2f}")
 
@@ -261,8 +280,8 @@ def generate_etl_chrf_csv(output_csv='etl_chrf_similarity.csv'):
         return None
 
     # Write CSV
-    with open(output_csv, 'w', newline='', encoding='utf-8') as f:
-        writer = csv.DictWriter(f, fieldnames=['LLM', 'Strategy', 'File', 'CHRF_Score'])
+    with open(output_csv, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=["LLM", "Strategy", "File", "CHRF_Score"])
         writer.writeheader()
         writer.writerows(csv_data)
 
@@ -277,7 +296,7 @@ def print_etl_chrf_summary(csv_data):
     stats = defaultdict(list)
 
     for row in csv_data:
-        stats[(row['LLM'], row['Strategy'])].append(row['CHRF_Score'])
+        stats[(row["LLM"], row["Strategy"])].append(row["CHRF_Score"])
 
     print("\n" + "=" * 75)
     print("ETL CHRF SIMILARITY SUMMARY")
@@ -289,16 +308,22 @@ def print_etl_chrf_summary(csv_data):
     for (llm, strategy), scores in sorted(stats.items()):
         avg = sum(scores) / len(scores)
         all_scores.extend(scores)
-        print(f"{llm:<20} {strategy:<25} {avg:>8.2f}   {min(scores):>8.2f}   {max(scores):>8.2f}")
+        print(
+            f"{llm:<20} {strategy:<25} {avg:>8.2f}   {min(scores):>8.2f}   {max(scores):>8.2f}"
+        )
 
     if all_scores:
         print("-" * 75)
-        print(f"{'OVERALL':<46} {sum(all_scores)/len(all_scores):>8.2f}   {min(all_scores):>8.2f}   {max(all_scores):>8.2f}")
+        print(
+            f"{'OVERALL':<46} {sum(all_scores)/len(all_scores):>8.2f}   {min(all_scores):>8.2f}   {max(all_scores):>8.2f}"
+        )
 
 
-def generate_combined_csv(parsed_csv='etl_parsed_rate.csv',
-                          chrf_csv='etl_chrf_similarity.csv',
-                          output_csv='etl_parser_chrf_results.csv'):
+def generate_combined_csv(
+    parsed_csv="etl_parsed_rate.csv",
+    chrf_csv="etl_chrf_similarity.csv",
+    output_csv="etl_parser_chrf_results.csv",
+):
     """Merge parsed rate and CHRF into a single CSV.
 
     Output: LLM, Strategy, File, Parsed, ProblemCount, CHRF_Score
@@ -306,40 +331,52 @@ def generate_combined_csv(parsed_csv='etl_parsed_rate.csv',
     # Load parsed rate data
     parsed_data = {}
     if os.path.exists(parsed_csv):
-        with open(parsed_csv, 'r', encoding='utf-8') as f:
+        with open(parsed_csv, "r", encoding="utf-8") as f:
             for row in csv.DictReader(f):
-                key = (row['LLM'], row['Strategy'], row['File'])
+                key = (row["LLM"], row["Strategy"], row["File"])
                 parsed_data[key] = {
-                    'Parsed': row['Parsed'],
-                    'ProblemCount': row['ProblemCount']
+                    "Parsed": row["Parsed"],
+                    "ProblemCount": row["ProblemCount"],
                 }
 
     # Load CHRF data
     chrf_data = {}
     if os.path.exists(chrf_csv):
-        with open(chrf_csv, 'r', encoding='utf-8') as f:
+        with open(chrf_csv, "r", encoding="utf-8") as f:
             for row in csv.DictReader(f):
-                key = (row['LLM'], row['Strategy'], row['File'])
-                chrf_data[key] = row['CHRF_Score']
+                key = (row["LLM"], row["Strategy"], row["File"])
+                chrf_data[key] = row["CHRF_Score"]
 
     # Merge
     all_keys = sorted(set(parsed_data.keys()) | set(chrf_data.keys()))
     csv_rows = []
     for key in all_keys:
         llm, strategy, filename = key
-        parsed_info = parsed_data.get(key, {'Parsed': '', 'ProblemCount': ''})
-        chrf_score = chrf_data.get(key, '')
-        csv_rows.append({
-            'LLM': llm,
-            'Strategy': strategy,
-            'File': filename,
-            'Parsed': parsed_info['Parsed'],
-            'ProblemCount': parsed_info['ProblemCount'],
-            'CHRF_Score': chrf_score
-        })
+        parsed_info = parsed_data.get(key, {"Parsed": "", "ProblemCount": ""})
+        chrf_score = chrf_data.get(key, "")
+        csv_rows.append(
+            {
+                "LLM": llm,
+                "Strategy": strategy,
+                "File": filename,
+                "Parsed": parsed_info["Parsed"],
+                "ProblemCount": parsed_info["ProblemCount"],
+                "CHRF_Score": chrf_score,
+            }
+        )
 
-    with open(output_csv, 'w', newline='', encoding='utf-8') as f:
-        writer = csv.DictWriter(f, fieldnames=['LLM', 'Strategy', 'File', 'Parsed', 'ProblemCount', 'CHRF_Score'])
+    with open(output_csv, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(
+            f,
+            fieldnames=[
+                "LLM",
+                "Strategy",
+                "File",
+                "Parsed",
+                "ProblemCount",
+                "CHRF_Score",
+            ],
+        )
         writer.writeheader()
         writer.writerows(csv_rows)
 

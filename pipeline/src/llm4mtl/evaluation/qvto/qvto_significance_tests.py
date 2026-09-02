@@ -22,7 +22,10 @@ from scipy import stats
 # Ground truth LoC: count non-blank, non-comment lines from .qvto files
 # QVTo comment syntax: lines starting with '--'
 # ---------------------------------------------------------------------------
-GT_DIR = Path(r"C:\Users\10239\OneDrive\Desktop\QVT-O siginificanttest\QVT-O Test\qvto-tests\src\main\resources\transformations")
+GT_DIR = Path(
+    r"C:\Users\10239\OneDrive\Desktop\QVT-O siginificanttest\QVT-O Test\qvto-tests\src\main\resources\transformations"
+)
+
 
 def count_loc_qvto(file_path):
     """Count LOC excluding blank lines and '--' comment lines."""
@@ -33,6 +36,7 @@ def count_loc_qvto(file_path):
             if stripped and not stripped.startswith("--"):
                 loc += 1
     return loc
+
 
 FILE_LOC = {p.stem: count_loc_qvto(p) for p in GT_DIR.glob("*.qvto")}
 print("Ground truth LoC per file:")
@@ -47,22 +51,25 @@ df = pd.read_csv(
 )
 
 # Normalise column names to match ETL script conventions
-df = df.rename(columns={
-    "model":         "LLM",
-    "strategy":      "Strategy",
-    "file":          "File",
-    "problem_count": "ProblemCount",
-    "parse_success": "Parsed",
-    "chrF":          "CHRF_Score",
-})
+df = df.rename(
+    columns={
+        "model": "LLM",
+        "strategy": "Strategy",
+        "file": "File",
+        "problem_count": "ProblemCount",
+        "parse_success": "Parsed",
+        "chrF": "CHRF_Score",
+    }
+)
 
 # Strip .qvto extension from File
 df["File"] = df["File"].str.replace(r"\.qvto$", "", regex=True)
 
 # Normalise bool columns
 for col in ("Parsed", "test_pass"):
-    df[col] = df[col].map({True: 1, False: 0, "True": 1, "False": 0,
-                           "true": 1, "false": 0})
+    df[col] = df[col].map(
+        {True: 1, False: 0, "True": 1, "False": 0, "true": 1, "false": 0}
+    )
 
 # Combined pass@1
 df["pass1"] = ((df["Parsed"] == 1) & (df["test_pass"] == 1)).astype(int)
@@ -77,24 +84,25 @@ df["errors_per_LOC"] = df["ProblemCount"] / df["reference_LOC"]
 # are the Baseline condition.
 # ---------------------------------------------------------------------------
 STRATEGY_MAP = {
-    "only_prompt":          "Baseline",
+    "only_prompt": "Baseline",
     "only_prompt/zero_shot": "Baseline",
-    "few_shot":              "Few-shot",
-    "grammar":               "Grammar",
-    "few_shot_AND_grammar":  "FS + GR",
+    "few_shot": "Few-shot",
+    "grammar": "Grammar",
+    "few_shot_AND_grammar": "FS + GR",
 }
 LLM_MAP = {
-    "gpt-5":           "GPT",
-    "gemini-2-5-pro":  "Gemini",
+    "gpt-5": "GPT",
+    "gemini-2-5-pro": "Gemini",
     "claude-sonnet-4": "Claude",
 }
 df["Strategy"] = df["Strategy"].map(STRATEGY_MAP)
-df["LLM"]      = df["LLM"].map(LLM_MAP)
+df["LLM"] = df["LLM"].map(LLM_MAP)
 
 STRATEGIES = ["Few-shot", "Grammar", "FS + GR"]
-LLMS       = ["GPT", "Gemini", "Claude"]
-FILES      = sorted(df["File"].unique())
-ALPHA      = 0.05
+LLMS = ["GPT", "Gemini", "Claude"]
+FILES = sorted(df["File"].unique())
+ALPHA = 0.05
+
 
 # ---------------------------------------------------------------------------
 # Helper: get per-file array for (strategy, llm, metric)
@@ -102,6 +110,7 @@ ALPHA      = 0.05
 def get_vals(strategy, llm, metric):
     sub = df[(df["Strategy"] == strategy) & (df["LLM"] == llm)]
     return sub.set_index("File").reindex(FILES)[metric].values.astype(float)
+
 
 # ---------------------------------------------------------------------------
 # Cochran's Q test (binary_matrix: shape n_blocks x k_treatments)
@@ -112,18 +121,19 @@ def cochrans_q(binary_matrix):
     C = data.sum(axis=0)
     L = data.sum(axis=1)
     N = data.sum()
-    denom = k * N - np.sum(L ** 2)
+    denom = k * N - np.sum(L**2)
     if denom == 0:
         return np.nan, np.nan
-    Q = (k - 1) * (k * np.sum(C ** 2) - N ** 2) / denom
+    Q = (k - 1) * (k * np.sum(C**2) - N**2) / denom
     p = 1 - stats.chi2.cdf(Q, df=k - 1)
     return float(Q), float(p)
+
 
 # ---------------------------------------------------------------------------
 # McNemar's test (one-sided: treatment better than baseline)
 # ---------------------------------------------------------------------------
 def mcnemar_one_sided(base_bin, treat_bin):
-    base_bin  = np.asarray(base_bin,  dtype=int)
+    base_bin = np.asarray(base_bin, dtype=int)
     treat_bin = np.asarray(treat_bin, dtype=int)
     b = int(np.sum((base_bin == 0) & (treat_bin == 1)))
     c = int(np.sum((base_bin == 1) & (treat_bin == 0)))
@@ -131,6 +141,7 @@ def mcnemar_one_sided(base_bin, treat_bin):
         return np.nan
     p = stats.binomtest(b, b + c, 0.5, alternative="greater").pvalue
     return float(p)
+
 
 # ---------------------------------------------------------------------------
 # Wilcoxon signed-rank test (one-sided)
@@ -145,6 +156,7 @@ def wilcoxon_greater(base_vals, treat_vals):
     except ValueError:
         return np.nan
 
+
 def wilcoxon_less(base_vals, treat_vals):
     """Treatment significantly lower than baseline (lower is better)."""
     if np.all(treat_vals - base_vals == 0):
@@ -155,11 +167,14 @@ def wilcoxon_less(base_vals, treat_vals):
     except ValueError:
         return np.nan
 
+
 def fmt_p(p):
     return f"{p:.4f}" if (p is not None and not np.isnan(p)) else "  n/a"
 
+
 def fmt_stat(s):
     return f"{s:.4f}" if (s is not None and not np.isnan(s)) else "n/a"
+
 
 # ---------------------------------------------------------------------------
 # 1. STAR (*): each strategy vs Baseline, per LLM
@@ -170,10 +185,10 @@ print("=" * 65)
 
 # (metric, label, kind, higher_is_better)
 METRICS_STAR = [
-    ("CHRF_Score",     "ChrF",        "continuous", True),
-    ("errors_per_LOC", "Errors/LoC",  "continuous", False),
-    ("Parsed",         "Parsability", "binary",     True),
-    ("pass1",          "Pass@1",      "binary",     True),
+    ("CHRF_Score", "ChrF", "continuous", True),
+    ("errors_per_LOC", "Errors/LoC", "continuous", False),
+    ("Parsed", "Parsability", "binary", True),
+    ("pass1", "Pass@1", "binary", True),
 ]
 
 star_results = {}
@@ -187,11 +202,14 @@ for metric, label, kind, higher_better in METRICS_STAR:
         row = []
         for llm in LLMS:
             treat_vals = get_vals(strategy, llm, metric)
-            base_vals  = baseline_vals[llm]
+            base_vals = baseline_vals[llm]
 
             if kind == "continuous":
-                p = wilcoxon_greater(base_vals, treat_vals) if higher_better \
+                p = (
+                    wilcoxon_greater(base_vals, treat_vals)
+                    if higher_better
                     else wilcoxon_less(base_vals, treat_vals)
+                )
             else:
                 p = mcnemar_one_sided(base_vals, treat_vals)
 
@@ -209,10 +227,10 @@ print("UNDERLINE TESTS  --  LLMs differ within a strategy")
 print("=" * 65)
 
 METRICS_UL = [
-    ("CHRF_Score",     "ChrF",        "continuous"),
-    ("errors_per_LOC", "Errors/LoC",  "continuous"),
-    ("Parsed",         "Parsability", "binary"),
-    ("pass1",          "Pass@1",      "binary"),
+    ("CHRF_Score", "ChrF", "continuous"),
+    ("errors_per_LOC", "Errors/LoC", "continuous"),
+    ("Parsed", "Parsability", "binary"),
+    ("pass1", "Pass@1", "binary"),
 ]
 
 underline_results = {}
@@ -233,7 +251,9 @@ for metric, label, kind in METRICS_UL:
         sig = (p is not None) and not np.isnan(p) and (p < ALPHA)
         underline_results[(metric, strategy)] = (stat, p, sig)
         marker = " => UNDERLINE" if sig else ""
-        print(f"  {strategy:<12}  {test_name}: stat={fmt_stat(stat)}, p={fmt_p(p)}{marker}")
+        print(
+            f"  {strategy:<12}  {test_name}: stat={fmt_stat(stat)}, p={fmt_p(p)}{marker}"
+        )
 
 # ---------------------------------------------------------------------------
 # 3. Summary: QVTo column values with significance annotations
@@ -251,13 +271,13 @@ for metric, label, kind, _ in METRICS_STAR:
     for strategy in all_strategies:
         vals, markers = [], []
         for llm in LLMS:
-            v   = get_vals(strategy, llm, metric).mean()
+            v = get_vals(strategy, llm, metric).mean()
             sig = star_results.get((metric, strategy, llm), (None, False))[1]
             vals.append(v)
             markers.append("*" if sig else " ")
-        ul     = underline_results.get((metric, strategy), (None, None, False))[2]
+        ul = underline_results.get((metric, strategy), (None, None, False))[2]
         prefix = "[ul]" if ul else "    "
-        cells  = "  ".join(f"{v:.4f}{m}" for v, m in zip(vals, markers))
+        cells = "  ".join(f"{v:.4f}{m}" for v, m in zip(vals, markers))
         print(f"  {prefix} {strategy:<12}  {cells}")
 
 # ---------------------------------------------------------------------------
@@ -272,38 +292,46 @@ output_dir.mkdir(exist_ok=True)
 # --- 4a. Star test results ---
 star_rows = []
 for metric, label, kind, higher_better in METRICS_STAR:
-    test_type = "Wilcoxon (one-sided)" if kind == "continuous" else "McNemar (one-sided)"
+    test_type = (
+        "Wilcoxon (one-sided)" if kind == "continuous" else "McNemar (one-sided)"
+    )
     for strategy in STRATEGIES:
         for llm in LLMS:
             p, sig = star_results.get((metric, strategy, llm), (np.nan, False))
-            star_rows.append({
-                "Language":    "QVT-O",
-                "TestType":    "Star",
-                "StatTest":    test_type,
-                "Metric":      label,
-                "Strategy":    strategy,
-                "LLM":         llm,
-                "p_value":     round(p, 6) if not np.isnan(p) else "NaN",
-                "Significant": "Yes" if sig else "No",
-            })
+            star_rows.append(
+                {
+                    "Language": "QVT-O",
+                    "TestType": "Star",
+                    "StatTest": test_type,
+                    "Metric": label,
+                    "Strategy": strategy,
+                    "LLM": llm,
+                    "p_value": round(p, 6) if not np.isnan(p) else "NaN",
+                    "Significant": "Yes" if sig else "No",
+                }
+            )
 
 # --- 4b. Underline test results ---
 ul_rows = []
 for metric, label, kind in METRICS_UL:
     test_type = "Friedman" if kind == "continuous" else "Cochran's Q"
     for strategy in ["Baseline"] + STRATEGIES:
-        stat, p, sig = underline_results.get((metric, strategy), (np.nan, np.nan, False))
-        ul_rows.append({
-            "Language":    "QVT-O",
-            "TestType":    "Underline",
-            "StatTest":    test_type,
-            "Metric":      label,
-            "Strategy":    strategy,
-            "LLM":         "All",
-            "stat_value":  round(float(stat), 6) if not np.isnan(stat) else "NaN",
-            "p_value":     round(float(p), 6) if not np.isnan(p) else "NaN",
-            "Significant": "Yes" if sig else "No",
-        })
+        stat, p, sig = underline_results.get(
+            (metric, strategy), (np.nan, np.nan, False)
+        )
+        ul_rows.append(
+            {
+                "Language": "QVT-O",
+                "TestType": "Underline",
+                "StatTest": test_type,
+                "Metric": label,
+                "Strategy": strategy,
+                "LLM": "All",
+                "stat_value": round(float(stat), 6) if not np.isnan(stat) else "NaN",
+                "p_value": round(float(p), 6) if not np.isnan(p) else "NaN",
+                "Significant": "Yes" if sig else "No",
+            }
+        )
 
 # --- 4c. Summary values table ---
 summary_rows = []
@@ -311,20 +339,22 @@ for metric, label, kind, _ in METRICS_STAR:
     for strategy in ["Baseline"] + STRATEGIES:
         ul_sig = underline_results.get((metric, strategy), (None, None, False))[2]
         for llm in LLMS:
-            v      = np.nanmean(get_vals(strategy, llm, metric))
+            v = np.nanmean(get_vals(strategy, llm, metric))
             _, star_s = star_results.get((metric, strategy, llm), (None, False))
-            summary_rows.append({
-                "Language":  "QVT-O",
-                "Metric":    label,
-                "Strategy":  strategy,
-                "LLM":       llm,
-                "Mean":      round(v, 4),
-                "Star":      "Yes" if star_s else "No",
-                "Underline": "Yes" if ul_sig else "No",
-            })
+            summary_rows.append(
+                {
+                    "Language": "QVT-O",
+                    "Metric": label,
+                    "Strategy": strategy,
+                    "LLM": llm,
+                    "Mean": round(v, 4),
+                    "Star": "Yes" if star_s else "No",
+                    "Underline": "Yes" if ul_sig else "No",
+                }
+            )
 
-star_df    = pd.DataFrame(star_rows)
-ul_df      = pd.DataFrame(ul_rows)
+star_df = pd.DataFrame(star_rows)
+ul_df = pd.DataFrame(ul_rows)
 summary_df = pd.DataFrame(summary_rows)
 
 star_df.to_csv(output_dir / "qvto_star_tests.csv", index=False)
@@ -334,15 +364,17 @@ summary_df.to_csv(output_dir / "qvto_summary_with_sig.csv", index=False)
 # Unified significance_pvalues format
 pvalue_rows = []
 for r in star_rows:
-    pvalue_rows.append({
-        "LLM":         r["LLM"],
-        "metric":      r["Metric"],
-        "baseline":    "Baseline",
-        "strategy":    r["Strategy"],
-        "test":        r["StatTest"],
-        "p_value":     r["p_value"],
-        "significant": r["Significant"] == "Yes",
-    })
+    pvalue_rows.append(
+        {
+            "LLM": r["LLM"],
+            "metric": r["Metric"],
+            "baseline": "Baseline",
+            "strategy": r["Strategy"],
+            "test": r["StatTest"],
+            "p_value": r["p_value"],
+            "significant": r["Significant"] == "Yes",
+        }
+    )
 pd.DataFrame(pvalue_rows).to_csv(output_dir / "significance_pvalues.csv", index=False)
 
 print(f"\nCSV results saved to: {output_dir}")

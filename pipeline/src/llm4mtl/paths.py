@@ -252,6 +252,7 @@ def require_repository_relative(path: Path) -> str:
     """
     return Path(path).resolve().relative_to(REPO_ROOT).as_posix()
 
+
 # Migration map (legacy -> target) used by Stages 1-2 and by the self-check.
 # Kept as data so a stage can move a component and update one entry here.
 MIGRATION_MAP: dict[str, tuple[Path, Path]] = {
@@ -262,13 +263,25 @@ MIGRATION_MAP: dict[str, tuple[Path, Path]] = {
     "qvto/parser": (LEGACY.qvto_parser, TARGET.engine_parser("qvto")),
     "qvto/harness": (LEGACY.qvto_harness, TARGET.engine_harness("qvto")),
     "reactions/parser": (LEGACY.reactions_parser, TARGET.engine_parser("reactions")),
-    "reactions/parser-antlr": (LEGACY.reactions_parser_antlr, TARGET.engines / "reactions" / "parser-antlr"),
+    "reactions/parser-antlr": (
+        LEGACY.reactions_parser_antlr,
+        TARGET.engines / "reactions" / "parser-antlr",
+    ),
     "reactions/harness": (LEGACY.reactions_harness, TARGET.engine_harness("reactions")),
     "pipeline/test_generation": (LEGACY.test_generation, TARGET.package),
-    "pipeline/transformation_validation": (LEGACY.transformation_validation, TARGET.package / "transformation_execution"),
+    "pipeline/transformation_validation": (
+        LEGACY.transformation_validation,
+        TARGET.package / "transformation_execution",
+    ),
     "pipeline/experiment_runner": (LEGACY.experiment_runner, TARGET.package),
-    "pipeline/significant_test": (LEGACY.significant_test, TARGET.package / "evaluation"),
-    "n8n/transformations": (LEGACY.n8n_transformations, TARGET.workflows / "transformations"),
+    "pipeline/significant_test": (
+        LEGACY.significant_test,
+        TARGET.package / "evaluation",
+    ),
+    "n8n/transformations": (
+        LEGACY.n8n_transformations,
+        TARGET.workflows / "transformations",
+    ),
     "n8n/tests": (LEGACY.n8n_tests, TARGET.workflows / "tests"),
 }
 

@@ -12,4 +12,6 @@ def reference_transformation_path(references_root: Path, task: str) -> Path:
 
 
 def transformation_destination(etl_test_dir: Path, task: str) -> Path:
-    return etl_test_dir / "src" / "test" / "resources" / "transformations" / f"{task}.etl"
+    return (
+        etl_test_dir / "src" / "test" / "resources" / "transformations" / f"{task}.etl"
+    )

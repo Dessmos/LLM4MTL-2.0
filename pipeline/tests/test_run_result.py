@@ -43,6 +43,7 @@ TERMINAL = {
 
 
 class AggregateClassificationTests(unittest.TestCase):
+
     def test_the_aggregate_is_conservative_and_never_a_majority_vote(self) -> None:
         self.assertIsNone(aggregate_classification([]))
         self.assertEqual(
@@ -53,9 +54,7 @@ class AggregateClassificationTests(unittest.TestCase):
         # three-to-one is still both.
         self.assertEqual(
             "AMBIGUOUS",
-            aggregate_classification(
-                ["TRANSFORMATION_DEFECT"] * 3 + ["TEST_DEFECT"]
-            ),
+            aggregate_classification(["TRANSFORMATION_DEFECT"] * 3 + ["TEST_DEFECT"]),
         )
         self.assertEqual(
             "AMBIGUOUS",
@@ -64,6 +63,7 @@ class AggregateClassificationTests(unittest.TestCase):
 
 
 class RunResultServiceTests(unittest.TestCase):
+
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self._tmp.cleanup)
@@ -132,7 +132,9 @@ class RunResultServiceTests(unittest.TestCase):
         # many verdicts there were rather than implying three defects.
         self.assertEqual("TRANSFORMATION_DEFECT", result["diagnosis"])
         self.assertEqual(3, result["diagnosis_records"])
-        self.assertEqual(["TRANSFORMATION_DEFECT"] * 3, result["diagnosis_classifications"])
+        self.assertEqual(
+            ["TRANSFORMATION_DEFECT"] * 3, result["diagnosis_classifications"]
+        )
         self.assertEqual(
             "SEMANTIC_EXECUTION_FAILED", result["stages"]["execution"]["outcome_code"]
         )
@@ -141,13 +143,18 @@ class RunResultServiceTests(unittest.TestCase):
         stored = read_json(self.paths.root / "result.json")
         self.assertEqual(result, stored)
         self.assertIn(
-            "run_finished", [event["event"] for event in run_store.read_events(self.paths)]
+            "run_finished",
+            [event["event"] for event in run_store.read_events(self.paths)],
         )
 
     def test_a_stage_that_never_ran_is_not_run_rather_than_passing(self) -> None:
         response = self.client.post(
             "/runs/result-1/result",
-            json={**TERMINAL, "status": "incomplete", "terminal_state": "ALL_PIPELINE_STAGES_DISABLED"},
+            json={
+                **TERMINAL,
+                "status": "incomplete",
+                "terminal_state": "ALL_PIPELINE_STAGES_DISABLED",
+            },
         )
 
         result = response.json()
@@ -191,7 +198,11 @@ class RunResultServiceTests(unittest.TestCase):
 
         conflicting = self.client.post(
             "/runs/result-1/result",
-            json={**TERMINAL, "status": "completed", "terminal_state": "SEMANTIC_PASSED"},
+            json={
+                **TERMINAL,
+                "status": "completed",
+                "terminal_state": "SEMANTIC_PASSED",
+            },
         )
         self.assertEqual(409, conflicting.status_code)
         self.assertEqual(

@@ -25,22 +25,20 @@ def _load_script(name: str, path: Path) -> ModuleType:
 
 ETL_PARSER = _load_script(
     "legacy_etl_parser",
-    REPO_ROOT
-    / "pipeline/src/llm4mtl/evaluation/etl/ETL Parser/run_parser.py",
+    REPO_ROOT / "pipeline/src/llm4mtl/evaluation/etl/ETL Parser/run_parser.py",
 )
 ETL_TESTS = _load_script(
     "legacy_etl_tests",
-    REPO_ROOT
-    / "pipeline/src/llm4mtl/evaluation/etl/ETL Test/run_all_tests.py",
+    REPO_ROOT / "pipeline/src/llm4mtl/evaluation/etl/ETL Test/run_all_tests.py",
 )
 QVTO_TESTS = _load_script(
     "legacy_qvto_tests",
-    REPO_ROOT
-    / "pipeline/src/llm4mtl/evaluation/qvto/QVT-O Test/run_all_tests.py",
+    REPO_ROOT / "pipeline/src/llm4mtl/evaluation/qvto/QVT-O Test/run_all_tests.py",
 )
 
 
 class LegacyEtlParserSummaryTests(unittest.TestCase):
+
     def test_summary_preserves_grouping_sorting_and_totals(self) -> None:
         rows = [
             {
@@ -70,6 +68,7 @@ class LegacyEtlParserSummaryTests(unittest.TestCase):
 
 
 class LegacyMavenTestRunnerTests(unittest.TestCase):
+
     def test_failure_detail_preserves_marker_precedence(self) -> None:
         cases = (
             (ETL_TESTS, "ETL parse errors: invalid token"),

@@ -90,9 +90,7 @@ class ResolvedTaskInputs:
             "task": self.task,
             "contract_path": self.contract_path,
             "reference": self.reference.to_dict(),
-            "metamodels": [
-                metamodel.to_dict() for metamodel in self.metamodels
-            ],
+            "metamodels": [metamodel.to_dict() for metamodel in self.metamodels],
             "metamodel_text": self.metamodel_text,
             "metamodel_uris": list(self.metamodel_uris),
             "metamodel_uri_text": self.metamodel_uri_text,
@@ -138,11 +136,7 @@ def resolve_task_inputs(language: str, task: str) -> ResolvedTaskInputs:
     metamodel_paths, metamodel_uris = _contract_metamodels(contract)
 
     grammar_path = (
-        TARGET.prompt_assets
-        / "transformations"
-        / "grammar"
-        / language_key
-        / "EBNF.txt"
+        TARGET.prompt_assets / "transformations" / "grammar" / language_key / "EBNF.txt"
     )
     if not grammar_path.is_file():
         raise TaskInputResolutionError(

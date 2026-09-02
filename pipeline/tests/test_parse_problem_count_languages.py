@@ -37,7 +37,8 @@ class AtlProblemCountTests(unittest.TestCase):
                     return_value=root / "parser",
                 ),
                 patch(
-                    "llm4mtl.languages.atl.adapter.subprocess.run", return_value=completed
+                    "llm4mtl.languages.atl.adapter.subprocess.run",
+                    return_value=completed,
                 ),
             ):
                 result = AtlAdapter().parse_transformations(
@@ -91,7 +92,9 @@ class ReactionsProblemCountTests(unittest.TestCase):
             transformation.write_text("import x\n", encoding="utf-8")
             parser_dir = root / "parser"
             (parser_dir / "parser" / "target").mkdir(parents=True)
-            (parser_dir / "parser" / "target" / "p-all.jar").write_text("", encoding="utf-8")
+            (parser_dir / "parser" / "target" / "p-all.jar").write_text(
+                "", encoding="utf-8"
+            )
             build = SimpleNamespace(stdout="", stderr="", returncode=0)
             run = SimpleNamespace(stdout="", stderr=stderr, returncode=returncode)
 
@@ -111,7 +114,8 @@ class ReactionsProblemCountTests(unittest.TestCase):
                     return_value=parser_dir,
                 ),
                 patch(
-                    "llm4mtl.languages.reactions.adapter.subprocess.run", side_effect=fake_run
+                    "llm4mtl.languages.reactions.adapter.subprocess.run",
+                    side_effect=fake_run,
                 ),
             ):
                 result = ReactionsAdapter().parse_transformations(
@@ -145,7 +149,7 @@ class ReactionsProblemCountTests(unittest.TestCase):
 
     def test_a_run_that_reported_nothing_has_no_count(self) -> None:
         observation = self.observe(
-            "Exception in thread \"main\" java.lang.OutOfMemoryError\n",
+            'Exception in thread "main" java.lang.OutOfMemoryError\n',
             returncode=1,
             write_output=False,
         )
@@ -153,7 +157,9 @@ class ReactionsProblemCountTests(unittest.TestCase):
         self.assertIsNone(observation.problem_count)
         self.assertFalse(observation.parsed)
 
-    def test_the_count_is_reported_even_when_the_issues_are_known_false_positives(self) -> None:
+    def test_the_count_is_reported_even_when_the_issues_are_known_false_positives(
+        self,
+    ) -> None:
         # The frozen standalone parser reports unresolved linkage that Maven
         # compilation later accepts. The verdict forgives them; the measurement
         # still records what the parser counted.
@@ -180,7 +186,9 @@ class ReactionsProblemCountTests(unittest.TestCase):
                 ),
                 patch(
                     "llm4mtl.languages.reactions.adapter.subprocess.run",
-                    return_value=SimpleNamespace(stdout="", stderr="boom", returncode=1),
+                    return_value=SimpleNamespace(
+                        stdout="", stderr="boom", returncode=1
+                    ),
                 ),
             ):
                 result = ReactionsAdapter().parse_transformations(

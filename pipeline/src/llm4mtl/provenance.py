@@ -96,9 +96,13 @@ def input_hashes(language: str, task: str) -> dict[str, Any]:
 
     reference = next(default_references_root(config).glob(f"{task}.*"), None)
     contract_path = default_task_contracts_root(config) / f"{task}.json"
-    contract = load_task_contract(task, contracts_root=default_task_contracts_root(config), config=config)
+    contract = load_task_contract(
+        task, contracts_root=default_task_contracts_root(config), config=config
+    )
     if reference is None:
-        raise ProvenanceError(f"reference transformation not found for {language}/{task}")
+        raise ProvenanceError(
+            f"reference transformation not found for {language}/{task}"
+        )
     if not contract_path.is_file() or contract is None:
         raise ProvenanceError(f"task contract not found for {language}/{task}")
 
@@ -163,7 +167,9 @@ def is_working_tree_dirty() -> bool:
     """True when tracked or untracked, non-ignored files differ from the revision."""
     completed = _run_git(["status", "--porcelain", "--untracked-files=normal"])
     if completed is None or completed.returncode != 0:
-        raise ProvenanceError(f"cannot determine the git working-tree state of {REPO_ROOT}")
+        raise ProvenanceError(
+            f"cannot determine the git working-tree state of {REPO_ROOT}"
+        )
     return bool(completed.stdout.strip())
 
 

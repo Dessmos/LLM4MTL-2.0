@@ -54,7 +54,9 @@ def enforce_contract(
 
         model_to_contract: dict[str, ModelContract] = {}
         for model in models:
-            matched = _match_model(contract, model, asserted_types, violations, test_index)
+            matched = _match_model(
+                contract, model, asserted_types, violations, test_index
+            )
             if matched is None:
                 continue
             model_to_contract[str(model.get("name"))] = matched
@@ -195,9 +197,7 @@ def _runtime_name_match(
     return None
 
 
-def _uri_matches(
-    candidates: list[ModelContract], llm_uri: str
-) -> list[ModelContract]:
+def _uri_matches(candidates: list[ModelContract], llm_uri: str) -> list[ModelContract]:
     return [
         candidate
         for candidate in candidates
@@ -234,7 +234,9 @@ def _apply_binding(
         model["metamodelNsPrefix"] = contract_model.metamodel_ns_prefix
         model["metamodelAlias"] = contract_model.metamodel_alias
         if model.get("path"):
-            _rewrite_model_namespace(model, old_uri, contract_model.metamodel_uri, files)
+            _rewrite_model_namespace(
+                model, old_uri, contract_model.metamodel_uri, files
+            )
     else:
         model.pop("metamodelUri", None)
 
@@ -278,7 +280,9 @@ def _replace_namespace_uri(content: str, old_uri: str, new_uri: str) -> str:
 
     # Fallback: if there is exactly one non-standard namespace, rewrite it.
     declarations = re.findall(r'xmlns:([\w.-]+)="([^"]*)"', content)
-    custom = [(prefix, uri) for prefix, uri in declarations if uri not in STANDARD_NS_URIS]
+    custom = [
+        (prefix, uri) for prefix, uri in declarations if uri not in STANDARD_NS_URIS
+    ]
     if len(custom) == 1:
         prefix, uri = custom[0]
         return content.replace(

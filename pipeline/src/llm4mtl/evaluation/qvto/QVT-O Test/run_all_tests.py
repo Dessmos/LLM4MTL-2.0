@@ -23,7 +23,9 @@ sys.stderr.reconfigure(line_buffering=True)
 PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
 TRANSFORM_DIR = os.path.join(PROJECT_DIR, "transformation")
 QVTO_TESTS_DIR = os.path.join(PROJECT_DIR, "qvto-tests")
-QVTO_SRC_DIR = os.path.join(QVTO_TESTS_DIR, "src", "main", "resources", "transformations")
+QVTO_SRC_DIR = os.path.join(
+    QVTO_TESTS_DIR, "src", "main", "resources", "transformations"
+)
 QVTO_TARGET_DIR = os.path.join(QVTO_TESTS_DIR, "target", "classes", "transformations")
 INPUT_CSV = os.path.join(PROJECT_DIR, "benchmark_results_detailed.csv")
 OUTPUT_CSV = os.path.join(PROJECT_DIR, "qvto_test_results.csv")
@@ -31,16 +33,16 @@ SUMMARY_CSV = os.path.join(PROJECT_DIR, "qvto_pass_rate_summary.csv")
 
 # Mapping from QVTO file base name to JUnit test class (fully qualified)
 FILE_TO_TEST = {
-    "Constructors":              "org.eclipse.qvto.tests.ConstructorsTest",
-    "MappingBody":               "org.eclipse.qvto.tests.MappingBodyTest",
+    "Constructors": "org.eclipse.qvto.tests.ConstructorsTest",
+    "MappingBody": "org.eclipse.qvto.tests.MappingBodyTest",
     "MappingExtensionDisjuncts": "org.eclipse.qvto.tests.MappingExtensionDisjunctsTest",
-    "MappingExtensionInherits":  "org.eclipse.qvto.tests.MappingExtensionInheritsTest",
-    "MappingExtensionMerges":    "org.eclipse.qvto.tests.MappingExtensionMergesTest",
-    "Mappings":                  "org.eclipse.qvto.tests.MappingsTest",
-    "MappingsWhenClause":        "org.eclipse.qvto.tests.MappingsWhenClauseTest",
-    "ModelExtents":              "org.eclipse.qvto.tests.ModelExtentsTest",
-    "OverridingMappings":        "org.eclipse.qvto.tests.OverridingMappingsTest",
-    "ResolveExpressions":        "org.eclipse.qvto.tests.ResolveExpressionsTest",
+    "MappingExtensionInherits": "org.eclipse.qvto.tests.MappingExtensionInheritsTest",
+    "MappingExtensionMerges": "org.eclipse.qvto.tests.MappingExtensionMergesTest",
+    "Mappings": "org.eclipse.qvto.tests.MappingsTest",
+    "MappingsWhenClause": "org.eclipse.qvto.tests.MappingsWhenClauseTest",
+    "ModelExtents": "org.eclipse.qvto.tests.ModelExtentsTest",
+    "OverridingMappings": "org.eclipse.qvto.tests.OverridingMappingsTest",
+    "ResolveExpressions": "org.eclipse.qvto.tests.ResolveExpressionsTest",
 }
 
 
@@ -51,10 +53,14 @@ def _error_detail(output: str) -> str:
         if "Errors:" in line_stripped or "Failures:" in line_stripped:
             if line_stripped not in ("Errors:", "Failures:"):
                 error_detail = line_stripped
-        elif ("expected:" in line_stripped or "Expected" in line_stripped
-              or "NotFound" in line_stripped or "RuntimeException" in line_stripped
-              or "Transformation failed" in line_stripped
-              or "AssertionError" in line_stripped):
+        elif (
+            "expected:" in line_stripped
+            or "Expected" in line_stripped
+            or "NotFound" in line_stripped
+            or "RuntimeException" in line_stripped
+            or "Transformation failed" in line_stripped
+            or "AssertionError" in line_stripped
+        ):
             return line_stripped
 
     return error_detail
@@ -133,7 +139,9 @@ def write_summary_csv(results):
             s = stats[(model, strategy)]
             failed = s["total"] - s["passed"]
             rate = s["passed"] / s["total"] * 100 if s["total"] > 0 else 0.0
-            writer.writerow([model, strategy, s["total"], s["passed"], failed, f"{rate:.1f}%"])
+            writer.writerow(
+                [model, strategy, s["total"], s["passed"], failed, f"{rate:.1f}%"]
+            )
 
     print(f"\nPass rate summary written to: {SUMMARY_CSV}")
 
@@ -178,10 +186,12 @@ def main():
     for i, row in enumerate(rows):
         model = row["model"]
         strategy = row["strategy"]
-        file_name = row["file"]            # e.g. "Constructors.qvto"
+        file_name = row["file"]  # e.g. "Constructors.qvto"
         parse_success = row["parse_success"].strip().lower() == "true"
 
-        print(f"[{i+1}/{total}] {model} | {strategy} | {file_name} | parse_success={parse_success}")
+        print(
+            f"[{i+1}/{total}] {model} | {strategy} | {file_name} | parse_success={parse_success}"
+        )
 
         test_pass = evaluate_row(row)
 

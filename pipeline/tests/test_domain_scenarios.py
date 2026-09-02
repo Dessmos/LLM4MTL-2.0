@@ -55,14 +55,19 @@ def inserted_daughter_scenario() -> SemanticScenario:
         changes=(
             ChangeOperation(
                 kind=ChangeKind.ADD_TO_COLLECTION,
-                target=ElementRef(slot="families", type_name="Family", where={"lastName": "Smith"}),
+                target=ElementRef(
+                    slot="families", type_name="Family", where={"lastName": "Smith"}
+                ),
                 feature="daughters",
                 value=ElementSpec(type_name="Member", features={"firstName": "Anna"}),
             ),
         ),
         expectations=(
             Expectation(
-                kind="count", slot="persons", type_name="Female", payload={"expected": 1}
+                kind="count",
+                slot="persons",
+                type_name="Female",
+                payload={"expected": 1},
             ),
             Expectation(
                 kind="feature_values",
@@ -81,22 +86,30 @@ def tree2graph_scenario() -> SemanticScenario:
         kind=ScenarioKind.BATCH_TRANSFORMATION,
         slots=(
             ModelSlot(
-                name="source", role=ModelRole.INPUT, metamodel="Tree", artifact="models/in.model"
+                name="source",
+                role=ModelRole.INPUT,
+                metamodel="Tree",
+                artifact="models/in.model",
             ),
             ModelSlot(name="target", role=ModelRole.OUTPUT, metamodel="Graph"),
         ),
         expectations=(
-            Expectation(kind="count", slot="target", type_name="Node", payload={"expected": 3}),
+            Expectation(
+                kind="count", slot="target", type_name="Node", payload={"expected": 3}
+            ),
         ),
     )
 
 
 class ChangePropagationTests(unittest.TestCase):
+
     def test_a_real_reactions_scenario_is_expressible(self) -> None:
         scenario = inserted_daughter_scenario()
 
         self.assertEqual(ScenarioKind.CHANGE_PROPAGATION, scenario.kind)
-        self.assertEqual(("families", "persons"), tuple(slot.name for slot in scenario.slots))
+        self.assertEqual(
+            ("families", "persons"), tuple(slot.name for slot in scenario.slots)
+        )
         self.assertEqual(1, len(scenario.changes))
         self.assertEqual("daughters", scenario.changes[0].feature)
 
@@ -114,8 +127,12 @@ class ChangePropagationTests(unittest.TestCase):
             SemanticScenario(
                 name="noChange",
                 kind=ScenarioKind.CHANGE_PROPAGATION,
-                slots=(ModelSlot("families", ModelRole.INOUT, FAMILIES, "models/f.xmi"),),
-                expectations=(Expectation("count", "families", "Family", {"expected": 1}),),
+                slots=(
+                    ModelSlot("families", ModelRole.INOUT, FAMILIES, "models/f.xmi"),
+                ),
+                expectations=(
+                    Expectation("count", "families", "Family", {"expected": 1}),
+                ),
             )
 
     def test_changes_are_a_closed_vocabulary_not_code(self) -> None:
@@ -128,6 +145,7 @@ class ChangePropagationTests(unittest.TestCase):
 
 
 class BatchTransformationTests(unittest.TestCase):
+
     def test_a_batch_scenario_is_expressible(self) -> None:
         scenario = tree2graph_scenario()
 
@@ -140,7 +158,9 @@ class BatchTransformationTests(unittest.TestCase):
             SemanticScenario(
                 name="batchWithChange",
                 kind=ScenarioKind.BATCH_TRANSFORMATION,
-                slots=(ModelSlot("source", ModelRole.INPUT, "Tree", "models/in.model"),),
+                slots=(
+                    ModelSlot("source", ModelRole.INPUT, "Tree", "models/in.model"),
+                ),
                 expectations=(Expectation("count", "source", "Tree", {"expected": 1}),),
                 changes=(
                     ChangeOperation(
@@ -156,13 +176,18 @@ class BatchTransformationTests(unittest.TestCase):
 
 
 class ScenarioIntegrityTests(unittest.TestCase):
+
     def test_expectations_must_name_a_declared_slot(self) -> None:
         with self.assertRaises(ValueError):
             SemanticScenario(
                 name="strayExpectation",
                 kind=ScenarioKind.BATCH_TRANSFORMATION,
-                slots=(ModelSlot("source", ModelRole.INPUT, "Tree", "models/in.model"),),
-                expectations=(Expectation("count", "elsewhere", "Node", {"expected": 1}),),
+                slots=(
+                    ModelSlot("source", ModelRole.INPUT, "Tree", "models/in.model"),
+                ),
+                expectations=(
+                    Expectation("count", "elsewhere", "Node", {"expected": 1}),
+                ),
             )
 
     def test_both_kinds_live_in_one_suite(self) -> None:
@@ -175,7 +200,9 @@ class ScenarioIntegrityTests(unittest.TestCase):
         self.assertEqual(1, len(suite.scenarios))
 
         with self.assertRaises(ValueError):
-            SemanticSuite(suite_id="empty", language="etl", task="Tree2Graph", scenarios=())
+            SemanticSuite(
+                suite_id="empty", language="etl", task="Tree2Graph", scenarios=()
+            )
 
 
 if __name__ == "__main__":

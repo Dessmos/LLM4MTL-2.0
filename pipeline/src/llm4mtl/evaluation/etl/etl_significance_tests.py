@@ -25,16 +25,28 @@ ETL_ROOT = Path(r"C:\Users\10239\OneDrive\Desktop\ETL siginificant test\ETL Test
 
 # Manual mapping: File name (as in CSV) -> path to ground truth .etl file
 FILE_TO_ETL = {
-    "base":             ETL_ROOT / "flowchart2html" / "scripts" / "base" / "base.etl",
-    "equivalent":       ETL_ROOT / "flowchart2html" / "scripts" / "equivalent" / "equivalent.etl",
-    "greedy":           ETL_ROOT / "flowchart2html" / "scripts" / "greedy" / "greedy.etl",
-    "inheritance":      ETL_ROOT / "flowchart2html" / "scripts" / "inheritance" / "inheritance.etl",
-    "lazy":             ETL_ROOT / "flowchart2html" / "scripts" / "lazy" / "lazy.etl",
-    "multiple_targets": ETL_ROOT / "flowchart2html" / "scripts" / "multiple_targets" / "multiple_targets.etl",
-    "primary":          ETL_ROOT / "flowchart2html" / "scripts" / "primary" / "primary.etl",
-    "OO2DB":            ETL_ROOT / "OO2DB" / "OO2DB.etl",
-    "rss2atom":         ETL_ROOT / "RSS2ATOM" / "rss2atom.etl",
-    "Tree2Graph":       ETL_ROOT / "Tree2Graph" / "Tree2Graph.etl",
+    "base": ETL_ROOT / "flowchart2html" / "scripts" / "base" / "base.etl",
+    "equivalent": ETL_ROOT
+    / "flowchart2html"
+    / "scripts"
+    / "equivalent"
+    / "equivalent.etl",
+    "greedy": ETL_ROOT / "flowchart2html" / "scripts" / "greedy" / "greedy.etl",
+    "inheritance": ETL_ROOT
+    / "flowchart2html"
+    / "scripts"
+    / "inheritance"
+    / "inheritance.etl",
+    "lazy": ETL_ROOT / "flowchart2html" / "scripts" / "lazy" / "lazy.etl",
+    "multiple_targets": ETL_ROOT
+    / "flowchart2html"
+    / "scripts"
+    / "multiple_targets"
+    / "multiple_targets.etl",
+    "primary": ETL_ROOT / "flowchart2html" / "scripts" / "primary" / "primary.etl",
+    "OO2DB": ETL_ROOT / "OO2DB" / "OO2DB.etl",
+    "rss2atom": ETL_ROOT / "RSS2ATOM" / "rss2atom.etl",
+    "Tree2Graph": ETL_ROOT / "Tree2Graph" / "Tree2Graph.etl",
 }
 
 
@@ -63,8 +75,9 @@ df = pd.read_csv(
 
 # Normalise bool columns
 for col in ("Parsed", "test_pass"):
-    df[col] = df[col].map({True: 1, False: 0, "True": 1, "False": 0,
-                           "true": 1, "false": 0})
+    df[col] = df[col].map(
+        {True: 1, False: 0, "True": 1, "False": 0, "true": 1, "false": 0}
+    )
 
 # Combined pass@1
 df["pass1"] = ((df["Parsed"] == 1) & (df["test_pass"] == 1)).astype(int)
@@ -74,23 +87,24 @@ df["reference_LOC"] = df["File"].map(FILE_LOC)
 df["errors_per_LOC"] = df["ProblemCount"] / df["reference_LOC"]
 
 STRATEGY_MAP = {
-    "only_prompt":           "Baseline",
-    "few_shot":              "Few-shot",
-    "grammar":               "Grammar",
+    "only_prompt": "Baseline",
+    "few_shot": "Few-shot",
+    "grammar": "Grammar",
     "few_shots_AND_grammar": "FS + GR",
 }
 LLM_MAP = {
-    "gpt-5":           "GPT",
-    "gemini-2-5-pro":  "Gemini",
+    "gpt-5": "GPT",
+    "gemini-2-5-pro": "Gemini",
     "claude-sonnet-4": "Claude",
 }
 df["Strategy"] = df["Strategy"].map(STRATEGY_MAP)
-df["LLM"]      = df["LLM"].map(LLM_MAP)
+df["LLM"] = df["LLM"].map(LLM_MAP)
 
 STRATEGIES = ["Few-shot", "Grammar", "FS + GR"]
-LLMS       = ["GPT", "Gemini", "Claude"]
-FILES      = sorted(df["File"].unique())
-ALPHA      = 0.05
+LLMS = ["GPT", "Gemini", "Claude"]
+FILES = sorted(df["File"].unique())
+ALPHA = 0.05
+
 
 # ---------------------------------------------------------------------------
 # Helper: get per-file array for (strategy, llm, metric)
@@ -109,10 +123,10 @@ def cochrans_q(binary_matrix):
     C = data.sum(axis=0)
     L = data.sum(axis=1)
     N = data.sum()
-    denom = k * N - np.sum(L ** 2)
+    denom = k * N - np.sum(L**2)
     if denom == 0:
         return np.nan, np.nan
-    Q = (k - 1) * (k * np.sum(C ** 2) - N ** 2) / denom
+    Q = (k - 1) * (k * np.sum(C**2) - N**2) / denom
     p = 1 - stats.chi2.cdf(Q, df=k - 1)
     return float(Q), float(p)
 
@@ -121,7 +135,7 @@ def cochrans_q(binary_matrix):
 # McNemar's test (one-sided: treatment better than baseline)
 # ---------------------------------------------------------------------------
 def mcnemar_one_sided(base_bin, treat_bin):
-    base_bin  = np.asarray(base_bin,  dtype=int)
+    base_bin = np.asarray(base_bin, dtype=int)
     treat_bin = np.asarray(treat_bin, dtype=int)
     b = int(np.sum((base_bin == 0) & (treat_bin == 1)))
     c = int(np.sum((base_bin == 1) & (treat_bin == 0)))
@@ -173,10 +187,10 @@ print("=" * 65)
 
 # (metric, label, kind, higher_is_better)
 METRICS_STAR = [
-    ("CHRF_Score",     "ChrF",        "continuous", True),
-    ("errors_per_LOC", "Errors/LoC",  "continuous", False),
-    ("Parsed",         "Parsability", "binary",     True),
-    ("pass1",          "Pass@1",      "binary",     True),
+    ("CHRF_Score", "ChrF", "continuous", True),
+    ("errors_per_LOC", "Errors/LoC", "continuous", False),
+    ("Parsed", "Parsability", "binary", True),
+    ("pass1", "Pass@1", "binary", True),
 ]
 
 star_results = {}
@@ -190,11 +204,14 @@ for metric, label, kind, higher_better in METRICS_STAR:
         row = []
         for llm in LLMS:
             treat_vals = get_vals(strategy, llm, metric)
-            base_vals  = baseline_vals[llm]
+            base_vals = baseline_vals[llm]
 
             if kind == "continuous":
-                p = wilcoxon_greater(base_vals, treat_vals) if higher_better \
+                p = (
+                    wilcoxon_greater(base_vals, treat_vals)
+                    if higher_better
                     else wilcoxon_less(base_vals, treat_vals)
+                )
             else:
                 p = mcnemar_one_sided(base_vals, treat_vals)
 
@@ -213,10 +230,10 @@ print("UNDERLINE TESTS  --  LLMs differ within a strategy")
 print("=" * 65)
 
 METRICS_UL = [
-    ("CHRF_Score",     "ChrF",        "continuous"),
-    ("errors_per_LOC", "Errors/LoC",  "continuous"),
-    ("Parsed",         "Parsability", "binary"),
-    ("pass1",          "Pass@1",      "binary"),
+    ("CHRF_Score", "ChrF", "continuous"),
+    ("errors_per_LOC", "Errors/LoC", "continuous"),
+    ("Parsed", "Parsability", "binary"),
+    ("pass1", "Pass@1", "binary"),
 ]
 
 underline_results = {}
@@ -237,7 +254,9 @@ for metric, label, kind in METRICS_UL:
         sig = (p is not None) and not np.isnan(p) and (p < ALPHA)
         underline_results[(metric, strategy)] = (stat, p, sig)
         marker = " => UNDERLINE" if sig else ""
-        print(f"  {strategy:<12}  {test_name}: stat={fmt_stat(stat)}, p={fmt_p(p)}{marker}")
+        print(
+            f"  {strategy:<12}  {test_name}: stat={fmt_stat(stat)}, p={fmt_p(p)}{marker}"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -256,14 +275,14 @@ for metric, label, kind, _ in METRICS_STAR:
     for strategy in all_strategies:
         vals, markers = [], []
         for llm in LLMS:
-            v   = get_vals(strategy, llm, metric)
+            v = get_vals(strategy, llm, metric)
             v_mean = np.nanmean(v)
             sig = star_results.get((metric, strategy, llm), (None, False))[1]
             vals.append(v_mean)
             markers.append("*" if sig else " ")
-        ul     = underline_results.get((metric, strategy), (None, None, False))[2]
+        ul = underline_results.get((metric, strategy), (None, None, False))[2]
         prefix = "[ul]" if ul else "    "
-        cells  = "  ".join(f"{v:.4f}{m}" for v, m in zip(vals, markers))
+        cells = "  ".join(f"{v:.4f}{m}" for v, m in zip(vals, markers))
         print(f"  {prefix} {strategy:<12}  {cells}")
 
 
@@ -276,38 +295,46 @@ output_dir.mkdir(exist_ok=True)
 # --- 4a. Star test results (strategy vs Baseline, per LLM) ---
 star_rows = []
 for metric, label, kind, higher_better in METRICS_STAR:
-    test_type = "Wilcoxon (one-sided)" if kind == "continuous" else "McNemar (one-sided)"
+    test_type = (
+        "Wilcoxon (one-sided)" if kind == "continuous" else "McNemar (one-sided)"
+    )
     for strategy in STRATEGIES:
         for llm in LLMS:
             p, sig = star_results.get((metric, strategy, llm), (np.nan, False))
-            star_rows.append({
-                "Language":   "ETL",
-                "TestType":   "Star",
-                "StatTest":   test_type,
-                "Metric":     label,
-                "Strategy":   strategy,
-                "LLM":        llm,
-                "p_value":    round(p, 6) if not np.isnan(p) else "NaN",
-                "Significant": "Yes" if sig else "No",
-            })
+            star_rows.append(
+                {
+                    "Language": "ETL",
+                    "TestType": "Star",
+                    "StatTest": test_type,
+                    "Metric": label,
+                    "Strategy": strategy,
+                    "LLM": llm,
+                    "p_value": round(p, 6) if not np.isnan(p) else "NaN",
+                    "Significant": "Yes" if sig else "No",
+                }
+            )
 
 # --- 4b. Underline test results (across LLMs within strategy) ---
 ul_rows = []
 for metric, label, kind in METRICS_UL:
     test_type = "Friedman" if kind == "continuous" else "Cochran's Q"
     for strategy in ["Baseline"] + STRATEGIES:
-        stat, p, sig = underline_results.get((metric, strategy), (np.nan, np.nan, False))
-        ul_rows.append({
-            "Language":   "ETL",
-            "TestType":   "Underline",
-            "StatTest":   test_type,
-            "Metric":     label,
-            "Strategy":   strategy,
-            "LLM":        "All",
-            "stat_value": round(stat, 6) if not np.isnan(stat) else "NaN",
-            "p_value":    round(p, 6) if not np.isnan(p) else "NaN",
-            "Significant": "Yes" if sig else "No",
-        })
+        stat, p, sig = underline_results.get(
+            (metric, strategy), (np.nan, np.nan, False)
+        )
+        ul_rows.append(
+            {
+                "Language": "ETL",
+                "TestType": "Underline",
+                "StatTest": test_type,
+                "Metric": label,
+                "Strategy": strategy,
+                "LLM": "All",
+                "stat_value": round(stat, 6) if not np.isnan(stat) else "NaN",
+                "p_value": round(p, 6) if not np.isnan(p) else "NaN",
+                "Significant": "Yes" if sig else "No",
+            }
+        )
 
 # --- 4c. Summary values table ---
 summary_rows = []
@@ -317,23 +344,26 @@ for metric, label, kind, _ in METRICS_STAR:
         for llm in LLMS:
             v = np.nanmean(get_vals(strategy, llm, metric))
             star_sig = star_results.get((metric, strategy, llm), (None, False))[1]
-            summary_rows.append({
-                "Language":    "ETL",
-                "Metric":      label,
-                "Strategy":    strategy,
-                "LLM":         llm,
-                "Mean":        round(v, 4),
-                "Star":        "Yes" if star_sig else "No",
-                "Underline":   "Yes" if ul_sig else "No",
-            })
+            summary_rows.append(
+                {
+                    "Language": "ETL",
+                    "Metric": label,
+                    "Strategy": strategy,
+                    "LLM": llm,
+                    "Mean": round(v, 4),
+                    "Star": "Yes" if star_sig else "No",
+                    "Underline": "Yes" if ul_sig else "No",
+                }
+            )
 
 # Save
-star_df    = pd.DataFrame(star_rows)
-ul_df      = pd.DataFrame(ul_rows)
+star_df = pd.DataFrame(star_rows)
+ul_df = pd.DataFrame(ul_rows)
 summary_df = pd.DataFrame(summary_rows)
 
-all_results = pd.concat([star_df, ul_df.reindex(columns=star_df.columns, fill_value="")],
-                        ignore_index=True)
+all_results = pd.concat(
+    [star_df, ul_df.reindex(columns=star_df.columns, fill_value="")], ignore_index=True
+)
 
 star_df.to_csv(output_dir / "etl_star_tests.csv", index=False)
 ul_df.to_csv(output_dir / "etl_underline_tests.csv", index=False)
@@ -345,16 +375,21 @@ for metric, label, kind, higher_better in METRICS_STAR:
     test_type = "Wilcoxon" if kind == "continuous" else "McNemar"
     for strategy in STRATEGIES:
         for llm in LLMS:
-            p, sig = star_results.get((metric, label, llm), star_results.get((metric, strategy, llm), (np.nan, False)))
-            pvalue_rows.append({
-                "LLM":         llm,
-                "metric":      metric,
-                "baseline":    "Baseline (only_prompt)",
-                "strategy":    strategy,
-                "test":        test_type,
-                "p_value":     round(p, 6) if not np.isnan(p) else "NaN",
-                "significant": sig,
-            })
+            p, sig = star_results.get(
+                (metric, label, llm),
+                star_results.get((metric, strategy, llm), (np.nan, False)),
+            )
+            pvalue_rows.append(
+                {
+                    "LLM": llm,
+                    "metric": metric,
+                    "baseline": "Baseline (only_prompt)",
+                    "strategy": strategy,
+                    "test": test_type,
+                    "p_value": round(p, 6) if not np.isnan(p) else "NaN",
+                    "significant": sig,
+                }
+            )
 
 pd.DataFrame(pvalue_rows).to_csv(output_dir / "significance_pvalues.csv", index=False)
 

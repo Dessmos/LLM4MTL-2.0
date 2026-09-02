@@ -41,8 +41,11 @@ SPEC = {
 
 
 class SpecToScenarioTests(unittest.TestCase):
+
     def test_a_generated_etl_suite_becomes_a_batch_scenario(self) -> None:
-        suite = suite_from_spec(SPEC, suite_id="suite_001", language="etl", task="SmokeTask")
+        suite = suite_from_spec(
+            SPEC, suite_id="suite_001", language="etl", task="SmokeTask"
+        )
 
         self.assertEqual(1, len(suite.scenarios))
         scenario = suite.scenarios[0]
@@ -67,10 +70,13 @@ class SpecToScenarioTests(unittest.TestCase):
         spec["tests"][0]["assertions"][0]["kind"] = "somethingUnmodelled"
 
         with self.assertRaises(ScenarioMappingError):
-            suite_from_spec(spec, suite_id="suite_001", language="etl", task="SmokeTask")
+            suite_from_spec(
+                spec, suite_id="suite_001", language="etl", task="SmokeTask"
+            )
 
 
 class ProductionGateTests(unittest.TestCase):
+
     def test_extraction_refuses_a_suite_the_contract_cannot_express(self) -> None:
         # The contract is load-bearing: a suite that cannot be expressed never
         # becomes an executable artifact, whatever the ETL path would accept.

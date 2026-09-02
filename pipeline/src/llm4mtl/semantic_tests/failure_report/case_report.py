@@ -93,9 +93,7 @@ def build_failure_report(request: ReportRequest) -> dict[str, Any]:
         "generated_test": {
             "sha256": directory_sha256(suite_dir),
             "path": _repository_path(suite_dir),
-            "renderer_version": manifest.get("provenance", {}).get(
-                "renderer_version"
-            ),
+            "renderer_version": manifest.get("provenance", {}).get("renderer_version"),
         },
     }
 

@@ -117,9 +117,7 @@ def _change_value(
         return ElementSpec(
             type_name=str(raw["type"]),
             features=(
-                raw.get("features")
-                if isinstance(raw.get("features"), dict)
-                else {}
+                raw.get("features") if isinstance(raw.get("features"), dict) else {}
             ),
         )
     raise ValueError("a structured change value must describe an element or reference")

@@ -35,10 +35,14 @@ ASSERTION_FAILURE = CommandResult(
     stderr="",
 )
 COMPILE_FAILURE = CommandResult(
-    exit_code=1, stdout="[ERROR] COMPILATION ERROR :\n[ERROR] cannot find symbol", stderr=""
+    exit_code=1,
+    stdout="[ERROR] COMPILATION ERROR :\n[ERROR] cannot find symbol",
+    stderr="",
 )
 ALL_PASSED = CommandResult(
-    exit_code=0, stdout="[INFO] Tests run: 2, Failures: 0, Errors: 0\n[INFO] BUILD SUCCESS", stderr=""
+    exit_code=0,
+    stdout="[INFO] Tests run: 2, Failures: 0, Errors: 0\n[INFO] BUILD SUCCESS",
+    stderr="",
 )
 
 RENDERED_JAVA = """package org.eclipse.epsilon.examples.etl.generated;
@@ -52,16 +56,25 @@ public class GeneratedSmokeTest {
 
 
 class FunnelFixture(unittest.TestCase):
+
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self._tmp.cleanup)
         root = Path(self._tmp.name)
 
         self.suite_dir = (
-            root / "generated_tests" / "SmokeTask" / "candidates" / "gpt-5" / "few_shot" / "suite_001"
+            root
+            / "generated_tests"
+            / "SmokeTask"
+            / "candidates"
+            / "gpt-5"
+            / "few_shot"
+            / "suite_001"
         )
         (self.suite_dir / "models").mkdir(parents=True)
-        (self.suite_dir / "GeneratedSmokeTest.java").write_text(RENDERED_JAVA, encoding="utf-8")
+        (self.suite_dir / "GeneratedSmokeTest.java").write_text(
+            RENDERED_JAVA, encoding="utf-8"
+        )
         (self.suite_dir / "models" / "in.model").write_text(
             '<?xml version="1.0"?><Root/>', encoding="utf-8"
         )
@@ -78,7 +91,9 @@ class FunnelFixture(unittest.TestCase):
         self.references_root = root / "references"
         self.references_root.mkdir()
         self.reference = self.references_root / "SmokeTask.etl"
-        self.reference.write_text("rule R transform s : S!A to t : T!B { }\n", encoding="utf-8")
+        self.reference.write_text(
+            "rule R transform s : S!A to t : T!B { }\n", encoding="utf-8"
+        )
 
         # A rendered suite is only an artifact if a deterministic contract backs
         # it. That gate is the same in all four languages, so the fixture has to
@@ -103,7 +118,10 @@ class FunnelFixture(unittest.TestCase):
         )
         (self.suite_dir / "metadata.json").write_text(
             json.dumps(
-                {"status": "candidate" if valid else "invalid", "artifact_validation": validation}
+                {
+                    "status": "candidate" if valid else "invalid",
+                    "artifact_validation": validation,
+                }
             ),
             encoding="utf-8",
         )
@@ -120,9 +138,11 @@ class FunnelFixture(unittest.TestCase):
 
 
 class TechnicalValidationTests(FunnelFixture):
+
     def test_assertion_failure_is_technically_valid(self) -> None:
         with patch(
-            "llm4mtl.semantic_tests.suite_execution.run_maven", return_value=ASSERTION_FAILURE
+            "llm4mtl.semantic_tests.suite_execution.run_maven",
+            return_value=ASSERTION_FAILURE,
         ):
             verdict = check_suite(self.suite, self.context())
 
@@ -134,7 +154,8 @@ class TechnicalValidationTests(FunnelFixture):
 
     def test_compile_failure_is_not_technically_valid(self) -> None:
         with patch(
-            "llm4mtl.semantic_tests.suite_execution.run_maven", return_value=COMPILE_FAILURE
+            "llm4mtl.semantic_tests.suite_execution.run_maven",
+            return_value=COMPILE_FAILURE,
         ):
             verdict = check_suite(self.suite, self.context())
 
@@ -146,7 +167,9 @@ class TechnicalValidationTests(FunnelFixture):
         self.write_metadata(valid=False)
         with patch(
             "llm4mtl.semantic_tests.suite_execution.run_maven",
-            side_effect=AssertionError("Maven must not run for an artifact-invalid suite"),
+            side_effect=AssertionError(
+                "Maven must not run for an artifact-invalid suite"
+            ),
         ):
             verdict = check_suite(self.suite, self.context())
 
@@ -158,14 +181,16 @@ class TechnicalValidationTests(FunnelFixture):
         # @Test methods cannot be executed, and must not reach the engine only
         # to fail there with an unrelated diagnostic.
         cases = {
-            "no rendered harness": lambda: (self.suite_dir / "GeneratedSmokeTest.java").unlink(),
+            "no rendered harness": lambda: (
+                self.suite_dir / "GeneratedSmokeTest.java"
+            ).unlink(),
             "no models": lambda: (self.suite_dir / "models" / "in.model").unlink(),
-            "no @Test methods": lambda: (self.suite_dir / "GeneratedSmokeTest.java").write_text(
-                "public class GeneratedSmokeTest {}\n", encoding="utf-8"
-            ),
-            "unparsable model": lambda: (self.suite_dir / "models" / "in.model").write_text(
-                "<broken", encoding="utf-8"
-            ),
+            "no @Test methods": lambda: (
+                self.suite_dir / "GeneratedSmokeTest.java"
+            ).write_text("public class GeneratedSmokeTest {}\n", encoding="utf-8"),
+            "unparsable model": lambda: (
+                self.suite_dir / "models" / "in.model"
+            ).write_text("<broken", encoding="utf-8"),
         }
         for label, break_it in cases.items():
             with self.subTest(case=label):
@@ -173,7 +198,9 @@ class TechnicalValidationTests(FunnelFixture):
                 break_it()
                 with patch(
                     "llm4mtl.semantic_tests.suite_execution.run_maven",
-                    side_effect=AssertionError("a malformed suite must not reach Maven"),
+                    side_effect=AssertionError(
+                        "a malformed suite must not reach Maven"
+                    ),
                 ):
                     verdict = check_suite(self.suite, self.context())
                 self.assertEqual("ARTIFACT_INVALID", verdict.status)
@@ -187,9 +214,13 @@ class TechnicalValidationTests(FunnelFixture):
 
 
 class ReferenceValidationTests(FunnelFixture):
-    def test_a_failing_oracle_is_reference_invalid_not_a_technical_failure(self) -> None:
+
+    def test_a_failing_oracle_is_reference_invalid_not_a_technical_failure(
+        self,
+    ) -> None:
         with patch(
-            "llm4mtl.semantic_tests.suite_execution.run_maven", return_value=ASSERTION_FAILURE
+            "llm4mtl.semantic_tests.suite_execution.run_maven",
+            return_value=ASSERTION_FAILURE,
         ):
             verdict = validate_suite(self.suite, self.context())
 
@@ -198,7 +229,9 @@ class ReferenceValidationTests(FunnelFixture):
         self.assertTrue(verdict.is_judged_as_oracle)
 
     def test_a_passing_oracle_is_validated(self) -> None:
-        with patch("llm4mtl.semantic_tests.suite_execution.run_maven", return_value=ALL_PASSED):
+        with patch(
+            "llm4mtl.semantic_tests.suite_execution.run_maven", return_value=ALL_PASSED
+        ):
             verdict = validate_suite(self.suite, self.context())
 
         self.assertEqual("VALIDATED", verdict.status)
@@ -216,7 +249,8 @@ class ReferenceValidationTests(FunnelFixture):
 
     def test_an_unexecutable_suite_is_not_judged_as_an_oracle(self) -> None:
         with patch(
-            "llm4mtl.semantic_tests.suite_execution.run_maven", return_value=COMPILE_FAILURE
+            "llm4mtl.semantic_tests.suite_execution.run_maven",
+            return_value=COMPILE_FAILURE,
         ):
             verdict = validate_suite(self.suite, self.context())
 
@@ -236,9 +270,11 @@ def _evidence() -> RawExecutionEvidence:
 
 
 class ObservationReuseTests(FunnelFixture):
+
     def test_the_technical_execution_is_not_repeated(self) -> None:
         with patch(
-            "llm4mtl.semantic_tests.suite_execution.run_maven", return_value=ASSERTION_FAILURE
+            "llm4mtl.semantic_tests.suite_execution.run_maven",
+            return_value=ASSERTION_FAILURE,
         ) as maven:
             check_suite(self.suite, self.context())
             self.assertEqual(1, maven.call_count)
@@ -253,15 +289,23 @@ class ObservationReuseTests(FunnelFixture):
 
     def test_an_observation_about_other_inputs_is_ignored(self) -> None:
         record_observation(
-            self.observations_root, self.suite, self.reference, classify_maven_run(ALL_PASSED)
+            self.observations_root,
+            self.suite,
+            self.reference,
+            classify_maven_run(ALL_PASSED),
         )
-        self.reference.write_text("rule Changed transform s : S!A to t : T!B { }\n", encoding="utf-8")
+        self.reference.write_text(
+            "rule Changed transform s : S!A to t : T!B { }\n", encoding="utf-8"
+        )
 
-        self.assertIsNone(read_observation(self.observations_root, self.suite, self.reference))
+        self.assertIsNone(
+            read_observation(self.observations_root, self.suite, self.reference)
+        )
 
         # A stale record must not decide the verdict: the suite is executed again.
         with patch(
-            "llm4mtl.semantic_tests.suite_execution.run_maven", return_value=ASSERTION_FAILURE
+            "llm4mtl.semantic_tests.suite_execution.run_maven",
+            return_value=ASSERTION_FAILURE,
         ) as maven:
             verdict = validate_suite(self.suite, self.context())
 

@@ -137,7 +137,9 @@ def create_run(request: RunCreateRequest) -> RunCreateResponse:
             manifest,
         )
     except run_store.ManifestExistsError as exc:
-        raise HTTPException(status_code=409, detail=f"run already exists: {run_id}") from exc
+        raise HTTPException(
+            status_code=409, detail=f"run already exists: {run_id}"
+        ) from exc
     except InvalidRunIdError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except ProvenanceError as exc:
@@ -145,11 +147,15 @@ def create_run(request: RunCreateRequest) -> RunCreateResponse:
     return RunCreateResponse(run_id=run_id)
 
 
-def _stage_config(run_id: str, manifest: dict[str, Any], request: StageRunRequest) -> PipelineConfig:
+def _stage_config(
+    run_id: str, manifest: dict[str, Any], request: StageRunRequest
+) -> PipelineConfig:
     """Build stage selection exclusively from the immutable manifest."""
     language = manifest.get("language")
     if not isinstance(language, str) or not language:
-        raise HTTPException(status_code=409, detail="run manifest has no language identity")
+        raise HTTPException(
+            status_code=409, detail="run manifest has no language identity"
+        )
     task = manifest.get("task")
     if not isinstance(task, str) or not task:
         raise HTTPException(status_code=409, detail="run manifest has no task identity")
@@ -197,9 +203,11 @@ def _run_transformations(
     existing = adopted_transformations(paths, iteration)
     if existing is not None:
         return existing
-    extension = language_adapter(config.language).reference_transformation(
-        config.tasks[0]
-    ).suffix
+    extension = (
+        language_adapter(config.language)
+        .reference_transformation(config.tasks[0])
+        .suffix
+    )
     response = paths.generation_response(
         "transformation-generation",
         iteration,
@@ -365,7 +373,11 @@ def get_stage(run_id: str, stage: str) -> dict[str, Any]:
 
 @app.get(
     "/runs/{run_id}/diagnosis/execution/{attempt}",
-    responses={400: BAD_REQUEST_RESPONSE, 404: NOT_FOUND_RESPONSE, 409: CONFLICT_RESPONSE},
+    responses={
+        400: BAD_REQUEST_RESPONSE,
+        404: NOT_FOUND_RESPONSE,
+        409: CONFLICT_RESPONSE,
+    },
 )
 def get_diagnosis_queue(run_id: str, attempt: int) -> dict[str, Any]:
     paths, _ = _require_manifest(run_id)
@@ -377,7 +389,12 @@ def get_diagnosis_queue(run_id: str, attempt: int) -> dict[str, Any]:
 
 @app.post(
     "/runs/{run_id}/refinements",
-    responses={400: BAD_REQUEST_RESPONSE, 404: NOT_FOUND_RESPONSE, 409: CONFLICT_RESPONSE, 422: UNPROCESSABLE_RESPONSE},
+    responses={
+        400: BAD_REQUEST_RESPONSE,
+        404: NOT_FOUND_RESPONSE,
+        409: CONFLICT_RESPONSE,
+        422: UNPROCESSABLE_RESPONSE,
+    },
 )
 def prepare_run_refinement(
     run_id: str, request: RefinementPrepareRequest
@@ -396,7 +413,11 @@ def prepare_run_refinement(
 
 @app.post(
     "/runs/{run_id}/generations",
-    responses={400: BAD_REQUEST_RESPONSE, 404: NOT_FOUND_RESPONSE, 409: CONFLICT_RESPONSE},
+    responses={
+        400: BAD_REQUEST_RESPONSE,
+        404: NOT_FOUND_RESPONSE,
+        409: CONFLICT_RESPONSE,
+    },
 )
 def record_run_generation(
     run_id: str, request: GenerationRecordRequest
@@ -420,7 +441,11 @@ def record_run_generation(
 )
 def get_run(run_id: str) -> dict[str, Any]:
     paths, manifest = _require_manifest(run_id)
-    return {"run_id": run_id, "manifest": manifest, "stages": run_store.list_stages(paths)}
+    return {
+        "run_id": run_id,
+        "manifest": manifest,
+        "stages": run_store.list_stages(paths),
+    }
 
 
 @app.post(

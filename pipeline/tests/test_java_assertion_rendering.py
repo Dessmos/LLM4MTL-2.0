@@ -71,6 +71,7 @@ EXPECTED_LINES = (
 
 
 class JavaAssertionRenderingTests(unittest.TestCase):
+
     def test_all_supported_kinds_preserve_exact_java_output(self) -> None:
         model_variables = {"OUT": "model0"}
 

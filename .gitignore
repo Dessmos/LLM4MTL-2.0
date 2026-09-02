@@ -159,3 +159,10 @@ engines/*/*/results/
 *.kate-swp
 AGENTS.md
 /pipeline/.sonar
+pipeline/CODEBASE_SEMANTIC_GUIDE.md
+pipeline/pylint-errors.json
+pipeline/pylint-report.json
+repomix-output.xml
+# Pre-review refactor working plan (maintainer-only, like migration-plan).
+docs/refactor-plan.md
+docs/CODE_REVIEW_PREPARATION.md

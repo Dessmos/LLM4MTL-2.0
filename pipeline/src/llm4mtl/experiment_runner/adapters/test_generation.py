@@ -122,9 +122,7 @@ class TestGenerationAdapter:
                 }
             )
 
-        created = sum(
-            1 for outcome in extraction_outcomes if outcome["extracted"]
-        )
+        created = sum(1 for outcome in extraction_outcomes if outcome["extracted"])
         details["outcomes"] = extraction_outcomes
         return StageResult(
             "extraction",
@@ -243,9 +241,7 @@ class TestGenerationAdapter:
 
     def validation_context(self, config: PipelineConfig) -> ValidationContext:
         if not config.engine_dir:
-            raise ConfigError(
-                "suite validation requires a run-local engine workspace"
-            )
+            raise ConfigError("suite validation requires a run-local engine workspace")
         engine_dir = Path(config.engine_dir)
         return ValidationContext(
             adapter=language_adapter(config.language),

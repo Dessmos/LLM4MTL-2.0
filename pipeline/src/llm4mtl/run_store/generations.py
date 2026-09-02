@@ -48,7 +48,9 @@ def record_generation(
     strategy: str | None,
 ) -> dict[str, Any]:
     operation, suffix = _operation_and_suffix(manifest, artifact_type)
-    output = paths.generation_response(operation, iteration, f"{manifest['task']}.{suffix}")
+    output = paths.generation_response(
+        operation, iteration, f"{manifest['task']}.{suffix}"
+    )
     if not output.is_file():
         raise GenerationRecordError(f"raw generation output is missing: {output}")
 
@@ -63,14 +65,18 @@ def record_generation(
     if not prompt.is_file() and iteration > 0:
         prompt = paths.refinement_dir(artifact_type, iteration) / "prompt.md"
     if not prompt.is_file():
-        prompt = frozen_task_prompt(language_config(str(manifest["language"])), str(manifest["task"]))
+        prompt = frozen_task_prompt(
+            language_config(str(manifest["language"])), str(manifest["task"])
+        )
     previous = None
     if iteration > 0:
         previous = paths.generation_response(
             operation, iteration - 1, f"{manifest['task']}.{suffix}"
         )
         if not previous.is_file():
-            raise GenerationRecordError(f"input generation artifact is missing: {previous}")
+            raise GenerationRecordError(
+                f"input generation artifact is missing: {previous}"
+            )
 
     payload = {
         "schema_version": SCHEMA_VERSION,
@@ -88,7 +94,9 @@ def record_generation(
         "prompt": _file_fact(paths, prompt),
         "input_artifact": _file_fact(paths, previous) if previous is not None else None,
         "output_artifact": _file_fact(paths, output),
-        "refinement_request": _file_fact(paths, request_path) if iteration > 0 else None,
+        "refinement_request": _file_fact(paths, request_path)
+        if iteration > 0
+        else None,
         "recorded_at": datetime.now(timezone.utc).isoformat(),
     }
     validate_artifact("generation-result", payload)
@@ -106,7 +114,9 @@ def record_generation(
     return payload
 
 
-def _operation_and_suffix(manifest: dict[str, Any], artifact_type: str) -> tuple[str, str]:
+def _operation_and_suffix(
+    manifest: dict[str, Any], artifact_type: str
+) -> tuple[str, str]:
     operation = _operation_for_artifact_type(artifact_type)
     if artifact_type == "semantic-test":
         return operation, "md"
@@ -127,7 +137,11 @@ def _file_fact(paths: RunPaths, path: Path) -> dict[str, Any]:
         cited = Path(path).resolve().relative_to(paths.root.resolve()).as_posix()
     except ValueError:
         cited = Path(path).resolve().as_posix()
-    return {"path": cited, "sha256": hashlib.sha256(content).hexdigest(), "bytes": len(content)}
+    return {
+        "path": cited,
+        "sha256": hashlib.sha256(content).hexdigest(),
+        "bytes": len(content),
+    }
 
 
 def _without_time(payload: dict[str, Any]) -> dict[str, Any]:
