@@ -18,8 +18,8 @@ from llm4mtl.semantic_tests.failure_report.models import (
     EXECUTION_LOG_EXCERPT_LINES,
     MAVEN_BUNDLE_LINES,
 )
+from llm4mtl.serialization.hashing import file_sha256
 from llm4mtl.serialization.json_io import read_json
-from llm4mtl.transformation_execution.hashing import file_sha256
 
 
 def _read_object(path: Path, label: str) -> dict[str, Any]:

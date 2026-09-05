@@ -28,7 +28,12 @@ from pathlib import Path
 from typing import Iterator, Literal
 
 from llm4mtl.artifact_schemas import validate_artifact
-from llm4mtl.domain import ArtifactRef, GeneratedSuite, SuiteExecutionObservation
+from llm4mtl.domain import (
+    ArtifactRef,
+    GeneratedSuite,
+    RawExecutionEvidence,
+    SuiteExecutionObservation,
+)
 from llm4mtl.external_tools.maven import CommandResult, run_maven, summarize_error
 from llm4mtl.paths import repository_relative
 from llm4mtl.semantic_tests.reference_validation.maven_status import (
@@ -37,7 +42,6 @@ from llm4mtl.semantic_tests.reference_validation.maven_status import (
     transformation_parse_failed,
 )
 from llm4mtl.semantic_tests.execution_evidence import (
-    RawExecutionEvidence,
     capture_execution_evidence,
     write_execution_evidence,
 )
@@ -48,8 +52,8 @@ from llm4mtl.semantic_tests.surefire import (
     SurefireReport,
     read_surefire_reports,
 )
+from llm4mtl.serialization.hashing import directory_sha256, file_sha256
 from llm4mtl.serialization.json_io import read_json, write_json
-from llm4mtl.transformation_execution.hashing import directory_sha256, file_sha256
 from llm4mtl.workspace.injection import Injection
 
 SCHEMA_VERSION = "2.0"

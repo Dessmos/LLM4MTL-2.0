@@ -75,8 +75,9 @@ normalizers, schemas, or source inputs rather than hand-editing generated files.
 ```text
 domain
   ▲
-  ├── languages/<lang>
   ├── semantic_tests
+  │     ▲
+  │     └── languages/<lang>   (implementations only; never languages/base.py)
   └── evaluation
 
 external_tools / workspace / serialization
@@ -94,11 +95,21 @@ run_store / experiment_store
 stages depend on `LanguageAdapter`, not on concrete languages. Evaluation must
 derive results from stored facts and must not call language engines.
 
+`languages/` sits *above* parts of `semantic_tests/`, not beside it: the
+adapters reuse the shared Java emitter, suite helpers, Surefire reader, and
+execution machinery rather than each carrying a copy. The direction is chosen,
+not accidental — inverting it would make `semantic_tests/` import concrete
+languages, which is the dependency the `LanguageAdapter` seam exists to
+prevent. The seam itself stays clean: `languages/base.py` states the contract
+using `domain/` types only, so everything a caller must understand to implement
+a language is reachable without opening a stage.
+
 ## Established Python packages
 
 - `artifact_schemas.py` — cached JSON Schema validators used by artifact stores.
 - `domain/` — language-neutral artifact references, generated-suite identity,
-  scenarios, observations, and transformation outcomes.
+  scenarios, observations, transformation outcomes, and the raw execution
+  evidence an adapter returns beside them.
 - `languages/` — `LanguageAdapter`, static registry, and concrete adapters.
 - `task_contracts/` — deterministic structural contracts and enforcement.
 - `prompt_assembly/` — exact task-input resolution and synchronization of the
@@ -127,13 +138,28 @@ derive results from stored facts and must not call language engines.
 - `run_store/` — immutable run identity, append-only events, and atomic stage
   attempts.
 - `experiment_store/` — immutable experiment identity and locked run membership.
+  With `experiment_runner/matrix.py` and `evaluation/experiment_{aggregation,
+  significance}.py` it forms the RQ4 ablation scaffold: written and tested, but
+  deliberately not yet reachable from any entry point, because the matrix axes
+  are fixed by the measurement spec and that is still settling. Runs today are
+  created one at a time and never joined into an experiment.
 - `provenance.py` — code, tool, schema, renderer, and protected-input identity.
 - `paths.py` — the repository layout, and the one spelling of a recorded path:
   `repository_relative` keeps a path outside the repository absolute,
   `require_repository_relative` refuses it.
 - `workspace/` — atomic materialization plus temporary injection/restore.
+- `serialization/` — reading, writing, and content-hashing artifacts.
+  `file_sha256`/`directory_sha256` live here because artifact identity is
+  shared by provenance, the run store, prompt assembly, execution, and
+  reporting alike, and belongs to none of them.
 - `external_tools/` — structured subprocess boundaries.
 - `evaluation/` — current aggregation plus frozen legacy analysis zones.
+  `diagnosis_aggregation.py` and `experiment_*.py` are active;
+  `evaluation/{atl,etl,qvto,reactions}/` is a behaviour-locked historical
+  record of the analyses already run, kept reproducible rather than
+  refactored. Its triplicated statistics modules, directory names containing
+  spaces, and committed CSVs are intentional there and nowhere else; they are
+  held in place by characterisation tests, not maintained.
 
 Facade polishing and `_internal/` reorganisation remain frozen until the
 measurement-driven boundaries settle.

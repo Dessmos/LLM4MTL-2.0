@@ -20,7 +20,7 @@ from llm4mtl.conventions import (
     language_config,
 )
 from llm4mtl.paths import REPO_ROOT, TARGET, require_repository_relative
-from llm4mtl.transformation_execution.hashing import file_sha256
+from llm4mtl.serialization.hashing import file_sha256
 
 TASK_NAME = re.compile(r"^[A-Za-z0-9._-]+$")
 

@@ -16,11 +16,10 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from unittest.mock import patch
 
-from llm4mtl.domain import GeneratedSuite
+from llm4mtl.domain import GeneratedSuite, RawExecutionEvidence
 from llm4mtl.external_tools.maven import CommandResult
 from llm4mtl.languages.etl.adapter import EtlAdapter
 from llm4mtl.semantic_tests.reference_validation.runner import validate_suite
-from llm4mtl.semantic_tests.execution_evidence import RawExecutionEvidence
 from llm4mtl.semantic_tests.suite_execution import (
     classify_maven_run,
     read_observation,

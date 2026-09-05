@@ -15,7 +15,7 @@ from llm4mtl.semantic_tests.reference_validation.maven_status import (
 from llm4mtl.semantic_tests.reference_validation.reference import transformation_destination
 from llm4mtl.semantic_tests.suites.injection import inject_suite, suite_model_paths
 from llm4mtl.semantic_tests.suites.java import infer_fqcn
-from llm4mtl.transformation_execution.hashing import directory_sha256, file_sha256
+from llm4mtl.serialization.hashing import directory_sha256, file_sha256
 from llm4mtl.transformation_execution.models import TransformationValidationResult, ValidationPair
 
 

@@ -26,10 +26,10 @@ from llm4mtl.domain import (
     ArtifactValidation,
     GeneratedSuite,
     ParseObservation,
+    RawExecutionEvidence,
     SuiteExecutionObservation,
     TransformationOutcome,
 )
-from llm4mtl.semantic_tests.execution_evidence import RawExecutionEvidence
 
 
 @dataclass(frozen=True)

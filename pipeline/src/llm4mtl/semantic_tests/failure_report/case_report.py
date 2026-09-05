@@ -32,8 +32,8 @@ from llm4mtl.semantic_tests.failure_report.surefire_view import (
     _recorded_failure_view,
     _surefire_evidence,
 )
+from llm4mtl.serialization.hashing import directory_sha256, file_sha256
 from llm4mtl.serialization.json_io import write_json_once
-from llm4mtl.transformation_execution.hashing import directory_sha256, file_sha256
 
 
 def build_failure_report(request: ReportRequest) -> dict[str, Any]:

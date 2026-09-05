@@ -13,11 +13,11 @@ from llm4mtl.domain import (
     ArtifactValidation,
     GeneratedSuite,
     ParseObservation,
+    RawExecutionEvidence,
     SuiteExecutionObservation,
     TransformationOutcome,
 )
 from llm4mtl.languages.base import Workspace
-from llm4mtl.semantic_tests.execution_evidence import RawExecutionEvidence
 from llm4mtl.languages.common import (
     execute_maven_suite,
     materialize_parser,

@@ -41,8 +41,8 @@ from llm4mtl.semantic_tests.execution_evidence import (
     STDOUT_FILENAME,
     SUREFIRE_DIRNAME,
 )
+from llm4mtl.serialization.hashing import directory_sha256, file_sha256
 from llm4mtl.serialization.json_io import read_json, write_json
-from llm4mtl.transformation_execution.hashing import directory_sha256, file_sha256
 
 LANGUAGE = "atl"
 TASK = "AmaltheaToAscet_All"

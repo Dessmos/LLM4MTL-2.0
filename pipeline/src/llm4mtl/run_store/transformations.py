@@ -37,8 +37,8 @@ from typing import Any, Sequence
 from llm4mtl.artifact_schemas import validate_artifact
 from llm4mtl.paths import REPO_ROOT
 from llm4mtl.run_store.models import RunPaths
+from llm4mtl.serialization.hashing import file_sha256
 from llm4mtl.serialization.json_io import read_json, write_json
-from llm4mtl.transformation_execution.hashing import file_sha256
 
 SCHEMA_VERSION = "1.0"
 METADATA_FILENAME = "metadata.json"

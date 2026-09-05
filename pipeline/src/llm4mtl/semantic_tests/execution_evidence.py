@@ -27,6 +27,7 @@ from pathlib import Path
 from typing import Any
 
 from llm4mtl.artifact_schemas import validate_artifact
+from llm4mtl.domain import RawExecutionEvidence, SurefireArtifact
 from llm4mtl.external_tools.maven import CommandResult
 from llm4mtl.semantic_tests.surefire import SurefireReport
 from llm4mtl.serialization.json_io import write_json
@@ -38,35 +39,6 @@ MANIFEST_FILENAME = "evidence.json"
 STDOUT_FILENAME = "maven-stdout.log"
 STDERR_FILENAME = "maven-stderr.log"
 SUREFIRE_DIRNAME = "surefire"
-
-
-@dataclass(frozen=True)
-class SurefireArtifact:
-    """One Surefire report file, read verbatim while it still existed."""
-
-    name: str
-    content: str
-
-
-@dataclass(frozen=True)
-class RawExecutionEvidence:
-    """Everything one Maven invocation produced, held in memory.
-
-    ``reports_present`` is recorded separately from ``reports`` because "the
-    directory held no report" and "the reports could not be parsed" are
-    different states, and neither may be presented as "the run had no failures".
-    ``tests``/``failures``/``errors`` are ``None`` whenever no report parsed.
-    """
-
-    exit_code: int | str
-    timed_out: bool
-    stdout: str
-    stderr: str
-    reports_present: bool
-    reports: tuple[SurefireArtifact, ...] = ()
-    tests: int | None = None
-    failures: int | None = None
-    errors: int | None = None
 
 
 def capture_execution_evidence(

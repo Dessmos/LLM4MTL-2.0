@@ -87,7 +87,7 @@ def input_hashes(language: str, task: str) -> dict[str, Any]:
         language_config,
     )
     from llm4mtl.task_contracts import load_task_contract
-    from llm4mtl.transformation_execution.hashing import file_sha256
+    from llm4mtl.serialization.hashing import file_sha256
 
     try:
         config = language_config(language)

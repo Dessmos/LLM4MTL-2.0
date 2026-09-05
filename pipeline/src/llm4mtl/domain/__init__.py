@@ -12,6 +12,7 @@ adapters and the pipeline depend on `domain`, never the other way round.
 from __future__ import annotations
 
 from llm4mtl.domain.artifacts import ArtifactRef
+from llm4mtl.domain.evidence import RawExecutionEvidence, SurefireArtifact
 from llm4mtl.domain.observations import (
     CONTRACT_VIOLATION,
     EXTRACTION_FAILED,
@@ -54,9 +55,11 @@ __all__ = [
     "ModelSnapshot",
     "OutcomeStatus",
     "ParseObservation",
+    "RawExecutionEvidence",
     "ScenarioKind",
     "SemanticScenario",
     "SemanticSuite",
     "SuiteExecutionObservation",
+    "SurefireArtifact",
     "TransformationOutcome",
 ]

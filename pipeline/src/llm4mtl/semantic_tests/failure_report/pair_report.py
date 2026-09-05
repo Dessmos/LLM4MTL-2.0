@@ -26,8 +26,8 @@ from llm4mtl.semantic_tests.failure_report.models import (
 )
 from llm4mtl.semantic_tests.failure_report.request import PairReportRequest, _output_path
 from llm4mtl.semantic_tests.failure_report.surefire_view import _pair_surefire_evidence
+from llm4mtl.serialization.hashing import directory_sha256, file_sha256
 from llm4mtl.serialization.json_io import write_json_once
-from llm4mtl.transformation_execution.hashing import directory_sha256, file_sha256
 
 
 def build_pair_failure_report(request: PairReportRequest) -> dict[str, Any]:

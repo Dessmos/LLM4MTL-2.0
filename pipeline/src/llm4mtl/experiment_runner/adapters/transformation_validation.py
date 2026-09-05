@@ -40,7 +40,7 @@ from llm4mtl.semantic_tests.suites.discovery import (
     suite_from_path,
 )
 from llm4mtl.semantic_tests.validation import workspace_for
-from llm4mtl.transformation_execution.hashing import file_sha256
+from llm4mtl.serialization.hashing import file_sha256
 
 DEFAULT_PAIR_TIMEOUT_SECONDS = 240
 

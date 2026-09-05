@@ -29,11 +29,11 @@ from llm4mtl.semantic_tests.suite_execution import (
     record_observation,
     snapshot_dir,
 )
+from llm4mtl.serialization.hashing import file_sha256
 from llm4mtl.task_contracts.build_language_task_contracts import (
     BUILDERS,
     REFERENCE_EXTENSIONS,
 )
-from llm4mtl.transformation_execution.hashing import file_sha256
 from llm4mtl.workspace import materialize_engine
 
 SKELETONS = {

@@ -31,10 +31,7 @@ from evaluation.coverage.calculate_coverage import (
 )
 from evaluation.heldout.run_heldout import classify_surefire_cases
 from evaluation.mutation.generate_mutants import generate_mutants
-from llm4mtl.semantic_tests.execution_evidence import (
-    RawExecutionEvidence,
-    SurefireArtifact,
-)
+from llm4mtl.domain import RawExecutionEvidence, SurefireArtifact
 from llm4mtl.task_contracts import ModelContract
 
 

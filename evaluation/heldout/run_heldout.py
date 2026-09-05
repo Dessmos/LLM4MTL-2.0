@@ -18,11 +18,10 @@ from evaluation._common import (
     transformation_iterations,
     write_csv,
 )
-from llm4mtl.domain import GeneratedSuite
+from llm4mtl.domain import GeneratedSuite, RawExecutionEvidence
 from llm4mtl.languages import Workspace, language_adapter
 from llm4mtl.paths import TARGET
 from llm4mtl.semantic_tests.codegen.java_rendering import sanitize_method_name
-from llm4mtl.semantic_tests.execution_evidence import RawExecutionEvidence
 from llm4mtl.workspace import materialize_engine
 
 

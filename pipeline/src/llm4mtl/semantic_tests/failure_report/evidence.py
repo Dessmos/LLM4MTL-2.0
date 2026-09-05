@@ -24,7 +24,7 @@ from llm4mtl.semantic_tests.failure_report.models import (
     RUN_ID_PATTERN,
 )
 from llm4mtl.semantic_tests.failure_report.request import _input_path
-from llm4mtl.transformation_execution.hashing import directory_sha256, file_sha256
+from llm4mtl.serialization.hashing import directory_sha256, file_sha256
 
 
 def _identity(manifest: dict[str, Any], attempt: int) -> dict[str, Any]:

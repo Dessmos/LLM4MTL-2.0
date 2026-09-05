@@ -16,6 +16,7 @@ from llm4mtl.domain import (
     ArtifactValidation,
     GeneratedSuite,
     OutcomeStatus,
+    RawExecutionEvidence,
     SuiteExecutionObservation,
     TransformationOutcome,
 )
@@ -26,10 +27,7 @@ from llm4mtl.semantic_tests.suite_execution import (
     execution_workspace_lock,
     snapshot_dir,
 )
-from llm4mtl.semantic_tests.execution_evidence import (
-    RawExecutionEvidence,
-    capture_execution_evidence,
-)
+from llm4mtl.semantic_tests.execution_evidence import capture_execution_evidence
 from llm4mtl.semantic_tests.suites.java import infer_fqcn
 from llm4mtl.semantic_tests.suites.metadata import artifact_invalid_reason
 from llm4mtl.semantic_tests.surefire import UNCLASSIFIED_RUNTIME, read_surefire_reports
