@@ -13,7 +13,8 @@ Python performs deterministic extraction, validation, execution and evaluation.
 - workflows/n8n/ — transformation/test workflows and the master scaffold.
 - experiments/ — presets, variants and experiment matrices.
 - schemas/ — JSON contracts shared by n8n, Python and stored artifacts.
-- artifacts/work/ — generated per-run output; intentionally not tracked by Git.
+- artifacts/work/ — generated output, one `runs/batch_NNN/` per launch with one
+  directory per run below it; intentionally not tracked by Git.
 
 See docs/architecture.md for ownership rules and docs/data-flow.md for the
 end-to-end flow.

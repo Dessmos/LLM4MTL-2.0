@@ -50,10 +50,15 @@ def prepare_refinement(
     provider: str,
     model: str,
     reason: str,
-    diagnoses_root: Path,
+    run_diagnoses: Path,
     execution_attempt: int | None = None,
 ) -> dict[str, Any]:
-    """Write the request and exact prompt consumed by refinement iteration N."""
+    """Write the request and exact prompt consumed by refinement iteration N.
+
+    ``run_diagnoses`` is this run's directory in the diagnoses area, resolved by
+    the caller through the artifact layout; only the verdicts recorded there for
+    ``execution_attempt`` enter the prompt.
+    """
     if iteration != previous_iteration + 1 or iteration < 1:
         raise RefinementPreparationError(
             "refinement iteration must be exactly previous_iteration + 1"
@@ -97,7 +102,7 @@ def prepare_refinement(
     else:
         failure_reports = []
     diagnoses = (
-        _diagnosis_facts(paths, diagnoses_root, execution_attempt)
+        _diagnosis_facts(run_diagnoses, execution_attempt)
         if execution_attempt is not None
         else []
     )
@@ -167,11 +172,13 @@ def prepare_refinement(
                 f"refinement request already exists with different content: {request_path}"
             )
         payload = existing
+    # Both paths are run-relative: where the run is mounted for the caller is
+    # the caller's knowledge, not this store's.
     return {
         "artifact_type": artifact_type,
         "iteration": iteration,
         "previous_iteration": previous_iteration,
-        "prompt_path": f"/data/artifacts/runs/{paths.root.name}/{payload['prompt_file']}",
+        "prompt_file": payload["prompt_file"],
         "request_path": _run_path(paths, request_path),
         "feedback_source": source,
     }
@@ -387,12 +394,11 @@ def _reference_failure_facts(
 
 
 def _diagnosis_facts(
-    paths: RunPaths, diagnoses_root: Path, execution_attempt: int
+    run_diagnoses: Path, execution_attempt: int
 ) -> list[dict[str, Any]]:
     facts: list[dict[str, Any]] = []
-    run_root = Path(diagnoses_root) / paths.root.name
     evidence_prefix = f"diagnosis/execution/attempt-{execution_attempt:03d}/reports/"
-    for path in sorted(run_root.glob("attempt-*/diagnosis.json")):
+    for path in sorted(Path(run_diagnoses).glob("attempt-*/diagnosis.json")):
         diagnosis = read_json(path)
         if not str(diagnosis.get("evidence_ref") or "").startswith(evidence_prefix):
             continue

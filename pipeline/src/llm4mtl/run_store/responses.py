@@ -14,23 +14,24 @@ DIAGNOSIS_FILENAME = "diagnosis.json"
 
 
 def record_diagnosis(
-    paths: RunPaths, diagnosis: dict[str, Any], diagnoses_root: Path
-) -> tuple[int, str]:
+    paths: RunPaths, diagnosis: dict[str, Any], run_diagnoses: Path
+) -> tuple[int, Path]:
     """Persist one immutable failure diagnosis outside the run that produced it.
 
     The verdict is what downstream work consumes, so it is stored under
-    ``diagnoses_root`` rather than among the run's own state. Numbering is
-    unchanged: each diagnosis of a run claims the next free attempt directory,
-    so a second diagnosis can never overwrite the first.
+    ``run_diagnoses`` — the run's own directory in the diagnoses area, which the
+    caller resolves through the artifact layout — rather than among the run's
+    state. Numbering is unchanged: each diagnosis of a run claims the next free
+    attempt directory, so a second diagnosis can never overwrite the first.
 
-    Returns the attempt and the path relative to ``diagnoses_root``.
+    Returns the attempt and the written file.
     """
     validate_artifact("diagnosis", diagnosis)
-    run_diagnoses = Path(diagnoses_root) / paths.root.name
+    run_diagnoses = Path(run_diagnoses)
     attempt = claim_attempt(
         run_diagnoses,
         lambda number: run_diagnoses / f"attempt-{number:03d}",
     )
     target = run_diagnoses / f"attempt-{attempt:03d}" / DIAGNOSIS_FILENAME
     write_json(target, diagnosis)
-    return attempt, target.relative_to(diagnoses_root).as_posix()
+    return attempt, target

@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://llm4mtl/schemas/batch-manifest.schema.json",
+  "title": "Batch manifest",
+  "description": "Immutable record of one launch of the pipeline. A batch groups the runs one press of Start (or one local `pipeline run`) created, so the runs of one launch are read together and never interleave with another launch. It carries no run identity: every run below it has its own manifest.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "batch_id",
+    "created_at"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "2.0"
+    },
+    "batch_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9._-]+$"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "run_mode": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "full",
+        "tests_only",
+        "transformations_only",
+        null
+      ]
+    },
+    "pipeline_variant": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "command": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "The local runner command that started the batch; null for a batch the master workflow started."
+    },
+    "config": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "The launch configuration as the orchestration recorded it (the master's `config`, or the resolved local config). Kept whole so a batch can be told apart from another by what was asked for, not only by when."
+    },
+    "n8n": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "workflow_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "execution_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    }
+  }
+}

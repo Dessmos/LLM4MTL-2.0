@@ -28,7 +28,7 @@ The ``"test_case"`` request is one JSON object with these fields (an
 failure that reached no test method has none of them)::
 
     {
-      "run_manifest": "artifacts/work/runs/<run>/manifest.json",
+      "run_manifest": "artifacts/work/runs/<batch>/<run>/manifest.json",
       "syntax_evidence": ".../stages/syntax-validation/.../evidence.json",
       "execution_evidence": ".../stages/execution/attempts/attempt-001/evidence.json",
       "generated_execution": ".../suite_execution.json",

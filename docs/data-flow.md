@@ -15,13 +15,19 @@ factual outcomes.
 
 ```text
 n8n
-  │ POST /runs (complete immutable identity)
+  │ POST /batches (once per launch)
   ▼
 run_store
-  │ manifest.json + run_created event
+  │ runs/<batch-id>/batch.json
   ▼
 n8n
-  │ POST /runs/<run-id>/stages/<stage>
+  │ POST /batches/<batch-id>/runs (complete immutable identity)
+  ▼
+run_store
+  │ manifest.json + run_created event; run_dir and n8n_run_dir reported back
+  ▼
+n8n
+  │ POST /batches/<batch-id>/runs/<run-id>/stages/<stage>
   ▼
 shared Python stage → LanguageAdapter → run-local workspace
   │
@@ -52,9 +58,9 @@ reference transformation
        + the same exact task metamodels
        + prompt_assets/tests/contract/<lang>/semantic_cases_contract.txt
        + selected few-shot/grammar strategy inputs
-       → artifacts/work/runs/<run-id>/responses/semantic-test-generation/
+       → artifacts/work/runs/<batch-id>/<run-id>/responses/semantic-test-generation/
          iteration-<NNN>/prompt.md
-       → artifacts/work/runs/<run-id>/responses/semantic-test-generation/
+       → artifacts/work/runs/<batch-id>/<run-id>/responses/semantic-test-generation/
          iteration-<NNN>/<task>.md
 ```
 
@@ -314,7 +320,7 @@ execution attempt recorded
 Preparation reads only the immutable attempt that was just written. It never
 changes the stage result, the run status, or the events timeline, and a failure
 to assemble evidence is recorded in the index rather than failing the stage.
-The same assembly is available as `llm4mtl diagnosis prepare --run <run-id>`.
+The same assembly is available as `llm4mtl diagnosis prepare --batch <batch-id> --run <run-id>`.
 
 The mapping back from a Surefire method to a semantic case is the renderer's own
 name function applied to every case; the mapping from a failure message to an
@@ -382,7 +388,7 @@ When n8n decides that the prepared semantic failure needs LLM diagnosis, it
 sends the normalized diagnosis result to:
 
 ```text
-POST /runs/<run-id>/diagnoses
+POST /batches/<batch-id>/runs/<run-id>/diagnoses
 ```
 
 Python validates it against `diagnosis.schema.json`, stores it as an immutable

@@ -170,7 +170,7 @@ class RefinementGenerationContractTests(unittest.TestCase):
             provider="google",
             model="gemini-2.5-pro",
             reason="SYNTAX_INVALID",
-            diagnoses_root=self.root / "diagnoses",
+            run_diagnoses=self.root / "diagnoses" / self.paths.root.name,
         )
 
         request = read_json(self.paths.root / prepared["request_path"])
@@ -264,7 +264,7 @@ class RefinementGenerationContractTests(unittest.TestCase):
             provider="openai",
             model="gpt-5.3-codex",
             reason="REFERENCE_VALIDATION_FAILED",
-            diagnoses_root=self.root / "diagnoses",
+            run_diagnoses=self.root / "diagnoses" / self.paths.root.name,
         )
 
         request = read_json(self.paths.root / prepared["request_path"])
@@ -317,7 +317,7 @@ class RefinementGenerationContractTests(unittest.TestCase):
             provider="google",
             model="gemini-2.5-pro",
             reason="SYNTAX_INVALID",
-            diagnoses_root=self.root / "diagnoses",
+            run_diagnoses=self.root / "diagnoses" / self.paths.root.name,
         )
         refined = self.paths.generation_response(
             "transformation-generation", 1, "Tree2Graph.etl"
@@ -381,7 +381,7 @@ class RefinementGenerationContractTests(unittest.TestCase):
                 provider="google",
                 model="gemini-2.5-pro",
                 reason="SYNTAX_INVALID",
-                diagnoses_root=self.root / "diagnoses",
+                run_diagnoses=self.root / "diagnoses" / self.paths.root.name,
             )
 
         refinement_directory = self.paths.refinement_dir("transformation", 1)
@@ -407,7 +407,7 @@ class RefinementGenerationContractTests(unittest.TestCase):
             )
             self.assertEqual(attempt, recorded)
             self._write_diagnosis_index(attempt)
-        diagnoses_root = self.root / "diagnoses"
+        run_diagnoses = self.root / "diagnoses" / self.paths.root.name
         for attempt, classification, rationale in (
             (1, "TRANSFORMATION_DEFECT", "OLD_TRANSFORMATION_DIAGNOSIS"),
             (2, "TEST_DEFECT", "CURRENT_TEST_DIAGNOSIS"),
@@ -425,7 +425,7 @@ class RefinementGenerationContractTests(unittest.TestCase):
                     "model": "gpt-5",
                     "created_at": "2026-08-21T12:00:00+00:00",
                 },
-                diagnoses_root,
+                run_diagnoses,
             )
 
         prepared = run_store.prepare_refinement(
@@ -437,7 +437,7 @@ class RefinementGenerationContractTests(unittest.TestCase):
             provider="google",
             model="gemini-2.5-pro",
             reason="DIAGNOSED_TEST_DEFECT",
-            diagnoses_root=diagnoses_root,
+            run_diagnoses=run_diagnoses,
             execution_attempt=2,
         )
 

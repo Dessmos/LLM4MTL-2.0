@@ -19,6 +19,7 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 from llm4mtl import run_store
+from llm4mtl.paths import ArtifactRoots
 from llm4mtl.provenance import build_provenance
 from llm4mtl.run_store.results import aggregate_classification
 from llm4mtl.serialization.json_io import read_json, write_json
@@ -62,25 +63,28 @@ class AggregateClassificationTests(unittest.TestCase):
         )
 
 
+BATCH = "batch_001"
+
+
 class RunResultServiceTests(unittest.TestCase):
 
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self._tmp.cleanup)
         self.root = Path(self._tmp.name)
-        self.runs_root = self.root / "runs"
-        self.diagnoses = self.root / "diagnoses"
-        self.addCleanup(lambda: shutil.rmtree(self.diagnoses, ignore_errors=True))
-        for target, value in (
-            ("_runs_root", self.runs_root),
-            ("_diagnoses_root", self.diagnoses),
-        ):
-            patcher = patch(f"llm4mtl.stage_service.app.{target}", return_value=value)
-            patcher.start()
-            self.addCleanup(patcher.stop)
+        self.artifacts = ArtifactRoots(self.root)
+        self.diagnoses = self.artifacts.diagnoses
+        patcher = patch(
+            "llm4mtl.stage_service.app._artifact_roots", return_value=self.artifacts
+        )
+        patcher.start()
+        self.addCleanup(patcher.stop)
         self.client = TestClient(app)
-        self.client.post("/runs", json={**IDENTITY, "run_id": "result-1"})
-        self.paths = run_store.open_run(self.runs_root, "result-1")
+        self.client.post("/batches", json={"batch_id": BATCH})
+        self.client.post(
+            f"/batches/{BATCH}/runs", json={**IDENTITY, "run_id": "result-1"}
+        )
+        self.paths = run_store.open_run(self.artifacts.batch_dir(BATCH), "result-1")
 
     def _record_stage(self, stage: str, status: str, outcome_code: str) -> None:
         run_store.record_attempt(
@@ -98,7 +102,7 @@ class RunResultServiceTests(unittest.TestCase):
 
     def _record_diagnosis(self, classification: str) -> None:
         response = self.client.post(
-            "/runs/result-1/diagnoses",
+            f"/batches/{BATCH}/runs/result-1/diagnoses",
             json={
                 "schema_version": "1.0",
                 "classification": classification,
@@ -116,7 +120,7 @@ class RunResultServiceTests(unittest.TestCase):
         for _ in range(3):
             self._record_diagnosis("TRANSFORMATION_DEFECT")
 
-        response = self.client.post("/runs/result-1/result", json=TERMINAL)
+        response = self.client.post(f"/batches/{BATCH}/runs/result-1/result", json=TERMINAL)
 
         self.assertEqual(200, response.status_code, response.text)
         result = response.json()
@@ -149,7 +153,7 @@ class RunResultServiceTests(unittest.TestCase):
 
     def test_a_stage_that_never_ran_is_not_run_rather_than_passing(self) -> None:
         response = self.client.post(
-            "/runs/result-1/result",
+            f"/batches/{BATCH}/runs/result-1/result",
             json={
                 **TERMINAL,
                 "status": "incomplete",
@@ -166,7 +170,7 @@ class RunResultServiceTests(unittest.TestCase):
 
     def test_orchestration_error_records_recoverable_terminal_context(self) -> None:
         response = self.client.post(
-            "/runs/result-1/result",
+            f"/batches/{BATCH}/runs/result-1/result",
             json={
                 **TERMINAL,
                 "status": "failed",
@@ -190,14 +194,14 @@ class RunResultServiceTests(unittest.TestCase):
         self,
     ) -> None:
         """An n8n retry re-posts; a second, different ending is a conflict."""
-        first = self.client.post("/runs/result-1/result", json=TERMINAL)
-        again = self.client.post("/runs/result-1/result", json=TERMINAL)
+        first = self.client.post(f"/batches/{BATCH}/runs/result-1/result", json=TERMINAL)
+        again = self.client.post(f"/batches/{BATCH}/runs/result-1/result", json=TERMINAL)
 
         self.assertEqual(200, again.status_code)
         self.assertEqual(first.json(), again.json())
 
         conflicting = self.client.post(
-            "/runs/result-1/result",
+            f"/batches/{BATCH}/runs/result-1/result",
             json={
                 **TERMINAL,
                 "status": "completed",
@@ -212,7 +216,7 @@ class RunResultServiceTests(unittest.TestCase):
 
     def test_a_result_for_an_unknown_run_is_refused(self) -> None:
         self.assertEqual(
-            404, self.client.post("/runs/absent/result", json=TERMINAL).status_code
+            404, self.client.post(f"/batches/{BATCH}/runs/absent/result", json=TERMINAL).status_code
         )
 
     def test_the_caller_cannot_state_what_the_stages_observed(self) -> None:
@@ -222,7 +226,7 @@ class RunResultServiceTests(unittest.TestCase):
         reporting a fact the run already recorded, and the two could disagree.
         """
         response = self.client.post(
-            "/runs/result-1/result", json={**TERMINAL, "syntax_status": "passed"}
+            f"/batches/{BATCH}/runs/result-1/result", json={**TERMINAL, "syntax_status": "passed"}
         )
         self.assertEqual(422, response.status_code)
 
@@ -259,7 +263,7 @@ class RunResultWriterTests(unittest.TestCase):
                     "refinement_iterations_used": 1,
                     "refinement_iterations_allowed": 2,
                 },
-                root / "diagnoses",
+                root / "diagnoses" / "direct-1",
             )
 
             self.assertEqual("TEST_DEFECT", result["diagnosis"])

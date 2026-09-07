@@ -110,7 +110,7 @@ every `gpt-5` variant writes under `gpt-5`, every `claude-sonnet-4` variant unde
 `claude-sonnet-4`, every `gemini-2.5-pro` variant under `gemini-2-5-pro`. The
 family is read from the variant workflow that was selected, which already
 declares it. The exact id reaches the n8n model node and remains in the master's
-LLM configuration; `POST /runs` receives the stable family id that Python uses
+LLM configuration; `POST /batches/{batch_id}/runs` receives the stable family id that Python uses
 for generated-suite identity and selection. Raw responses are selected from the
 run- and artifact-iteration-scoped path instead. All twelve nodes
 stay connected to `Validate Config and Build Run Queue` through
@@ -273,14 +273,23 @@ refuses.
 
 ## Stage contract
 
-1. **Create Run** — `POST http://stage-service:8129/runs` → `{run_id}`.
+0. **Create Batch** — once per Start, `POST http://stage-service:8129/batches`
+   → `{batch_id, batch_dir, n8n_batch_dir}`. Every run of the queue is created
+   below that batch, so one launch is one `artifacts/work/runs/batch_NNN/`.
+1. **Create Run** — `POST /batches/{batch_id}/runs` →
+   `{run_id, run_dir, n8n_run_dir}`. The master keeps both directory spellings
+   and derives every artifact path from them; it spells none itself, so the
+   layout lives only in `llm4mtl.paths`.
 2. **Generation** (n8n owns it) — the provider subworkflow calls the LLM and
    writes the raw response into the run-specific response directory. The
    stage service then persists actual provider/model provenance as
    `generations/<artifact-type>/iteration-NNN/generation.json`, validated by
    `generation-result.schema.json`.
-3. **Stages** — `POST /runs/{run_id}/stages/{stage}`; n8n reads
-   `{status, outcome_code, artifacts}` and routes on it.
+3. **Stages** — `POST /batches/{batch_id}/runs/{run_id}/stages/{stage}`; n8n
+   reads `{status, outcome_code, artifacts}` and routes on it.
+4. **Batch result** — when the queue is exhausted, `Final Result and Artifacts`
+   is recorded once to `POST /batches/{batch_id}/result`, so the launch can be
+   read from `batch-result.json` before any run is opened.
 
 `docs/n8n-python-contract.md` is authoritative for stage ids and
 `outcome_code` values.

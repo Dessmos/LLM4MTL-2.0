@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -54,8 +54,73 @@ class RunCreateRequest(BaseModel):
 
 
 class RunCreateResponse(BaseModel):
+    """Where the run was created: its id, its batch, and both spellings of its
+    directory (repository-relative, and as the n8n container reaches it)."""
+
     run_id: str
+    batch_id: str
     status: str = "initialized"
+    run_dir: str
+    n8n_run_dir: str
+
+
+class BatchN8nContext(BaseModel):
+    """Which n8n execution launched the batch, for finding it again later."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    workflow_id: str | None = None
+    execution_id: str | None = None
+
+
+class BatchCreateRequest(BaseModel):
+    """One launch of the pipeline, before any of its runs exist.
+
+    ``batch_id`` is optional: the service claims the next free ``batch_NNN``
+    when none is given, which is the normal case. ``config`` is the launch
+    configuration as the caller recorded it, kept whole in the batch manifest.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    # Validated by the run store like a run id, so an escaping id is a 400 from
+    # the same check that guards every other identifier that becomes a path.
+    batch_id: str | None = None
+    run_mode: Literal["full", "tests_only", "transformations_only"] | None = None
+    pipeline_variant: str | None = Field(default=None, min_length=1)
+    config: dict[str, Any] | None = None
+    n8n: BatchN8nContext | None = None
+
+
+class BatchCreateResponse(BaseModel):
+    batch_id: str
+    status: str = "initialized"
+    batch_dir: str
+    n8n_batch_dir: str
+
+
+class BatchRunSummary(BaseModel):
+    """One run's ending as the launch reports it; extra detail is kept as given."""
+
+    model_config = ConfigDict(extra="allow")
+
+    run_id: str = Field(pattern=r"^[A-Za-z0-9._-]+$")
+    language: str = Field(min_length=1)
+    task: str = Field(min_length=1)
+    status: Literal["completed", "completed_with_failures", "failed", "incomplete"]
+    reason: str = Field(min_length=1)
+
+
+class BatchResultRequest(BaseModel):
+    """How the launch ended, reported once by the orchestration."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    status: Literal["completed", "completed_with_failures", "failed", "incomplete"]
+    run_mode: str | None = None
+    pipeline_variant: str | None = None
+    run_count: int = Field(ge=0)
+    results: list[BatchRunSummary]
 
 
 class StageRunRequest(BaseModel):

@@ -23,7 +23,7 @@ from llm4mtl.experiment_runner.config import (
 from llm4mtl.experiment_runner.models import PipelineConfig, RunResult, StageResult
 from llm4mtl.experiment_runner.orchestrator import ExperimentOrchestrator
 from llm4mtl.experiment_runner.adapters.transformation_validation import TransformationValidationAdapter
-from llm4mtl.paths import LEGACY_PROJECT_ROOT, TARGET
+from llm4mtl.paths import LEGACY_PROJECT_ROOT, TARGET, ArtifactRoots
 from llm4mtl.semantic_tests.failure_report import DIFF_FIELDS, FailureReportError
 from llm4mtl.semantic_tests.failure_report.request import (
     ReportRequest,
@@ -155,7 +155,7 @@ class CliTests(unittest.TestCase):
             run_id="dry-test",
             status="dry_run",
             command="pipeline.run",
-            run_dir="artifacts/work/runs/dry-test",
+            run_dir="artifacts/work/runs/batch_001/dry-test",
             stages=[
                 StageResult(
                     name="transformation_validation",
@@ -190,7 +190,7 @@ class CliTests(unittest.TestCase):
             "pair-two\n"
             "Results: artifacts/work/results.json\n"
             "candidate: suite-001\n"
-            "Run metadata: artifacts/work/runs/dry-test\n",
+            "Run metadata: artifacts/work/runs/batch_001/dry-test\n",
             stdout.getvalue(),
         )
 
@@ -346,7 +346,7 @@ class OrchestratorTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             repo_root = Path(temp_dir)
             orchestrator = ExperimentOrchestrator(REPO_ROOT)
-            orchestrator.runs_root = repo_root / "runs"
+            orchestrator.artifacts = ArtifactRoots(repo_root)
             config = PipelineConfig(
                 language="etl",
                 tasks=["Tree2Graph"],
@@ -358,7 +358,8 @@ class OrchestratorTests(unittest.TestCase):
             )
             result = orchestrator.run(config)
             self.assertEqual("dry_run", result.status)
-            self.assertFalse((orchestrator.runs_root / "dry-test").exists())
+            # Neither the run nor the batch it previewed is claimed by a dry run.
+            self.assertFalse(orchestrator.artifacts.runs.exists())
             self.assertEqual(5, len(result.stages))
 
     def test_semantic_stage_skips_when_parser_passed_nothing(self) -> None:

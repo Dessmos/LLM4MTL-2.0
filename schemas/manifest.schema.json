@@ -27,6 +27,11 @@
       "type": "string",
       "pattern": "^[A-Za-z0-9._-]+$"
     },
+    "batch_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9._-]+$",
+      "description": "The launch this run was created in; the run lives below that batch's directory. Optional only so manifests recorded before batches existed remain readable."
+    },
     "preset": {
       "type": [
         "string",

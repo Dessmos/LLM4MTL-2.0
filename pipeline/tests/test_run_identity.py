@@ -24,8 +24,14 @@ from llm4mtl.experiment_runner.orchestrator import (
     reject_identity_drift,
     run_identity,
 )
+from llm4mtl.paths import ArtifactRoots
 from llm4mtl.provenance import build_provenance
-from llm4mtl.run_store import ManifestExistsError, create_run, write_manifest
+from llm4mtl.run_store import (
+    ManifestExistsError,
+    create_batch,
+    create_run,
+    write_manifest,
+)
 from llm4mtl.run_store.identity import InvalidRunIdError
 
 IDENTITY = {
@@ -135,12 +141,12 @@ class ManifestImmutabilityTests(unittest.TestCase):
     def test_rejected_resume_does_not_overwrite_the_resolved_config(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             runner = ExperimentOrchestrator()
-            runner.runs_root = Path(temp_dir) / "runs"
-            runner.runs_root.mkdir()
-            original = config(run_id="same", command="tests.extract")
-            paths = create_run(
-                runner.runs_root, "same", run_identity(original, "original")
+            runner.artifacts = ArtifactRoots(Path(temp_dir))
+            batch = create_batch(runner.artifacts.runs, {}, batch_id="batch_001")
+            original = config(
+                run_id="same", batch_id="batch_001", command="tests.extract"
             )
+            paths = create_run(batch.root, "same", run_identity(original, "original"))
             paths.root.joinpath("config.resolved.yaml").write_text(
                 json.dumps({"task": "original"}),
                 encoding="utf-8",
@@ -149,6 +155,7 @@ class ManifestImmutabilityTests(unittest.TestCase):
             changed = config(
                 tasks=["OO2DB"],
                 run_id="same",
+                batch_id="batch_001",
                 command="tests.extract",
                 resume=True,
             )
@@ -170,13 +177,14 @@ class RunDirectoryContainmentTests(unittest.TestCase):
     def test_a_traversing_run_id_writes_nothing_before_it_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             orchestrator = ExperimentOrchestrator()
-            orchestrator.runs_root = Path(temp_dir) / "runs"
-            orchestrator.runs_root.mkdir()
+            orchestrator.artifacts = ArtifactRoots(Path(temp_dir))
 
             with self.assertRaises(InvalidRunIdError):
                 orchestrator.run(config(run_id="../escaped", command="tests.extract"))
 
             self.assertFalse((Path(temp_dir) / "escaped").exists())
+            # Nor is a batch claimed for a run that could never be created.
+            self.assertFalse(orchestrator.artifacts.runs.exists())
 
 
 class WorkspaceIsolationTests(unittest.TestCase):

@@ -24,9 +24,10 @@ from llm4mtl.experiment_runner.config import (
 )
 from llm4mtl.evaluation.diagnosis_aggregation import aggregate_run_diagnoses
 from llm4mtl.experiment_runner.models import PipelineConfig, RunResult, StageResult
-from llm4mtl.paths import REPO_ROOT, TARGET
+from llm4mtl.paths import REPO_ROOT, TARGET, ArtifactRoots
 from llm4mtl.provenance import build_provenance
 from llm4mtl.run_store.attempts import existing_attempts
+from llm4mtl.run_store.identity import validate_opaque_id
 from llm4mtl.semantic_tests.diagnosis_preparation import prepare_execution_diagnosis
 from llm4mtl.semantic_tests.failure_report import (
     read_request_payload,
@@ -61,6 +62,8 @@ _CONFIG_HASH_IGNORED_FIELDS = frozenset(
         "output_format",
         "engine_dir",
         "run_dir",
+        # Where the run is filed, not what it computes.
+        "batch_id",
     }
 )
 
@@ -76,8 +79,9 @@ class ExperimentOrchestrator:
         # Adapter subprocesses use this path as their cwd. After the v5 migration
         # every active component lives below the repository root.
         self.repo_root = (repo_root or REPO_ROOT).resolve()
-        # v5 migration (Stage 4): runs are now run-centric under artifacts/work/runs.
-        self.runs_root = TARGET.runs
+        # The one statement of where runs, batches and diagnoses live. Tests
+        # point it at a temporary tree.
+        self.artifacts: ArtifactRoots = TARGET.artifact_roots
         self.tests = TestGenerationAdapter(self.repo_root)
         self.parser = TransformationParserAdapter(self.repo_root)
         self.transformations = TransformationValidationAdapter(self.repo_root)
@@ -99,7 +103,8 @@ class ExperimentOrchestrator:
 
     def prepare_diagnosis_evidence(
         self,
-        run: str,
+        batch_id: str,
+        run_id: str,
         attempt: int | None = None,
     ) -> dict[str, Any]:
         """Re-derive the diagnosis evidence of one recorded execution attempt.
@@ -108,9 +113,7 @@ class ExperimentOrchestrator:
         command so an existing run can be prepared without re-executing Maven,
         and so the automatic path has no behaviour that cannot be reproduced.
         """
-        paths = run_store.open_run(self.runs_root, Path(run).name)
-        if not paths.manifest.exists():
-            raise ConfigError(f"unknown run: {run}")
+        paths = self._existing_run(batch_id, run_id)
         if attempt is None:
             attempts = existing_attempts(paths.stage_attempts_dir("execution"))
             if not attempts:
@@ -122,7 +125,8 @@ class ExperimentOrchestrator:
 
     def aggregate_diagnosis_evidence(
         self,
-        run: str,
+        batch_id: str,
+        run_id: str,
         attempt: int | None = None,
     ) -> dict[str, Any]:
         """Cluster one attempt's prepared reports by the failure they describe.
@@ -131,9 +135,7 @@ class ExperimentOrchestrator:
         test case; this counts how many distinct failures those observations
         actually cover, and how far the separate verdicts agreed.
         """
-        paths = run_store.open_run(self.runs_root, Path(run).name)
-        if not paths.manifest.exists():
-            raise ConfigError(f"unknown run: {run}")
+        paths = self._existing_run(batch_id, run_id)
         if attempt is None:
             attempts = existing_attempts(paths.stage_attempts_dir("execution"))
             if not attempts:
@@ -141,7 +143,46 @@ class ExperimentOrchestrator:
                     f"run {paths.root.name} recorded no execution attempt"
                 )
             attempt = max(attempts)
-        return aggregate_run_diagnoses(paths.root, attempt, TARGET.diagnoses)
+        return aggregate_run_diagnoses(
+            paths.root, attempt, self.artifacts.run_diagnoses_dir(batch_id, run_id)
+        )
+
+    def _existing_run(self, batch_id: str, run_id: str) -> run_store.RunPaths:
+        batch = run_store.open_batch(self.artifacts.runs, batch_id)
+        if run_store.read_batch_manifest(batch) is None:
+            raise ConfigError(f"unknown batch: {batch_id}")
+        paths = run_store.open_run(batch.root, run_id)
+        if not paths.manifest.exists():
+            raise ConfigError(f"unknown run: {batch_id}/{run_id}")
+        return paths
+
+    def _batch_for(self, config: PipelineConfig) -> run_store.BatchPaths:
+        """The batch this invocation files its run under.
+
+        A named batch must already exist: a run resumed or added by id joins a
+        launch that happened. Without a name, a dry run only previews the id
+        the next launch would claim, and a real run claims it.
+        """
+        if config.batch_id is not None:
+            batch = run_store.open_batch(self.artifacts.runs, config.batch_id)
+            if run_store.read_batch_manifest(batch) is None:
+                raise ConfigError(f"unknown batch: {config.batch_id}")
+            return batch
+        if config.dry_run:
+            return run_store.open_batch(
+                self.artifacts.runs, run_store.next_batch_id(self.artifacts.runs)
+            )
+        batch = run_store.create_batch(
+            self.artifacts.runs,
+            {
+                "run_mode": None,
+                "pipeline_variant": config.pipeline_variant,
+                "command": config.command,
+                "config": config.to_dict(),
+            },
+        )
+        config.batch_id = batch.batch_id
+        return batch
 
     def run(self, config: PipelineConfig) -> RunResult:
         validate_config(config)
@@ -154,8 +195,11 @@ class ExperimentOrchestrator:
         )
         # Resolve through the run store first: it validates that ``run_id`` is a
         # contained identifier. Deriving the directory here would let a
-        # traversing id create files before anything checked it.
-        paths = run_store.open_run(self.runs_root, run_id)
+        # traversing id create files before anything checked it — including a
+        # batch claimed for a run that can never exist. A dry run claims nothing.
+        validate_opaque_id(run_id)
+        batch = self._batch_for(config)
+        paths = run_store.open_run(batch.root, run_id)
         run_dir = paths.root
         config.run_dir = str(run_dir)
         previous = self.load_previous(paths) if config.resume else {}
@@ -178,7 +222,7 @@ class ExperimentOrchestrator:
             ]
             return RunResult(run_id, "dry_run", config.command, results)
 
-        self._initialize_run(paths, identity, run_id, run_exists)
+        self._initialize_run(batch, paths, identity, run_id, run_exists)
 
         if _stages_require_workspace(stages):
             # Execution always uses a run-local engine copy. `keep_workspace`
@@ -211,6 +255,7 @@ class ExperimentOrchestrator:
 
     def _initialize_run(
         self,
+        batch: run_store.BatchPaths,
         paths: run_store.RunPaths,
         identity: dict[str, object],
         run_id: str,
@@ -229,7 +274,9 @@ class ExperimentOrchestrator:
         # Claim the immutable identity before creating any secondary run
         # artifact. Concurrent creators cannot materialize workspaces under an
         # identity they did not win.
-        run_store.create_run(self.runs_root, run_id, identity)
+        run_store.create_run(
+            batch.root, run_id, {"batch_id": batch.batch_id, **identity}
+        )
 
     def _run_stages(
         self,

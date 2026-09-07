@@ -237,25 +237,34 @@ Stage requests cannot repeat or override identity. They carry only
 attempt-specific parameters such as `suite_id` and `verbose`.
 
 ```text
-artifacts/work/runs/<run-id>/
-├── manifest.json
-├── events.jsonl
-├── config.resolved.yaml
-├── summary.json
-├── runner.log
-├── observations/
-├── workspaces/
-├── responses/
-│   ├── semantic-test-generation/iteration-NNN/
-│   ├── transformation-generation/iteration-NNN/
-│   └── source-diagnosis/execution-attempt-NNN/
-└── stages/
-    └── <contract-stage>/
-        └── attempts/
-            └── attempt-NNN/
-                ├── result.json
-                └── evidence.json
+artifacts/work/runs/<batch-id>/
+├── batch.json                 immutable: what was launched, by whom
+├── batch-result.json          written once when the launch ends
+└── <run-id>/
+    ├── manifest.json
+    ├── events.jsonl
+    ├── config.resolved.yaml
+    ├── summary.json
+    ├── runner.log
+    ├── observations/
+    ├── workspaces/
+    ├── responses/
+    │   ├── semantic-test-generation/iteration-NNN/
+    │   ├── transformation-generation/iteration-NNN/
+    │   └── source-diagnosis/execution-attempt-NNN/
+    └── stages/
+        └── <contract-stage>/
+            └── attempts/
+                └── attempt-NNN/
+                    ├── result.json
+                    └── evidence.json
 ```
+
+A batch is one launch: one press of the master's Start button, or one local
+`pipeline run`. Its number is claimed by creating the directory, the same way
+stage attempts are, so two launches cannot share one. The batch owns nothing a
+run needs; it exists so the runs of one launch are found together and never
+interleave with another launch's.
 
 A run directory holds the state of one run: its workspaces, its logs, and the
 evidence its stages recorded. Results other work consumes do not live there,
@@ -265,15 +274,23 @@ it, analysis reads it across runs — so it is stored in its own area, keyed by
 the run that produced it and carrying no run state:
 
 ```text
-artifacts/work/diagnoses/<run-id>/attempt-NNN/diagnosis.json
+artifacts/work/diagnoses/<batch-id>/<run-id>/attempt-NNN/diagnosis.json
 ```
 
 The run keeps no copy and no pointer; `events.jsonl` still records that a
-`diagnosis_recorded` event happened, and the run id is what links the two.
+`diagnosis_recorded` event happened, and the batch and run ids are what link the
+two.
+
+Every one of these locations is stated once, in `llm4mtl.paths.ArtifactRoots`.
+No module derives one from another — a run's diagnoses directory is asked of the
+layout, not built from the run's directory name — and n8n receives both the
+repository-relative and the mounted spelling of each directory from the stage
+service at creation time, so the workflows spell no artifact path themselves.
 
 Invariants:
 
-- `run_id`, experiment id, and suite id are opaque one-component identifiers;
+- `run_id`, batch id, experiment id, and suite id are opaque one-component
+  identifiers;
 - `manifest.json` is write-once;
 - `events.jsonl` is append-only and locked;
 - attempt directories are claimed atomically;

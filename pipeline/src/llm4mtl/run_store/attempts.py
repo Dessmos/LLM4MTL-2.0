@@ -24,10 +24,23 @@ class AttemptAllocationError(RuntimeError):
     """Raised when no free attempt number could be claimed."""
 
 
-def claim_attempt(attempts_root: Path, attempt_dir: Callable[[int], Path]) -> int:
-    """Create the next free attempt directory and return its 1-based number."""
+ATTEMPT_PREFIX = "attempt-"
+
+
+def claim_attempt(
+    attempts_root: Path,
+    attempt_dir: Callable[[int], Path],
+    *,
+    prefix: str = ATTEMPT_PREFIX,
+) -> int:
+    """Create the next free numbered directory and return its 1-based number.
+
+    ``prefix`` is what the existing directories are named with, so the same
+    claim serves ``attempt-NNN`` and any other monotonic sequence (a batch of
+    runs claims ``batch_NNN`` the same way).
+    """
     attempts_root.mkdir(parents=True, exist_ok=True)
-    attempt = _first_free_candidate(attempts_root)
+    attempt = next_free_number(attempts_root, prefix=prefix)
     while attempt <= MAX_ATTEMPTS:
         try:
             attempt_dir(attempt).mkdir(parents=False, exist_ok=False)
@@ -40,18 +53,21 @@ def claim_attempt(attempts_root: Path, attempt_dir: Callable[[int], Path]) -> in
     )
 
 
-def _first_free_candidate(attempts_root: Path) -> int:
-    """One past the highest existing attempt, so numbering stays monotonic."""
-    return max(existing_attempts(attempts_root), default=0) + 1
+def next_free_number(attempts_root: Path, *, prefix: str = ATTEMPT_PREFIX) -> int:
+    """One past the highest existing number, so numbering stays monotonic.
+
+    A preview only: nothing is claimed, so two callers can read the same value.
+    """
+    return max(existing_attempts(attempts_root, prefix=prefix), default=0) + 1
 
 
-def existing_attempts(attempts_root: Path) -> list[int]:
-    """Attempt numbers already present, ignoring unrelated directory entries."""
+def existing_attempts(attempts_root: Path, *, prefix: str = ATTEMPT_PREFIX) -> list[int]:
+    """Numbers already present, ignoring unrelated directory entries."""
     if not attempts_root.is_dir():
         return []
     numbers = []
-    for item in attempts_root.glob("attempt-*"):
-        suffix = item.name.split("-", 1)[1]
+    for item in attempts_root.glob(f"{prefix}*"):
+        suffix = item.name[len(prefix) :]
         if item.is_dir() and suffix.isdigit():
             numbers.append(int(suffix))
     return numbers

@@ -19,6 +19,7 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 from llm4mtl import run_store
+from llm4mtl.paths import ArtifactRoots
 from llm4mtl.experiment_runner.models import PipelineConfig, StageResult
 from llm4mtl.experiment_runner.orchestrator import ExperimentOrchestrator
 from llm4mtl.provenance import build_provenance
@@ -172,6 +173,9 @@ class InfrastructureErrorResultTests(unittest.TestCase):
         self.assertEqual("abc123", result.input_hash)
 
 
+BATCH = "batch_001"
+
+
 class CallerEquivalenceTests(unittest.TestCase):
     """The same stage outcome records the same way through either entry point."""
 
@@ -180,19 +184,15 @@ class CallerEquivalenceTests(unittest.TestCase):
         self.addCleanup(self._tmp.cleanup)
         # Resolved: the run store resolves a run directory, and the runner
         # reports it relative to the repository root patched in below.
-        self.runs_root = Path(self._tmp.name).resolve()
-        self._diagnoses = self.runs_root.parent / f"{self.runs_root.name}-diagnoses"
-        self.addCleanup(lambda: shutil.rmtree(self._diagnoses, ignore_errors=True))
-        runs_patcher = patch(
-            "llm4mtl.stage_service.app._runs_root", return_value=self.runs_root
+        self.artifacts = ArtifactRoots(Path(self._tmp.name).resolve())
+        # One batch, shared by both entry points: the runner joins it by id, the
+        # service is asked for it by URL.
+        self.batch = run_store.create_batch(self.artifacts.runs, {}, batch_id=BATCH)
+        roots_patcher = patch(
+            "llm4mtl.stage_service.app._artifact_roots", return_value=self.artifacts
         )
-        runs_patcher.start()
-        self.addCleanup(runs_patcher.stop)
-        diagnoses_patcher = patch(
-            "llm4mtl.stage_service.app._diagnoses_root", return_value=self._diagnoses
-        )
-        diagnoses_patcher.start()
-        self.addCleanup(diagnoses_patcher.stop)
+        roots_patcher.start()
+        self.addCleanup(roots_patcher.stop)
         self.client = TestClient(app)
 
     def _extraction_config(self, run_id: str) -> PipelineConfig:
@@ -204,17 +204,21 @@ class CallerEquivalenceTests(unittest.TestCase):
             transformation_models=["gpt-5"],
             transformation_strategies=["grammar"],
             run_id=run_id,
+            batch_id=BATCH,
             command="tests.extract",
         )
 
     def _run_locally(self, config: PipelineConfig, extract):
         """Drive the local runner with its runs root inside a temporary tree."""
         orchestrator = ExperimentOrchestrator()
-        orchestrator.runs_root = self.runs_root
+        orchestrator.artifacts = self.artifacts
         with (
             # The runner reports its run directory relative to the repository
             # root; the fixture's runs live outside it.
-            patch("llm4mtl.experiment_runner.orchestrator.REPO_ROOT", self.runs_root),
+            patch(
+                "llm4mtl.experiment_runner.orchestrator.REPO_ROOT",
+                self.artifacts.artifacts_work,
+            ),
             patch.object(orchestrator.tests, "extract", side_effect=extract),
         ):
             return orchestrator.run(config)
@@ -224,11 +228,11 @@ class CallerEquivalenceTests(unittest.TestCase):
             self._extraction_config(run_id),
             lambda *_: extraction_result(),
         )
-        return run_store.open_run(self.runs_root, run_id)
+        return run_store.open_run(self.batch.root, run_id)
 
     def _record_through_service(self, run_id: str) -> run_store.RunPaths:
         self.client.post(
-            "/runs",
+            f"/batches/{BATCH}/runs",
             json={
                 "language": "etl",
                 "task": "Tree2Graph",
@@ -243,9 +247,9 @@ class CallerEquivalenceTests(unittest.TestCase):
             "llm4mtl.stage_service.app._orchestrator.tests.extract",
             side_effect=lambda *_: extraction_result(),
         ):
-            response = self.client.post(f"/runs/{run_id}/stages/extract", json={})
+            response = self.client.post(f"/batches/{BATCH}/runs/{run_id}/stages/extract", json={})
         self.assertEqual(200, response.status_code)
-        return run_store.open_run(self.runs_root, run_id)
+        return run_store.open_run(self.batch.root, run_id)
 
     def test_both_entry_points_persist_the_same_stage_result(self) -> None:
         runner = self._record_through_runner("equiv-runner")
@@ -298,7 +302,7 @@ class CallerEquivalenceTests(unittest.TestCase):
         )
 
         self.assertEqual("failed", result.status)
-        paths = run_store.open_run(self.runs_root, "runner-raises")
+        paths = run_store.open_run(self.batch.root, "runner-raises")
         persisted = read_json(paths.stage_attempt_result("extract", 1))
         self.assertEqual("infrastructure_error", persisted["status"])
         self.assertEqual("INFRASTRUCTURE_ERROR", persisted["outcome_code"])

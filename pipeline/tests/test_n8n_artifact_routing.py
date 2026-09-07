@@ -74,7 +74,11 @@ def _writes_inside_artifacts(document: dict[str, Any], file_name: str) -> bool:
     )
     if source is None:
         return False
-    return "/data/artifacts/" in json.dumps(source.get("parameters", {}))
+    parameters = json.dumps(source.get("parameters", {}))
+    # Either the mount is spelled there, or the path is built from the run
+    # directory Python reported for this run, which `Validate Input` has already
+    # required to sit below the mount.
+    return "/data/artifacts/" in parameters or "${context.n8n_run_dir}/" in parameters
 
 
 class N8nArtifactRoutingTests(unittest.TestCase):

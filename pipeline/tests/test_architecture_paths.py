@@ -90,7 +90,10 @@ class ActivePathTests(unittest.TestCase):
         consumer needs the run id and nothing else.
         """
         self.assertEqual(TARGET.artifacts_work / "diagnoses", TARGET.diagnoses)
-        self.assertEqual(TARGET.diagnoses / "run-1", TARGET.run_diagnoses_dir("run-1"))
+        self.assertEqual(
+            TARGET.diagnoses / "batch_001" / "run-1",
+            TARGET.run_diagnoses_dir("batch_001", "run-1"),
+        )
         self.assertNotEqual(TARGET.runs, TARGET.diagnoses)
         self.assertFalse(
             TARGET.diagnoses.is_relative_to(TARGET.runs),

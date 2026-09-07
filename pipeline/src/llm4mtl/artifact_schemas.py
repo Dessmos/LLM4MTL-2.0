@@ -59,6 +59,8 @@ def _is_rfc3339_date_time(value: object) -> bool:
 # callers; the filename is an implementation detail of the schema directory.
 SCHEMA_FILES: dict[str, str] = {
     "manifest": "manifest.schema.json",
+    "batch-manifest": "batch-manifest.schema.json",
+    "batch-result": "batch-result.schema.json",
     "events": "events.schema.json",
     "stage-result": "stage-result.schema.json",
     "experiment-manifest": "experiment-manifest.schema.json",

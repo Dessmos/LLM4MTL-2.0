@@ -9,7 +9,7 @@ An experiment must not start when its raw-data source is marked `not defined`.
 
 | Metric | Authoritative raw data | Current state |
 | --- | --- | --- |
-| Test Executability Rate | `artifacts/work/runs/<run_id>/observations/**/suite_execution.json`; supporting Maven output and Surefire XML under the adjacent `execution_evidence/` | available at suite level |
+| Test Executability Rate | `artifacts/work/runs/<batch_id>/<run_id>/observations/**/suite_execution.json`; supporting Maven output and Surefire XML under the adjacent `execution_evidence/` | available at suite level |
 | Reference-Pass Rate | the same reference-role `suite_execution.json`, keyed by its recorded suite and reference-transformation hashes | available at suite level |
 | Held-out Repair Success Rate | adopted `transformation/iteration-NNN/` plus fixed-suite observations derived by `evaluation/heldout/run_heldout.py` | available offline at transformation level (`T0 -> Tfinal`) |
 | Held-out Semantic Pass Rate | fixed versioned held-out suites plus `evaluation/results/heldout.csv` | available offline; held-out data never enters production feedback |

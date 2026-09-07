@@ -20,6 +20,7 @@ from fastapi.testclient import TestClient
 
 from llm4mtl import run_store
 from llm4mtl.experiment_runner.models import PipelineConfig, StageResult
+from llm4mtl.paths import ArtifactRoots
 from llm4mtl.provenance import build_provenance
 from llm4mtl.run_store.transformations import (
     TransformationAdoptionError,
@@ -161,6 +162,9 @@ class TransformationAdoptionTests(unittest.TestCase):
         self.assertIsNone(adopted_transformations(self.paths, 0))
 
 
+BATCH = "batch_001"
+
+
 class StageServiceAdoptionTests(unittest.TestCase):
     """What the stages actually receive once the service adopts."""
 
@@ -168,20 +172,21 @@ class StageServiceAdoptionTests(unittest.TestCase):
         self._tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self._tmp.cleanup)
         self.root = Path(self._tmp.name)
-        self._diagnoses = self.root / "diagnoses"
-        self.addCleanup(lambda: shutil.rmtree(self._diagnoses, ignore_errors=True))
-        for target, value in (
-            ("_runs_root", self.root / "runs"),
-            ("_diagnoses_root", self._diagnoses),
-        ):
-            patcher = patch(f"llm4mtl.stage_service.app.{target}", return_value=value)
-            patcher.start()
-            self.addCleanup(patcher.stop)
+        self.artifacts = ArtifactRoots(self.root)
+        patcher = patch(
+            "llm4mtl.stage_service.app._artifact_roots", return_value=self.artifacts
+        )
+        patcher.start()
+        self.addCleanup(patcher.stop)
         self.client = TestClient(app)
-        self.client.post("/runs", json={**IDENTITY, "run_id": "svc-adopt"})
+        self.client.post("/batches", json={"batch_id": BATCH})
+        self.client.post(
+            f"/batches/{BATCH}/runs", json={**IDENTITY, "run_id": "svc-adopt"}
+        )
         self.shared = (
             self.root
             / "runs"
+            / BATCH
             / "svc-adopt"
             / "responses"
             / "transformation-generation"
@@ -216,7 +221,7 @@ class StageServiceAdoptionTests(unittest.TestCase):
             ),
         ):
             response = self.client.post(
-                f"/runs/svc-adopt/stages/{stage}",
+                f"/batches/{BATCH}/runs/svc-adopt/stages/{stage}",
                 json=body if body is not None else {"suite_id": "svc-adopt_000"},
             )
         self.assertEqual(200, response.status_code, response.text)
@@ -224,7 +229,7 @@ class StageServiceAdoptionTests(unittest.TestCase):
 
     def test_both_transformation_stages_judge_the_run_s_own_copy(self) -> None:
         syntax = self._run_stage("syntax-validation", "parser", "parse")
-        run_dir = (self.root / "runs" / "svc-adopt").resolve()
+        run_dir = (self.root / "runs" / BATCH / "svc-adopt").resolve()
         adopted = run_dir / "transformation" / "iteration-000" / "Tree2Graph.etl"
         self.assertEqual([str(adopted)], syntax.transformations)
 
@@ -251,6 +256,7 @@ class StageServiceAdoptionTests(unittest.TestCase):
         refined_response = (
             self.root
             / "runs"
+            / BATCH
             / "svc-adopt"
             / "responses"
             / "transformation-generation"
@@ -267,7 +273,7 @@ class StageServiceAdoptionTests(unittest.TestCase):
             body={"suite_id": "svc-adopt_000", "refinement_iteration": 1},
         )
 
-        run_dir = (self.root / "runs" / "svc-adopt").resolve()
+        run_dir = (self.root / "runs" / BATCH / "svc-adopt").resolve()
         self.assertEqual(
             [str(run_dir / "transformation" / "iteration-001" / "Tree2Graph.etl")],
             refined.transformations,
@@ -282,7 +288,7 @@ class StageServiceAdoptionTests(unittest.TestCase):
         self.shared.unlink()
 
         response = self.client.post(
-            "/runs/svc-adopt/stages/syntax-validation",
+            f"/batches/{BATCH}/runs/svc-adopt/stages/syntax-validation",
             json={"suite_id": "svc-adopt_000", "refinement_iteration": 0},
         )
 

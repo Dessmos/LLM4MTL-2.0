@@ -33,6 +33,10 @@ class PipelineConfig:
     start_stage: str = "extract"
     stop_after: str = "semantic"
     run_id: str | None = None
+    # The launch this run belongs to. None means "start a new batch": the run
+    # store claims the next free batch directory. Not an identity axis: it says
+    # where the run is filed, not what it computes.
+    batch_id: str | None = None
     # Identity axes recorded in the immutable manifest alongside language/task/models.
     seed: int = 1
     pipeline_variant: str = "full"

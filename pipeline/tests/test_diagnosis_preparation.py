@@ -243,8 +243,10 @@ class DiagnosisPreparationTests(unittest.TestCase):
 
     def setUp(self) -> None:
         self.run_id = f"test-diagnosis-preparation-{uuid.uuid4().hex[:8]}"
-        self.run_dir = TARGET.runs / self.run_id
-        self.addCleanup(shutil.rmtree, self.run_dir, ignore_errors=True)
+        # A run lives below its batch; the whole batch is this test's to remove.
+        batch_id = f"batch_test-{uuid.uuid4().hex[:8]}"
+        self.run_dir = TARGET.run_dir(batch_id, self.run_id)
+        self.addCleanup(shutil.rmtree, TARGET.batch_dir(batch_id), ignore_errors=True)
         self.fixture = self.run_dir / "fixture"
         (self.fixture / "suite" / "models").mkdir(parents=True)
         self.suite_dir = self.fixture / "suite"

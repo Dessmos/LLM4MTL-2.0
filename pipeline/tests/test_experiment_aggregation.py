@@ -111,7 +111,7 @@ class AggregationTests(unittest.TestCase):
                 provider="anthropic",
                 model="claude-sonnet-4-20250514",
                 reason="SYNTAX_INVALID",
-                diagnoses_root=root / "diagnoses",
+                run_diagnoses=root / "diagnoses" / paths.root.name,
             )
             refined = paths.generation_response(
                 "transformation-generation", 1, "Tree2Graph.etl"

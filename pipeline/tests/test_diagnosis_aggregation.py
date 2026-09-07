@@ -111,7 +111,8 @@ class RunAggregationTests(unittest.TestCase):
         self.addCleanup(self._tmp.cleanup)
         self.root = Path(self._tmp.name)
         self.run_dir = self.root / "runs" / RUN_ID
-        self.diagnoses = self.root / "diagnoses"
+        # The run's own directory in the diagnoses area, as the layout names it.
+        self.diagnoses = self.root / "diagnoses" / RUN_ID
         self.reports_dir = (
             self.run_dir / "diagnosis" / "execution" / "attempt-001" / "reports"
         )
@@ -149,7 +150,7 @@ class RunAggregationTests(unittest.TestCase):
 
     def _write_verdict(self, attempt: int, case: str, classification: str) -> None:
         write_json(
-            self.diagnoses / RUN_ID / f"attempt-{attempt:03d}" / "diagnosis.json",
+            self.diagnoses / f"attempt-{attempt:03d}" / "diagnosis.json",
             {
                 "schema_version": "1.0",
                 "classification": classification,

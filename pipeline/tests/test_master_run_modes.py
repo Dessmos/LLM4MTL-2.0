@@ -232,9 +232,21 @@ def _configure(
     )
 
 
+# Where one launch's runs are filed. Python claims the batch and reports both
+# spellings of every directory; the master repeats them and builds none itself.
+BATCH = "batch_001"
+RUN_ID = "etl-tree2graph-0001"
+RUN_DIR = f"artifacts/work/runs/{BATCH}/{RUN_ID}"
+N8N_RUN_DIR = f"/data/artifacts/runs/{BATCH}/{RUN_ID}"
+
 # What each stage reports back when everything succeeds.
 PASSING_RESULTS = {
-    "create_run": {"run_id": "etl-tree2graph-0001"},
+    "create_batch": {
+        "batch_id": BATCH,
+        "batch_dir": f"artifacts/work/runs/{BATCH}",
+        "n8n_batch_dir": f"/data/artifacts/runs/{BATCH}",
+    },
+    "create_run": {"run_id": RUN_ID, "run_dir": RUN_DIR, "n8n_run_dir": N8N_RUN_DIR},
     "generate_tests": {"status": "completed"},
     "extract": {"stage": "extract", "status": "completed", "outcome_code": "EXTRACTED"},
     "technical": {
@@ -299,7 +311,7 @@ def _drive(
             iteration = state["refinement_request"]["iteration"]
             produced = {
                 "prompt_path": (
-                    f"/data/artifacts/runs/{state['current']['run_id']}/refinements/"
+                    f"{state['current']['n8n_run_dir']}/refinements/"
                     f"{artifact_type}/iteration-{iteration:03d}/prompt.md"
                 ),
                 "request_path": (
@@ -516,11 +528,12 @@ class TransformationWorkflowCompatibilityTests(unittest.TestCase):
                         "language": "etl",
                         "task": "Tree2Graph",
                         "run_id": "run-transform-1",
+                        "n8n_run_dir": "/data/artifacts/runs/batch_001/run-transform-1",
                         "refinement_iteration": 1,
                     },
                     "subworkflow_input": {
                         "refinement_iteration": 1,
-                        "prompt_path": "/data/artifacts/runs/run-transform-1/refinements/transformation/iteration-001/prompt.md",
+                        "prompt_path": "/data/artifacts/runs/batch_001/run-transform-1/refinements/transformation/iteration-001/prompt.md",
                     },
                     "workflow_json": workflow,
                 }
@@ -532,7 +545,7 @@ class TransformationWorkflowCompatibilityTests(unittest.TestCase):
             node["name"]: node for node in adapted["result"]["workflow_json"]["nodes"]
         }
         self.assertEqual(
-            "=/data/artifacts/runs/run-transform-1/refinements/"
+            "=/data/artifacts/runs/batch_001/run-transform-1/refinements/"
             "transformation/iteration-001/prompt.md",
             nodes["Read prompt files"]["parameters"]["fileSelector"],
         )
@@ -550,7 +563,7 @@ class TransformationWorkflowCompatibilityTests(unittest.TestCase):
         self.assertTrue(save_name["parameters"]["includeOtherFields"])
         self.assertFalse(save_name["parameters"]["options"]["stripBinary"])
         self.assertEqual(
-            "=/data/artifacts/runs/run-transform-1/responses/"
+            "=/data/artifacts/runs/batch_001/run-transform-1/responses/"
             "transformation-generation/iteration-001/Tree2Graph.etl",
             nodes["Write response to disk"]["parameters"]["fileName"],
         )
@@ -582,11 +595,12 @@ class TransformationWorkflowCompatibilityTests(unittest.TestCase):
                         "language": "etl",
                         "task": "Tree2Graph",
                         "run_id": "run-tests-1",
+                        "n8n_run_dir": "/data/artifacts/runs/batch_001/run-tests-1",
                         "refinement_iteration": 2,
                     },
                     "subworkflow_input": {
                         "refinement_iteration": 2,
-                        "prompt_path": "/data/artifacts/runs/run-tests-1/refinements/semantic-test/iteration-002/prompt.md",
+                        "prompt_path": "/data/artifacts/runs/batch_001/run-tests-1/refinements/semantic-test/iteration-002/prompt.md",
                     },
                     "workflow_json": workflow,
                 }
@@ -597,7 +611,7 @@ class TransformationWorkflowCompatibilityTests(unittest.TestCase):
             node["name"]: node for node in adapted["result"]["workflow_json"]["nodes"]
         }
         self.assertEqual(
-            "=/data/artifacts/runs/run-tests-1/refinements/"
+            "=/data/artifacts/runs/batch_001/run-tests-1/refinements/"
             "semantic-test/iteration-002/prompt.md",
             nodes["Read prompt files"]["parameters"]["fileSelector"],
         )
@@ -606,7 +620,7 @@ class TransformationWorkflowCompatibilityTests(unittest.TestCase):
             nodes["(Re-)Generate test suite"]["parameters"]["text"],
         )
         self.assertEqual(
-            "=/data/artifacts/runs/run-tests-1/responses/"
+            "=/data/artifacts/runs/batch_001/run-tests-1/responses/"
             "semantic-test-generation/iteration-002/Tree2Graph.md",
             nodes["Write response to disk"]["parameters"]["fileName"],
         )
@@ -639,6 +653,7 @@ class TransformationWorkflowCompatibilityTests(unittest.TestCase):
                         "language": "etl",
                         "task": "Tree2Graph",
                         "run_id": "run-tests-initial",
+                        "n8n_run_dir": "/data/artifacts/runs/batch_001/run-tests-initial",
                         "refinement_iteration": 0,
                     },
                     "subworkflow_input": {"refinement_iteration": 0},
@@ -652,7 +667,7 @@ class TransformationWorkflowCompatibilityTests(unittest.TestCase):
             node["name"]: node for node in adapted["result"]["workflow_json"]["nodes"]
         }
         response_directory = (
-            "=/data/artifacts/runs/run-tests-initial/responses/"
+            "=/data/artifacts/runs/batch_001/run-tests-initial/responses/"
             "semantic-test-generation/iteration-000"
         )
         self.assertEqual(
@@ -690,6 +705,82 @@ class TransformationWorkflowCompatibilityTests(unittest.TestCase):
 @unittest.skipUnless(shutil.which("node"), "the master workflow's Code nodes need Node")
 class RunModeTests(unittest.TestCase):
 
+    def test_one_launch_claims_one_batch_and_files_every_run_below_it(self) -> None:
+        """Two queued runs share the batch Python claimed once."""
+        config = _configure(
+            run_mode="Semantic Tests Only",
+            tasks={"etl_tasks": "Tree2Graph,OO2DB"},
+        )
+        self.assertTrue(config["ok"], config.get("error"))
+        created: list[dict[str, Any]] = []
+
+        def next_run() -> dict[str, Any]:
+            run_id = f"etl-run-{len(created)}"
+            created.append(
+                {
+                    "run_id": run_id,
+                    "run_dir": f"artifacts/work/runs/{BATCH}/{run_id}",
+                    "n8n_run_dir": f"/data/artifacts/runs/{BATCH}/{run_id}",
+                }
+            )
+            return created[-1]
+
+        actions, state = _drive(config["result"], factories={"create_run": next_run})
+        self.assertEqual(1, actions.count("create_batch"))
+        self.assertEqual(2, actions.count("create_run"))
+        self.assertEqual("create_batch", actions[0])
+        self.assertEqual(BATCH, state["batch_id"])
+        self.assertEqual(
+            [
+                f"artifacts/work/runs/{BATCH}/etl-run-0",
+                f"artifacts/work/runs/{BATCH}/etl-run-1",
+            ],
+            [result["run_dir"] for result in state["results"]],
+        )
+
+    def test_a_run_directory_python_did_not_mount_is_refused(self) -> None:
+        config = _configure(run_mode="Semantic Tests Only")
+        self.assertTrue(config["ok"], config.get("error"))
+        for field, value in (
+            ("n8n_run_dir", "/etc/passwd"),
+            ("n8n_run_dir", "/data/artifacts/../secrets"),
+            ("run_dir", "/absolute/run"),
+        ):
+            with self.subTest(field=field):
+                with self.assertRaises(AssertionError) as refused:
+                    _drive(
+                        config["result"],
+                        results={
+                            "create_run": {**PASSING_RESULTS["create_run"], field: value}
+                        },
+                    )
+                self.assertIn(field, str(refused.exception))
+
+    def test_the_master_spells_no_artifact_path_of_its_own(self) -> None:
+        """Every run path n8n uses is one Python reported for that run.
+
+        The mount prefix and the runs layout used to be repeated inside the
+        workflow, so a layout change had to be made in two languages at once.
+        """
+        master = _master()
+        nodes = {node["name"]: node for node in master["nodes"]}
+        for name in (
+            "State Machine",
+            "Adapt Transformation Workflow Compatibility",
+            "Validate Config and Build Run Queue",
+        ):
+            code = nodes[name]["parameters"]["jsCode"]
+            with self.subTest(node=name):
+                self.assertNotIn("/data/artifacts/runs", code)
+                self.assertNotIn("artifacts/work/runs", code)
+        self.assertEqual(
+            "Record Batch Result",
+            master["connections"]["Final Result and Artifacts"]["main"][0][0]["node"],
+        )
+        batch_result = nodes["Record Batch Result"]["parameters"]
+        self.assertIn("/batches/{{ $json.batch_id }}/result", batch_result["url"])
+        self.assertIn("results: $json.results", batch_result["jsonBody"])
+
     def test_tests_only_never_routes_into_transformation_generation(self) -> None:
         config = _configure(run_mode="Semantic Tests Only")
         self.assertTrue(config["ok"], config.get("error"))
@@ -698,6 +789,7 @@ class RunModeTests(unittest.TestCase):
             self.assertNotIn(action, actions)
         self.assertEqual(
             [
+                "create_batch",
                 "create_run",
                 "generate_tests",
                 "record_generation",
@@ -727,6 +819,7 @@ class RunModeTests(unittest.TestCase):
             self.assertNotIn(action, actions)
         self.assertEqual(
             [
+                "create_batch",
                 "create_run",
                 "generate_transformations",
                 "record_generation",
@@ -747,6 +840,7 @@ class RunModeTests(unittest.TestCase):
         actions, state = _drive(config["result"])
         self.assertEqual(
             [
+                "create_batch",
                 "create_run",
                 "generate_tests",
                 "record_generation",
@@ -929,11 +1023,11 @@ def _failing_execution() -> dict[str, Any]:
         "attempt": 1,
         "artifacts": {
             "failure_report_index": (
-                "artifacts/work/runs/etl-tree2graph-0001/diagnosis/execution/"
+                "artifacts/work/runs/batch_001/etl-tree2graph-0001/diagnosis/execution/"
                 "attempt-001/index.json"
             ),
             "failure_report_path": (
-                "artifacts/work/runs/etl-tree2graph-0001/diagnosis/execution/"
+                "artifacts/work/runs/batch_001/etl-tree2graph-0001/diagnosis/execution/"
                 "attempt-001/reports/first.json"
             ),
         },
@@ -955,7 +1049,7 @@ def _drive_diagnosis(
     count = len(classifications) if eligible is None else eligible
     reports = [
         {
-            "path": "artifacts/work/runs/etl-tree2graph-0001/diagnosis/execution/"
+            "path": "artifacts/work/runs/batch_001/etl-tree2graph-0001/diagnosis/execution/"
             f"attempt-001/reports/r{index}.json"
         }
         for index in range(count)
@@ -1127,7 +1221,7 @@ class SourceDiagnosisAggregationTests(unittest.TestCase):
                 "read_diagnosis_index": _diagnosis_index(
                     {
                         "path": (
-                            "artifacts/work/runs/etl-tree2graph-0001/diagnosis/"
+                            "artifacts/work/runs/batch_001/etl-tree2graph-0001/diagnosis/"
                             "execution/attempt-001/reports/r0.json"
                         )
                     }
@@ -1471,11 +1565,25 @@ class ConditionalLlmRoleTests(unittest.TestCase):
                     state["run_specs"][0]["test_generation_model"],
                 )
 
-                create_run = _run_node("State Machine", inputs=[state])
+                create_batch = _run_node("State Machine", inputs=[state])
+                self.assertTrue(create_batch["ok"], create_batch.get("error"))
+                self.assertEqual("create_batch", create_batch["result"]["action"])
+                batched = _run_node(
+                    "Capture Action Result",
+                    inputs=[PASSING_RESULTS["create_batch"]],
+                    nodes={"State Machine": {"json": create_batch["result"]}},
+                )
+                create_run = _run_node("State Machine", inputs=[batched["result"]])
                 self.assertTrue(create_run["ok"], create_run.get("error"))
                 captured = _run_node(
                     "Capture Action Result",
-                    inputs=[{"run_id": "etl-tree2graph-family-test"}],
+                    inputs=[
+                        {
+                            "run_id": "etl-tree2graph-family-test",
+                            "run_dir": f"artifacts/work/runs/{BATCH}/etl-tree2graph-family-test",
+                            "n8n_run_dir": f"/data/artifacts/runs/{BATCH}/etl-tree2graph-family-test",
+                        }
+                    ],
                     nodes={"State Machine": {"json": create_run["result"]}},
                 )
                 self.assertTrue(captured["ok"], captured.get("error"))

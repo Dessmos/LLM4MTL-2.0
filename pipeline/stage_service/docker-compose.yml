@@ -9,6 +9,7 @@ services:
     ports:
       - "8129:8129"
     volumes:
-      # Mount the working tree so runs land on the host under artifacts/work/runs
+      # Mount the working tree so runs land on the host under
+      # artifacts/work/runs/<batch>/<run>
       # and engines/benchmark/workflows are read live (not a baked-in copy).
       - ../..:/app

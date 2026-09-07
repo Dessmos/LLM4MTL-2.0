@@ -148,7 +148,7 @@ class AttemptAtomicityTests(unittest.TestCase):
                 results = list(
                     pool.map(
                         lambda _: run_store.record_diagnosis(
-                            paths, diagnosis, Path(temp_dir) / "diagnoses"
+                            paths, diagnosis, Path(temp_dir) / "diagnoses" / "run_001"
                         ),
                         range(8),
                     )
@@ -210,7 +210,7 @@ class PersistedSchemaTests(unittest.TestCase):
                         "model": "gpt-5",
                         "created_at": "not-a-date",
                     },
-                    Path(temp_dir) / "diagnoses",
+                    Path(temp_dir) / "diagnoses" / "run_001",
                 )
 
     def test_every_persisted_artifact_of_a_run_validates(self) -> None:

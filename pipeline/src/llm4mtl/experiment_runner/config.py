@@ -56,6 +56,7 @@ def load_pipeline_config(path: Path) -> PipelineConfig:
         keep_workspace=bool(execution.get("keep_workspace", False)),
         fail_fast=bool(execution.get("fail_fast", False)),
         run_id=string_or_none(execution.get("run_id")),
+        batch_id=string_or_none(execution.get("batch_id")),
     )
     if extraction.get("enabled") is False and config.start_stage == "extract":
         config.start_stage = "technical"

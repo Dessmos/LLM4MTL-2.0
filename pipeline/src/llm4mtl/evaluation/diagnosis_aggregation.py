@@ -57,9 +57,13 @@ class DiagnosisAggregationError(ValueError):
 
 
 def aggregate_run_diagnoses(
-    run_dir: Path, attempt: int, diagnoses_root: Path
+    run_dir: Path, attempt: int, run_diagnoses: Path
 ) -> dict[str, Any]:
-    """Cluster every prepared report of ``attempt`` and count what was diagnosed."""
+    """Cluster every prepared report of ``attempt`` and count what was diagnosed.
+
+    ``run_diagnoses`` is the run's directory in the diagnoses area, resolved by
+    the caller through the artifact layout.
+    """
     run_dir = Path(run_dir).resolve()
     index_path = (
         run_dir / "diagnosis" / "execution" / f"attempt-{attempt:03d}" / INDEX_FILENAME
@@ -69,7 +73,7 @@ def aggregate_run_diagnoses(
             f"run {run_dir.name} prepared no diagnosis evidence for attempt {attempt}"
         )
     index = read_json(index_path)
-    verdicts = _recorded_verdicts(Path(diagnoses_root) / run_dir.name)
+    verdicts = _recorded_verdicts(Path(run_diagnoses))
 
     pairs = [
         _aggregate_pair(run_dir, pair, verdicts) for pair in index.get("pairs", [])

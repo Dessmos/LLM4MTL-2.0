@@ -1,6 +1,6 @@
 """Run-centric artifact store (public facade).
 
-A run directory (``artifacts/work/runs/<run-id>/``) has three owners with distinct
+A run directory (``artifacts/work/runs/<batch-id>/<run-id>/``) has three owners with distinct
 write invariants: an immutable ``manifest.json`` (write-once), an append-only
 ``events.jsonl`` timeline, and per-stage results stored as immutable
 ``attempts/attempt-NNN/``, with the latest result derived from them on read.
@@ -16,6 +16,18 @@ from pathlib import Path
 from typing import Any
 
 from llm4mtl.run_store.attempts import AttemptAllocationError
+from llm4mtl.run_store.batches import (
+    BatchExistsError,
+    BatchPaths,
+    BatchResultConflictError,
+    create_batch,
+    list_batch_runs,
+    next_batch_id,
+    open_batch,
+    read_batch_manifest,
+    read_batch_result,
+    record_batch_result,
+)
 from llm4mtl.run_store.events import append_event, read_events
 from llm4mtl.run_store.generations import (
     GenerationRecordError,
@@ -36,18 +48,19 @@ from llm4mtl.run_store.transformations import (
 )
 
 
-def open_run(runs_root: Path, run_id: str) -> RunPaths:
+def open_run(batch_root: Path, run_id: str) -> RunPaths:
     """Return the :class:`RunPaths` for a run without creating anything.
 
-    Raises :class:`InvalidRunIdError` when ``run_id`` is malformed or would
-    resolve outside ``runs_root``.
+    ``batch_root`` is the directory of the batch the run belongs to. Raises
+    :class:`InvalidRunIdError` when ``run_id`` is malformed or would resolve
+    outside it.
     """
-    return RunPaths(resolve_contained_dir(Path(runs_root), run_id, kind="run"))
+    return RunPaths(resolve_contained_dir(Path(batch_root), run_id, kind="run"))
 
 
-def create_run(runs_root: Path, run_id: str, manifest: dict[str, Any]) -> RunPaths:
+def create_run(batch_root: Path, run_id: str, manifest: dict[str, Any]) -> RunPaths:
     """Create the run directory, write the immutable manifest, and open the event log."""
-    paths = open_run(runs_root, run_id)
+    paths = open_run(batch_root, run_id)
     paths.root.mkdir(parents=True, exist_ok=True)
     write_manifest(paths, {"run_id": run_id, **manifest})
     if manifest.get("test_generation_model") is not None:
@@ -65,7 +78,17 @@ def create_run(runs_root: Path, run_id: str, manifest: dict[str, Any]) -> RunPat
 __all__ = [
     "SCHEMA_VERSION",
     "RunPaths",
+    "BatchPaths",
     "AttemptAllocationError",
+    "BatchExistsError",
+    "BatchResultConflictError",
+    "open_batch",
+    "create_batch",
+    "next_batch_id",
+    "read_batch_manifest",
+    "list_batch_runs",
+    "record_batch_result",
+    "read_batch_result",
     "InvalidRunIdError",
     "ManifestExistsError",
     "open_run",

@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 
 from llm4mtl.experiment_runner.models import StageResult
 from llm4mtl import run_store
+from llm4mtl.paths import ArtifactRoots
 from llm4mtl.provenance import build_provenance
 from llm4mtl.serialization.json_io import read_json, write_json
 from llm4mtl.stage_service.app import app
@@ -36,33 +37,124 @@ def run_payload(**overrides: object) -> dict[str, object]:
     return {**IDENTITY, "experiment_config": EXPERIMENT_CONFIG, **overrides}
 
 
+# Every run of one launch is created below its batch.
+BATCH = "batch_001"
+
+
 class StageServiceTests(unittest.TestCase):
 
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
-        self._diagnoses = (
-            Path(self._tmp.name).parent / f"{Path(self._tmp.name).name}-diagnoses"
-        )
+        self.addCleanup(self._tmp.cleanup)
+        self.artifacts = ArtifactRoots(Path(self._tmp.name))
+        self._diagnoses = self.artifacts.diagnoses
         patcher = patch(
-            "llm4mtl.stage_service.app._runs_root", return_value=Path(self._tmp.name)
+            "llm4mtl.stage_service.app._artifact_roots", return_value=self.artifacts
         )
         patcher.start()
         self.addCleanup(patcher.stop)
-        diagnoses_patcher = patch(
-            "llm4mtl.stage_service.app._diagnoses_root", return_value=self._diagnoses
-        )
-        diagnoses_patcher.start()
-        self.addCleanup(diagnoses_patcher.stop)
-        self.addCleanup(lambda: shutil.rmtree(self._diagnoses, ignore_errors=True))
-        self.addCleanup(self._tmp.cleanup)
         self.client = TestClient(app)
+        created = self.client.post("/batches", json={"batch_id": BATCH})
+        self.assertEqual(200, created.status_code, created.text)
+        self.batch_root = self.artifacts.batch_dir(BATCH)
+
+    def test_batches_are_claimed_in_sequence_and_never_shared(self) -> None:
+        first = self.client.post("/batches", json={"run_mode": "full"})
+        second = self.client.post("/batches", json={})
+        self.assertEqual(200, first.status_code, first.text)
+        self.assertEqual("batch_002", first.json()["batch_id"])
+        self.assertEqual("batch_003", second.json()["batch_id"])
+        self.assertEqual(
+            {
+                "batch_id": "batch_002",
+                "status": "initialized",
+                "batch_dir": str(self.artifacts.batch_dir("batch_002").resolve()),
+                "n8n_batch_dir": "/data/artifacts/runs/batch_002",
+            },
+            first.json(),
+        )
+        manifest = run_store.read_batch_manifest(
+            run_store.open_batch(self.artifacts.runs, "batch_002")
+        )
+        self.assertEqual("full", manifest["run_mode"])
+        self.assertEqual(
+            409, self.client.post("/batches", json={"batch_id": BATCH}).status_code
+        )
+        self.assertEqual(
+            400, self.client.post("/batches", json={"batch_id": "../up"}).status_code
+        )
+
+    def test_a_run_is_created_below_its_batch_and_knows_it(self) -> None:
+        created = self.client.post(
+            f"/batches/{BATCH}/runs", json=run_payload(run_id="svc-below")
+        )
+        self.assertEqual(200, created.status_code, created.text)
+        self.assertEqual(
+            {
+                "run_id": "svc-below",
+                "batch_id": BATCH,
+                "status": "initialized",
+                "run_dir": str((self.batch_root / "svc-below").resolve()),
+                "n8n_run_dir": f"/data/artifacts/runs/{BATCH}/svc-below",
+            },
+            created.json(),
+        )
+        self.assertTrue((self.batch_root / "svc-below" / "manifest.json").is_file())
+        manifest = self.client.get(f"/batches/{BATCH}/runs/svc-below").json()["manifest"]
+        self.assertEqual(BATCH, manifest["batch_id"])
+        batch = self.client.get(f"/batches/{BATCH}").json()
+        self.assertEqual(["svc-below"], batch["runs"])
+        self.assertIsNone(batch["result"])
+        self.assertEqual(
+            404,
+            self.client.post(
+                "/batches/batch_999/runs", json=run_payload(run_id="svc-orphan")
+            ).status_code,
+        )
+        self.assertFalse((self.artifacts.runs / "svc-orphan").exists())
+
+    def test_a_batch_result_is_written_once(self) -> None:
+        ending = {
+            "status": "completed_with_failures",
+            "run_mode": "full",
+            "pipeline_variant": "full",
+            "run_count": 1,
+            "results": [
+                {
+                    "run_id": "svc-1",
+                    "language": "etl",
+                    "task": "Tree2Graph",
+                    "status": "completed_with_failures",
+                    "reason": "SYNTAX_INVALID:REFINEMENT_LIMIT_REACHED",
+                    "timeline": [],
+                }
+            ],
+        }
+        first = self.client.post(f"/batches/{BATCH}/result", json=ending)
+        self.assertEqual(200, first.status_code, first.text)
+        self.assertEqual(BATCH, first.json()["batch_id"])
+        self.assertEqual([], first.json()["results"][0]["timeline"])
+        again = self.client.post(f"/batches/{BATCH}/result", json=ending)
+        self.assertEqual(first.json(), again.json())
+        self.assertEqual(
+            409,
+            self.client.post(
+                f"/batches/{BATCH}/result", json={**ending, "status": "failed"}
+            ).status_code,
+        )
+        self.assertEqual(
+            first.json(), self.client.get(f"/batches/{BATCH}").json()["result"]
+        )
 
     def test_create_run_then_read_manifest(self) -> None:
-        created = self.client.post("/runs", json=run_payload(run_id="svc-1"))
+        created = self.client.post(
+            f"/batches/{BATCH}/runs", json=run_payload(run_id="svc-1")
+        )
         self.assertEqual(200, created.status_code)
-        self.assertEqual({"run_id": "svc-1", "status": "initialized"}, created.json())
+        self.assertEqual("svc-1", created.json()["run_id"])
+        self.assertEqual("initialized", created.json()["status"])
 
-        paths = run_store.open_run(Path(self._tmp.name), "svc-1")
+        paths = run_store.open_run(self.batch_root, "svc-1")
         self.assertTrue(
             paths.generation_iteration_dir("semantic-test-generation", 0).is_dir()
         )
@@ -70,7 +162,7 @@ class StageServiceTests(unittest.TestCase):
             paths.generation_iteration_dir("transformation-generation", 0).is_dir()
         )
 
-        fetched = self.client.get("/runs/svc-1")
+        fetched = self.client.get(f"/batches/{BATCH}/runs/svc-1")
         self.assertEqual(200, fetched.status_code)
         self.assertEqual("etl", fetched.json()["manifest"]["language"])
         self.assertEqual("svc-1", fetched.json()["manifest"]["run_id"])
@@ -81,7 +173,7 @@ class StageServiceTests(unittest.TestCase):
 
     def test_run_experiment_config_is_bounded(self) -> None:
         response = self.client.post(
-            "/runs",
+            f"/batches/{BATCH}/runs",
             json=run_payload(
                 run_id="svc-invalid-budget",
                 experiment_config={
@@ -94,21 +186,25 @@ class StageServiceTests(unittest.TestCase):
 
     def test_openapi_documents_explicit_http_errors(self) -> None:
         paths = self.client.get("/openapi.json").json()["paths"]
+        run = "/batches/{batch_id}/runs/{run_id}"
         expected = {
             ("/prompt-inputs/resolve", "post"): {"422"},
-            ("/runs", "post"): {"400", "409", "422"},
-            ("/runs/{run_id}/stages/{stage}", "post"): {"400", "404", "409"},
-            ("/runs/{run_id}/stages/{stage}", "get"): {"400", "404"},
-            ("/runs/{run_id}/refinements", "post"): {"400", "404", "409", "422"},
-            ("/runs/{run_id}/generations", "post"): {"400", "404", "409"},
-            ("/runs/{run_id}/diagnosis/execution/{attempt}", "get"): {
+            ("/batches", "post"): {"400", "409", "422"},
+            ("/batches/{batch_id}", "get"): {"400", "404"},
+            ("/batches/{batch_id}/result", "post"): {"400", "404", "409"},
+            ("/batches/{batch_id}/runs", "post"): {"400", "404", "409", "422"},
+            (f"{run}/stages/{{stage}}", "post"): {"400", "404", "409"},
+            (f"{run}/stages/{{stage}}", "get"): {"400", "404"},
+            (f"{run}/refinements", "post"): {"400", "404", "409", "422"},
+            (f"{run}/generations", "post"): {"400", "404", "409"},
+            (f"{run}/diagnosis/execution/{{attempt}}", "get"): {
                 "400",
                 "404",
                 "409",
             },
-            ("/runs/{run_id}", "get"): {"400", "404"},
-            ("/runs/{run_id}/diagnoses", "post"): {"400", "404"},
-            ("/runs/{run_id}/result", "post"): {"400", "404", "409"},
+            (run, "get"): {"400", "404"},
+            (f"{run}/diagnoses", "post"): {"400", "404"},
+            (f"{run}/result", "post"): {"400", "404", "409"},
         }
         for (path, method), status_codes in expected.items():
             with self.subTest(path=path, method=method):
@@ -145,22 +241,22 @@ class StageServiceTests(unittest.TestCase):
         self.assertEqual(422, response.status_code)
 
     def test_create_run_refuses_to_replace_existing_manifest(self) -> None:
-        first = self.client.post("/runs", json=run_payload(run_id="svc-immutable"))
+        first = self.client.post(f"/batches/{BATCH}/runs", json=run_payload(run_id="svc-immutable"))
         duplicate = self.client.post(
-            "/runs", json=run_payload(run_id="svc-immutable", task="OO2DB")
+            f"/batches/{BATCH}/runs", json=run_payload(run_id="svc-immutable", task="OO2DB")
         )
         self.assertEqual(200, first.status_code)
         self.assertEqual(409, duplicate.status_code)
-        fetched = self.client.get("/runs/svc-immutable")
+        fetched = self.client.get(f"/batches/{BATCH}/runs/svc-immutable")
         self.assertEqual("Tree2Graph", fetched.json()["manifest"]["task"])
 
     def test_unknown_run_and_unknown_stage_return_404(self) -> None:
         self.assertEqual(
-            404, self.client.post("/runs/nope/stages/extract", json={}).status_code
+            404, self.client.post(f"/batches/{BATCH}/runs/nope/stages/extract", json={}).status_code
         )
-        self.client.post("/runs", json=run_payload(run_id="svc-2", task="Tree2Graph"))
+        self.client.post(f"/batches/{BATCH}/runs", json=run_payload(run_id="svc-2", task="Tree2Graph"))
         self.assertEqual(
-            404, self.client.post("/runs/svc-2/stages/not-a-stage", json={}).status_code
+            404, self.client.post(f"/batches/{BATCH}/runs/svc-2/stages/not-a-stage", json={}).status_code
         )
 
     def test_malformed_or_escaping_run_ids_are_rejected(self) -> None:
@@ -168,12 +264,12 @@ class StageServiceTests(unittest.TestCase):
         # it away), so the containment check matters for ids supplied in a body.
         self.assertEqual(
             400,
-            self.client.post("/runs", json=run_payload(run_id="../escape")).status_code,
+            self.client.post(f"/batches/{BATCH}/runs", json=run_payload(run_id="../escape")).status_code,
         )
         # An id that does reach the handler is refused before it becomes a path.
-        self.assertEqual(400, self.client.get("/runs/bad$id").status_code)
+        self.assertEqual(400, self.client.get(f"/batches/{BATCH}/runs/bad$id").status_code)
         self.assertEqual(
-            400, self.client.post("/runs/bad$id/stages/extract", json={}).status_code
+            400, self.client.post(f"/batches/{BATCH}/runs/bad$id/stages/extract", json={}).status_code
         )
 
     def test_a_run_must_fix_the_language_and_task_it_reports(self) -> None:
@@ -183,7 +279,7 @@ class StageServiceTests(unittest.TestCase):
                     key: value for key, value in IDENTITY.items() if key != missing
                 }
                 response = self.client.post(
-                    "/runs", json={**partial, "run_id": f"svc-no-{missing}"}
+                    f"/batches/{BATCH}/runs", json={**partial, "run_id": f"svc-no-{missing}"}
                 )
                 self.assertEqual(422, response.status_code)
 
@@ -205,11 +301,11 @@ class StageServiceTests(unittest.TestCase):
             if key not in transformation_axes
         }
         created = self.client.post(
-            "/runs", json={**partial, "run_id": "svc-tests-only"}
+            f"/batches/{BATCH}/runs", json={**partial, "run_id": "svc-tests-only"}
         )
         self.assertEqual(200, created.status_code)
 
-        manifest = self.client.get("/runs/svc-tests-only").json()["manifest"]
+        manifest = self.client.get(f"/batches/{BATCH}/runs/svc-tests-only").json()["manifest"]
         for axis in transformation_axes:
             self.assertIsNone(manifest[axis])
         self.assertEqual("gpt-5", manifest["test_generation_model"])
@@ -217,32 +313,32 @@ class StageServiceTests(unittest.TestCase):
     def test_an_identity_axis_cannot_be_blanked_instead_of_omitted(self) -> None:
         """Empty is not the same statement as "not applicable"."""
         response = self.client.post(
-            "/runs",
+            f"/batches/{BATCH}/runs",
             json=run_payload(run_id="svc-blank", transformation_model=""),
         )
         self.assertEqual(422, response.status_code)
 
     def test_transport_models_reject_unknown_fields(self) -> None:
         created = self.client.post(
-            "/runs",
+            f"/batches/{BATCH}/runs",
             json=run_payload(run_id="svc-extra", unexpected_identity="value"),
         )
         self.assertEqual(422, created.status_code)
 
     def test_stage_request_cannot_carry_run_identity(self) -> None:
         self.client.post(
-            "/runs",
+            f"/batches/{BATCH}/runs",
             json=run_payload(run_id="svc-identity"),
         )
 
         wrong_task = self.client.post(
-            "/runs/svc-identity/stages/extract", json={"tasks": ["OO2DB"]}
+            f"/batches/{BATCH}/runs/svc-identity/stages/extract", json={"tasks": ["OO2DB"]}
         )
         wrong_language = self.client.post(
-            "/runs/svc-identity/stages/extract", json={"language": "atl"}
+            f"/batches/{BATCH}/runs/svc-identity/stages/extract", json={"language": "atl"}
         )
         wrong_model = self.client.post(
-            "/runs/svc-identity/stages/syntax-validation",
+            f"/batches/{BATCH}/runs/svc-identity/stages/syntax-validation",
             json={"transformation_models": ["claude-sonnet-4"]},
         )
 
@@ -251,12 +347,12 @@ class StageServiceTests(unittest.TestCase):
         self.assertEqual(422, wrong_model.status_code)
         # A rejected request records no evidence under the run.
         self.assertEqual(
-            404, self.client.get("/runs/svc-identity/stages/extract").status_code
+            404, self.client.get(f"/batches/{BATCH}/runs/svc-identity/stages/extract").status_code
         )
 
     def test_stage_request_cannot_fill_an_identity_axis_recorded_as_null(self) -> None:
         run_store.create_run(
-            Path(self._tmp.name),
+            self.batch_root,
             "svc-null-axis",
             {
                 "language": "etl",
@@ -272,7 +368,7 @@ class StageServiceTests(unittest.TestCase):
         )
 
         response = self.client.post(
-            "/runs/svc-null-axis/stages/syntax-validation",
+            f"/batches/{BATCH}/runs/svc-null-axis/stages/syntax-validation",
             json={
                 "transformation_models": ["gpt-5"],
                 "transformation_strategies": ["grammar"],
@@ -281,35 +377,35 @@ class StageServiceTests(unittest.TestCase):
         self.assertEqual(422, response.status_code)
         self.assertEqual(
             404,
-            self.client.get("/runs/svc-null-axis/stages/syntax-validation").status_code,
+            self.client.get(f"/batches/{BATCH}/runs/svc-null-axis/stages/syntax-validation").status_code,
         )
 
     def test_stage_request_cannot_expand_to_all_tasks(self) -> None:
-        self.client.post("/runs", json=run_payload(run_id="svc-one-task"))
+        self.client.post(f"/batches/{BATCH}/runs", json=run_payload(run_id="svc-one-task"))
         response = self.client.post(
-            "/runs/svc-one-task/stages/extract",
+            f"/batches/{BATCH}/runs/svc-one-task/stages/extract",
             json={"all_tasks": True},
         )
         self.assertEqual(422, response.status_code)
 
     def test_stage_request_rejects_even_matching_identity_repetitions(self) -> None:
-        self.client.post("/runs", json=run_payload(run_id="svc-agree"))
+        self.client.post(f"/batches/{BATCH}/runs", json=run_payload(run_id="svc-agree"))
         response = self.client.post(
-            "/runs/svc-agree/stages/extract",
+            f"/batches/{BATCH}/runs/svc-agree/stages/extract",
             json={"language": "etl", "tasks": ["Tree2Graph"]},
         )
         self.assertEqual(422, response.status_code)
 
     def test_stage_request_rejects_a_traversing_suite_id(self) -> None:
-        self.client.post("/runs", json=run_payload(run_id="svc-suite-id"))
+        self.client.post(f"/batches/{BATCH}/runs", json=run_payload(run_id="svc-suite-id"))
         response = self.client.post(
-            "/runs/svc-suite-id/stages/extract",
+            f"/batches/{BATCH}/runs/svc-suite-id/stages/extract",
             json={"suite_id": "../../outside"},
         )
         self.assertEqual(422, response.status_code)
 
     def test_stage_returns_and_records_outcome_code(self) -> None:
-        self.client.post("/runs", json=run_payload(run_id="svc-3"))
+        self.client.post(f"/batches/{BATCH}/runs", json=run_payload(run_id="svc-3"))
         with patch(
             "llm4mtl.stage_service.app._orchestrator.tests.extract",
             return_value=StageResult(
@@ -320,7 +416,7 @@ class StageServiceTests(unittest.TestCase):
             ),
         ):
             response = self.client.post(
-                "/runs/svc-3/stages/extract",
+                f"/batches/{BATCH}/runs/svc-3/stages/extract",
                 json={},
             )
         self.assertEqual(200, response.status_code)
@@ -331,12 +427,12 @@ class StageServiceTests(unittest.TestCase):
         self.assertEqual(1, body["attempt"])
 
         # The result is persisted and readable via GET (the latest recorded attempt).
-        fetched = self.client.get("/runs/svc-3/stages/extract")
+        fetched = self.client.get(f"/batches/{BATCH}/runs/svc-3/stages/extract")
         self.assertEqual(200, fetched.status_code)
         self.assertEqual("INFRASTRUCTURE_ERROR", fetched.json()["outcome_code"])
 
     def test_extract_consumes_the_run_scoped_generation_response(self) -> None:
-        self.client.post("/runs", json=run_payload(run_id="svc-response"))
+        self.client.post(f"/batches/{BATCH}/runs", json=run_payload(run_id="svc-response"))
         seen = []
 
         def capture(config, dry_run):
@@ -353,13 +449,13 @@ class StageServiceTests(unittest.TestCase):
             side_effect=capture,
         ):
             response = self.client.post(
-                "/runs/svc-response/stages/extract",
+                f"/batches/{BATCH}/runs/svc-response/stages/extract",
                 json={"suite_id": "svc-response_002", "refinement_iteration": 2},
             )
 
         self.assertEqual(200, response.status_code, response.text)
         expected = (
-            Path(self._tmp.name)
+            self.batch_root
             / "svc-response"
             / "responses"
             / "semantic-test-generation"
@@ -370,8 +466,8 @@ class StageServiceTests(unittest.TestCase):
 
     def test_stage_result_references_the_generation_iteration_it_consumed(self) -> None:
         run_id = "svc-generation-attribution"
-        self.client.post("/runs", json=run_payload(run_id=run_id))
-        paths = run_store.open_run(Path(self._tmp.name), run_id)
+        self.client.post(f"/batches/{BATCH}/runs", json=run_payload(run_id=run_id))
+        paths = run_store.open_run(self.batch_root, run_id)
         manifest = run_store.read_manifest(paths)
         assert manifest is not None
         raw = paths.generation_response("semantic-test-generation", 0, "Tree2Graph.md")
@@ -398,7 +494,7 @@ class StageServiceTests(unittest.TestCase):
             ),
         ):
             response = self.client.post(
-                f"/runs/{run_id}/stages/extract",
+                f"/batches/{BATCH}/runs/{run_id}/stages/extract",
                 json={"suite_id": f"{run_id}_000", "refinement_iteration": 0},
             )
 
@@ -417,9 +513,9 @@ class StageServiceTests(unittest.TestCase):
             ("svc-run-a", "response A"),
             ("svc-run-b", "response B"),
         ):
-            self.client.post("/runs", json=run_payload(run_id=run_id))
+            self.client.post(f"/batches/{BATCH}/runs", json=run_payload(run_id=run_id))
             response_path = (
-                Path(self._tmp.name)
+                self.batch_root
                 / run_id
                 / "responses"
                 / "semantic-test-generation"
@@ -445,7 +541,7 @@ class StageServiceTests(unittest.TestCase):
         ):
             for run_id in ("svc-run-a", "svc-run-b"):
                 response = self.client.post(
-                    f"/runs/{run_id}/stages/extract",
+                    f"/batches/{BATCH}/runs/{run_id}/stages/extract",
                     json={"suite_id": f"{run_id}_000", "refinement_iteration": 0},
                 )
                 self.assertEqual(200, response.status_code, response.text)
@@ -456,12 +552,12 @@ class StageServiceTests(unittest.TestCase):
         )
 
     def test_stage_exception_is_recorded_as_infrastructure_error(self) -> None:
-        self.client.post("/runs", json=run_payload(run_id="svc-4", task="Tree2Graph"))
+        self.client.post(f"/batches/{BATCH}/runs", json=run_payload(run_id="svc-4", task="Tree2Graph"))
         with patch(
             "llm4mtl.stage_service.app._orchestrator.tests.extract",
             side_effect=RuntimeError("adapter failed"),
         ):
-            response = self.client.post("/runs/svc-4/stages/extract", json={})
+            response = self.client.post(f"/batches/{BATCH}/runs/svc-4/stages/extract", json={})
         self.assertEqual(200, response.status_code)
         self.assertEqual("infrastructure_error", response.json()["status"])
         self.assertEqual("INFRASTRUCTURE_ERROR", response.json()["outcome_code"])
@@ -469,7 +565,7 @@ class StageServiceTests(unittest.TestCase):
 
     def test_diagnosis_is_persisted_with_model_provenance(self) -> None:
         self.client.post(
-            "/runs", json=run_payload(run_id="svc-diagnosis", task="Tree2Graph")
+            f"/batches/{BATCH}/runs", json=run_payload(run_id="svc-diagnosis", task="Tree2Graph")
         )
         payload = {
             "schema_version": "1.0",
@@ -481,9 +577,9 @@ class StageServiceTests(unittest.TestCase):
             "created_at": "2026-07-29T12:00:00Z",
         }
 
-        first = self.client.post("/runs/svc-diagnosis/diagnoses", json=payload)
+        first = self.client.post(f"/batches/{BATCH}/runs/svc-diagnosis/diagnoses", json=payload)
         second = self.client.post(
-            "/runs/svc-diagnosis/diagnoses",
+            f"/batches/{BATCH}/runs/svc-diagnosis/diagnoses",
             json={**payload, "classification": "AMBIGUOUS"},
         )
 
@@ -492,7 +588,7 @@ class StageServiceTests(unittest.TestCase):
         # The verdict is what downstream work consumes, so it is stored in its
         # own area keyed by the run, not among that run's working state.
         self.assertEqual(
-            "svc-diagnosis/attempt-001/diagnosis.json",
+            f"{BATCH}/svc-diagnosis/attempt-001/diagnosis.json",
             first.json()["artifact"],
         )
         self.assertEqual("gpt-5", first.json()["model"])
@@ -504,7 +600,7 @@ class StageServiceTests(unittest.TestCase):
         # A consumer never has to open the run directory to find it.
         self.assertFalse(
             (
-                Path(self._tmp.name)
+                self.batch_root
                 / "svc-diagnosis"
                 / "responses"
                 / "failure-diagnosis"
@@ -513,7 +609,7 @@ class StageServiceTests(unittest.TestCase):
 
     def _failing_execution(self, run_id: str, index: dict[str, object]):
         """Drive one failing execution stage with a prepared diagnosis index."""
-        self.client.post("/runs", json=run_payload(run_id=run_id))
+        self.client.post(f"/batches/{BATCH}/runs", json=run_payload(run_id=run_id))
         with (
             patch(
                 "llm4mtl.stage_service.app._orchestrator.prepare_workspace",
@@ -535,7 +631,7 @@ class StageServiceTests(unittest.TestCase):
                 return_value=index,
             ),
         ):
-            return self.client.post(f"/runs/{run_id}/stages/execution", json={})
+            return self.client.post(f"/batches/{BATCH}/runs/{run_id}/stages/execution", json={})
 
     def _write_report(self, name: str, *, available: bool) -> str:
         """One prepared failure report, named by its absolute path."""
@@ -682,7 +778,7 @@ class StageServiceTests(unittest.TestCase):
         self.assertIn("failure_report_path", body["artifacts"])
 
         recorded = read_json(
-            Path(self._tmp.name)
+            self.batch_root
             / "svc-exec-recorded"
             / "stages"
             / "execution"
@@ -708,15 +804,15 @@ class StageServiceTests(unittest.TestCase):
         }
         self.assertEqual(
             404,
-            self.client.post("/runs/nope/diagnoses", json=valid_payload).status_code,
+            self.client.post(f"/batches/{BATCH}/runs/nope/diagnoses", json=valid_payload).status_code,
         )
         self.client.post(
-            "/runs", json=run_payload(run_id="svc-invalid-diagnosis", task="Tree2Graph")
+            f"/batches/{BATCH}/runs", json=run_payload(run_id="svc-invalid-diagnosis", task="Tree2Graph")
         )
         self.assertEqual(
             422,
             self.client.post(
-                "/runs/svc-invalid-diagnosis/diagnoses",
+                f"/batches/{BATCH}/runs/svc-invalid-diagnosis/diagnoses",
                 json={**valid_payload, "classification": "NOT_A_CLASSIFICATION"},
             ).status_code,
         )

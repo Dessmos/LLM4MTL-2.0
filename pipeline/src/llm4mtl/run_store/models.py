@@ -1,6 +1,7 @@
 """Run directory layout for the run-centric artifact store.
 
-One run lives under ``artifacts/work/runs/<run-id>/`` and is described by:
+One run lives under ``artifacts/work/runs/<batch-id>/<run-id>/`` — the batch is
+the launch that created it (see ``run_store.batches``) — and is described by:
 
 * ``manifest.json`` — immutable resolved config + provenance (written once).
 * ``events.jsonl`` — append-only timeline.
@@ -19,6 +20,10 @@ One run lives under ``artifacts/work/runs/<run-id>/`` and is described by:
 ``<stage>`` is always a contract stage id (see ``llm4mtl.stage_contract``), so a
 run directory reads the same whether the local runner or the stage service wrote
 it.
+
+This class knows only the inside of a run. Where the run sits — its batch, its
+diagnoses directory, how n8n sees it — is ``llm4mtl.paths.ArtifactRoots``, and
+nothing here reads the run's directory name back to derive another location.
 """
 
 from __future__ import annotations

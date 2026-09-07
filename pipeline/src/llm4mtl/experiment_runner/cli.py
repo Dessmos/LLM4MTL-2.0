@@ -125,11 +125,7 @@ def _add_diagnosis_commands(domains: argparse._SubParsersAction) -> None:
             "command re-derives the same index for an existing run."
         ),
     )
-    diagnosis_prepare.add_argument(
-        "--run",
-        required=True,
-        help="run id or run directory",
-    )
+    add_run_selection(diagnosis_prepare)
     diagnosis_prepare.add_argument(
         "--attempt",
         type=int,
@@ -149,11 +145,7 @@ def _add_diagnosis_commands(domains: argparse._SubParsersAction) -> None:
             "recorded evidence only; it writes and changes nothing."
         ),
     )
-    diagnosis_aggregate.add_argument(
-        "--run",
-        required=True,
-        help="run id or run directory",
-    )
+    add_run_selection(diagnosis_aggregate)
     diagnosis_aggregate.add_argument(
         "--attempt",
         type=int,
@@ -190,6 +182,35 @@ def _add_pipeline_commands(domains: argparse._SubParsersAction) -> None:
     )
 
 
+def add_run_selection(parser: argparse.ArgumentParser) -> None:
+    """Name one existing run: its batch and id, or the run directory itself."""
+    parser.add_argument(
+        "--run",
+        required=True,
+        help="run id (with --batch) or the run directory",
+    )
+    parser.add_argument(
+        "--batch",
+        help="batch id the run belongs to; read from the directory when --run is a path",
+    )
+
+
+def locate_run(run: str, batch: str | None) -> tuple[str, str]:
+    """``(batch_id, run_id)`` for a run named by id or by directory.
+
+    A run directory carries its batch as the parent directory, so a path needs
+    no ``--batch``; a bare id does, because ids are opaque and name no batch.
+    """
+    candidate = Path(run)
+    if candidate.is_dir():
+        return (batch or candidate.resolve().parent.name), candidate.name
+    if batch is None:
+        raise ConfigError(
+            f"--run {run!r} is a run id, so --batch must name the batch it belongs to"
+        )
+    return batch, run
+
+
 def add_language(parser: argparse.ArgumentParser, *, required: bool = True) -> None:
     # Every thesis language is offered; `validate_config` rejects the ones whose
     # adapter is not implemented yet, with a message naming what is missing.
@@ -219,6 +240,10 @@ def add_execution(parser: argparse.ArgumentParser, defaults_none: bool = False) 
     boolean_default = None if defaults_none else False
     parser.add_argument("--dry-run", action="store_true", default=boolean_default)
     parser.add_argument("--run-id")
+    parser.add_argument(
+        "--batch-id",
+        help="batch to file the run under; a new batch is claimed when omitted",
+    )
     parser.add_argument("--resume", action="store_true", default=boolean_default)
     parser.add_argument("--force", action="store_true", default=boolean_default)
     parser.add_argument(
@@ -263,6 +288,7 @@ def config_from_args(args: argparse.Namespace) -> PipelineConfig:
         start_stage=getattr(args, "start_stage", None) or "extract",
         stop_after=getattr(args, "stop_after", None) or "semantic",
         run_id=args.run_id,
+        batch_id=args.batch_id,
         resume=bool(args.resume),
         force=bool(args.force),
         dry_run=bool(args.dry_run),
@@ -292,7 +318,13 @@ def _load_pipeline_config_from_args(
     if args.resume and args.run_id and not has_pipeline_selection(args):
         from llm4mtl.paths import TARGET
 
-        resolved = TARGET.runs / args.run_id / "config.resolved.yaml"
+        if not args.batch_id:
+            raise ConfigError(
+                "resuming by run id needs --batch-id: a run id names no batch"
+            )
+        resolved = (
+            TARGET.run_dir(args.batch_id, args.run_id) / "config.resolved.yaml"
+        )
         config = load_resolved_config(resolved)
         apply_execution_overrides(config, args)
         config.command = command
@@ -389,6 +421,8 @@ def apply_execution_overrides(config: PipelineConfig, args: argparse.Namespace) 
             setattr(config, name, bool(value))
     if args.run_id:
         config.run_id = args.run_id
+    if args.batch_id:
+        config.batch_id = args.batch_id
     if args.output_format:
         config.output_format = args.output_format
 
@@ -512,15 +546,19 @@ def main(argv: list[str] | None = None) -> int:
             emit_failure_report_result(report, args.output, args.output_format)
             return 0
         if args.domain == "diagnosis" and args.action == "aggregate":
+            batch_id, run_id = locate_run(args.run, args.batch)
             aggregated = ExperimentOrchestrator().aggregate_diagnosis_evidence(
-                args.run,
+                batch_id,
+                run_id,
                 args.attempt,
             )
             emit_diagnosis_aggregate(aggregated, args.output_format)
             return 0
         if args.domain == "diagnosis" and args.action == "prepare":
+            batch_id, run_id = locate_run(args.run, args.batch)
             index = ExperimentOrchestrator().prepare_diagnosis_evidence(
-                args.run,
+                batch_id,
+                run_id,
                 args.attempt,
             )
             emit_diagnosis_index(index, args.output_format)

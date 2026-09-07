@@ -22,7 +22,8 @@ LLM retries, iteration limits, and stop conditions.
 
 ## Run identity
 
-`POST /runs` fixes one immutable combination:
+One launch of the master is one *batch* (`POST /batches`, claimed before any
+run). `POST /batches/<batch-id>/runs` then fixes one immutable combination:
 
 ```text
 language
@@ -283,7 +284,7 @@ exactly what Source Diagnosis is for. Such a report names no assertion
 and leaves `expected`/`actual` null rather than reconstructing them.
 
 The same assembly is reproducible outside the stage call with
-`llm4mtl diagnosis prepare --run <run-id> [--attempt N]`; the index is written
+`llm4mtl diagnosis prepare --batch <batch-id> --run <run-id> [--attempt N]`; the index is written
 once per attempt and re-reading it returns the same document.
 
 ## Diagnosis result
@@ -396,7 +397,7 @@ The terminal decision is n8n's, so n8n reports it once, when the state machine
 reaches `final`:
 
 ```text
-POST /runs/<run-id>/result
+POST /batches/<batch-id>/runs/<run-id>/result
 ```
 
 ```json
@@ -430,14 +431,21 @@ fails after run creation, the master's error branch records status `failed`,
 `ORCHESTRATION_ERROR:<component>`, the last completed stage, and both artifact
 iterations before it stops.
 
+When the queue is exhausted the master reports the launch as a whole once, to
+`POST /batches/<batch-id>/result` (`schemas/batch-result.schema.json`): the
+worst run status and one entry per run, so a reader opens the batch before any
+run.
+
 `diagnosis_records` counts the verdicts, not the defects: one broken
 transformation fails every test case that uses it, and each failing case gets its
 own report and its own verdict. Clustering those observations into distinct
-failures is evaluation's job — `llm4mtl diagnosis aggregate --run <run-id>` —
+failures is evaluation's job — `llm4mtl diagnosis aggregate --batch <batch-id> --run <run-id>` —
 and never the pipeline's.
 
 ## Retry and concurrency rules
 
+- Every launch claims its batch directory atomically; runs of one launch are
+  created only below it.
 - Every stage/diagnosis invocation gets an immutable atomic attempt number.
 - A retry adds an attempt; it does not replace history.
 - The latest result is derived from the highest recorded attempt.

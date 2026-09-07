@@ -10,7 +10,7 @@ from llm4mtl import run_store
 from llm4mtl.experiment_runner.models import PipelineConfig
 from llm4mtl.experiment_runner.orchestrator import ExperimentOrchestrator, generate_run_id
 from llm4mtl.languages import language_adapter
-from llm4mtl.paths import TARGET
+from llm4mtl.paths import TARGET, ArtifactRoots, repository_relative
 from llm4mtl.prompt_assembly.task_inputs import (
     TaskInputResolutionError,
     resolve_task_inputs,
@@ -35,6 +35,9 @@ from llm4mtl.stage_recording import (
     record_stage_attempt,
 )
 from llm4mtl.stage_service.api_models import (
+    BatchCreateRequest,
+    BatchCreateResponse,
+    BatchResultRequest,
     DiagnosisRecordRequest,
     GenerationRecordRequest,
     PromptInputsRequest,
@@ -57,28 +60,62 @@ UNPROCESSABLE_RESPONSE = {"description": "Request violates a task or run contrac
 TRANSFORMATION_STAGES = frozenset({"syntax-validation", "execution"})
 
 
-def _runs_root():
-    return TARGET.runs
+def _artifact_roots() -> ArtifactRoots:
+    """The artifact tree this service writes. One function, so a test redirects it."""
+    return TARGET.artifact_roots
 
 
-def _diagnoses_root():
-    return TARGET.diagnoses
-
-
-def _open_run(run_id: str) -> run_store.RunPaths:
-    """Open a run, translating a malformed or escaping id into a 400."""
+def _open_batch(batch_id: str) -> run_store.BatchPaths:
+    """Open a batch, translating a malformed or escaping id into a 400."""
     try:
-        return run_store.open_run(_runs_root(), run_id)
+        return run_store.open_batch(_artifact_roots().runs, batch_id)
     except InvalidRunIdError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
-def _require_manifest(run_id: str) -> tuple[run_store.RunPaths, dict[str, Any]]:
-    paths = _open_run(run_id)
+def _require_batch(batch_id: str) -> tuple[run_store.BatchPaths, dict[str, Any]]:
+    batch = _open_batch(batch_id)
+    manifest = run_store.read_batch_manifest(batch)
+    if manifest is None:
+        raise HTTPException(status_code=404, detail=f"unknown batch: {batch_id}")
+    return batch, manifest
+
+
+def _open_run(batch_id: str, run_id: str) -> run_store.RunPaths:
+    """Open a run of a known batch, translating a malformed id into a 400."""
+    batch, _ = _require_batch(batch_id)
+    try:
+        return run_store.open_run(batch.root, run_id)
+    except InvalidRunIdError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+def _require_manifest(
+    batch_id: str, run_id: str
+) -> tuple[run_store.RunPaths, dict[str, Any]]:
+    paths = _open_run(batch_id, run_id)
     manifest = run_store.read_manifest(paths)
     if manifest is None:
         raise HTTPException(status_code=404, detail=f"unknown run: {run_id}")
     return paths, manifest
+
+
+def _run_diagnoses(batch_id: str, run_id: str):
+    """Where this run's verdicts live: asked of the layout, never derived."""
+    return _artifact_roots().run_diagnoses_dir(batch_id, run_id)
+
+
+def _locations(directory) -> dict[str, str]:
+    """A directory as the repository names it and as n8n reaches it.
+
+    n8n receives both spellings from here and builds no artifact path of its
+    own: the repository-relative one is what Python cites in every artifact, the
+    mounted one is what the workflow's file nodes can open.
+    """
+    return {
+        "dir": repository_relative(directory),
+        "n8n_dir": _artifact_roots().n8n_path(directory),
+    }
 
 
 @app.get("/health")
@@ -99,25 +136,104 @@ def resolve_prompt_inputs(request: PromptInputsRequest) -> dict[str, Any]:
 
 
 @app.post(
-    "/runs",
-    response_model=RunCreateResponse,
+    "/batches",
+    response_model=BatchCreateResponse,
     responses={
         400: BAD_REQUEST_RESPONSE,
         409: CONFLICT_RESPONSE,
         422: UNPROCESSABLE_RESPONSE,
     },
 )
-def create_run(request: RunCreateRequest) -> RunCreateResponse:
+def create_batch(request: BatchCreateRequest) -> BatchCreateResponse:
+    """Claim the directory one launch's runs are created in.
+
+    Without ``batch_id`` the next free ``batch_NNN`` is claimed atomically, so
+    two launches started together cannot share one.
+    """
+    manifest: dict[str, Any] = {
+        "run_mode": request.run_mode,
+        "pipeline_variant": request.pipeline_variant,
+        "command": None,
+    }
+    if request.config is not None:
+        manifest["config"] = request.config
+    if request.n8n is not None:
+        manifest["n8n"] = request.n8n.model_dump()
+    try:
+        batch = run_store.create_batch(
+            _artifact_roots().runs, manifest, batch_id=request.batch_id
+        )
+    except run_store.BatchExistsError as exc:
+        raise HTTPException(
+            status_code=409, detail=f"batch already exists: {request.batch_id}"
+        ) from exc
+    except InvalidRunIdError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    locations = _locations(batch.root)
+    return BatchCreateResponse(
+        batch_id=batch.batch_id,
+        batch_dir=locations["dir"],
+        n8n_batch_dir=locations["n8n_dir"],
+    )
+
+
+@app.get(
+    "/batches/{batch_id}",
+    responses={
+        400: BAD_REQUEST_RESPONSE,
+        404: NOT_FOUND_RESPONSE,
+    },
+)
+def get_batch(batch_id: str) -> dict[str, Any]:
+    batch, manifest = _require_batch(batch_id)
+    return {
+        "batch_id": batch.batch_id,
+        "manifest": manifest,
+        "runs": run_store.list_batch_runs(batch),
+        "result": run_store.read_batch_result(batch),
+    }
+
+
+@app.post(
+    "/batches/{batch_id}/result",
+    responses={
+        400: BAD_REQUEST_RESPONSE,
+        404: NOT_FOUND_RESPONSE,
+        409: CONFLICT_RESPONSE,
+    },
+)
+def record_batch_result(batch_id: str, request: BatchResultRequest) -> dict[str, Any]:
+    """Persist how the launch ended, once, next to the runs it created."""
+    batch, _ = _require_batch(batch_id)
+    try:
+        return run_store.record_batch_result(batch, request.model_dump(mode="json"))
+    except run_store.BatchResultConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.post(
+    "/batches/{batch_id}/runs",
+    response_model=RunCreateResponse,
+    responses={
+        400: BAD_REQUEST_RESPONSE,
+        404: NOT_FOUND_RESPONSE,
+        409: CONFLICT_RESPONSE,
+        422: UNPROCESSABLE_RESPONSE,
+    },
+)
+def create_run(batch_id: str, request: RunCreateRequest) -> RunCreateResponse:
     if request.task == "all":
         raise HTTPException(
             status_code=422,
             detail="a run must fix one concrete task; expand all tasks through a matrix",
         )
+    batch, _ = _require_batch(batch_id)
     run_id = request.run_id or generate_run_id(
         PipelineConfig(language=request.language, tasks=[request.task])
     )
     try:
         manifest = {
+            "batch_id": batch.batch_id,
             "language": request.language,
             "task": request.task,
             "transformation_model": request.transformation_model,
@@ -131,11 +247,7 @@ def create_run(request: RunCreateRequest) -> RunCreateResponse:
         }
         if request.experiment_config is not None:
             manifest["experiment_config"] = request.experiment_config.model_dump()
-        run_store.create_run(
-            _runs_root(),
-            run_id,
-            manifest,
-        )
+        paths = run_store.create_run(batch.root, run_id, manifest)
     except run_store.ManifestExistsError as exc:
         raise HTTPException(
             status_code=409, detail=f"run already exists: {run_id}"
@@ -144,7 +256,13 @@ def create_run(request: RunCreateRequest) -> RunCreateResponse:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except ProvenanceError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    return RunCreateResponse(run_id=run_id)
+    locations = _locations(paths.root)
+    return RunCreateResponse(
+        run_id=run_id,
+        batch_id=batch.batch_id,
+        run_dir=locations["dir"],
+        n8n_run_dir=locations["n8n_dir"],
+    )
 
 
 def _stage_config(
@@ -272,17 +390,19 @@ def _add_generation_reference(
 
 
 @app.post(
-    "/runs/{run_id}/stages/{stage}",
+    "/batches/{batch_id}/runs/{run_id}/stages/{stage}",
     responses={
         400: BAD_REQUEST_RESPONSE,
         404: NOT_FOUND_RESPONSE,
         409: CONFLICT_RESPONSE,
     },
 )
-def run_stage(run_id: str, stage: str, request: StageRunRequest) -> dict[str, Any]:
+def run_stage(
+    batch_id: str, run_id: str, stage: str, request: StageRunRequest
+) -> dict[str, Any]:
     if stage not in STAGE_DISPATCH:
         raise HTTPException(status_code=404, detail=f"unknown stage: {stage}")
-    paths, manifest = _require_manifest(run_id)
+    paths, manifest = _require_manifest(batch_id, run_id)
     config = _stage_config(run_id, manifest, request)
     config.run_dir = str(paths.root)
 
@@ -344,14 +464,14 @@ def run_stage(run_id: str, stage: str, request: StageRunRequest) -> dict[str, An
 
 
 @app.get(
-    "/runs/{run_id}/stages/{stage}",
+    "/batches/{batch_id}/runs/{run_id}/stages/{stage}",
     responses={
         400: BAD_REQUEST_RESPONSE,
         404: NOT_FOUND_RESPONSE,
     },
 )
-def get_stage(run_id: str, stage: str) -> dict[str, Any]:
-    paths = _open_run(run_id)
+def get_stage(batch_id: str, run_id: str, stage: str) -> dict[str, Any]:
+    paths = _open_run(batch_id, run_id)
     latest = run_store.read_latest(paths, stage)
     if latest is None:
         raise HTTPException(status_code=404, detail=f"no result for stage {stage}")
@@ -372,15 +492,15 @@ def get_stage(run_id: str, stage: str) -> dict[str, Any]:
 
 
 @app.get(
-    "/runs/{run_id}/diagnosis/execution/{attempt}",
+    "/batches/{batch_id}/runs/{run_id}/diagnosis/execution/{attempt}",
     responses={
         400: BAD_REQUEST_RESPONSE,
         404: NOT_FOUND_RESPONSE,
         409: CONFLICT_RESPONSE,
     },
 )
-def get_diagnosis_queue(run_id: str, attempt: int) -> dict[str, Any]:
-    paths, _ = _require_manifest(run_id)
+def get_diagnosis_queue(batch_id: str, run_id: str, attempt: int) -> dict[str, Any]:
+    paths, _ = _require_manifest(batch_id, run_id)
     try:
         return read_diagnosis_queue(paths.root, attempt)
     except DiagnosisPreparationError as exc:
@@ -388,7 +508,7 @@ def get_diagnosis_queue(run_id: str, attempt: int) -> dict[str, Any]:
 
 
 @app.post(
-    "/runs/{run_id}/refinements",
+    "/batches/{batch_id}/runs/{run_id}/refinements",
     responses={
         400: BAD_REQUEST_RESPONSE,
         404: NOT_FOUND_RESPONSE,
@@ -397,22 +517,26 @@ def get_diagnosis_queue(run_id: str, attempt: int) -> dict[str, Any]:
     },
 )
 def prepare_run_refinement(
-    run_id: str, request: RefinementPrepareRequest
+    batch_id: str, run_id: str, request: RefinementPrepareRequest
 ) -> dict[str, Any]:
-    paths, manifest = _require_manifest(run_id)
+    paths, manifest = _require_manifest(batch_id, run_id)
     try:
-        return run_store.prepare_refinement(
+        prepared = run_store.prepare_refinement(
             paths,
             manifest,
             **request.model_dump(mode="json"),
-            diagnoses_root=_diagnoses_root(),
+            run_diagnoses=_run_diagnoses(batch_id, run_id),
         )
     except run_store.RefinementPreparationError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+    # The store names the prompt within the run; where n8n reads it from is
+    # this transport's knowledge.
+    prompt_path = _artifact_roots().n8n_path(paths.root / prepared["prompt_file"])
+    return {**prepared, "prompt_path": prompt_path}
 
 
 @app.post(
-    "/runs/{run_id}/generations",
+    "/batches/{batch_id}/runs/{run_id}/generations",
     responses={
         400: BAD_REQUEST_RESPONSE,
         404: NOT_FOUND_RESPONSE,
@@ -420,9 +544,9 @@ def prepare_run_refinement(
     },
 )
 def record_run_generation(
-    run_id: str, request: GenerationRecordRequest
+    batch_id: str, run_id: str, request: GenerationRecordRequest
 ) -> dict[str, Any]:
-    paths, manifest = _require_manifest(run_id)
+    paths, manifest = _require_manifest(batch_id, run_id)
     try:
         generation = run_store.record_generation(
             paths, manifest, **request.model_dump(mode="json")
@@ -433,35 +557,41 @@ def record_run_generation(
 
 
 @app.get(
-    "/runs/{run_id}",
+    "/batches/{batch_id}/runs/{run_id}",
     responses={
         400: BAD_REQUEST_RESPONSE,
         404: NOT_FOUND_RESPONSE,
     },
 )
-def get_run(run_id: str) -> dict[str, Any]:
-    paths, manifest = _require_manifest(run_id)
+def get_run(batch_id: str, run_id: str) -> dict[str, Any]:
+    paths, manifest = _require_manifest(batch_id, run_id)
+    locations = _locations(paths.root)
     return {
         "run_id": run_id,
+        "batch_id": batch_id,
+        "run_dir": locations["dir"],
+        "n8n_run_dir": locations["n8n_dir"],
         "manifest": manifest,
         "stages": run_store.list_stages(paths),
     }
 
 
 @app.post(
-    "/runs/{run_id}/result",
+    "/batches/{batch_id}/runs/{run_id}/result",
     responses={
         400: BAD_REQUEST_RESPONSE,
         404: NOT_FOUND_RESPONSE,
         409: CONFLICT_RESPONSE,
     },
 )
-def record_run_result(run_id: str, request: RunResultRequest) -> dict[str, Any]:
+def record_run_result(
+    batch_id: str, run_id: str, request: RunResultRequest
+) -> dict[str, Any]:
     """Persist where the orchestration ended, with what the run itself recorded."""
-    paths, _ = _require_manifest(run_id)
+    paths, _ = _require_manifest(batch_id, run_id)
     try:
         result = run_store.record_result(
-            paths, request.model_dump(mode="json"), _diagnoses_root()
+            paths, request.model_dump(mode="json"), _run_diagnoses(batch_id, run_id)
         )
     except run_store.ResultConflictError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
@@ -476,18 +606,29 @@ def record_run_result(run_id: str, request: RunResultRequest) -> dict[str, Any]:
 
 
 @app.post(
-    "/runs/{run_id}/diagnoses",
+    "/batches/{batch_id}/runs/{run_id}/diagnoses",
     responses={
         400: BAD_REQUEST_RESPONSE,
         404: NOT_FOUND_RESPONSE,
     },
 )
-def record_diagnosis(run_id: str, request: DiagnosisRecordRequest) -> dict[str, Any]:
+def record_diagnosis(
+    batch_id: str, run_id: str, request: DiagnosisRecordRequest
+) -> dict[str, Any]:
     """Persist the normalized n8n diagnosis through Python's artifact layer."""
-    paths, _ = _require_manifest(run_id)
+    paths, _ = _require_manifest(batch_id, run_id)
 
     diagnosis = request.model_dump(mode="json", exclude_none=True)
-    attempt, artifact = run_store.record_diagnosis(paths, diagnosis, _diagnoses_root())
+    attempt, written = run_store.record_diagnosis(
+        paths, diagnosis, _run_diagnoses(batch_id, run_id)
+    )
+    # Reported relative to the diagnoses area, so the caller sees the batch and
+    # run it was filed under without knowing how that area is laid out.
+    artifact = (
+        written.resolve()
+        .relative_to(_artifact_roots().diagnoses.resolve())
+        .as_posix()
+    )
     run_store.append_event(
         paths,
         "diagnosis_recorded",

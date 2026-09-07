@@ -63,16 +63,17 @@ def read_result(paths: RunPaths) -> dict[str, Any] | None:
 def record_result(
     paths: RunPaths,
     terminal: dict[str, Any],
-    diagnoses_root: Path,
+    run_diagnoses: Path,
 ) -> dict[str, Any]:
     """Assemble and persist the run's terminal result.
 
     ``terminal`` carries only what the orchestration owns: the status, the reason
     string it ended on, the run mode, and the refinement budget it used out of
-    the one it was given.
+    the one it was given. ``run_diagnoses`` is where this run's verdicts were
+    recorded, resolved by the caller through the artifact layout.
     """
     outcome_code, _, qualifier = str(terminal["terminal_state"]).partition(":")
-    classifications = _recorded_classifications(paths, Path(diagnoses_root))
+    classifications = _recorded_classifications(Path(run_diagnoses))
     result = {
         "schema_version": SCHEMA_VERSION,
         "run_id": paths.root.name,
@@ -128,9 +129,8 @@ def aggregate_classification(classifications: list[str]) -> str | None:
     return "TRANSFORMATION_DEFECT" if has_transformation else "TEST_DEFECT"
 
 
-def _recorded_classifications(paths: RunPaths, diagnoses_root: Path) -> list[str]:
+def _recorded_classifications(run_diagnoses: Path) -> list[str]:
     """Every verdict this run persisted, in the order the attempts claimed."""
-    run_diagnoses = diagnoses_root / paths.root.name
     classifications: list[str] = []
     for attempt in sorted(existing_attempts(run_diagnoses)):
         path = run_diagnoses / f"attempt-{attempt:03d}" / DIAGNOSIS_FILENAME

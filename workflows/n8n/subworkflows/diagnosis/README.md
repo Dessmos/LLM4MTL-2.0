@@ -41,15 +41,22 @@ The parent `Execute Sub-workflow` node passes one item:
 
 ```json
 {
+  "batch_id": "batch_007",
   "run_id": "run-123",
+  "run_dir": "artifacts/work/runs/batch_007/run-123",
+  "n8n_run_dir": "/data/artifacts/runs/batch_007/run-123",
   "outcome_code": "SEMANTIC_EXECUTION_FAILED",
   "execution_attempt": 1,
   "diagnosis_provider": "openai",
-  "failure_report_path": "artifacts/work/runs/run-123/diagnosis-evidence/case-1/assertion-001.json"
+  "failure_report_path": "artifacts/work/runs/batch_007/run-123/diagnosis/execution/attempt-001/reports/case-1.json"
 }
 ```
 
-The report path is mandatory and must identify this run under `artifacts/work`.
+`run_dir` and `n8n_run_dir` are the run's directory as Python reported it at
+run creation: as the repository names it, and as this container reaches it.
+The report path is mandatory and must identify this run under `run_dir`; the
+workflow reads it through `n8n_run_dir` and builds every path it writes from
+that directory, spelling no artifact path of its own.
 The workflow does not search for a report, case, assertion, model snapshot,
 Surefire report, or structured difference. Supported `diagnosis_provider`
 values are `openai`, `anthropic`, and `google`. Choose the concrete
@@ -84,7 +91,7 @@ These trace artifacts are grouped by semantic-execution attempt and n8n
 execution so an n8n retry cannot overwrite the earlier evidence:
 
 ```text
-artifacts/work/runs/<run-id>/
+artifacts/work/runs/<batch-id>/<run-id>/
   responses/source-diagnosis/
     execution-attempt-NNN/
       n8n-execution-<id>__diagnosis_request.json
@@ -105,7 +112,7 @@ The verdict is a result other work consumes, so the stage service stores it
 outside the run rather than among that run's state:
 
 ```text
-artifacts/work/diagnoses/<run-id>/attempt-NNN/diagnosis.json
+artifacts/work/diagnoses/<batch-id>/<run-id>/attempt-NNN/diagnosis.json
 ```
 
 Only the trace above stays in the run. Nothing in the run points at the verdict;
