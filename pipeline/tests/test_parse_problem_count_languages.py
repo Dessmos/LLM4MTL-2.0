@@ -10,6 +10,7 @@ transformation is syntactically accepted is decided exactly as before.
 
 from __future__ import annotations
 
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -19,6 +20,7 @@ from unittest.mock import patch
 from llm4mtl.conventions import default_reactions_metamodels_root
 from llm4mtl.languages.atl.adapter import AtlAdapter
 from llm4mtl.languages.base import Workspace
+from llm4mtl.languages.etl.adapter import EtlAdapter
 from llm4mtl.languages.reactions.adapter import ReactionsAdapter
 
 
@@ -73,6 +75,73 @@ class AtlProblemCountTests(unittest.TestCase):
         for stdout, code in (("RESULT:FAIL:-1\n", 1), ("[ERROR] crash\n", 1)):
             with self.subTest(stdout=stdout):
                 self.assertFalse(self.observe(stdout, returncode=code).parsed)
+
+
+class EtlParseDiagnosticTests(unittest.TestCase):
+    """A rejected ETL file must say what Epsilon objected to.
+
+    The driver used to report only pass/fail lists, so the diagnostic was the
+    report itself — which states that the file failed and nothing else. Asked to
+    repair that, a model can only repeat the file it already knows was rejected.
+    """
+
+    def observe(self, *, diagnostic: str | None = None, failed: bool = True):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            transformation = root / "candidate.etl"
+            transformation.write_text("rule X {}\n", encoding="utf-8")
+            reported = [str(transformation.resolve())]
+            payload: dict[str, object] = {
+                "status": "completed",
+                "selected": 1,
+                "passed": 0 if failed else 1,
+                "failed": 1 if failed else 0,
+                "passed_transformations": [] if failed else reported,
+                "failed_transformations": reported if failed else [],
+            }
+            if diagnostic is not None:
+                payload["diagnostics"] = {reported[0]: diagnostic}
+            build = SimpleNamespace(stdout="", stderr="", returncode=0)
+            driver = SimpleNamespace(
+                stdout=json.dumps(payload), stderr="", returncode=1 if failed else 0
+            )
+            with (
+                patch(
+                    "llm4mtl.languages.etl.adapter.materialize_parser",
+                    return_value=root / "parser",
+                ),
+                patch(
+                    "llm4mtl.languages.etl.adapter.subprocess.run",
+                    side_effect=[build, driver],
+                ),
+            ):
+                result = EtlAdapter().parse_transformations(
+                    [transformation], Workspace(root / "engine", root / "observations")
+                )
+            return result[transformation]
+
+    def test_the_reported_problems_become_the_diagnostic(self) -> None:
+        observation = self.observe(
+            diagnostic="ERROR line 8:16 mismatched input 'extends' expecting 'transform'"
+        )
+
+        self.assertFalse(observation.parsed)
+        self.assertEqual(
+            "ERROR line 8:16 mismatched input 'extends' expecting 'transform'",
+            observation.diagnostic,
+        )
+
+    def test_a_driver_without_diagnostics_still_reports_the_rejection(self) -> None:
+        observation = self.observe()
+
+        self.assertFalse(observation.parsed)
+        self.assertIn("failed_transformations", observation.diagnostic)
+
+    def test_a_parsed_transformation_states_no_problem(self) -> None:
+        observation = self.observe(failed=False)
+
+        self.assertTrue(observation.parsed)
+        self.assertEqual("", observation.diagnostic)
 
 
 class ReactionsProblemCountTests(unittest.TestCase):

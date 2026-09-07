@@ -88,6 +88,47 @@ class QvtoProblemCountTests(unittest.TestCase):
         self.assertNotEqual(measured.problem_count, missing.problem_count)
 
 
+class QvtoParseDiagnosticTests(QvtoProblemCountTests):
+    """A rejected file must say what the parser objected to.
+
+    The probe used to print only the count, so the diagnostic fell back to the
+    tail of Maven's output — which describes the build, not the transformation.
+    A refinement asked to repair that learns only that the file was rejected.
+    """
+
+    def test_reported_problems_become_the_diagnostic(self) -> None:
+        measured, _ = self.observations(
+            "LLM4MTL_PARSE\t{measured}\t2\n"
+            "LLM4MTL_PROBLEM\t{measured}\tline 3:7 no viable alternative at 'x'\n"
+            "LLM4MTL_PROBLEM\t{measured}\tline 9:1 missing ';'\n"
+        )
+
+        self.assertEqual(
+            "line 3:7 no viable alternative at 'x'\nline 9:1 missing ';'",
+            measured.diagnostic,
+        )
+
+    def test_a_clean_parse_states_no_problem(self) -> None:
+        measured, _ = self.observations("LLM4MTL_PARSE\t{measured}\t0\n")
+
+        self.assertEqual("", measured.diagnostic)
+
+    def test_a_file_the_probe_never_reached_keeps_the_driver_output(self) -> None:
+        _, missing = self.observations(
+            "LLM4MTL_PARSE\t{measured}\t0\nharness exploded\n"
+        )
+
+        self.assertIn("harness exploded", missing.diagnostic)
+
+    def test_one_files_problems_never_describe_another(self) -> None:
+        measured, missing = self.observations(
+            "LLM4MTL_PARSE\t{measured}\t1\n"
+            "LLM4MTL_PROBLEM\t{measured}\tline 3:7 no viable alternative at 'x'\n"
+        )
+
+        self.assertNotIn("no viable alternative", missing.diagnostic)
+
+
 class DefaultIsUnmeasuredTests(unittest.TestCase):
 
     def test_an_observation_that_states_no_count_reports_none(self) -> None:

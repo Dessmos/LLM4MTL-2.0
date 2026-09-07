@@ -31,6 +31,9 @@ from llm4mtl.semantic_tests.suites.java import slug
 
 PARSER_TIMEOUT_SECONDS = 900
 PARSE_LINE = re.compile(r"LLM4MTL_PARSE\t(.+?)\t(\d+)")
+# The probe reports each ANTLR problem as well as their count: the count alone
+# tells a refinement loop only that the file was rejected.
+PROBLEM_LINE = re.compile(r"LLM4MTL_PROBLEM\t(.+?)\t(.+)")
 PARSER_PROBE = """\
 package org.qvto.parser;
 
@@ -46,6 +49,9 @@ public class Llm4mtlParserProbeTest {
             QVTOParserFacade facade = new QVTOParserFacade();
             facade.parseFile(Path.of(item));
             System.out.println("LLM4MTL_PARSE\\t" + item + "\\t" + facade.getProblemCount());
+            for (String problem : facade.getProblems()) {
+                System.out.println("LLM4MTL_PROBLEM\\t" + item + "\\t" + problem);
+            }
         }
     }
 }
@@ -160,12 +166,41 @@ class QvtoAdapter:
             text=True,
             timeout=PARSER_TIMEOUT_SECONDS,
         )
+        combined = f"{completed.stdout}\n{completed.stderr}"
         parsed = {
             Path(path).resolve(): int(problems)
-            for path, problems in PARSE_LINE.findall(
-                f"{completed.stdout}\n{completed.stderr}"
-            )
+            for path, problems in PARSE_LINE.findall(combined)
         }
+        reported: dict[Path, list[str]] = {}
+        for path, problem in PROBLEM_LINE.findall(combined):
+            reported.setdefault(Path(path).resolve(), []).append(problem)
+        # What is left once every per-file marker line is removed. A file the
+        # probe never reached has no problems of its own, and handing it the raw
+        # tail would describe some other transformation's syntax error as if it
+        # were this one's.
+        driver_output = "\n".join(
+            line
+            for line in combined.splitlines()
+            if not line.startswith(("LLM4MTL_PARSE\t", "LLM4MTL_PROBLEM\t"))
+        ).strip()
+
+        def diagnostic_for(path: Path) -> str:
+            """This file's parse problems, or the driver output that hid them.
+
+            The driver output is what remains when the probe never reached the
+            file — a build or harness failure — and it describes that failure
+            rather than the transformation.
+            """
+            if completed.returncode == 0 and parsed.get(path.resolve()) == 0:
+                return ""
+            problems = reported.get(path.resolve())
+            if problems:
+                return "\n".join(problems)
+            # Nothing but marker lines means nothing was observed about this
+            # file. Saying so by staying silent beats quoting a neighbour's
+            # syntax error as though it belonged here.
+            return driver_output[-500:]
+
         return {
             path: ParseObservation(
                 parsed=completed.returncode == 0 and parsed.get(path.resolve()) == 0,
@@ -174,11 +209,7 @@ class QvtoAdapter:
                 # measured. Reporting 0 for it would claim the parser found no
                 # problems in a transformation it never reached.
                 problem_count=parsed.get(path.resolve()),
-                diagnostic=(
-                    ""
-                    if completed.returncode == 0 and parsed.get(path.resolve()) == 0
-                    else f"{completed.stdout}\n{completed.stderr}".strip()[-500:]
-                ),
+                diagnostic=diagnostic_for(path),
             )
             for path in transformations
         }

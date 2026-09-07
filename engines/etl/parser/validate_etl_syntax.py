@@ -9,7 +9,7 @@ import json
 import sys
 from pathlib import Path
 
-from run_parser import check_etl_syntax
+from run_parser import check_etl_syntax_detailed
 
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -72,8 +72,11 @@ def main(argv: list[str] | None = None) -> int:
         return emit(args, payload, 0)
 
     rows: list[dict[str, str]] = []
+    diagnostics: dict[str, str] = {}
     for item in selected:
-        parsed, problem_count = check_etl_syntax(str(item["path"]))
+        parsed, problem_count, problems = check_etl_syntax_detailed(str(item["path"]))
+        if not parsed and problems:
+            diagnostics[str(item["path"])] = "\n".join(problems)
         rows.append(
             {
                 "language": "etl",
@@ -100,6 +103,9 @@ def main(argv: list[str] | None = None) -> int:
         "failed": len(rows) - passed,
         "passed_transformations": [row["path"] for row in rows if row["parsed"] == "True"],
         "failed_transformations": [row["path"] for row in rows if row["parsed"] != "True"],
+        # Per-file parse problems. Without them a caller can only repeat that the
+        # file was rejected, which is what a refinement prompt used to carry.
+        "diagnostics": diagnostics,
         "results_file": str(args.results_file.resolve()),
     }
     return emit(args, payload, 0 if passed == len(rows) else 1)

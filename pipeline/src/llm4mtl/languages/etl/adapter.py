@@ -66,13 +66,21 @@ def _completed_parse_observations(
     all_selected_passed = len(transformations) == int(
         payload.get("selected") or 0
     ) and len(transformations) == int(payload.get("passed") or 0)
-    diagnostic = json.dumps(payload, ensure_ascii=False)
+    # The driver reports the Epsilon parse problems per file. Falling back to the
+    # whole report keeps an older driver readable, but that fallback only repeats
+    # the verdict: it is the report that says which files failed, and a model
+    # asked to repair a file it already knows was rejected learns nothing.
+    reported = {
+        Path(str(key)).resolve(): str(value)
+        for key, value in (payload.get("diagnostics") or {}).items()
+    }
+    fallback = json.dumps(payload, ensure_ascii=False)
     observations: dict[Path, ParseObservation] = {}
     for path in transformations:
         parsed = all_selected_passed or path.resolve() in parsed_paths
         observations[path] = ParseObservation(
             parsed=parsed,
-            diagnostic="" if parsed else diagnostic,
+            diagnostic="" if parsed else reported.get(path.resolve()) or fallback,
         )
     return observations
 

@@ -77,16 +77,20 @@ def get_etl_reference_files():
     return references
 
 
-def check_etl_syntax(etl_file_path):
+PROBLEM_PREFIX = 'PROBLEM\t'
+
+
+def check_etl_syntax_detailed(etl_file_path):
     """Check ETL syntax using Eclipse Epsilon ETL Parser.
 
-    Uses ETLParserMain which outputs RESULT:OK:0 or RESULT:FAIL:N.
+    Uses ETLParserMain, which outputs RESULT:OK:0 or RESULT:FAIL:N followed by
+    one PROBLEM line per parse problem.
 
     Args:
         etl_file_path: Absolute path to ETL file
 
     Returns:
-        tuple: (is_valid: bool, problem_count: int)
+        tuple: (is_valid: bool, problem_count: int, problems: list of str)
     """
     try:
         use_shell = os.name == 'nt'
@@ -106,21 +110,35 @@ def check_etl_syntax(etl_file_path):
             shell=use_shell
         )
 
-        # Parse output: RESULT:OK:0 or RESULT:FAIL:N
+        # Parse output: RESULT:OK:0 or RESULT:FAIL:N, then PROBLEM lines
         problem_count = 0
+        problems = []
+        seen_result = False
         for line in result.stdout.split('\n'):
-            if line.startswith('RESULT:'):
+            if line.startswith('RESULT:') and not seen_result:
                 parts = line.split(':')
                 if len(parts) >= 3:
                     problem_count = int(parts[2])
-                break
+                seen_result = True
+            elif line.startswith(PROBLEM_PREFIX):
+                problems.append(line[len(PROBLEM_PREFIX):].replace('\t', ' ').strip())
 
-        return (result.returncode == 0 and problem_count == 0, problem_count)
+        return (result.returncode == 0 and problem_count == 0, problem_count, problems)
     except subprocess.TimeoutExpired:
-        return (False, -1)
+        return (False, -1, ['Parser timed out'])
     except Exception as e:
         print(f"Error: {e}")
-        return (False, -1)
+        return (False, -1, [f'Parser driver error: {e}'])
+
+
+def check_etl_syntax(etl_file_path):
+    """Backwards-compatible pair for callers that only count problems.
+
+    Returns:
+        tuple: (is_valid: bool, problem_count: int)
+    """
+    is_valid, problem_count, _ = check_etl_syntax_detailed(etl_file_path)
+    return (is_valid, problem_count)
 
 
 def generate_etl_parsed_rate_csv(output_csv='etl_parsed_rate.csv'):
