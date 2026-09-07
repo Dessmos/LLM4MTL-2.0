@@ -90,11 +90,12 @@ def prepare_refinement(
         raise RefinementPreparationError(
             f"{source} refinement must not name an execution attempt"
         )
-    failure_reports = (
-        _failure_report_facts(paths, execution_attempt)
-        if execution_attempt is not None
-        else []
-    )
+    if execution_attempt is not None:
+        failure_reports = _failure_report_facts(paths, execution_attempt)
+    elif source == "reference":
+        failure_reports = _reference_failure_facts(paths, manifest, previous_iteration)
+    else:
+        failure_reports = []
     diagnoses = (
         _diagnosis_facts(paths, diagnoses_root, execution_attempt)
         if execution_attempt is not None
@@ -339,6 +340,50 @@ def _failure_report_facts(
             }
         )
     return facts
+
+
+def _reference_failure_facts(
+    paths: RunPaths, manifest: dict[str, Any], previous_iteration: int
+) -> list[dict[str, Any]]:
+    """Why the reference rejected the previous suite, in the failure slot.
+
+    Reference validation records its verdict as a suite observation rather than
+    as a failure report, so this slot used to be empty for every reference
+    refinement: the prompt carried ``REFERENCE_INVALID`` and no assertion that
+    disagreed with the reference. A model asked to repair that has nothing to
+    repair, and every retry reproduced its own input.
+    """
+    path = (
+        paths.root
+        / "observations"
+        / str(manifest["task"])
+        / str(manifest.get("test_generation_model") or "")
+        / str(manifest.get("test_generation_strategy") or "")
+        / f"{paths.root.name}_{previous_iteration:03d}"
+        / "suite_execution.json"
+    )
+    if not path.is_file():
+        return []
+    payload = read_json(path)
+    validate_artifact("suite-execution", payload)
+    observation = dict(payload.get("observation") or {})
+    if observation.get("reference_valid"):
+        return []
+    return [
+        {
+            "report": _run_path(paths, path),
+            "identity": {
+                "task": payload.get("task"),
+                "suite_id": payload.get("suite_id"),
+            },
+            "failure": {
+                "failure_stage": observation.get("failure_stage"),
+                "error_summary": observation.get("error_summary"),
+                "assertions_evaluated": observation.get("assertions_evaluated"),
+                "assertions_passed": observation.get("assertions_passed"),
+            },
+        }
+    ]
 
 
 def _diagnosis_facts(

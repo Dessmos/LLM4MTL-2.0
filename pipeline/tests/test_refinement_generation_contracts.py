@@ -186,6 +186,95 @@ class RefinementGenerationContractTests(unittest.TestCase):
             self.paths.generation_iteration_dir("transformation-generation", 1).is_dir()
         )
 
+    def test_reference_refinement_carries_the_assertion_the_reference_rejected(
+        self,
+    ) -> None:
+        """Reference validation records its verdict as a suite observation, so the
+        failure slot used to arrive empty and the prompt said only that the suite
+        was REFERENCE_INVALID. Every retry then reproduced its own input.
+        """
+        previous = self.paths.generation_response(
+            "semantic-test-generation", 0, "Tree2Graph.md"
+        )
+        previous.parent.mkdir(parents=True, exist_ok=True)
+        previous.write_text("```json file=semantic_cases.json\n{}\n```\n", encoding="utf-8")
+        write_json(
+            self.paths.root
+            / "observations"
+            / "Tree2Graph"
+            / "gpt-5"
+            / "few_shot"
+            / f"{self.paths.root.name}_000"
+            / "suite_execution.json",
+            {
+                "schema_version": "2.0",
+                "language": "etl",
+                "task": "Tree2Graph",
+                "llm": "gpt-5",
+                "strategy": "few_shot",
+                "suite_id": f"{self.paths.root.name}_000",
+                "inputs": {
+                    "suite": {"path": "suite", "sha256": "0" * 64, "role": "generated_suite"},
+                    "transformation": {
+                        "path": "benchmark/tasks/etl/references/Tree2Graph.etl",
+                        "sha256": "1" * 64,
+                        "role": "reference_transformation",
+                    },
+                },
+                "observation": {
+                    "compiled": True,
+                    "tests_discovered": True,
+                    "models_loaded": True,
+                    "engine_started": True,
+                    "assertions_evaluated": True,
+                    "assertions_passed": False,
+                    "timed_out": False,
+                    "maven_exit_code": 1,
+                    "failure_stage": "assertion_failure",
+                    "error_summary": "singleRoot: count for Graph::Node ==> expected: <2> but was: <3>",
+                    "technically_executable": True,
+                    "reference_valid": False,
+                },
+            },
+        )
+        for stage, status, outcome in (
+            ("technical-validation", "passed", "TECH_VALID"),
+            ("reference-validation", "failed", "REFERENCE_VALIDATION_FAILED"),
+        ):
+            run_store.record_attempt(
+                self.paths,
+                stage,
+                {
+                    "schema_version": "2.0",
+                    "stage": stage,
+                    "status": status,
+                    "outcome_code": outcome,
+                    "counts": {"selected": 1},
+                    "artifacts": {},
+                },
+                evidence={"details": {"verdicts": []}},
+            )
+
+        prepared = run_store.prepare_refinement(
+            self.paths,
+            self.manifest,
+            artifact_type="semantic-test",
+            iteration=1,
+            previous_iteration=0,
+            provider="openai",
+            model="gpt-5.3-codex",
+            reason="REFERENCE_VALIDATION_FAILED",
+            diagnoses_root=self.root / "diagnoses",
+        )
+
+        request = read_json(self.paths.root / prepared["request_path"])
+        prompt = (self.paths.root / request["prompt_file"]).read_text(encoding="utf-8")
+        reports = request["feedback"]["failure_reports"]
+        self.assertEqual("reference", request["feedback"]["source"])
+        self.assertEqual(1, len(reports))
+        self.assertEqual("assertion_failure", reports[0]["failure"]["failure_stage"])
+        self.assertIn("expected: <2> but was: <3>", prompt)
+
     def test_generation_record_uses_actual_n8n_model_and_links_both_iterations(
         self,
     ) -> None:

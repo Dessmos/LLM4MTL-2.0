@@ -210,6 +210,8 @@ class TestGenerationAdapter:
             {
                 "suite": str(verdict.suite.path),
                 "status": verdict.status,
+                "failure_stage": verdict.failure_stage,
+                "error_summary": verdict.error_summary,
             }
             for verdict in verdicts
         ]

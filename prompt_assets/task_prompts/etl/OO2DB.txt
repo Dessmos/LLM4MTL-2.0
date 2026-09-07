@@ -2,4 +2,7 @@ Create an ETL transformation from an object-oriented model to a database model.
 Include a **pre block** that initializes a new database instance and a **post block** that builds a custom trace model linking each source element with its transformation results.  
 Define the following rules: **Class2Table**, **SingleValuedAttribute2Column**, **MultiValuedAttribute2Table**, and **Reference2ForeignKey**.  
 Implement operations `primaryKeyName`, `valuesTableName`, and `toDbType` to derive names and type mappings.  
-Each rule should populate the appropriate database elements, handling inheritance and foreign keys where needed.
+Each rule should populate the appropriate database elements, handling inheritance and foreign keys where needed.  
+**Class2Table** adds a primary-key column typed `INT` in addition to the columns produced for the class’s attributes; `primaryKeyName` yields the table name with a lower-case initial and an `Id` suffix.  
+`valuesTableName` yields the owner class name, an underscore, the attribute name with an upper-case initial, and a `Values` suffix; that table holds an `id` and a `value` column, and its foreign key links that `id` to an `<attribute name>Id` column added to the owner’s table.  
+In **Reference2ForeignKey** the child column is named `<reference name>Id` and belongs to the table of the reference’s type, while the parent is the primary key of the owning class’s table.

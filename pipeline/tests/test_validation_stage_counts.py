@@ -143,12 +143,12 @@ class TestGenerationAdapterValidationTests(unittest.TestCase):
         config = PipelineConfig(language="etl", tasks=["Tree2Graph"])
         adapter = GenerationAdapter(Path("/repository"))
         cases = (
-            (False, TECHNICALLY_EXECUTABLE, "technical_validation"),
-            (True, VALIDATED, "reference_validation"),
+            (False, TECHNICALLY_EXECUTABLE, "technical_validation", ""),
+            (True, VALIDATED, "reference_validation", "count for H1 was 4, not 3"),
         )
 
-        for judge_as_oracle, status, name in cases:
-            verdict = SuiteVerdict(suite, status)
+        for judge_as_oracle, status, name, summary in cases:
+            verdict = SuiteVerdict(suite, status, error_summary=summary)
             with self.subTest(name=name):
                 with patch.object(
                     adapter,
@@ -185,7 +185,14 @@ class TestGenerationAdapterValidationTests(unittest.TestCase):
                 other_validator.assert_not_called()
                 self.assertEqual("completed", result.status)
                 self.assertEqual(
-                    [{"suite": str(suite_path), "status": status}],
+                    [
+                        {
+                            "suite": str(suite_path),
+                            "status": status,
+                            "failure_stage": verdict.failure_stage,
+                            "error_summary": summary,
+                        }
+                    ],
                     result.details["verdicts"],
                 )
 

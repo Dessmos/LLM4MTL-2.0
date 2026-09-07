@@ -188,7 +188,9 @@ def cloud_prompt_request(language: str) -> str:
         "have produced this reference transformation. Preserve the task's "
         "observable intent and explicitly name its transformation rules, "
         "mappings, or reactions. Do not generate code or tests. Do not add facts "
-        "that are absent from these inputs. Keep the request under 100 words.\n\n"
+        "that are absent from these inputs. State verbatim every literal string, "
+        "prefix, and separator the reference writes into a target attribute. "
+        "Keep the request under 150 words.\n\n"
         f"{special}\n\nReturn only the task prompt text."
     )
 

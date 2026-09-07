@@ -5,3 +5,5 @@ Include the following rules:
 - **Transition2SourceLink**: convert each Transition into an HTML link showing its source’s name and linking to that source.  
 - **Transition2TargetLink**: produce an HTML link showing the transition’s name, linking to its target.  
 - **Transition2Heading**: create an H1 heading for each Transition displaying its name as the title.
+
+Every link’s href is “#” followed by the name of the node it points to.
