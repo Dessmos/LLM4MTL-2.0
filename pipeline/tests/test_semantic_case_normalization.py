@@ -17,7 +17,7 @@ import unittest
 
 from llm4mtl.conventions import ETL_CONFIG
 from llm4mtl.domain import INVALID_SEMANTIC_CASES
-from llm4mtl.semantic_tests.codegen.java import render_semantic_test
+from llm4mtl.languages.etl.rendering import render_semantic_test
 from llm4mtl.semantic_tests.extraction.semantic_cases import render_generated_suite
 from llm4mtl.semantic_tests.extraction.semantic_cases.errors import SemanticCasesError
 from llm4mtl.semantic_tests.extraction.semantic_cases.normalization import (

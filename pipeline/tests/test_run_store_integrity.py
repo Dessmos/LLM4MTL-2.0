@@ -7,7 +7,7 @@ import unittest
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from llm4mtl import experiment_store, run_store
+from llm4mtl import run_store
 from llm4mtl.artifact_schemas import ArtifactSchemaError, validate_artifact
 from llm4mtl.run_store.identity import InvalidRunIdError
 from llm4mtl.stage_contract import SCHEMA_VERSION as STAGE_SCHEMA_VERSION
@@ -77,12 +77,6 @@ class RunIdContainmentTests(unittest.TestCase):
                         runs_root.resolve() / run_id,
                         run_store.open_run(runs_root, run_id).root,
                     )
-
-    def test_experiment_ids_are_contained_too(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            with self.assertRaises(InvalidRunIdError):
-                experiment_store.open_experiment(Path(temp_dir), "../escape")
-
 
 class AttemptAtomicityTests(unittest.TestCase):
 

@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from llm4mtl.semantic_tests.codegen.java import object_signatures
 from llm4mtl.semantic_tests.codegen.java_rendering import (
     assertion_message,
     escape_java,
     java_string_array,
     java_string_list,
+    object_signatures,
 )
 
 ALL_OF_TYPE_LOOP = "        for (EObject object : allOfType(roots, typeName)) {"

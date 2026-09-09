@@ -25,7 +25,6 @@ from llm4mtl.domain import (
     ArtifactValidation,
 )
 from llm4mtl.semantic_tests.codegen.java_rendering import sanitize_class_name
-from llm4mtl.semantic_tests.codegen.java import render_semantic_test
 from llm4mtl.task_contracts import enforce_contract, load_task_contract
 
 from llm4mtl.semantic_tests.scenario_mapping import ScenarioMappingError, suite_from_spec
@@ -40,7 +39,6 @@ __all__ = [
     "CONTRACT_VIOLATION",
     "render_generated_suite",
     "parse_semantic_cases",
-    "render_semantic_test",
     "SEMANTIC_CASES_FILE",
     "CONTRACT_VIOLATIONS_FILE",
 ]

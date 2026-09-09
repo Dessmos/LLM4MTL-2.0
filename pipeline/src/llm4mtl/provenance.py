@@ -19,7 +19,6 @@ from pathlib import Path
 from typing import Any
 
 from llm4mtl import run_store
-from llm4mtl.experiment_store.models import SCHEMA_VERSION as EXPERIMENT_SCHEMA_VERSION
 from llm4mtl.paths import REPO_ROOT, TARGET
 from llm4mtl.stage_contract import SCHEMA_VERSION as STAGE_SCHEMA_VERSION
 
@@ -53,7 +52,6 @@ def build_provenance(language: str, task: str, **extra: Any) -> dict[str, Any]:
         "schema_versions": {
             "run_store": run_store.SCHEMA_VERSION,
             "stage_contract": STAGE_SCHEMA_VERSION,
-            "experiment_store": EXPERIMENT_SCHEMA_VERSION,
         },
         "tool_versions": {
             "python": platform.python_version(),

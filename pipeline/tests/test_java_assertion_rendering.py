@@ -6,7 +6,7 @@ import unittest
 from typing import Any, Callable
 
 from llm4mtl.languages.java_assertions import render_assertions
-from llm4mtl.semantic_tests.codegen.java import render_assertion
+from llm4mtl.languages.etl.rendering import render_assertion
 
 
 ASSERTIONS = (

@@ -1,4 +1,4 @@
-"""Render a deterministic JUnit Java harness from a canonical semantic-case spec."""
+"""Deterministic ETL/JUnit renderer for canonical semantic cases."""
 
 from __future__ import annotations
 
@@ -10,6 +10,7 @@ from llm4mtl.semantic_tests.codegen.java_rendering import (
     java_bool,
     java_string_array,
     java_string_list,
+    object_signatures,
     safe_temp_prefix,
     sanitize_method_name,
 )
@@ -489,12 +490,3 @@ def model_resource_path(path: str, task: str, generated: bool) -> str:
         normalized = normalized[len("models/") :]
     return f"generated-models/{slug(task)}/{normalized}"
 
-
-def object_signatures(raw_objects: list[Any], features: list[str]) -> list[str]:
-    signatures = []
-    for raw_object in raw_objects:
-        if not isinstance(raw_object, dict):
-            raise SystemExit("objects assertion expected entries must be objects")
-        parts = [f"{feature}={raw_object.get(feature)}" for feature in features]
-        signatures.append("|".join(parts))
-    return signatures

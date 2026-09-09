@@ -40,7 +40,7 @@ from llm4mtl.languages.common import (
 from llm4mtl.paths import TARGET
 from llm4mtl.semantic_tests.suite_execution import execute_suite_against
 from llm4mtl.semantic_tests.surefire import UNCLASSIFIED_RUNTIME
-from llm4mtl.semantic_tests.codegen.java import render_semantic_test
+from llm4mtl.languages.etl.rendering import render_semantic_test
 from llm4mtl.semantic_tests.extraction.semantic_cases import render_generated_suite
 
 PARSER_TIMEOUT_SECONDS = 900

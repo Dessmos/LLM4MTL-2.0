@@ -20,7 +20,7 @@ import re
 import unittest
 
 from llm4mtl.languages.java_assertions import render_assertions
-from llm4mtl.semantic_tests.codegen.java import render_assertion
+from llm4mtl.languages.etl.rendering import render_assertion
 from llm4mtl.semantic_tests.codegen.java_rendering import (
     assertion_message,
     escape_java,
@@ -30,11 +30,11 @@ from llm4mtl.semantic_tests.failure_report import FailureReportError
 from llm4mtl.semantic_tests.failure_report.case_report import _assertion_message
 
 MODEL_VARIABLES = {"OUT": "model0"}
-# Two harness emitters are live: ETL renders through codegen.java, the other
+# Two harness emitters are live: ETL renders through languages.etl.rendering, the other
 # three languages through languages.java_assertions. Both must print the one
 # message, or a diagnosis works for some languages and not others.
 EMITTERS = {
-    "codegen.java": lambda assertion: render_assertion(assertion, MODEL_VARIABLES),
+    "languages.etl.rendering": lambda assertion: render_assertion(assertion, MODEL_VARIABLES),
     "languages.java_assertions": lambda assertion: render_assertions(
         [assertion], MODEL_VARIABLES
     ),

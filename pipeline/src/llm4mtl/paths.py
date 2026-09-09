@@ -269,13 +269,6 @@ class TargetLayout:
     def run_diagnoses_dir(self, batch_id: str, run_id: str) -> Path:
         return self.artifact_roots.run_diagnoses_dir(batch_id, run_id)
 
-    @property
-    def artifact_experiments(self) -> Path:
-        return self.artifacts_work / "experiments"
-
-    def experiment_dir(self, experiment_id: str) -> Path:
-        return self.artifact_experiments / experiment_id
-
     # Engines, uniform per language
     def engine_parser(self, language: str) -> Path:
         return self.engines / language / "parser"

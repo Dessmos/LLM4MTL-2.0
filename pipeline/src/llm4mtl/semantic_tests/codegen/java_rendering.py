@@ -91,3 +91,13 @@ def assertion_message(assertion: Mapping[str, Any]) -> str:
 def escape_java(value: str) -> str:
     """Escape backslashes and quotes for a Java string literal body."""
     return value.replace("\\", "\\\\").replace('"', '\\"')
+
+
+def object_signatures(raw_objects: list[Any], features: list[str]) -> list[str]:
+    signatures = []
+    for raw_object in raw_objects:
+        if not isinstance(raw_object, dict):
+            raise SystemExit("objects assertion expected entries must be objects")
+        parts = [f"{feature}={raw_object.get(feature)}" for feature in features]
+        signatures.append("|".join(parts))
+    return signatures

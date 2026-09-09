@@ -63,8 +63,6 @@ SCHEMA_FILES: dict[str, str] = {
     "batch-result": "batch-result.schema.json",
     "events": "events.schema.json",
     "stage-result": "stage-result.schema.json",
-    "experiment-manifest": "experiment-manifest.schema.json",
-    "run-index": "run-index.schema.json",
     "diagnosis": "diagnosis.schema.json",
     "suite-execution": "suite-execution.schema.json",
     "execution-evidence": "execution-evidence.schema.json",
