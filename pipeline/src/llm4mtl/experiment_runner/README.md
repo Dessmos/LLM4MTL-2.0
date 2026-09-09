@@ -1,14 +1,31 @@
 # Experiment runner
 
-llm4mtl.experiment_runner is the local orchestration CLI. Production routing
-belongs to n8n; the runner invokes the same deterministic Python stages locally.
+llm4mtl.experiment_runner is the local orchestration which can MANUALLY start 
+all Python stages that are als used in n8n workflow
+
+
+# files description
+
+_init_.py               - import 3 models: PipelineConfig, RunResult, StageResult
+main.py and _main_.py   - points of entry (main.py is an old one)
+models.py               - Data classes and contracts. Contains no logic
+                                PipelineConfig - all what one run describes
+                                StageResult    - Result of one stage
+                                RunResult      - The whole run
+config.py               - load and validation of configs
+orchestrator.py         - main file of the folder.controls the whole process
+cli.py                  - Command-line public contract (llm4mtl). Entry point for    
+                            analyze command line for flags. And then gives it to orch.
+matrix.py               - expands a single YAML list of settings into a list of 
+                            specific runs.
+
+
+
 
 ## Run a preset
 
     PYTHONPATH=pipeline/src .venv/bin/python -m llm4mtl.experiment_runner pipeline run --config experiments/presets/etl/tree2graph_smoke.yaml
 
-Use --dry-run to inspect selected responses, suites, transformations and
-execution pairs without writing run artifacts.
 
 ## Active paths
 
@@ -34,21 +51,3 @@ orchestrator CLI:
     .venv/bin/llm4mtl diagnosis report \
       --request artifacts/work/runs/<run-id>/diagnosis-request.json \
       --output artifacts/work/runs/<run-id>/diagnosis-evidence/<test-case>/<assertion>.json
-
-The request format and all required fields are documented in
-`llm4mtl.semantic_tests.failure_report`. It identifies the immutable run
-manifest, syntax and execution attempt evidence, generated/reference execution
-observations, one `test_case_id`, one `assertion_id`, the structured comparator
-difference, and explicit snapshot and Surefire paths. An execution-log path is
-optional because the report records it only when one exists. No evidence paths
-are discovered automatically.
-
-The command creates the output once and refuses to overwrite it. It also
-verifies that the selected execution attempt, suite, transformation, Surefire
-failure, and assertion message agree. Source-diagnosis evidence is emitted only
-for `parser passed + assertions evaluated + semantic assertion failed`.
-
-This command is deterministic post-processing, not an additional pipeline
-stage. It does not call an LLM, classify the failure, modify run history, or
-choose whether the transformation or test should be refined. n8n owns those
-actions.

@@ -25,12 +25,16 @@ def load_pipeline_config(path: Path) -> PipelineConfig:
     """Load and validate a human-authored pipeline configuration."""
     payload = load_mapping(path)
     language = payload.get("language")
+
     if not isinstance(language, str) or not language.strip():
         raise ConfigError("Experiment config must declare a non-empty language.")
+    
     test_suites = mapping(payload.get("test_suites"))
     extraction = mapping(test_suites.get("extraction"))
+
     validation = mapping(test_suites.get("validation"))
     transformations = mapping(payload.get("transformations"))
+
     execution = mapping(payload.get("execution"))
 
     config = PipelineConfig(
@@ -58,17 +62,18 @@ def load_pipeline_config(path: Path) -> PipelineConfig:
         run_id=string_or_none(execution.get("run_id")),
         batch_id=string_or_none(execution.get("batch_id")),
     )
+
     if extraction.get("enabled") is False and config.start_stage == "extract":
         config.start_stage = "technical"
     validate_config(config)
     return config
 
-
+    # Load a top-level mapping from a JSON or supported YAML file.
 def load_mapping(path: Path) -> dict[str, Any]:
-    """Load a top-level mapping from a JSON or supported YAML file."""
     if not path.is_file():
         raise ConfigError(f"Experiment config not found: {path}")
     text = path.read_text(encoding="utf-8")
+
     if path.suffix.lower() == ".json" or text.lstrip().startswith("{"):
         value = json.loads(text)
     else:
@@ -78,24 +83,22 @@ def load_mapping(path: Path) -> dict[str, Any]:
             value = yaml.safe_load(text)
         except ImportError:
             value = parse_simple_yaml(text)
+
     if not isinstance(value, dict):
         raise ConfigError("Experiment config must contain a mapping at the top level.")
     return value
 
 
+#  Load the persisted fields understood by the current runner version.
 def load_resolved_config(path: Path) -> PipelineConfig:
-    """Load the persisted fields understood by the current runner version."""
     payload = load_mapping(path)
     allowed = {item.name for item in fields(PipelineConfig)}
     known_values = {key: value for key, value in payload.items() if key in allowed}
     return PipelineConfig(**known_values)
 
-
+#   Validate identity, selection, and stage-range constraints."""
+#   The language must have an adapter. 
 def validate_config(config: PipelineConfig, require_selection: bool = True) -> None:
-    """Validate identity, selection, and stage-range constraints."""
-    # The language must have an adapter. Rejecting here rather than deep in a
-    # stage keeps an unimplemented language from producing partial artifacts
-    # attributed to a language that never ran.
     from llm4mtl.languages import (
         REQUIRED_LANGUAGES,
         UnsupportedLanguageError,
@@ -104,6 +107,7 @@ def validate_config(config: PipelineConfig, require_selection: bool = True) -> N
 
     if not isinstance(config.language, str) or not config.language.strip():
         raise ConfigError("A run must declare a non-empty language.")
+    
     if config.suite_id and not RUN_ID_PATTERN.fullmatch(config.suite_id):
         raise ConfigError(
             f"Invalid suite id {config.suite_id!r}: expected a non-empty "
@@ -125,16 +129,18 @@ def validate_config(config: PipelineConfig, require_selection: bool = True) -> N
     _validate_stage_range(config)
 
 
+#  Validate model and strategy selections in their established order.
 def _validate_selections(config: PipelineConfig) -> None:
-    """Validate model and strategy selections in their established order."""
     unknown_models = (
         set(config.test_models) | set(config.transformation_models)
     ) - ALLOWED_MODELS
+
     if unknown_models:
         raise ConfigError(f"Unsupported model(s): {', '.join(sorted(unknown_models))}")
     unknown_strategies = (
         set(config.test_strategies) | set(config.transformation_strategies)
     ) - ALLOWED_STRATEGIES
+
     if unknown_strategies:
         raise ConfigError(
             "Unsupported strategy/strategies: "
@@ -142,24 +148,27 @@ def _validate_selections(config: PipelineConfig) -> None:
         )
 
 
+#   Validate the configured pipeline interval and its direction.
 def _validate_stage_range(config: PipelineConfig) -> None:
-    """Validate the configured pipeline interval and its direction."""
     if config.start_stage not in PIPELINE_STAGES:
         raise ConfigError(f"Unknown start stage: {config.start_stage}")
+    
     if config.stop_after not in PIPELINE_STAGES:
         raise ConfigError(f"Unknown stop stage: {config.stop_after}")
+    
     start_index = PIPELINE_STAGES.index(config.start_stage)
     stop_index = PIPELINE_STAGES.index(config.stop_after)
     if start_index > stop_index:
         raise ConfigError("--start-stage must not come after --stop-after.")
 
 
+#   Parse the mapping/list/scalar YAML subset used by experiment configs."""
 def parse_simple_yaml(text: str) -> dict[str, Any]:
-    """Parse the mapping/list/scalar YAML subset used by experiment configs."""
     lines = _simple_yaml_lines(text)
     if not lines:
         return {}
     result, index = _parse_yaml_block(lines, 0, lines[0][0])
+
     if index != len(lines) or not isinstance(result, dict):
         raise ConfigError("Unsupported YAML structure.")
     return result
@@ -176,9 +185,7 @@ def _simple_yaml_lines(text: str) -> list[_YamlLine]:
     return lines
 
 
-def _parse_yaml_block(
-    lines: list[_YamlLine], index: int, indent: int
-) -> tuple[Any, int]:
+def _parse_yaml_block(lines: list[_YamlLine], index: int, indent: int) -> tuple[Any, int]:
     is_list = lines[index][1].startswith("- ") or lines[index][1] == "-"
     if is_list:
         return _parse_yaml_list_block(lines, index, indent)
@@ -252,7 +259,6 @@ def _parse_yaml_mapping_list_item(
     item_text: str,
 ) -> int:
     """Parse one list item that starts with a mapping entry."""
-
     key, value_text = split_key_value(item_text)
     item = {key: parse_scalar(value_text)} if value_text else {key: None}
     index += 1
