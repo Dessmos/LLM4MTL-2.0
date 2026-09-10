@@ -8,9 +8,9 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-
+# Atomically replace "path" with one complete JSON document.
+# Exclude risk of damaged write
 def write_json(path: Path, payload: Any) -> None:
-    """Atomically replace ``path`` with one complete JSON document."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     serialized = json.dumps(payload, indent=2, ensure_ascii=False) + "\n"
@@ -31,8 +31,8 @@ def write_json(path: Path, payload: Any) -> None:
         temporary.unlink(missing_ok=True)
 
 
+#  Atomically create "path" without replacing an existing document.
 def write_json_once(path: Path, payload: Any) -> None:
-    """Atomically create ``path`` without replacing an existing document."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     serialized = json.dumps(payload, indent=2, ensure_ascii=False) + "\n"

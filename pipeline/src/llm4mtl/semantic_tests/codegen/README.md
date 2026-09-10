@@ -1,0 +1,1 @@
+Four renderers (ETL, ATL, QVT-O, Reactions) generate different Java code, but they handle string escaping and method naming in the same way—by drawing from here.
