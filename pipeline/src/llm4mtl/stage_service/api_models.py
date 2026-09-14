@@ -24,6 +24,21 @@ class RunExperimentConfig(BaseModel):
     source_diagnosis: bool
 
 
+class CustomTaskSpec(BaseModel):
+    """A user-authored task prompt, run over a benchmark task's inputs.
+
+    The run's ``task`` stays the benchmark task: its contract, metamodels, and
+    reference are what every stage resolves. The custom prompt only replaces the
+    frozen task prompt the generators read, and the name is how the run is
+    recognised in its id and its batch summary.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9._-]+$")
+    prompt: str = Field(min_length=1)
+
+
 class RunCreateRequest(BaseModel):
     """Identity of a new run. These fields become the immutable manifest.
 
@@ -51,6 +66,7 @@ class RunCreateRequest(BaseModel):
     pipeline_variant: str = "full"
     preset: str | None = None
     experiment_config: RunExperimentConfig | None = None
+    custom_task: CustomTaskSpec | None = None
 
 
 class RunCreateResponse(BaseModel):

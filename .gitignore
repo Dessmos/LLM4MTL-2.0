@@ -166,3 +166,4 @@ repomix-output.xml
 # Pre-review refactor working plan (maintainer-only, like migration-plan).
 docs/refactor-plan.md
 docs/CODE_REVIEW_PREPARATION.md
+docs/DEFENSE-QA-100.md

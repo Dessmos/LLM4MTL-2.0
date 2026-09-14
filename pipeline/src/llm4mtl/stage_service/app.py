@@ -228,10 +228,26 @@ def create_run(batch_id: str, request: RunCreateRequest) -> RunCreateResponse:
             detail="a run must fix one concrete task; expand all tasks through a matrix",
         )
     batch, _ = _require_batch(batch_id)
+    custom = request.custom_task
+    # A custom task is recognised by its own name in the run id; its identity
+    # axis stays the benchmark task whose contract and oracle it resolves.
     run_id = request.run_id or generate_run_id(
-        PipelineConfig(language=request.language, tasks=[request.task])
+        PipelineConfig(
+            language=request.language,
+            tasks=[custom.name if custom is not None else request.task],
+        )
     )
     try:
+        provenance = build_provenance(
+            request.language,
+            request.task,
+            custom_task_prompt=custom.prompt if custom is not None else None,
+        )
+        if custom is not None:
+            provenance["custom_task"] = {
+                "name": custom.name,
+                "benchmark_task": request.task,
+            }
         manifest = {
             "batch_id": batch.batch_id,
             "language": request.language,
@@ -243,11 +259,16 @@ def create_run(batch_id: str, request: RunCreateRequest) -> RunCreateResponse:
             "seed": request.seed,
             "pipeline_variant": request.pipeline_variant,
             "preset": request.preset,
-            "provenance": build_provenance(request.language, request.task),
+            "provenance": provenance,
         }
         if request.experiment_config is not None:
             manifest["experiment_config"] = request.experiment_config.model_dump()
-        paths = run_store.create_run(batch.root, run_id, manifest)
+        paths = run_store.create_run(
+            batch.root,
+            run_id,
+            manifest,
+            task_prompt=custom.prompt if custom is not None else None,
+        )
     except run_store.ManifestExistsError as exc:
         raise HTTPException(
             status_code=409, detail=f"run already exists: {run_id}"

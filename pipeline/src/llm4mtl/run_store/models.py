@@ -45,6 +45,11 @@ class RunPaths:
         return self.root / "manifest.json"
 
     @property
+    def task_prompt(self) -> Path:
+        """The custom task prompt this run was created with, when it has one."""
+        return self.root / "task-prompt.md"
+
+    @property
     def events(self) -> Path:
         return self.root / "events.jsonl"
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import shutil
 import tempfile
 import unittest
@@ -183,6 +184,56 @@ class StageServiceTests(unittest.TestCase):
             ),
         )
         self.assertEqual(422, response.status_code)
+
+    def test_a_custom_task_prompt_is_kept_by_its_run_and_hashed_into_its_manifest(
+        self,
+    ) -> None:
+        prompt = "Flatten every tree into one graph node per leaf.\n"
+        created = self.client.post(
+            f"/batches/{BATCH}/runs",
+            json=run_payload(
+                pipeline_variant="full:custom-task:TreeFlattening",
+                custom_task={"name": "TreeFlattening", "prompt": prompt},
+            ),
+        )
+        self.assertEqual(200, created.status_code, created.text)
+        run_id = created.json()["run_id"]
+        self.assertIn("treeflattening", run_id)
+
+        paths = run_store.open_run(self.batch_root, run_id)
+        self.assertEqual(prompt, paths.task_prompt.read_text(encoding="utf-8"))
+        manifest = run_store.read_manifest(paths)
+        assert manifest is not None
+        # The identity stays the benchmark task whose inputs the run resolves.
+        self.assertEqual("Tree2Graph", manifest["task"])
+        hashes = manifest["provenance"]["input_hashes"]
+        self.assertEqual(hashlib.sha256(prompt.encode()).hexdigest(), hashes["task_prompt"])
+        self.assertEqual("custom", hashes["task_prompt_source"])
+        self.assertEqual(64, len(hashes["reference_transformation"]))
+        self.assertEqual(
+            {"name": "TreeFlattening", "benchmark_task": "Tree2Graph"},
+            manifest["provenance"]["custom_task"],
+        )
+
+    def test_a_benchmark_run_keeps_no_task_prompt_of_its_own(self) -> None:
+        created = self.client.post(
+            f"/batches/{BATCH}/runs", json=run_payload(run_id="svc-frozen")
+        )
+        self.assertEqual(200, created.status_code, created.text)
+        paths = run_store.open_run(self.batch_root, "svc-frozen")
+        self.assertFalse(paths.task_prompt.exists())
+        manifest = run_store.read_manifest(paths)
+        assert manifest is not None
+        self.assertNotIn("task_prompt_source", manifest["provenance"]["input_hashes"])
+
+    def test_a_custom_task_name_must_be_a_safe_identifier(self) -> None:
+        for name in ("no spaces", "../escape", ""):
+            with self.subTest(name=name):
+                response = self.client.post(
+                    f"/batches/{BATCH}/runs",
+                    json=run_payload(custom_task={"name": name, "prompt": "p"}),
+                )
+                self.assertEqual(422, response.status_code)
 
     def test_openapi_documents_explicit_http_errors(self) -> None:
         paths = self.client.get("/openapi.json").json()["paths"]

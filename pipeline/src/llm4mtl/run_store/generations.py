@@ -36,6 +36,29 @@ def prepare_generation_response_directory(
     return directory
 
 
+def task_prompt_source(paths: RunPaths, manifest: dict[str, Any]) -> Path:
+    """The task specification this run's generators were given.
+
+    A run created with a custom task prompt keeps it as ``task-prompt.md`` and
+    every generator reads that copy; every other run reads the frozen benchmark
+    prompt. Stated once, so generation provenance and refinement cannot cite
+    different specifications for the same run.
+    """
+    if paths.task_prompt.is_file():
+        return paths.task_prompt
+    return frozen_task_prompt(
+        language_config(str(manifest["language"])), str(manifest["task"])
+    )
+
+
+def write_task_prompt(paths: RunPaths, prompt: str) -> Path:
+    """Keep the custom task prompt a run was created with, exactly once."""
+    if paths.task_prompt.exists():
+        raise GenerationRecordError(f"task prompt already recorded: {paths.task_prompt}")
+    paths.task_prompt.write_text(prompt, encoding="utf-8")
+    return paths.task_prompt
+
+
 def record_generation(
     paths: RunPaths,
     manifest: dict[str, Any],
@@ -60,14 +83,12 @@ def record_generation(
     # Semantic-test workflows archive the fully assembled prompt beside their
     # response. Transformation exports currently do not, so refinement falls
     # back to Python's exact prepared prompt and initial generation to the
-    # frozen task prompt.
+    # task prompt the run was created with.
     prompt = paths.generation_iteration_dir(operation, iteration) / "prompt.md"
     if not prompt.is_file() and iteration > 0:
         prompt = paths.refinement_dir(artifact_type, iteration) / "prompt.md"
     if not prompt.is_file():
-        prompt = frozen_task_prompt(
-            language_config(str(manifest["language"])), str(manifest["task"])
-        )
+        prompt = task_prompt_source(paths, manifest)
     previous = None
     if iteration > 0:
         previous = paths.generation_response(

@@ -45,6 +45,41 @@ responses are selected by run, artifact iteration, and task instead.
 One run represents one concrete task. A matrix must expand multi-task or
 multi-model experiments before calling the service.
 
+### Custom task prompts
+
+`POST /batches/<batch-id>/runs` may carry, beside the identity:
+
+```json
+{
+  "custom_task": {
+    "name": "TreeFlattening",
+    "prompt": "Flatten every tree into one graph node per leaf."
+  }
+}
+```
+
+The run is still one run of `task`: the contract, metamodels, and reference
+of that benchmark task are what every stage resolves, so `task` stays a
+benchmark task and the identity axes are unchanged. What the custom task
+replaces is the frozen task prompt. Python keeps the text as
+`runs/<run-id>/task-prompt.md`, records
+`provenance.input_hashes.task_prompt` as its hash with
+`task_prompt_source: "custom"` (absent for a frozen prompt), and records
+`provenance.custom_task` as `{name, benchmark_task}`. The run id names the
+custom task rather than the benchmark task.
+
+Every reader of the task specification goes through one resolution — the run's
+`task-prompt.md` when it exists, the frozen prompt otherwise: the generation
+subworkflows read it as `$json.prompt`, the transformation generation record
+hashes it, and a refinement prompt quotes it. A custom task can therefore never
+be refined against the benchmark task's specification.
+
+Which stages such a run executes is n8n's decision, as always. The master
+disables `technical-validation`, `reference-validation`, `execution`, and source
+diagnosis for it, because the borrowed reference does not implement the custom
+prompt and every one of those stages judges against that reference; Python
+needs no custom-task branch for that, the stages are simply never called.
+
 Stage requests cannot repeat or override identity fields. Their accepted body is
 limited to:
 

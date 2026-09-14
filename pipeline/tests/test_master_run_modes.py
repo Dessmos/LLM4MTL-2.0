@@ -68,6 +68,21 @@ STRATEGY_LABELS = {
     "Grammar": "grammar",
     "Few-shot + Grammar": "few_shots_AND_grammar",
 }
+CUSTOM_TASK_SLOTS = 5
+CUSTOM_TASK_FIELDS = tuple(
+    f"custom_task_{slot}_{part}"
+    for slot in range(1, CUSTOM_TASK_SLOTS + 1)
+    for part in ("name", "base", "prompt", "more")
+    if not (slot == CUSTOM_TASK_SLOTS and part == "more")
+)
+# The stages a custom task never runs: they all judge against the benchmark
+# reference, which does not implement the custom prompt.
+CUSTOM_TASK_DISABLED = (
+    "technical_validation",
+    "reference_validation",
+    "semantic_execution",
+    "source_diagnosis",
+)
 STAGE_FIELDS = (
     "test_generation",
     "test_extraction",
@@ -197,9 +212,10 @@ def _configure(
     ablation_profile: str = "Standard full configuration",
     disabled_components: str = "",
     unconfigured_roles: tuple[str, ...] = (),
+    custom_tasks: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Submit the configuration screen and build the run queue."""
-    chosen = {"etl_tasks": "Tree2Graph", **(tasks or {})}
+    chosen = {"etl_tasks": "Tree2Graph", **(tasks or {}), **(custom_tasks or {})}
     provider_choice = {
         "semantic_test_provider": "OpenAI",
         "transformation_provider": "Anthropic",
@@ -346,13 +362,16 @@ class OrchestrationFailureTests(unittest.TestCase):
         for field in (
             "max_test_refinement_iterations",
             "max_transformation_refinement_iterations",
-            "parser_feedback",
-            "semantic_feedback",
-            "source_diagnosis",
         ):
             with self.subTest(field=field):
-                self.assertIn(f"{field}:", body)
+                self.assertIn(f"{field}: $json.config.{field}", body)
+        # The feedback flags are the run's own: a custom task in the queue runs
+        # under a narrower set than the launch configured.
+        for field in ("parser_feedback", "semantic_feedback", "source_diagnosis"):
+            with self.subTest(field=field):
+                self.assertIn(f"{field}: $json.current.stages.{field}", body)
         self.assertIn("pipeline_variant: $json.current.pipeline_variant", body)
+        self.assertIn("custom_task: $json.current.custom_task || null", body)
 
     def test_terminal_result_reports_both_artifact_iterations(self) -> None:
         record = next(
@@ -1719,7 +1738,7 @@ class ConfigurationPresentationTests(unittest.TestCase):
         would show up and return nothing usable, so every field a run reads has to
         stay a real option input.
         """
-        submitted_types = {"radio", "checkbox", "dropdown", "hiddenField"}
+        submitted_types = {"radio", "checkbox", "dropdown", "hiddenField", "text", "textarea"}
         for field in _form_fields():
             if field["fieldType"] == "html":
                 continue
@@ -1790,8 +1809,170 @@ class ConfigurationPresentationTests(unittest.TestCase):
                 "ablation_profile",
                 "disabled_components",
                 "n8n_workflow_root",
+                *CUSTOM_TASK_FIELDS,
             },
             submitted,
+        )
+
+
+@unittest.skipUnless(shutil.which("node"), "the master workflow's Code nodes need Node")
+class CustomTaskTests(unittest.TestCase):
+    """A custom task is a user prompt run as one benchmark task.
+
+    The benchmark task lends its contract, metamodels, and reference, so the
+    run's identity stays that task; the prompt, the stage flags, and the variant
+    are the custom task's own. Everything reference-bound is disabled for it
+    while the benchmark tasks of the same launch keep the configured set.
+    """
+
+    CUSTOM = {
+        "custom_task_1_name": "TreeFlattening",
+        "custom_task_1_base": "ETL / Tree2Graph",
+        "custom_task_1_prompt": "Flatten every tree into one graph node per leaf.",
+    }
+
+    def test_the_slot_offers_every_benchmark_task_with_its_language(self) -> None:
+        expected = set()
+        for language, label in (
+            ("etl", "ETL"),
+            ("atl", "ATL"),
+            ("qvto", "QVT-O"),
+            ("reactions", "Reactions"),
+        ):
+            for path in (TASK_CONTRACTS / language / "task_contracts").glob("*.json"):
+                expected.add(f"{label} / {path.stem}")
+        for slot in range(1, CUSTOM_TASK_SLOTS + 1):
+            with self.subTest(slot=slot):
+                self.assertEqual(
+                    expected, set(_field_options(f"custom_task_{slot}_base"))
+                )
+
+    def test_a_custom_task_runs_as_its_benchmark_task_under_its_own_flags(self) -> None:
+        config = _configure(custom_tasks=self.CUSTOM)
+        self.assertTrue(config["ok"], config.get("error"))
+        custom, benchmark = config["result"]["run_specs"]
+
+        self.assertEqual("etl", custom["language"])
+        self.assertEqual("Tree2Graph", custom["task"])
+        self.assertEqual(
+            {"name": "TreeFlattening", "prompt": self.CUSTOM["custom_task_1_prompt"]},
+            custom["custom_task"],
+        )
+        self.assertEqual("full:custom-task:TreeFlattening", custom["pipeline_variant"])
+        for stage in CUSTOM_TASK_DISABLED:
+            with self.subTest(stage=stage):
+                self.assertFalse(custom["stages"][stage])
+        for stage in set(STAGE_FIELDS) - set(CUSTOM_TASK_DISABLED):
+            with self.subTest(stage=stage):
+                self.assertTrue(custom["stages"][stage])
+
+        self.assertIsNone(benchmark["custom_task"])
+        self.assertEqual("full", benchmark["pipeline_variant"])
+        self.assertEqual(config["result"]["config"]["stages"], benchmark["stages"])
+        self.assertEqual(
+            [{"name": "TreeFlattening", "language": "etl", "base_task": "Tree2Graph"}],
+            config["result"]["config"]["custom_tasks"],
+        )
+
+    def test_a_custom_task_keeps_the_ablation_the_launch_chose(self) -> None:
+        config = _configure(
+            custom_tasks=self.CUSTOM, ablation_profile="No parser feedback"
+        )
+        self.assertTrue(config["ok"], config.get("error"))
+        custom = config["result"]["run_specs"][0]
+        self.assertFalse(custom["stages"]["parser_feedback"])
+        self.assertEqual(
+            "full:no-parser-feedback:custom-task:TreeFlattening",
+            custom["pipeline_variant"],
+        )
+
+    def test_a_launch_of_only_custom_tasks_needs_no_language_and_no_diagnosis_model(
+        self,
+    ) -> None:
+        config = _configure(
+            languages="",
+            custom_tasks=self.CUSTOM,
+            unconfigured_roles=("source_diagnosis",),
+        )
+        self.assertTrue(config["ok"], config.get("error"))
+        self.assertEqual(1, len(config["result"]["run_specs"]))
+        self.assertNotIn("source_diagnosis", config["result"]["config"]["llms"])
+
+    def test_a_launch_with_nothing_to_run_is_refused(self) -> None:
+        config = _configure(languages="")
+        self.assertFalse(config["ok"])
+        self.assertIn("at least one language or define a custom task", config["error"])
+
+    def test_a_half_filled_or_repeated_slot_is_refused(self) -> None:
+        cases = {
+            "name only": {"custom_task_1_name": "Lonely"},
+            "no name": {
+                "custom_task_1_base": "ETL / Tree2Graph",
+                "custom_task_1_prompt": "prompt",
+            },
+            "bad name": {**self.CUSTOM, "custom_task_1_name": "no spaces allowed"},
+            # Whether the benchmark task exists is not checked here: the slot
+            # offers only contracts on disk, and POST /runs refuses any other.
+            "no language": {**self.CUSTOM, "custom_task_1_base": "Nope"},
+            "repeated name": {
+                **self.CUSTOM,
+                "custom_task_2_name": "TreeFlattening",
+                "custom_task_2_base": "ATL / Class2Interface_All",
+                "custom_task_2_prompt": "prompt",
+            },
+        }
+        for label, slots in cases.items():
+            with self.subTest(case=label):
+                config = _configure(custom_tasks=slots)
+                self.assertFalse(config["ok"], label)
+
+    def test_a_custom_task_stops_before_the_reference_bound_stages(self) -> None:
+        config = _configure(custom_tasks=self.CUSTOM)
+        self.assertTrue(config["ok"], config.get("error"))
+        actions, state = _drive(config["result"])
+
+        custom, benchmark = state["results"]
+        self.assertEqual("TreeFlattening", custom["custom_task"])
+        self.assertEqual("incomplete", custom["status"])
+        self.assertEqual("SEMANTIC_EXECUTION_DISABLED", custom["reason"])
+        custom_actions = [entry["action"] for entry in custom["timeline"]]
+        self.assertEqual(
+            ["generate_tests", "extract", "generate_transformations", "syntax"],
+            custom_actions,
+        )
+
+        self.assertIsNone(benchmark["custom_task"])
+        self.assertEqual("completed", benchmark["status"])
+        self.assertEqual("SEMANTIC_PASSED", benchmark["reason"])
+        self.assertIn("execution", [entry["action"] for entry in benchmark["timeline"]])
+
+    def test_a_custom_task_reads_the_prompt_its_run_was_created_with(self) -> None:
+        workflow = json.loads(TRANSFORMATION_WORKFLOW.read_text(encoding="utf-8"))
+        adapted = _run_node(
+            "Adapt Transformation Workflow Compatibility",
+            inputs=[
+                {
+                    "action": "generate_transformations",
+                    "current": {
+                        "language": "etl",
+                        "task": "Tree2Graph",
+                        "run_id": "run-custom-1",
+                        "n8n_run_dir": "/data/artifacts/runs/batch_001/run-custom-1",
+                        "transformation_iteration": 0,
+                        "custom_task": {"name": "TreeFlattening", "prompt": "p"},
+                    },
+                    "subworkflow_input": {"refinement_iteration": 0},
+                    "workflow_json": workflow,
+                }
+            ],
+        )
+        self.assertTrue(adapted["ok"], adapted.get("error"))
+        nodes = {
+            node["name"]: node for node in adapted["result"]["workflow_json"]["nodes"]
+        }
+        self.assertEqual(
+            "=/data/artifacts/runs/batch_001/run-custom-1/task-prompt.md",
+            nodes["Read prompt files"]["parameters"]["fileSelector"],
         )
 
 

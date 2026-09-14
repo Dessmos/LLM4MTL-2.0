@@ -186,6 +186,86 @@ class RefinementGenerationContractTests(unittest.TestCase):
             self.paths.generation_iteration_dir("transformation-generation", 1).is_dir()
         )
 
+    def test_a_custom_task_prompt_is_what_generation_and_refinement_cite(self) -> None:
+        """One specification per run: the prompt it was created with.
+
+        A custom task borrows Tree2Graph's contract but not its frozen prompt,
+        so neither the generation record nor the refinement may fall back to
+        that frozen text.
+        """
+        prompt = "Flatten every tree into one graph node per leaf.\n"
+        paths = run_store.create_run(
+            self.root / "runs",
+            "custom-1",
+            {
+                **IDENTITY,
+                "provenance": build_provenance(
+                    "etl", "Tree2Graph", custom_task_prompt=prompt
+                ),
+            },
+            task_prompt=prompt,
+        )
+        manifest = run_store.read_manifest(paths)
+        assert manifest is not None
+        initial = paths.generation_response(
+            "transformation-generation", 0, "Tree2Graph.etl"
+        )
+        initial.parent.mkdir(parents=True, exist_ok=True)
+        initial.write_text("rule Broken { }\n", encoding="utf-8")
+
+        record = run_store.record_generation(
+            paths,
+            manifest,
+            artifact_type="transformation",
+            iteration=0,
+            purpose="initial",
+            provider="openai",
+            model="gpt-5",
+            strategy="grammar",
+        )
+        self.assertEqual("task-prompt.md", record["prompt"]["path"])
+        self.assertEqual(
+            manifest["provenance"]["input_hashes"]["task_prompt"],
+            record["prompt"]["sha256"],
+        )
+
+        run_store.record_attempt(
+            paths,
+            "syntax-validation",
+            {
+                "schema_version": "2.0",
+                "stage": "syntax-validation",
+                "status": "failed",
+                "outcome_code": "SYNTAX_INVALID",
+                "counts": {"failed": 1},
+                "artifacts": {},
+            },
+            evidence={"details": {"parser_diagnostics": ["line 1: unexpected token"]}},
+        )
+        prepared = run_store.prepare_refinement(
+            paths,
+            manifest,
+            artifact_type="transformation",
+            iteration=1,
+            previous_iteration=0,
+            provider="google",
+            model="gemini-2.5-pro",
+            reason="SYNTAX_INVALID",
+            run_diagnoses=self.root / "diagnoses" / paths.root.name,
+        )
+        request = read_json(paths.root / prepared["request_path"])
+        rendered = (paths.root / request["prompt_file"]).read_text(encoding="utf-8")
+        self.assertIn("Flatten every tree", rendered)
+        frozen_prompt = (
+            Path(__file__).resolve().parents[2]
+            / "prompt_assets"
+            / "task_prompts"
+            / "etl"
+            / "Tree2Graph.txt"
+        )
+        first_frozen_line = frozen_prompt.read_text(encoding="utf-8").strip().splitlines()[0]
+        self.assertNotIn(first_frozen_line, rendered)
+
     def test_reference_refinement_carries_the_assertion_the_reference_rejected(
         self,
     ) -> None:

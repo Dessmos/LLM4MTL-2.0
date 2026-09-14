@@ -12,6 +12,7 @@ is not reproducible, so run creation fails instead of recording an unknown.
 
 from __future__ import annotations
 
+import hashlib
 import platform
 import subprocess
 from functools import lru_cache
@@ -30,11 +31,19 @@ class ProvenanceError(RuntimeError):
     """Raised when a mandatory provenance fact cannot be determined."""
 
 
-def build_provenance(language: str, task: str, **extra: Any) -> dict[str, Any]:
+def build_provenance(
+    language: str,
+    task: str,
+    *,
+    custom_task_prompt: str | None = None,
+    **extra: Any,
+) -> dict[str, Any]:
     """Collect the provenance block for a run manifest.
 
     Extra keyword arguments are merged in, so a caller can record facts only it
     knows (for example the resolved-config hash of a local runner invocation).
+    ``custom_task_prompt`` is the user-authored prompt a run reads instead of
+    the frozen benchmark prompt; its hash is recorded in place of the frozen one.
     """
     from llm4mtl.languages import UnsupportedLanguageError, language_adapter
 
@@ -60,12 +69,16 @@ def build_provenance(language: str, task: str, **extra: Any) -> dict[str, Any]:
             "maven": required_tool_version("Maven", ("mvn", "--version")),
             **language_tool_versions,
         },
-        "input_hashes": input_hashes(language, task),
+        "input_hashes": input_hashes(
+            language, task, custom_task_prompt=custom_task_prompt
+        ),
         **extra,
     }
 
 
-def input_hashes(language: str, task: str) -> dict[str, Any]:
+def input_hashes(
+    language: str, task: str, *, custom_task_prompt: str | None = None
+) -> dict[str, Any]:
     """Content hashes of the hand-authored inputs that decide this run's outcome.
 
     The reference transformation is the behavioural oracle, the task contract
@@ -77,6 +90,10 @@ def input_hashes(language: str, task: str) -> dict[str, Any]:
     These inputs are mandatory for a supported task. Missing one aborts run
     creation: recording ``null`` would create evidence that cannot be tied to
     the behavioural oracle and structural contract that produced it.
+
+    A custom task prompt replaces only the frozen prompt: ``task_prompt`` then
+    hashes the text the run was given and ``task_prompt_source`` says so, while
+    the oracle, contract, and metamodels stay those of the benchmark task.
     """
     from llm4mtl.conventions import (
         default_references_root,
@@ -111,18 +128,24 @@ def input_hashes(language: str, task: str) -> dict[str, Any]:
         path = _metamodel_path(config.language_key, model.metamodel_file)
         metamodels[path.relative_to(REPO_ROOT).as_posix()] = file_sha256(path)
 
+    hashes = {
+        "reference_transformation": file_sha256(reference),
+        "task_contract": file_sha256(contract_path),
+        "metamodels": metamodels,
+    }
+    if custom_task_prompt is not None:
+        return {
+            **hashes,
+            "task_prompt": hashlib.sha256(custom_task_prompt.encode("utf-8")).hexdigest(),
+            "task_prompt_source": "custom",
+        }
+
     task_prompt = frozen_task_prompt(config, task)
     if not task_prompt.is_file():
         raise ProvenanceError(
             f"frozen task prompt not found for {config.language_key}/{task}"
         )
-
-    return {
-        "reference_transformation": file_sha256(reference),
-        "task_contract": file_sha256(contract_path),
-        "metamodels": metamodels,
-        "task_prompt": file_sha256(task_prompt),
-    }
+    return {**hashes, "task_prompt": file_sha256(task_prompt)}
 
 
 def _metamodel_path(language: str, recorded_path: str) -> Path:

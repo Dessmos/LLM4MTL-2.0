@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from llm4mtl.artifact_schemas import validate_artifact
-from llm4mtl.conventions import default_generated_tests_root, frozen_task_prompt, language_config
+from llm4mtl.conventions import default_generated_tests_root, language_config
 from llm4mtl.paths import REPO_ROOT, TARGET
 from llm4mtl.prompt_assembly.task_inputs import (
     TaskInputResolutionError,
@@ -19,6 +19,7 @@ from llm4mtl.run_store.attempts import existing_attempts
 from llm4mtl.run_store.generations import (
     GenerationRecordError,
     prepare_generation_response_directory,
+    task_prompt_source,
 )
 from llm4mtl.run_store.models import RunPaths
 from llm4mtl.run_store.transformations import adopted_transformations
@@ -72,7 +73,7 @@ def prepare_refinement(
         context = resolve_task_inputs(language, task)
     except TaskInputResolutionError as exc:
         raise RefinementPreparationError(str(exc)) from exc
-    prompt_path = frozen_task_prompt(language_config(language), task)
+    prompt_path = task_prompt_source(paths, manifest)
     original_context = {
         "prompt": _text_artifact(prompt_path),
         "metamodels": [

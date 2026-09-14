@@ -33,6 +33,8 @@ from llm4mtl.run_store.generations import (
     GenerationRecordError,
     prepare_generation_response_directory,
     record_generation,
+    task_prompt_source,
+    write_task_prompt,
 )
 from llm4mtl.run_store.identity import InvalidRunIdError, resolve_contained_dir
 from llm4mtl.run_store.manifest import ManifestExistsError, read_manifest, write_manifest
@@ -58,11 +60,23 @@ def open_run(batch_root: Path, run_id: str) -> RunPaths:
     return RunPaths(resolve_contained_dir(Path(batch_root), run_id, kind="run"))
 
 
-def create_run(batch_root: Path, run_id: str, manifest: dict[str, Any]) -> RunPaths:
-    """Create the run directory, write the immutable manifest, and open the event log."""
+def create_run(
+    batch_root: Path,
+    run_id: str,
+    manifest: dict[str, Any],
+    *,
+    task_prompt: str | None = None,
+) -> RunPaths:
+    """Create the run directory, write the immutable manifest, and open the event log.
+
+    ``task_prompt`` is a custom task prompt the run reads instead of the frozen
+    benchmark prompt; it is kept beside the manifest that hashed it.
+    """
     paths = open_run(batch_root, run_id)
     paths.root.mkdir(parents=True, exist_ok=True)
     write_manifest(paths, {"run_id": run_id, **manifest})
+    if task_prompt is not None:
+        write_task_prompt(paths, task_prompt)
     if manifest.get("test_generation_model") is not None:
         prepare_generation_response_directory(
             paths, artifact_type="semantic-test", iteration=0
@@ -104,6 +118,8 @@ __all__ = [
     "GenerationRecordError",
     "prepare_generation_response_directory",
     "record_generation",
+    "task_prompt_source",
+    "write_task_prompt",
     "RefinementPreparationError",
     "prepare_refinement",
     "ResultConflictError",

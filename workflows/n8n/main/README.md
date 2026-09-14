@@ -33,7 +33,7 @@ incidental: n8n's `getFieldIdentifier` only keys a submitted field by its
 Pipeline"}` and every name the queue builder reads arrives undefined. The tests
 submit through that same rule, so a downgrade fails the suite instead of the run.
 
-The screen is ordered as the five sections below. Fields belonging to a branch the
+The screen is ordered as the six sections below. Fields belonging to a branch the
 selected run mode does not execute stay visible and are simply ignored, because
 what a run may leave unconfigured is decided in validation, not by hiding fields.
 
@@ -42,21 +42,53 @@ what a run may leave unconfigured is decided in validation, not by hiding fields
 * **Run mode** — three cards, each with a one-line summary of what it executes:
   `Semantic Tests Only`, `Transformations Only`, `Full Pipeline`. Recorded as
   `config.run_mode` = `tests_only` / `transformations_only` / `full`.
-* **Languages** — ETL, ATL, QVT-O, Reactions; at least one.
+* **Languages** — ETL, ATL, QVT-O, Reactions. Optional only when the launch
+  consists of custom tasks alone; a selected language still needs a task.
 
-### 2. Tasks
+### 2. Custom tasks
+
+Up to five slots, each a native text input (name), dropdown (the benchmark task
+whose metamodels the custom task uses, spelled `ETL / Tree2Graph`), and textarea
+(the prompt). The language follows from the benchmark task. Slot *n+1* opens
+when the `+ Add another custom task` tick at the end of slot *n* is set — that
+tick is an ordinary single-option checkbox, and the disclosure is a `:has()`
+rule in the custom CSS, so a closed slot still submits its empty inputs and the
+queue builder reads them as an unused slot. A slot with some but not all of its
+three values is refused rather than defaulted.
+
+A custom task is queued as one run of its benchmark task: that task's contract,
+metamodels, and reference are what Python resolves, and `task` in the manifest
+names it. What is the custom task's own is the prompt (sent as `custom_task`
+on `POST /batches/{batch_id}/runs`, kept by Python as the run's
+`task-prompt.md`, and hashed into the manifest in place of the frozen prompt),
+the run id, the `pipeline_variant` (`<variant>:custom-task:<name>`), and the
+stage flags: the borrowed reference does not implement the custom prompt, so
+`technical_validation`, `reference_validation`, `semantic_execution`, and
+`source_diagnosis` are disabled for that run only. Every other flag, both
+refinement budgets, the providers, and the strategies are the ones chosen on this
+screen, and the benchmark tasks in the same queue run under the full chosen
+configuration.
+
+A custom task therefore generates the semantic tests and the transformation,
+extracts the tests, parses the transformation, and refines either on
+`TEST_SPEC_INVALID` / `SYNTAX_INVALID` within the configured budgets. In
+`full` mode it then ends `incomplete / SEMANTIC_EXECUTION_DISABLED`, which is
+the ablated-stage terminal the State Machine already reports and is the
+expected end of such a run.
+
+### 3. Benchmark tasks
 
 One card list per language. The names are the task contracts under
 `benchmark/tasks/<language>/task_contracts`, which is the authoritative source;
 every selected language needs at least one task, and a list for a language that
 was not selected is ignored. There is no hidden default task.
 
-### 3. LLM roles
+### 4. LLM roles
 
 The provider for each of the four roles — OpenAI, Anthropic, or Google Gemini.
 Providers only: see below for where the exact model comes from.
 
-### 4. Prompting strategies
+### 5. Prompting strategies
 
 Each branch has its own strategy, as four cards. The card shows the reading name
 and the run records the canonical id, which is what the variant workflows are
@@ -72,7 +104,7 @@ named after:
 The semantic-test and transformation strategies are independent; the one belonging
 to a branch this run mode does not execute is ignored.
 
-### 5. Experiment and ablation
+### 6. Experiment and ablation
 
 Refinement iterations (0–5, bounding both branches), plus the RQ4 configuration:
 a named profile
@@ -118,8 +150,9 @@ stay connected to `Validate Config and Build Run Queue` through
 `$(nodeName).params`.
 
 A role is resolved **only when the final configuration can reach it**, so a
-tests-only run does not demand a transformation model, and a run with failure
-diagnosis ablated does not demand a diagnosis model. Reachability is:
+tests-only run does not demand a transformation model, a run with failure
+diagnosis ablated does not demand a diagnosis model, and a launch made only of
+custom tasks does not demand one either. Reachability is:
 
 | role | reachable when |
 | --- | --- |
@@ -239,7 +272,11 @@ There is one master workflow. Run modes are configuration, not three copies.
 provider, exact model, `configuration_node`, and strategy where applicable),
 `max_test_refinement_iterations`,
 `max_transformation_refinement_iterations`, the twelve effective `stages` flags,
-`ablation_profile`, `disabled_stages`, and `pipeline_variant`.
+`ablation_profile`, `disabled_stages`, `pipeline_variant`, and the
+`custom_tasks` the launch defined (name, language, benchmark task). Each queue
+entry carries the `stages` it executes under and its own `pipeline_variant`;
+the State Machine reads the run's flags, which is how a custom task runs with
+its reference-bound stages disabled beside benchmark tasks that keep them.
 
 At run creation the immutable manifest records `pipeline_variant` plus the
 compact `experiment_config`: both independent refinement budgets and the
@@ -263,7 +300,13 @@ full
 full:no-failure-diagnosis
 tests_only
 transformations_only:custom:parser_feedback+semantic_feedback
+full:custom-task:TreeFlattening
 ```
+
+`:custom-task:<name>` is appended for a custom task, after whatever the launch
+ablated, and stands for the fixed set it disables (technical validation,
+reference validation, semantic execution, source diagnosis). Evaluation groups
+by `pipeline_variant`, so a custom task never lands in a benchmark group.
 
 Each queue entry is one `language × task`; runs execute sequentially. A run mode
 without a branch records `null` for that branch's model and strategy axes, which
@@ -315,7 +358,13 @@ the tests either.
 * Fields are not conditionally shown or hidden: a tests-only run still displays
   the transformation strategy, and its value is then ignored. n8n form fields have
   no conditional disclosure, so which roles a run actually requires is enforced in
-  validation, where it has to be correct anyway.
+  validation, where it has to be correct anyway. The one exception is the custom
+  task slots, whose progressive disclosure is a CSS `:has()` rule over native
+  inputs (Chrome 105, Safari 15.4, Firefox 121); in an older browser every slot is
+  simply visible, and the submitted values are identical.
+* Custom tasks borrow a benchmark task's metamodels. A prompt over metamodels the
+  benchmark does not have is a new benchmark task (`docs/adding-task.md`), because
+  the contract those stages resolve is built from a reference transformation.
 * One screen means one long screen — the full configuration is roughly 3700px
   tall with every language expanded. That is the trade for a single link and a
   single node, and the numbered sections carry the structure the pages used to.
