@@ -2,10 +2,10 @@ Create an ATL transformation module named `BibTeX2DocBook` that transforms a `Bi
 
 The main rule `Main` should build a single `DocBook` containing one `Book`, one `Article` titled “BibTeXML to DocBook” and four `Sect1` sections:
 
-- “References List”: all `BibTeXEntry` instances as paragraphs, ordered by id, using a context helper `buildEntryPara()` on `BibTeXEntry` that concatenates id, type name, and available fields (title, authors, year, booktitle, school, journal, note, publisher, chapter).
-- “Authors list”: distinct `Author` objects, sorted by author name, computed by helper `authorSet`. Rule `Author` creates a `Para` per distinct author.
-- “Titles List”: distinct titled entries, sorted by title, computed by helper `titledEntrySet`, and using title paragraphs produced in rules.
-- “Journals List”: distinct `Article` journals, sorted by journal, computed by helper `articleSet`, and using journal paragraphs produced in rules.
+- “References List”: all `BibTeXEntry` instances as paragraphs, ordered by id, using a context helper `buildEntryPara()` on `BibTeXEntry`. It concatenates, separated by single spaces: `[` + id + `]`, the entry's type name, then the title (for a `TitledEntry`), each author's name (for an `AuthoredEntry`), the year (`DatedEntry`), the booktitle (`BookTitledEntry`), the school (`ThesisEntry`), the journal (`Article`), the note (`Unpublished`), the publisher (`Book`), and the chapter (`InBook`), in that order, each only when the entry is of that kind. An `Article` therefore reads `[A01] Article Alpha Alice 2020 JournalA`. The helper reads these attributes without checking them, so every attribute the metamodel declares mandatory (`id`, `title`, `year`, `journal`, `booktitle`, `school`, `note`, `publisher`, `chapter`, and at least one author) must be present on every entry of the kind that declares it; an entry that omits one makes the transformation fail.
+- “Authors list”: distinct `Author` objects, sorted by author name, computed by helper `authorSet`. Rule `Author` creates a `Para` per distinct author whose content is the author name.
+- “Titles List”: distinct titled entries (the first entry per title), sorted by title, computed by helper `titledEntrySet`, and using the title paragraphs produced in rules, whose content is the title.
+- “Journals List”: distinct `Article` journals (the first article per journal), sorted by journal, computed by helper `articleSet`, and using the journal paragraphs produced in rules, whose content is the journal.
 
 Define separate rules to generate paragraphs depending on whether a `BibTeXEntry` is titled or not, and for `Article` entries combine the presence/absence of title and journal:
 

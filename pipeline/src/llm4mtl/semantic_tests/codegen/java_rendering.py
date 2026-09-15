@@ -93,11 +93,28 @@ def escape_java(value: str) -> str:
     return value.replace("\\", "\\\\").replace('"', '\\"')
 
 
+def java_value(value: Any) -> str:
+    """Render an ``expected`` value the way the harness renders what it observes.
+
+    The harness stringifies model values through Java: a boolean attribute reads
+    ``true``/``false`` and an unset value reads ``null``. Python's ``str`` writes
+    ``True`` and ``None`` for the same JSON values, which never equal anything
+    the harness observes, so a suite that expected ``true`` could only fail.
+    """
+    if value is None:
+        return "null"
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    return str(value)
+
+
 def object_signatures(raw_objects: list[Any], features: list[str]) -> list[str]:
     signatures = []
     for raw_object in raw_objects:
         if not isinstance(raw_object, dict):
             raise SystemExit("objects assertion expected entries must be objects")
-        parts = [f"{feature}={raw_object.get(feature)}" for feature in features]
+        parts = [
+            f"{feature}={java_value(raw_object.get(feature))}" for feature in features
+        ]
         signatures.append("|".join(parts))
     return signatures

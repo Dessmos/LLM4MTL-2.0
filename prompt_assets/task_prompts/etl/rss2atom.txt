@@ -1,8 +1,15 @@
-Create an ETL transformation that converts an **RSS model** into an **Atom model**.  
+Create an ETL transformation that converts an **RSS model** into an **Atom model**. Both are plain XML documents, not EMF models: an RSS document is `<rss><channel><item>…</item></channel></rss>`, and an item may contain the child elements `title`, `link`, `generator`, `dc:creator`, `description`, `content:encoded`, and `pubDate`.  
 Define the following rules:  
 
-- **Rss2Atom**: transform the root RSS element into a feed, assigning it as the Atom root and including the equivalents of all RSS items, which are reached through the root’s **channel** child.  
-- **Item2Entry**: turn each item into an entry and include converted child elements.  
-- **Title2Title**, **Link2Link**, **Generator2Generator**, **Creator2Author**, **Description2Summary**, **ContentEncoded2Content**, and **PubDate2Published**: map corresponding RSS elements to their Atom counterparts, copying textual content.  
+- **Rss2Atom**: transform the root `rss` element into a `feed` element, assign it as the Atom root, and append to it the equivalents of all `item` elements found under the root's **channel** child.  
+- **Item2Entry**: turn each `item` into an `entry` and append to it the equivalents of the item's children; a child with no rule contributes nothing.  
+- **Title2Title**: `title` → `title`, copying the text.  
+- **Link2Link**: `link` → `link`, writing the source text into the target's `href` attribute; the target element has no text.  
+- **Generator2Generator**: `generator` → `generator`, writing the source text into the target's `href` attribute; the target element has no text.  
+- **Creator2Author**: `dc:creator` → `author` containing a new child element `name` whose text is the creator text; the `author` element itself has no text.  
+- **Description2Summary**: `description` → `summary`, copying the text.  
+- **ContentEncoded2Content**: `content:encoded` → `content`, copying the text.  
+- **PubDate2Published**: `pubDate` → `published`, copying the text.  
 
+All rules except **Rss2Atom** are lazy, so an Atom element exists only for an RSS element reached from the root through `channel` and `item`.  
 Also, provide helper operations **appendChildren** and **appendEquivalentsOfChildrenOf** to attach converted elements.

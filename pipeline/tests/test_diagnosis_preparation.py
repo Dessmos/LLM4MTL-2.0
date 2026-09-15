@@ -368,7 +368,11 @@ class DiagnosisPreparationTests(unittest.TestCase):
         return path
 
     def _write_stage_attempts(
-        self, observation: Path, *, syntax_passed: bool = True
+        self,
+        observation: Path,
+        *,
+        syntax_passed: bool = True,
+        failure_stage: str = "assertion_failure",
     ) -> None:
         write_json(
             self.run_dir
@@ -447,7 +451,7 @@ class DiagnosisPreparationTests(unittest.TestCase):
                             "suite": str(self.suite_dir),
                             "transformation": str(self.transformation),
                             "assertions_passed": False,
-                            "failure_stage": "assertion_failure",
+                            "failure_stage": failure_stage,
                             "outcome_status": None,
                             "evidence": str(observation),
                         }
@@ -671,6 +675,46 @@ class DiagnosisPreparationTests(unittest.TestCase):
         self.assertEqual(0, evidence["target_model_snapshots"])
         self.assertFalse(evidence["assertion_expected_actual"])
         self.assertTrue(evidence["recorded_exception"])
+
+    def test_a_compile_failure_recorded_as_a_junit_failure_names_no_assertion(
+        self,
+    ) -> None:
+        compile_failure = (
+            "Transformation failed: Compilation errors found in unit "
+            "&apos;file:/work/Mappings.qvto&apos; ==&gt; expected: &lt;0&gt; "
+            "but was: &lt;4&gt;"
+        )
+        observation = self._write_observation(
+            root=self._pair_root(),
+            role="generated_transformation",
+            assertions_evaluated=False,
+            failure_stage="transformation_parse",
+        )
+        self._archive_evidence(
+            observation, _surefire_xml(compile_failure, element="failure")
+        )
+        self._write_observation(
+            root=self.run_dir / "observations",
+            role="reference_transformation",
+            assertions_passed=True,
+            failure_stage="",
+        )
+        self._write_stage_attempts(observation, failure_stage="transformation_parse")
+
+        index = prepare_execution_diagnosis(self.run_dir, 1)
+        entry = index["pairs"][0]["reports"][0]
+        report = read_json(REPO_ROOT / entry["report"])
+        result = report["test_case_result"]
+
+        self.assertEqual("created", entry["status"])
+        self.assertEqual(0, index["counts"]["reports_refused"])
+        self.assertEqual(1, index["counts"]["diagnosis_eligible"])
+        self.assertTrue(entry["eligible"])
+        self.assertIsNone(entry["assertion_id"])
+        self.assertEqual(CASE, entry["test_case_id"])
+        self.assertEqual("execution_error", result["semantic_status"])
+        self.assertIsNone(result["assertion"])
+        self.assertIsNone(result["assertion_id"])
 
     def _throw_before_any_assertion(self) -> Path:
         """A test method that threw instead of reaching its first assertion.

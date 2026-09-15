@@ -198,3 +198,52 @@ class SerializationTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ReactionsParseDiagnosticTests(unittest.TestCase):
+
+    def diagnostic(self, probe_output: str) -> str:
+        from llm4mtl.languages.reactions.adapter import ReactionsAdapter
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            transformation = root / "Broken.reactions"
+            transformation.write_text("reactions: broken\n", encoding="utf-8")
+            jar = root / "parser/target/parser-all.jar"
+            jar.parent.mkdir(parents=True)
+            jar.write_bytes(b"")
+            workspace = Workspace(root / "engine", root / "observations")
+            build = SimpleNamespace(returncode=0, stdout="", stderr="")
+            probe = SimpleNamespace(returncode=1, stdout=probe_output, stderr="")
+            with (
+                patch(
+                    "llm4mtl.languages.reactions.adapter.materialize_parser",
+                    return_value=root,
+                ),
+                patch(
+                    "llm4mtl.languages.reactions.adapter.default_reactions_metamodels_root",
+                    return_value=root,
+                ),
+                patch(
+                    "llm4mtl.languages.reactions.adapter.subprocess.run",
+                    side_effect=[build, probe],
+                ),
+            ):
+                observations = ReactionsAdapter().parse_transformations(
+                    [transformation], workspace
+                )
+            return observations[transformation].diagnostic
+
+    def test_a_long_problem_list_keeps_its_first_problems(self) -> None:
+        problems = [f"problem number {index} is an ERROR" for index in range(40)]
+        diagnostic = self.diagnostic(
+            "Syntax issues (40):\n" + "\n".join(problems)
+        )
+
+        self.assertTrue(diagnostic.startswith("Syntax issues (40):"))
+        self.assertIn(problems[0], diagnostic)
+
+    def test_a_short_problem_list_is_kept_whole(self) -> None:
+        reported = "Syntax issues (1):\nThe method or field x is undefined (ERROR)"
+
+        self.assertEqual(reported, self.diagnostic(reported))

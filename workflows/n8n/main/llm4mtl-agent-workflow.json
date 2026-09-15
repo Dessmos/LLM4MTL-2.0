@@ -1445,7 +1445,7 @@
         300
       ],
       "parameters": {
-        "jsCode": "// The Code node runs in a bare VM context, which has the JavaScript\n// built-ins but none of Node's host globals: structuredClone is not one of\n// them. The state is pure JSON, so a JSON round trip is a faithful clone.\nconst state = JSON.parse(JSON.stringify($input.first().json));\n// Each run carries the stage flags it executes under: a custom task runs with\n// the reference-bound stages disabled while the benchmark tasks of the same\n// launch keep the configured set.\nconst flags = state.current.stages || state.config.stages;\nconst maxRefinements = {\n  tests: state.config.max_test_refinement_iterations,\n  transformations: state.config.max_transformation_refinement_iterations,\n};\n\n// run_mode is which pipeline the user asked for; the stage flags are which of\n// its components are enabled. A mode never reaches a stage of the other branch,\n// however the flags are set, so the two stay separable in the recorded config.\nconst runMode = state.config.run_mode;\nconst modeStages = {\n  tests_only: ['generate_tests', 'extract', 'technical', 'reference'],\n  transformations_only: ['generate_transformations', 'syntax'],\n  full: ['generate_tests', 'extract', 'technical', 'reference', 'generate_transformations', 'syntax', 'execution'],\n};\nif (!modeStages[runMode]) throw new Error(`Unknown run mode: ${runMode}`);\nconst modeAllows = (action) => (['diagnose', 'read_diagnosis_index'].includes(action)\n  ? runMode === 'full'\n  : modeStages[runMode].includes(action));\n\nconst actionFlag = {\n  generate_tests: 'test_generation',\n  extract: 'test_extraction',\n  technical: 'technical_validation',\n  reference: 'reference_validation',\n  generate_transformations: 'transformation_generation',\n  syntax: 'syntax_validation',\n  execution: 'semantic_execution',\n  diagnose: 'source_diagnosis',\n};\nconst stageIds = {\n  extract: 'extract',\n  technical: 'technical-validation',\n  reference: 'reference-validation',\n  syntax: 'syntax-validation',\n  execution: 'execution',\n};\n\nfunction choose(action) {\n  state.action = action;\n  state.stage_id = stageIds[action] || null;\n  state.subworkflow_path = null;\n  state.subworkflow_input = null;\n  state.stage_iteration = ['extract', 'technical', 'reference'].includes(action)\n    ? state.current.test_iteration\n    : ['syntax', 'execution'].includes(action)\n      ? state.current.transformation_iteration\n      : null;\n  if (action === 'generate_tests') {\n    state.subworkflow_path = state.current.test_generation_workflow;\n    state.subworkflow_input = {\n      language: state.current.language,\n      task: state.current.task,\n      provider: (state.current.test_iteration > 0 ? state.config.llms.refinement : state.config.llms.semantic_test).provider,\n      model: (state.current.test_iteration > 0 ? state.config.llms.refinement : state.config.llms.semantic_test).model,\n      strategy: state.config.llms.semantic_test.strategy,\n      llm_role: state.current.test_iteration > 0 ? 'refinement' : 'semantic_test',\n      run_id: state.current.run_id,\n      refinement_iteration: state.current.test_iteration,\n      refinement_reason: state.current.refinement_reason || null,\n      prompt_path: state.current.test_iteration > 0 ? state.current.refinement_prompt_path : null,\n    };\n  } else if (action === 'generate_transformations') {\n    state.subworkflow_path = state.current.transformation_generation_workflow;\n    state.subworkflow_input = {\n      language: state.current.language,\n      task: state.current.task,\n      provider: (state.current.transformation_iteration > 0 ? state.config.llms.refinement : state.config.llms.transformation).provider,\n      model: (state.current.transformation_iteration > 0 ? state.config.llms.refinement : state.config.llms.transformation).model,\n      strategy: state.config.llms.transformation.strategy,\n      llm_role: state.current.transformation_iteration > 0 ? 'refinement' : 'transformation',\n      run_id: state.current.run_id,\n      refinement_iteration: state.current.transformation_iteration,\n      refinement_reason: state.current.refinement_reason || null,\n      prompt_path: state.current.transformation_iteration > 0 ? state.current.refinement_prompt_path : null,\n    };\n  } else if (action === 'prepare_refinement') {\n    state.refinement_request = {\n      artifact_type: state.current.refinement_target === 'tests' ? 'semantic-test' : 'transformation',\n      iteration: state.current.refinement_target === 'tests' ? state.current.test_iteration : state.current.transformation_iteration,\n      previous_iteration: state.current.previous_artifact_iteration,\n      provider: state.config.llms.refinement.provider,\n      model: state.config.llms.refinement.model,\n      reason: state.current.refinement_reason,\n      execution_attempt: (state.current.refinement_reason || '').startsWith('DIAGNOSED_') || (state.current.refinement_reason || '').startsWith('SEMANTIC_')\n        ? state.current.execution_result?.attempt || null\n        : null,\n    };\n  } else if (action === 'record_generation') {\n    state.generation_record = state.current.pending_generation;\n  } else if (action === 'read_diagnosis_index') {\n    // Python names artifacts by repository path, and told this run where it\n    // lives when it was created; the master rebuilds no artifact path of its\n    // own. The report paths inside the index stay repository-relative, because\n    // the diagnosis subworkflow does its own containment check on them.\n    const indexPath = String(state.current.diagnosis_index_path || '').replace(/\\\\/g, '/');\n    const runPrefix = `${state.current.run_dir}/`;\n    if (!indexPath.startsWith(runPrefix) || indexPath.includes('..')) {\n      throw new Error(`Diagnosis index must identify this run under ${state.current.run_dir}: ${indexPath}`);\n    }\n    state.diagnosis_execution_attempt = state.current.execution_result.attempt;\n  } else if (action === 'diagnose') {\n    // One report per invocation. The queue was built from the attempt's index,\n    // so which failures get diagnosed is the recorded set, not the first of them.\n    const pending = state.current.diagnosis_queue[state.current.diagnosis_cursor];\n    state.subworkflow_path = state.current.diagnosis_workflow;\n    state.subworkflow_input = {\n      batch_id: state.batch_id,\n      run_id: state.current.run_id,\n      run_dir: state.current.run_dir,\n      n8n_run_dir: state.current.n8n_run_dir,\n      outcome_code: 'SEMANTIC_EXECUTION_FAILED',\n      execution_attempt: state.current.execution_result.attempt,\n      diagnosis_provider: state.config.llms.source_diagnosis.provider,\n      model: state.config.llms.source_diagnosis.model,\n      llm_role: 'source_diagnosis',\n      failure_report_path: pending.failure_report_path,\n    };\n  }\n}\n\nfunction finish(status, reason) {\n  state.current.terminal_status = status;\n  state.current.terminal_reason = reason;\n  choose('final');\n}\n\nfunction nextEnabled(actions, emptyReason) {\n  for (const action of actions) {\n    if (modeAllows(action) && flags[actionFlag[action]]) {\n      choose(action);\n      return;\n    }\n  }\n  // Nothing left here belongs to this mode's pipeline, and the pipeline did run:\n  // that is the mode's own successful terminal point, not an unfinished run. A\n  // stage that is merely ablated keeps the existing incomplete reason, because\n  // that configuration stopped short of the end it asked for.\n  if (state.current.timeline.length > 0 && !actions.some(modeAllows)) {\n    finish('completed', `${runMode.toUpperCase()}_PIPELINE_COMPLETE`);\n    return;\n  }\n  finish('incomplete', emptyReason);\n}\n\nfunction afterTestArtifact() {\n  nextEnabled(\n    ['extract', 'technical', 'reference', 'generate_transformations', 'syntax', 'execution'],\n    'NO_POST_TEST_GENERATION_STAGE_ENABLED',\n  );\n}\n\nfunction afterValidatedTests() {\n  if (state.current.has_transformation) {\n    // A test refinement does not mutate the already syntax-valid transformation.\n    nextEnabled(['execution'], 'SEMANTIC_EXECUTION_DISABLED');\n    return;\n  }\n  nextEnabled(\n    ['generate_transformations', 'syntax', 'execution'],\n    'NO_TRANSFORMATION_STAGE_ENABLED',\n  );\n}\n\nfunction refinementSource(reason) {\n  const sourceByReason = {\n    TEST_SPEC_INVALID: 'technical',\n    TECH_COMPILE_FAILED: 'technical',\n    TECH_EXEC_FAILED: 'technical',\n    REFERENCE_VALIDATION_FAILED: 'reference',\n    SYNTAX_INVALID: 'syntax',\n    SEMANTIC_EXECUTION_FAILED_WITHOUT_DIAGNOSIS: 'semantic',\n    DIAGNOSED_TRANSFORMATION_DEFECT: 'semantic',\n    DIAGNOSED_TEST_DEFECT: 'semantic',\n  };\n  const source = sourceByReason[reason];\n  if (!source) throw new Error(`Unknown refinement reason: ${reason}`);\n  return source;\n}\n\nfunction refinementPurpose(target, source, iteration) {\n  if (iteration === 0) return 'initial';\n  const purposes = {\n    tests: {\n      technical: 'technical_refinement',\n      reference: 'reference_refinement',\n      semantic: 'semantic_refinement',\n    },\n    transformations: {\n      syntax: 'syntax_refinement',\n      semantic: 'semantic_refinement',\n    },\n  };\n  const purpose = purposes[target]?.[source];\n  if (!purpose) throw new Error(`Unsupported ${target} refinement source: ${source}`);\n  return purpose;\n}\n\nfunction requestRefinement(target, reason) {\n  if (!['tests', 'transformations'].includes(target)) {\n    throw new Error(`Unknown refinement target: ${target}`);\n  }\n  const source = refinementSource(reason);\n  const targetAction = target === 'tests' ? 'generate_tests' : 'generate_transformations';\n  if (!modeAllows(targetAction)) {\n    finish('completed_with_failures', `${reason}:OUT_OF_RUN_MODE_SCOPE`);\n    return;\n  }\n  const refinementFlag = target === 'tests' ? flags.test_refinement : flags.transformation_refinement;\n  const generationFlag = target === 'tests' ? flags.test_generation : flags.transformation_generation;\n  if (!refinementFlag || !generationFlag) {\n    finish('completed_with_failures', `${reason}:REFINEMENT_DISABLED`);\n    return;\n  }\n  if (!state.config.llms.refinement) {\n    finish('completed_with_failures', `${reason}:REFINEMENT_MODEL_NOT_CONFIGURED`);\n    return;\n  }\n  const iterationsUsed = target === 'tests'\n    ? state.current.test_iteration\n    : state.current.transformation_iteration;\n  if (iterationsUsed >= maxRefinements[target]) {\n    finish('completed_with_failures', `${reason}:REFINEMENT_LIMIT_REACHED`);\n    return;\n  }\n  state.current.refinement_target = target;\n  state.current.refinement_source = source;\n  state.current.previous_artifact_iteration = target === 'tests'\n    ? state.current.test_iteration\n    : state.current.transformation_iteration;\n  if (target === 'tests') {\n    state.current.test_iteration += 1;\n    // A refined suite is a new suite and gets its own id. A refined\n    // transformation is judged against the suite that was already validated\n    // against the reference - renaming it here left the execution stage\n    // selecting a suite that does not exist, and every transformation\n    // refinement ended in an infrastructure error instead of an execution.\n    state.current.suite_id = `${state.current.run_id}_${String(state.current.test_iteration).padStart(3, '0')}`;\n  } else {\n    state.current.transformation_iteration += 1;\n  }\n  state.current.refinement_reason = reason;\n  state.current.generation_purpose = `${target}_refinement`;\n  choose('prepare_refinement');\n}\n\nfunction recordStage(action, result) {\n  state.current.timeline.push({\n    action,\n    stage: result.stage || null,\n    status: result.status || null,\n    outcome_code: result.outcome_code || null,\n    attempt: result.attempt || null,\n    counts: result.counts || {},\n    refinement_iteration: state.stage_iteration,\n    artifacts: result.artifacts || {},\n  });\n}\n\nconst completed = state.completed_action;\nconst result = state.last_result || {};\n\nfunction mountedPath(value, label) {\n  // A directory n8n's file nodes may open: below the artifacts mount, and\n  // unable to climb out of it.\n  if (typeof value !== 'string' || !value.startsWith('/data/') || value.includes('..')) {\n    throw new Error(`${label} must be a mounted path below /data: ${value}`);\n  }\n  return value;\n}\n\nfunction repositoryPath(value, label) {\n  if (typeof value !== 'string' || !value || value.startsWith('/') || value.includes('..')) {\n    throw new Error(`${label} must be a repository-relative path: ${value}`);\n  }\n  return value;\n}\n\nif (!completed) {\n  choose('create_batch');\n} else if (completed === 'create_batch') {\n  if (typeof result.batch_id !== 'string' || !result.batch_id) {\n    throw new Error('POST /batches did not return batch_id');\n  }\n  state.batch_id = result.batch_id;\n  state.batch_dir = repositoryPath(result.batch_dir, 'batch_dir');\n  state.n8n_batch_dir = mountedPath(result.n8n_batch_dir, 'n8n_batch_dir');\n  choose('create_run');\n} else if (completed === 'create_run') {\n  if (typeof result.run_id !== 'string' || !result.run_id) {\n    throw new Error('POST /batches/{batch_id}/runs did not return run_id');\n  }\n  state.current.run_id = result.run_id;\n  state.current.run_dir = repositoryPath(result.run_dir, 'run_dir');\n  state.current.n8n_run_dir = mountedPath(result.n8n_run_dir, 'n8n_run_dir');\n  state.current.suite_id = `${result.run_id}_000`;\n  nextEnabled(\n    ['generate_tests', 'extract', 'technical', 'reference', 'generate_transformations', 'syntax', 'execution'],\n    'ALL_PIPELINE_STAGES_DISABLED',\n  );\n} else if (completed === 'prepare_refinement') {\n  if (typeof result.prompt_path !== 'string' || !result.prompt_path) {\n    throw new Error('Python did not return a refinement prompt path');\n  }\n  state.current.refinement_prompt_path = result.prompt_path;\n  state.current.refinement_request_path = result.request_path;\n  choose(state.current.refinement_target === 'tests' ? 'generate_tests' : 'generate_transformations');\n} else if (completed === 'generate_tests') {\n  const purpose = refinementPurpose(\n    'tests',\n    state.current.refinement_source\n      || (state.current.test_iteration > 0\n        ? refinementSource(state.current.refinement_reason)\n        : null),\n    state.current.test_iteration,\n  );\n  state.current.pending_generation = {\n    artifact_type: 'semantic-test',\n    iteration: state.current.test_iteration,\n    purpose,\n    provider: state.subworkflow_input.provider,\n    model: state.subworkflow_input.model,\n    strategy: state.subworkflow_input.strategy || null,\n  };\n  choose('record_generation');\n} else if (completed === 'extract') {\n  recordStage(completed, result);\n  if (result.outcome_code === 'EXTRACTED') {\n    nextEnabled(\n      ['technical', 'reference', 'generate_transformations', 'syntax', 'execution'],\n      'NO_STAGE_AFTER_EXTRACTION_ENABLED',\n    );\n  } else if (result.outcome_code === 'TEST_SPEC_INVALID') {\n    requestRefinement('tests', result.outcome_code);\n  } else if (result.outcome_code === 'INFRASTRUCTURE_ERROR') {\n    finish('failed', 'EXTRACTION_INFRASTRUCTURE_ERROR');\n  } else {\n    finish('incomplete', result.outcome_code || 'UNKNOWN_EXTRACTION_OUTCOME');\n  }\n} else if (completed === 'technical') {\n  recordStage(completed, result);\n  if (result.outcome_code === 'TECH_VALID') {\n    nextEnabled(\n      ['reference', 'generate_transformations', 'syntax', 'execution'],\n      'NO_STAGE_AFTER_TECHNICAL_VALIDATION_ENABLED',\n    );\n  } else if (['TECH_COMPILE_FAILED', 'TECH_EXEC_FAILED', 'TEST_SPEC_INVALID'].includes(result.outcome_code)) {\n    requestRefinement('tests', result.outcome_code);\n  } else if (result.outcome_code === 'INFRASTRUCTURE_ERROR') {\n    finish('failed', 'TECHNICAL_VALIDATION_INFRASTRUCTURE_ERROR');\n  } else {\n    finish('incomplete', result.outcome_code || 'UNKNOWN_TECHNICAL_OUTCOME');\n  }\n} else if (completed === 'reference') {\n  recordStage(completed, result);\n  if (result.outcome_code === 'REFERENCE_VALIDATED') {\n    afterValidatedTests();\n  } else if (result.outcome_code === 'REFERENCE_VALIDATION_FAILED') {\n    requestRefinement('tests', result.outcome_code);\n  } else if (result.outcome_code === 'INFRASTRUCTURE_ERROR') {\n    finish('failed', 'REFERENCE_VALIDATION_INFRASTRUCTURE_ERROR');\n  } else {\n    finish('incomplete', result.outcome_code || 'UNKNOWN_REFERENCE_OUTCOME');\n  }\n} else if (completed === 'generate_transformations') {\n  const purpose = refinementPurpose(\n    'transformations',\n    state.current.refinement_source\n      || (state.current.transformation_iteration > 0\n        ? refinementSource(state.current.refinement_reason)\n        : null),\n    state.current.transformation_iteration,\n  );\n  state.current.pending_generation = {\n    artifact_type: 'transformation',\n    iteration: state.current.transformation_iteration,\n    purpose,\n    provider: state.subworkflow_input.provider,\n    model: state.subworkflow_input.model,\n    strategy: state.subworkflow_input.strategy || null,\n  };\n  state.current.has_transformation = true;\n  choose('record_generation');\n} else if (completed === 'record_generation') {\n  const generation = state.current.pending_generation;\n  state.current.timeline.push({\n    action: generation.artifact_type === 'semantic-test' ? 'generate_tests' : 'generate_transformations',\n    refinement_iteration: generation.iteration,\n    purpose: generation.purpose,\n    refinement_target: generation.iteration > 0 ? state.current.refinement_target : null,\n    refinement_source: generation.iteration > 0 ? state.current.refinement_source : null,\n    provider: generation.provider,\n    model: generation.model,\n    generation_artifact: `generations/${generation.artifact_type}/iteration-${String(generation.iteration).padStart(3, '0')}/generation.json`,\n  });\n  state.current.pending_generation = null;\n  if (generation.artifact_type === 'semantic-test') afterTestArtifact();\n  else nextEnabled(['syntax', 'execution'], 'NO_STAGE_AFTER_TRANSFORMATION_GENERATION_ENABLED');\n} else if (completed === 'syntax') {\n  recordStage(completed, result);\n  if (result.outcome_code === 'SYNTAX_VALID') {\n    nextEnabled(['execution'], 'SEMANTIC_EXECUTION_DISABLED');\n  } else if (result.outcome_code === 'SYNTAX_INVALID') {\n    if (flags.parser_feedback) {\n      requestRefinement('transformations', result.outcome_code);\n    } else {\n      finish('completed_with_failures', 'SYNTAX_INVALID:PARSER_FEEDBACK_DISABLED');\n    }\n  } else if (result.outcome_code === 'INFRASTRUCTURE_ERROR') {\n    finish('failed', 'SYNTAX_VALIDATION_INFRASTRUCTURE_ERROR');\n  } else {\n    finish('incomplete', result.outcome_code || 'UNKNOWN_SYNTAX_OUTCOME');\n  }\n} else if (completed === 'execution') {\n  recordStage(completed, result);\n  state.current.execution_result = result;\n  if (result.outcome_code === 'SEMANTIC_PASSED') {\n    finish('completed', 'SEMANTIC_PASSED');\n  } else if (result.outcome_code === 'SEMANTIC_EXECUTION_FAILED') {\n    if (!flags.semantic_feedback) {\n      finish('completed_with_failures', 'SEMANTIC_EXECUTION_FAILED:SEMANTIC_FEEDBACK_DISABLED');\n    } else {\n      // The index names every report the attempt prepared. Routing on it instead\n      // of the single shortcut report keeps a decision from resting on one\n      // failure when the attempt recorded several.\n      const diagnosisIndex = result.artifacts?.failure_report_index;\n      if (flags.source_diagnosis && diagnosisIndex) {\n        state.current.diagnosis_index_path = diagnosisIndex;\n        choose('read_diagnosis_index');\n      } else if (flags.source_diagnosis) {\n        finish('incomplete', 'SOURCE_DIAGNOSIS_EVIDENCE_NOT_EXPOSED');\n      } else {\n        requestRefinement('transformations', 'SEMANTIC_EXECUTION_FAILED_WITHOUT_DIAGNOSIS');\n      }\n    }\n  } else if (result.outcome_code === 'INFRASTRUCTURE_ERROR') {\n    finish('failed', 'SEMANTIC_EXECUTION_INFRASTRUCTURE_ERROR');\n  } else {\n    finish('incomplete', result.outcome_code || 'UNKNOWN_EXECUTION_OUTCOME');\n  }\n} else if (completed === 'read_diagnosis_index') {\n  const reports = Array.isArray(result.eligible_reports) ? result.eligible_reports : [];\n  state.current.timeline.push({\n    action: 'read_diagnosis_index',\n    eligible_reports: reports.length,\n  });\n  if (reports.length === 0) {\n    // The attempt prepared evidence and none of it is diagnosable. That is a\n    // recorded fact about the run, not a crash and not a silent pass.\n    finish('completed_with_failures', 'NO_ELIGIBLE_SOURCE_DIAGNOSIS_REPORTS');\n  } else {\n    state.current.diagnosis_queue = reports;\n    state.current.diagnosis_cursor = 0;\n    state.current.diagnosis_verdicts = [];\n    choose('diagnose');\n  }\n} else if (completed === 'diagnose') {\n  const verdict = Array.isArray(result.items) ? result.items[0] || {} : result;\n  const pending = state.current.diagnosis_queue[state.current.diagnosis_cursor] || {};\n  state.current.timeline.push({\n    action: 'diagnose',\n    failure_report_path: pending.failure_report_path || null,\n    scope: pending.scope || null,\n    classification: verdict.classification || null,\n    confidence: verdict.confidence || null,\n    test_case_id: verdict.test_case_id || null,\n    assertion_id: verdict.assertion_id || null,\n  });\n  state.current.diagnosis_verdicts.push({\n    failure_report_path: pending.failure_report_path || null,\n    scope: pending.scope || null,\n    classification: verdict.classification || null,\n    confidence: verdict.confidence || null,\n    test_case_id: verdict.test_case_id ?? null,\n    assertion_id: verdict.assertion_id ?? null,\n  });\n  state.current.diagnosis_cursor += 1;\n  if (state.current.diagnosis_cursor < state.current.diagnosis_queue.length) {\n    // Every eligible report is diagnosed before anything is decided. Each one\n    // persisted its own artifact as it went, so the individual verdicts survive\n    // whatever the aggregate turns out to be.\n    choose('diagnose');\n  } else {\n    const verdicts = state.current.diagnosis_verdicts;\n    const classifications = verdicts.map((entry) => entry.classification);\n    const known = ['transformation_defect', 'test_defect', 'ambiguous'];\n    if (verdicts.length !== state.current.diagnosis_queue.length\n      || classifications.some((value) => !known.includes(value))) {\n      // Deciding on part of the evidence is worse than not deciding: the run\n      // would attribute a refinement to a diagnosis set it never completed.\n      finish('incomplete', 'INCOMPLETE_SOURCE_DIAGNOSIS_SET');\n    } else {\n      // Conservative on purpose, and never a majority vote. One ambiguous\n      // verdict, or one of each defect, means the evidence points at both\n      // artefacts; repairing either one on that basis would be the mistake\n      // source diagnosis exists to prevent.\n      const hasTransformation = classifications.includes('transformation_defect');\n      const hasTest = classifications.includes('test_defect');\n      const aggregate = classifications.includes('ambiguous') || (hasTransformation && hasTest)\n        ? 'ambiguous'\n        : hasTransformation ? 'transformation_defect' : 'test_defect';\n      state.current.diagnosis_aggregate = aggregate;\n      state.current.timeline.push({\n        action: 'aggregate_diagnosis',\n        aggregate,\n        classifications,\n      });\n      if (aggregate === 'transformation_defect') {\n        requestRefinement('transformations', 'DIAGNOSED_TRANSFORMATION_DEFECT');\n      } else if (aggregate === 'test_defect') {\n        requestRefinement('tests', 'DIAGNOSED_TEST_DEFECT');\n      } else {\n        finish('completed_with_failures', 'AMBIGUOUS_SOURCE_DIAGNOSIS');\n      }\n    }\n  }\n} else if (completed === 'final') {\n  state.results.push({\n    run_id: state.current.run_id,\n    run_dir: state.current.run_dir,\n    language: state.current.language,\n    task: state.current.task,\n    custom_task: state.current.custom_task ? state.current.custom_task.name : null,\n    status: state.current.terminal_status || 'incomplete',\n    reason: state.current.terminal_reason || 'NO_TERMINAL_REASON',\n    refinement_iterations: state.current.test_iteration + state.current.transformation_iteration,\n    test_refinement_iterations: state.current.test_iteration,\n    transformation_refinement_iterations: state.current.transformation_iteration,\n    suite_id: state.current.suite_id,\n    timeline: state.current.timeline,\n    artifacts: result,\n  });\n  state.run_index += 1;\n  if (state.run_index >= state.run_specs.length) {\n    choose('complete');\n  } else {\n    const next = state.run_specs[state.run_index];\n    state.current = {\n      ...next,\n      run_id: null,\n      run_dir: null,\n      n8n_run_dir: null,\n      suite_id: null,\n      test_iteration: 0,\n      transformation_iteration: 0,\n      generation_purpose: 'initial',\n      has_transformation: false,\n      timeline: [],\n      terminal_status: null,\n      terminal_reason: null,\n    };\n    state.completed_action = null;\n    state.last_result = null;\n    choose('create_run');\n  }\n} else {\n  throw new Error(`Unknown completed action: ${completed}`);\n}\n\nstate.completed_action = null;\nstate.last_result = null;\nreturn [{ json: state }];"
+        "jsCode": "// The Code node runs in a bare VM context, which has the JavaScript\n// built-ins but none of Node's host globals: structuredClone is not one of\n// them. The state is pure JSON, so a JSON round trip is a faithful clone.\nconst state = JSON.parse(JSON.stringify($input.first().json));\n// Each run carries the stage flags it executes under: a custom task runs with\n// the reference-bound stages disabled while the benchmark tasks of the same\n// launch keep the configured set.\nconst flags = state.current.stages || state.config.stages;\nconst maxRefinements = {\n  tests: state.config.max_test_refinement_iterations,\n  transformations: state.config.max_transformation_refinement_iterations,\n};\n\n// run_mode is which pipeline the user asked for; the stage flags are which of\n// its components are enabled. A mode never reaches a stage of the other branch,\n// however the flags are set, so the two stay separable in the recorded config.\nconst runMode = state.config.run_mode;\nconst modeStages = {\n  tests_only: ['generate_tests', 'extract', 'technical', 'reference'],\n  transformations_only: ['generate_transformations', 'syntax'],\n  full: ['generate_tests', 'extract', 'technical', 'reference', 'generate_transformations', 'syntax', 'execution'],\n};\nif (!modeStages[runMode]) throw new Error(`Unknown run mode: ${runMode}`);\nconst modeAllows = (action) => (['diagnose', 'read_diagnosis_index'].includes(action)\n  ? runMode === 'full'\n  : modeStages[runMode].includes(action));\n\nconst actionFlag = {\n  generate_tests: 'test_generation',\n  extract: 'test_extraction',\n  technical: 'technical_validation',\n  reference: 'reference_validation',\n  generate_transformations: 'transformation_generation',\n  syntax: 'syntax_validation',\n  execution: 'semantic_execution',\n  diagnose: 'source_diagnosis',\n};\nconst stageIds = {\n  extract: 'extract',\n  technical: 'technical-validation',\n  reference: 'reference-validation',\n  syntax: 'syntax-validation',\n  execution: 'execution',\n};\n\n// The actions n8n runs itself, by executing an existing export rather than by\n// asking Python for a stage.\nconst subworkflowActions = ['generate_tests', 'generate_transformations', 'diagnose'];\n\n// Every call the master makes to Python reaches the same service, and one HTTP\n// node issues all of them: an action that calls Python names its method, its\n// path and its body here, beside the routing decision that implies it. A null\n// request is an action Python is not asked about.\n//\n// Every request carries a body object, and a read carries an empty one. The\n// node's `Send Body` switch is a boolean parameter, and n8n keeps no expression\n// in one: it strips the leading `=` on save and prunes the JSON body the switch\n// gates, leaving a node that still calls the service and sends nothing.\nconst stageService = 'http://stage-service:8129';\n\nfunction requestFor(action) {\n  const batchUrl = () => `${stageService}/batches/${state.batch_id}`;\n  const runUrl = () => `${batchUrl()}/runs/${state.current.run_id}`;\n  if (action === 'create_batch') {\n    return {\n      method: 'POST',\n      url: `${stageService}/batches`,\n      body: {\n        run_mode: state.config.run_mode,\n        pipeline_variant: state.config.pipeline_variant,\n        config: state.config,\n        n8n: {\n          workflow_id: String($workflow.id),\n          execution_id: String($execution.id),\n        },\n      },\n    };\n  }\n  if (action === 'create_run') {\n    return {\n      method: 'POST',\n      url: `${batchUrl()}/runs`,\n      body: {\n        language: state.current.language,\n        task: state.current.task,\n        transformation_model: state.current.transformation_model,\n        test_generation_model: state.current.test_generation_model,\n        transformation_strategy: state.current.transformation_strategy,\n        test_generation_strategy: state.current.test_generation_strategy,\n        seed: state.current.seed,\n        pipeline_variant: state.current.pipeline_variant,\n        experiment_config: {\n          max_test_refinement_iterations: state.config.max_test_refinement_iterations,\n          max_transformation_refinement_iterations: state.config.max_transformation_refinement_iterations,\n          parser_feedback: state.current.stages.parser_feedback,\n          semantic_feedback: state.current.stages.semantic_feedback,\n          source_diagnosis: state.current.stages.source_diagnosis,\n        },\n        custom_task: state.current.custom_task || null,\n      },\n    };\n  }\n  // Every Python stage is the same call under a different stage id, and\n  // `stage_id` is set for exactly the actions that are one.\n  if (state.stage_id) {\n    return {\n      method: 'POST',\n      url: `${runUrl()}/stages/${state.stage_id}`,\n      body: {\n        suite_id: state.current.suite_id,\n        refinement_iteration: state.stage_iteration,\n        verbose: false,\n      },\n    };\n  }\n  if (action === 'prepare_refinement') {\n    return { method: 'POST', url: `${runUrl()}/refinements`, body: state.refinement_request };\n  }\n  if (action === 'record_generation') {\n    return { method: 'POST', url: `${runUrl()}/generations`, body: state.generation_record };\n  }\n  if (action === 'final') {\n    return {\n      method: 'POST',\n      url: `${runUrl()}/result`,\n      body: {\n        status: state.current.terminal_status || 'incomplete',\n        terminal_state: state.current.terminal_reason || 'NO_TERMINAL_REASON',\n        run_mode: runMode,\n        refinement_iterations_used: state.current.test_iteration + state.current.transformation_iteration,\n        refinement_iterations_allowed:\n          (runMode === 'transformations_only' ? 0 : state.config.max_test_refinement_iterations)\n          + (runMode === 'tests_only' ? 0 : state.config.max_transformation_refinement_iterations),\n        suite_id: state.current.suite_id,\n        test_iteration: state.current.test_iteration,\n        transformation_iteration: state.current.transformation_iteration,\n      },\n    };\n  }\n  if (action === 'read_run_artifacts') {\n    return { method: 'GET', url: runUrl(), body: {} };\n  }\n  if (action === 'read_diagnosis_index') {\n    return {\n      method: 'GET',\n      url: `${runUrl()}/diagnosis/execution/${state.diagnosis_execution_attempt}`,\n      body: {},\n    };\n  }\n  return null;\n}\n\nfunction choose(action) {\n  state.action = action;\n  state.stage_id = stageIds[action] || null;\n  state.subworkflow_path = null;\n  state.subworkflow_input = null;\n  state.stage_iteration = ['extract', 'technical', 'reference'].includes(action)\n    ? state.current.test_iteration\n    : ['syntax', 'execution'].includes(action)\n      ? state.current.transformation_iteration\n      : null;\n  if (action === 'generate_tests') {\n    state.subworkflow_path = state.current.test_generation_workflow;\n    state.subworkflow_input = {\n      language: state.current.language,\n      task: state.current.task,\n      provider: (state.current.test_iteration > 0 ? state.config.llms.refinement : state.config.llms.semantic_test).provider,\n      model: (state.current.test_iteration > 0 ? state.config.llms.refinement : state.config.llms.semantic_test).model,\n      strategy: state.config.llms.semantic_test.strategy,\n      llm_role: state.current.test_iteration > 0 ? 'refinement' : 'semantic_test',\n      run_id: state.current.run_id,\n      refinement_iteration: state.current.test_iteration,\n      refinement_reason: state.current.refinement_reason || null,\n      prompt_path: state.current.test_iteration > 0 ? state.current.refinement_prompt_path : null,\n    };\n  } else if (action === 'generate_transformations') {\n    state.subworkflow_path = state.current.transformation_generation_workflow;\n    state.subworkflow_input = {\n      language: state.current.language,\n      task: state.current.task,\n      provider: (state.current.transformation_iteration > 0 ? state.config.llms.refinement : state.config.llms.transformation).provider,\n      model: (state.current.transformation_iteration > 0 ? state.config.llms.refinement : state.config.llms.transformation).model,\n      strategy: state.config.llms.transformation.strategy,\n      llm_role: state.current.transformation_iteration > 0 ? 'refinement' : 'transformation',\n      run_id: state.current.run_id,\n      refinement_iteration: state.current.transformation_iteration,\n      refinement_reason: state.current.refinement_reason || null,\n      prompt_path: state.current.transformation_iteration > 0 ? state.current.refinement_prompt_path : null,\n    };\n  } else if (action === 'prepare_refinement') {\n    state.refinement_request = {\n      artifact_type: state.current.refinement_target === 'tests' ? 'semantic-test' : 'transformation',\n      iteration: state.current.refinement_target === 'tests' ? state.current.test_iteration : state.current.transformation_iteration,\n      previous_iteration: state.current.previous_artifact_iteration,\n      provider: state.config.llms.refinement.provider,\n      model: state.config.llms.refinement.model,\n      reason: state.current.refinement_reason,\n      execution_attempt: (state.current.refinement_reason || '').startsWith('DIAGNOSED_') || (state.current.refinement_reason || '').startsWith('SEMANTIC_')\n        ? state.current.execution_result?.attempt || null\n        : null,\n    };\n  } else if (action === 'record_generation') {\n    state.generation_record = state.current.pending_generation;\n  } else if (action === 'read_diagnosis_index') {\n    // Python names artifacts by repository path, and told this run where it\n    // lives when it was created; the master rebuilds no artifact path of its\n    // own. The report paths inside the index stay repository-relative, because\n    // the diagnosis subworkflow does its own containment check on them.\n    const indexPath = String(state.current.diagnosis_index_path || '').replace(/\\\\/g, '/');\n    const runPrefix = `${state.current.run_dir}/`;\n    if (!indexPath.startsWith(runPrefix) || indexPath.includes('..')) {\n      throw new Error(`Diagnosis index must identify this run under ${state.current.run_dir}: ${indexPath}`);\n    }\n    state.diagnosis_execution_attempt = state.current.execution_result.attempt;\n  } else if (action === 'diagnose') {\n    // One report per invocation. The queue was built from the attempt's index,\n    // so which failures get diagnosed is the recorded set, not the first of them.\n    const pending = state.current.diagnosis_queue[state.current.diagnosis_cursor];\n    state.subworkflow_path = state.current.diagnosis_workflow;\n    state.subworkflow_input = {\n      batch_id: state.batch_id,\n      run_id: state.current.run_id,\n      run_dir: state.current.run_dir,\n      n8n_run_dir: state.current.n8n_run_dir,\n      outcome_code: 'SEMANTIC_EXECUTION_FAILED',\n      execution_attempt: state.current.execution_result.attempt,\n      diagnosis_provider: state.config.llms.source_diagnosis.provider,\n      model: state.config.llms.source_diagnosis.model,\n      llm_role: 'source_diagnosis',\n      failure_report_path: pending.failure_report_path,\n    };\n  }\n  state.request = requestFor(action);\n  // One HTTP node issues every stage-service call and one subworkflow node runs\n  // every generation and diagnosis, so the switch routes on the lane rather\n  // than on the action: an action added to a lane needs no new branch.\n  state.route = state.request\n    ? 'stage_service'\n    : subworkflowActions.includes(action)\n      ? 'subworkflow'\n      : action;\n}\n\nfunction finish(status, reason) {\n  state.current.terminal_status = status;\n  state.current.terminal_reason = reason;\n  choose('final');\n}\n\nfunction nextEnabled(actions, emptyReason) {\n  for (const action of actions) {\n    if (modeAllows(action) && flags[actionFlag[action]]) {\n      choose(action);\n      return;\n    }\n  }\n  // Nothing left here belongs to this mode's pipeline, and the pipeline did run:\n  // that is the mode's own successful terminal point, not an unfinished run. A\n  // stage that is merely ablated keeps the existing incomplete reason, because\n  // that configuration stopped short of the end it asked for.\n  if (state.current.timeline.length > 0 && !actions.some(modeAllows)) {\n    finish('completed', `${runMode.toUpperCase()}_PIPELINE_COMPLETE`);\n    return;\n  }\n  finish('incomplete', emptyReason);\n}\n\nfunction afterTestArtifact() {\n  nextEnabled(\n    ['extract', 'technical', 'reference', 'generate_transformations', 'syntax', 'execution'],\n    'NO_POST_TEST_GENERATION_STAGE_ENABLED',\n  );\n}\n\nfunction afterValidatedTests() {\n  if (state.current.has_transformation) {\n    // A test refinement does not mutate the already syntax-valid transformation.\n    nextEnabled(['execution'], 'SEMANTIC_EXECUTION_DISABLED');\n    return;\n  }\n  nextEnabled(\n    ['generate_transformations', 'syntax', 'execution'],\n    'NO_TRANSFORMATION_STAGE_ENABLED',\n  );\n}\n\nfunction refinementSource(reason) {\n  const sourceByReason = {\n    TEST_SPEC_INVALID: 'technical',\n    TECH_COMPILE_FAILED: 'technical',\n    TECH_EXEC_FAILED: 'technical',\n    REFERENCE_VALIDATION_FAILED: 'reference',\n    SYNTAX_INVALID: 'syntax',\n    SEMANTIC_EXECUTION_FAILED_WITHOUT_DIAGNOSIS: 'semantic',\n    DIAGNOSED_TRANSFORMATION_DEFECT: 'semantic',\n    DIAGNOSED_TEST_DEFECT: 'semantic',\n  };\n  const source = sourceByReason[reason];\n  if (!source) throw new Error(`Unknown refinement reason: ${reason}`);\n  return source;\n}\n\nfunction refinementPurpose(target, source, iteration) {\n  if (iteration === 0) return 'initial';\n  const purposes = {\n    tests: {\n      technical: 'technical_refinement',\n      reference: 'reference_refinement',\n      semantic: 'semantic_refinement',\n    },\n    transformations: {\n      syntax: 'syntax_refinement',\n      semantic: 'semantic_refinement',\n    },\n  };\n  const purpose = purposes[target]?.[source];\n  if (!purpose) throw new Error(`Unsupported ${target} refinement source: ${source}`);\n  return purpose;\n}\n\nfunction requestRefinement(target, reason) {\n  if (!['tests', 'transformations'].includes(target)) {\n    throw new Error(`Unknown refinement target: ${target}`);\n  }\n  const source = refinementSource(reason);\n  const targetAction = target === 'tests' ? 'generate_tests' : 'generate_transformations';\n  if (!modeAllows(targetAction)) {\n    finish('completed_with_failures', `${reason}:OUT_OF_RUN_MODE_SCOPE`);\n    return;\n  }\n  const refinementFlag = target === 'tests' ? flags.test_refinement : flags.transformation_refinement;\n  const generationFlag = target === 'tests' ? flags.test_generation : flags.transformation_generation;\n  if (!refinementFlag || !generationFlag) {\n    finish('completed_with_failures', `${reason}:REFINEMENT_DISABLED`);\n    return;\n  }\n  if (!state.config.llms.refinement) {\n    finish('completed_with_failures', `${reason}:REFINEMENT_MODEL_NOT_CONFIGURED`);\n    return;\n  }\n  const iterationsUsed = target === 'tests'\n    ? state.current.test_iteration\n    : state.current.transformation_iteration;\n  if (iterationsUsed >= maxRefinements[target]) {\n    finish('completed_with_failures', `${reason}:REFINEMENT_LIMIT_REACHED`);\n    return;\n  }\n  state.current.refinement_target = target;\n  state.current.refinement_source = source;\n  state.current.previous_artifact_iteration = target === 'tests'\n    ? state.current.test_iteration\n    : state.current.transformation_iteration;\n  if (target === 'tests') {\n    state.current.test_iteration += 1;\n    // A refined suite is a new suite and gets its own id. A refined\n    // transformation is judged against the suite that was already validated\n    // against the reference - renaming it here left the execution stage\n    // selecting a suite that does not exist, and every transformation\n    // refinement ended in an infrastructure error instead of an execution.\n    state.current.suite_id = `${state.current.run_id}_${String(state.current.test_iteration).padStart(3, '0')}`;\n  } else {\n    state.current.transformation_iteration += 1;\n  }\n  state.current.refinement_reason = reason;\n  state.current.generation_purpose = `${target}_refinement`;\n  choose('prepare_refinement');\n}\n\nfunction recordStage(action, result) {\n  state.current.timeline.push({\n    action,\n    stage: result.stage || null,\n    status: result.status || null,\n    outcome_code: result.outcome_code || null,\n    attempt: result.attempt || null,\n    counts: result.counts || {},\n    refinement_iteration: state.stage_iteration,\n    artifacts: result.artifacts || {},\n  });\n}\n\nconst completed = state.completed_action;\nconst result = state.last_result || {};\n\nfunction mountedPath(value, label) {\n  // A directory n8n's file nodes may open: below the artifacts mount, and\n  // unable to climb out of it.\n  if (typeof value !== 'string' || !value.startsWith('/data/') || value.includes('..')) {\n    throw new Error(`${label} must be a mounted path below /data: ${value}`);\n  }\n  return value;\n}\n\nfunction repositoryPath(value, label) {\n  if (typeof value !== 'string' || !value || value.startsWith('/') || value.includes('..')) {\n    throw new Error(`${label} must be a repository-relative path: ${value}`);\n  }\n  return value;\n}\n\nif (!completed) {\n  choose('create_batch');\n} else if (completed === 'create_batch') {\n  if (typeof result.batch_id !== 'string' || !result.batch_id) {\n    throw new Error('POST /batches did not return batch_id');\n  }\n  state.batch_id = result.batch_id;\n  state.batch_dir = repositoryPath(result.batch_dir, 'batch_dir');\n  state.n8n_batch_dir = mountedPath(result.n8n_batch_dir, 'n8n_batch_dir');\n  choose('create_run');\n} else if (completed === 'create_run') {\n  if (typeof result.run_id !== 'string' || !result.run_id) {\n    throw new Error('POST /batches/{batch_id}/runs did not return run_id');\n  }\n  state.current.run_id = result.run_id;\n  state.current.run_dir = repositoryPath(result.run_dir, 'run_dir');\n  state.current.n8n_run_dir = mountedPath(result.n8n_run_dir, 'n8n_run_dir');\n  state.current.suite_id = `${result.run_id}_000`;\n  nextEnabled(\n    ['generate_tests', 'extract', 'technical', 'reference', 'generate_transformations', 'syntax', 'execution'],\n    'ALL_PIPELINE_STAGES_DISABLED',\n  );\n} else if (completed === 'prepare_refinement') {\n  if (typeof result.prompt_path !== 'string' || !result.prompt_path) {\n    throw new Error('Python did not return a refinement prompt path');\n  }\n  state.current.refinement_prompt_path = result.prompt_path;\n  state.current.refinement_request_path = result.request_path;\n  choose(state.current.refinement_target === 'tests' ? 'generate_tests' : 'generate_transformations');\n} else if (completed === 'generate_tests') {\n  const purpose = refinementPurpose(\n    'tests',\n    state.current.refinement_source\n      || (state.current.test_iteration > 0\n        ? refinementSource(state.current.refinement_reason)\n        : null),\n    state.current.test_iteration,\n  );\n  state.current.pending_generation = {\n    artifact_type: 'semantic-test',\n    iteration: state.current.test_iteration,\n    purpose,\n    provider: state.subworkflow_input.provider,\n    model: state.subworkflow_input.model,\n    strategy: state.subworkflow_input.strategy || null,\n  };\n  choose('record_generation');\n} else if (completed === 'extract') {\n  recordStage(completed, result);\n  if (result.outcome_code === 'EXTRACTED') {\n    nextEnabled(\n      ['technical', 'reference', 'generate_transformations', 'syntax', 'execution'],\n      'NO_STAGE_AFTER_EXTRACTION_ENABLED',\n    );\n  } else if (result.outcome_code === 'TEST_SPEC_INVALID') {\n    requestRefinement('tests', result.outcome_code);\n  } else if (result.outcome_code === 'INFRASTRUCTURE_ERROR') {\n    finish('failed', 'EXTRACTION_INFRASTRUCTURE_ERROR');\n  } else {\n    finish('incomplete', result.outcome_code || 'UNKNOWN_EXTRACTION_OUTCOME');\n  }\n} else if (completed === 'technical') {\n  recordStage(completed, result);\n  if (result.outcome_code === 'TECH_VALID') {\n    nextEnabled(\n      ['reference', 'generate_transformations', 'syntax', 'execution'],\n      'NO_STAGE_AFTER_TECHNICAL_VALIDATION_ENABLED',\n    );\n  } else if (['TECH_COMPILE_FAILED', 'TECH_EXEC_FAILED', 'TEST_SPEC_INVALID'].includes(result.outcome_code)) {\n    requestRefinement('tests', result.outcome_code);\n  } else if (result.outcome_code === 'INFRASTRUCTURE_ERROR') {\n    finish('failed', 'TECHNICAL_VALIDATION_INFRASTRUCTURE_ERROR');\n  } else {\n    finish('incomplete', result.outcome_code || 'UNKNOWN_TECHNICAL_OUTCOME');\n  }\n} else if (completed === 'reference') {\n  recordStage(completed, result);\n  if (result.outcome_code === 'REFERENCE_VALIDATED') {\n    afterValidatedTests();\n  } else if (result.outcome_code === 'REFERENCE_VALIDATION_FAILED') {\n    requestRefinement('tests', result.outcome_code);\n  } else if (result.outcome_code === 'INFRASTRUCTURE_ERROR') {\n    finish('failed', 'REFERENCE_VALIDATION_INFRASTRUCTURE_ERROR');\n  } else {\n    finish('incomplete', result.outcome_code || 'UNKNOWN_REFERENCE_OUTCOME');\n  }\n} else if (completed === 'generate_transformations') {\n  const purpose = refinementPurpose(\n    'transformations',\n    state.current.refinement_source\n      || (state.current.transformation_iteration > 0\n        ? refinementSource(state.current.refinement_reason)\n        : null),\n    state.current.transformation_iteration,\n  );\n  state.current.pending_generation = {\n    artifact_type: 'transformation',\n    iteration: state.current.transformation_iteration,\n    purpose,\n    provider: state.subworkflow_input.provider,\n    model: state.subworkflow_input.model,\n    strategy: state.subworkflow_input.strategy || null,\n  };\n  state.current.has_transformation = true;\n  choose('record_generation');\n} else if (completed === 'record_generation') {\n  const generation = state.current.pending_generation;\n  state.current.timeline.push({\n    action: generation.artifact_type === 'semantic-test' ? 'generate_tests' : 'generate_transformations',\n    refinement_iteration: generation.iteration,\n    purpose: generation.purpose,\n    refinement_target: generation.iteration > 0 ? state.current.refinement_target : null,\n    refinement_source: generation.iteration > 0 ? state.current.refinement_source : null,\n    provider: generation.provider,\n    model: generation.model,\n    generation_artifact: `generations/${generation.artifact_type}/iteration-${String(generation.iteration).padStart(3, '0')}/generation.json`,\n  });\n  state.current.pending_generation = null;\n  if (generation.artifact_type === 'semantic-test') afterTestArtifact();\n  else nextEnabled(['syntax', 'execution'], 'NO_STAGE_AFTER_TRANSFORMATION_GENERATION_ENABLED');\n} else if (completed === 'syntax') {\n  recordStage(completed, result);\n  if (result.outcome_code === 'SYNTAX_VALID') {\n    nextEnabled(['execution'], 'SEMANTIC_EXECUTION_DISABLED');\n  } else if (result.outcome_code === 'SYNTAX_INVALID') {\n    if (flags.parser_feedback) {\n      requestRefinement('transformations', result.outcome_code);\n    } else {\n      finish('completed_with_failures', 'SYNTAX_INVALID:PARSER_FEEDBACK_DISABLED');\n    }\n  } else if (result.outcome_code === 'INFRASTRUCTURE_ERROR') {\n    finish('failed', 'SYNTAX_VALIDATION_INFRASTRUCTURE_ERROR');\n  } else {\n    finish('incomplete', result.outcome_code || 'UNKNOWN_SYNTAX_OUTCOME');\n  }\n} else if (completed === 'execution') {\n  recordStage(completed, result);\n  state.current.execution_result = result;\n  if (result.outcome_code === 'SEMANTIC_PASSED') {\n    finish('completed', 'SEMANTIC_PASSED');\n  } else if (result.outcome_code === 'SEMANTIC_EXECUTION_FAILED') {\n    if (!flags.semantic_feedback) {\n      finish('completed_with_failures', 'SEMANTIC_EXECUTION_FAILED:SEMANTIC_FEEDBACK_DISABLED');\n    } else {\n      // The index names every report the attempt prepared. Routing on it instead\n      // of the single shortcut report keeps a decision from resting on one\n      // failure when the attempt recorded several.\n      const diagnosisIndex = result.artifacts?.failure_report_index;\n      if (flags.source_diagnosis && diagnosisIndex) {\n        state.current.diagnosis_index_path = diagnosisIndex;\n        choose('read_diagnosis_index');\n      } else if (flags.source_diagnosis) {\n        finish('incomplete', 'SOURCE_DIAGNOSIS_EVIDENCE_NOT_EXPOSED');\n      } else {\n        requestRefinement('transformations', 'SEMANTIC_EXECUTION_FAILED_WITHOUT_DIAGNOSIS');\n      }\n    }\n  } else if (result.outcome_code === 'INFRASTRUCTURE_ERROR') {\n    finish('failed', 'SEMANTIC_EXECUTION_INFRASTRUCTURE_ERROR');\n  } else {\n    finish('incomplete', result.outcome_code || 'UNKNOWN_EXECUTION_OUTCOME');\n  }\n} else if (completed === 'read_diagnosis_index') {\n  const reports = Array.isArray(result.eligible_reports) ? result.eligible_reports : [];\n  state.current.timeline.push({\n    action: 'read_diagnosis_index',\n    eligible_reports: reports.length,\n  });\n  if (reports.length === 0) {\n    // The attempt prepared evidence and none of it is diagnosable. That is a\n    // recorded fact about the run, not a crash and not a silent pass.\n    finish('completed_with_failures', 'NO_ELIGIBLE_SOURCE_DIAGNOSIS_REPORTS');\n  } else {\n    state.current.diagnosis_queue = reports;\n    state.current.diagnosis_cursor = 0;\n    state.current.diagnosis_verdicts = [];\n    choose('diagnose');\n  }\n} else if (completed === 'diagnose') {\n  const verdict = Array.isArray(result.items) ? result.items[0] || {} : result;\n  const pending = state.current.diagnosis_queue[state.current.diagnosis_cursor] || {};\n  state.current.timeline.push({\n    action: 'diagnose',\n    failure_report_path: pending.failure_report_path || null,\n    scope: pending.scope || null,\n    classification: verdict.classification || null,\n    confidence: verdict.confidence || null,\n    test_case_id: verdict.test_case_id || null,\n    assertion_id: verdict.assertion_id || null,\n  });\n  state.current.diagnosis_verdicts.push({\n    failure_report_path: pending.failure_report_path || null,\n    scope: pending.scope || null,\n    classification: verdict.classification || null,\n    confidence: verdict.confidence || null,\n    test_case_id: verdict.test_case_id ?? null,\n    assertion_id: verdict.assertion_id ?? null,\n  });\n  state.current.diagnosis_cursor += 1;\n  if (state.current.diagnosis_cursor < state.current.diagnosis_queue.length) {\n    // Every eligible report is diagnosed before anything is decided. Each one\n    // persisted its own artifact as it went, so the individual verdicts survive\n    // whatever the aggregate turns out to be.\n    choose('diagnose');\n  } else {\n    const verdicts = state.current.diagnosis_verdicts;\n    const classifications = verdicts.map((entry) => entry.classification);\n    const known = ['transformation_defect', 'test_defect', 'ambiguous'];\n    if (verdicts.length !== state.current.diagnosis_queue.length\n      || classifications.some((value) => !known.includes(value))) {\n      // Deciding on part of the evidence is worse than not deciding: the run\n      // would attribute a refinement to a diagnosis set it never completed.\n      finish('incomplete', 'INCOMPLETE_SOURCE_DIAGNOSIS_SET');\n    } else {\n      // Conservative on purpose, and never a majority vote. One ambiguous\n      // verdict, or one of each defect, means the evidence points at both\n      // artefacts; repairing either one on that basis would be the mistake\n      // source diagnosis exists to prevent.\n      const hasTransformation = classifications.includes('transformation_defect');\n      const hasTest = classifications.includes('test_defect');\n      const aggregate = classifications.includes('ambiguous') || (hasTransformation && hasTest)\n        ? 'ambiguous'\n        : hasTransformation ? 'transformation_defect' : 'test_defect';\n      state.current.diagnosis_aggregate = aggregate;\n      state.current.timeline.push({\n        action: 'aggregate_diagnosis',\n        aggregate,\n        classifications,\n      });\n      if (aggregate === 'transformation_defect') {\n        requestRefinement('transformations', 'DIAGNOSED_TRANSFORMATION_DEFECT');\n      } else if (aggregate === 'test_defect') {\n        requestRefinement('tests', 'DIAGNOSED_TEST_DEFECT');\n      } else {\n        finish('completed_with_failures', 'AMBIGUOUS_SOURCE_DIAGNOSIS');\n      }\n    }\n  }\n} else if (completed === 'final') {\n  // The ending is recorded before the artifacts are read back, so the run view\n  // that lands in `results` is of a run already carrying its terminal result.\n  choose('read_run_artifacts');\n} else if (completed === 'read_run_artifacts') {\n  state.results.push({\n    run_id: state.current.run_id,\n    run_dir: state.current.run_dir,\n    language: state.current.language,\n    task: state.current.task,\n    custom_task: state.current.custom_task ? state.current.custom_task.name : null,\n    status: state.current.terminal_status || 'incomplete',\n    reason: state.current.terminal_reason || 'NO_TERMINAL_REASON',\n    refinement_iterations: state.current.test_iteration + state.current.transformation_iteration,\n    test_refinement_iterations: state.current.test_iteration,\n    transformation_refinement_iterations: state.current.transformation_iteration,\n    suite_id: state.current.suite_id,\n    timeline: state.current.timeline,\n    artifacts: result,\n  });\n  state.run_index += 1;\n  if (state.run_index >= state.run_specs.length) {\n    choose('complete');\n  } else {\n    const next = state.run_specs[state.run_index];\n    state.current = {\n      ...next,\n      run_id: null,\n      run_dir: null,\n      n8n_run_dir: null,\n      suite_id: null,\n      test_iteration: 0,\n      transformation_iteration: 0,\n      generation_purpose: 'initial',\n      has_transformation: false,\n      timeline: [],\n      terminal_status: null,\n      terminal_reason: null,\n    };\n    state.completed_action = null;\n    state.last_result = null;\n    choose('create_run');\n  }\n} else {\n  throw new Error(`Unknown completed action: ${completed}`);\n}\n\nstate.completed_action = null;\nstate.last_result = null;\nreturn [{ json: state }];"
       },
       "onError": "continueErrorOutput"
     },
@@ -1471,9 +1471,9 @@
                 },
                 "conditions": [
                   {
-                    "id": "route-create_run",
-                    "leftValue": "={{ $json.action }}",
-                    "rightValue": "create_run",
+                    "id": "route-stage-service",
+                    "leftValue": "={{ $json.route }}",
+                    "rightValue": "stage_service",
                     "operator": {
                       "type": "string",
                       "operation": "equals"
@@ -1483,7 +1483,7 @@
                 "combinator": "and"
               },
               "renameOutput": true,
-              "outputKey": "create_run"
+              "outputKey": "stage_service"
             },
             {
               "conditions": {
@@ -1496,11 +1496,11 @@
                 "conditions": [
                   {
                     "id": "route-subworkflow",
-                    "leftValue": "={{ $json.action }}",
-                    "rightValue": "^(generate_tests|generate_transformations|diagnose)$",
+                    "leftValue": "={{ $json.route }}",
+                    "rightValue": "subworkflow",
                     "operator": {
                       "type": "string",
-                      "operation": "regex"
+                      "operation": "equals"
                     }
                   }
                 ],
@@ -1519,80 +1519,8 @@
                 },
                 "conditions": [
                   {
-                    "id": "route-python_stage",
-                    "leftValue": "={{ $json.action }}",
-                    "rightValue": "^(extract|technical|reference|syntax|execution)$",
-                    "operator": {
-                      "type": "string",
-                      "operation": "regex"
-                    }
-                  }
-                ],
-                "combinator": "and"
-              },
-              "renameOutput": true,
-              "outputKey": "python_stage"
-            },
-            {
-              "conditions": {
-                "options": {
-                  "caseSensitive": true,
-                  "leftValue": "",
-                  "typeValidation": "strict",
-                  "version": 2
-                },
-                "conditions": [
-                  {
-                    "id": "route-diagnosis_index",
-                    "leftValue": "={{ $json.action }}",
-                    "rightValue": "read_diagnosis_index",
-                    "operator": {
-                      "type": "string",
-                      "operation": "equals"
-                    }
-                  }
-                ],
-                "combinator": "and"
-              },
-              "renameOutput": true,
-              "outputKey": "diagnosis_index"
-            },
-            {
-              "conditions": {
-                "options": {
-                  "caseSensitive": true,
-                  "leftValue": "",
-                  "typeValidation": "strict",
-                  "version": 2
-                },
-                "conditions": [
-                  {
-                    "id": "route-final",
-                    "leftValue": "={{ $json.action }}",
-                    "rightValue": "final",
-                    "operator": {
-                      "type": "string",
-                      "operation": "equals"
-                    }
-                  }
-                ],
-                "combinator": "and"
-              },
-              "renameOutput": true,
-              "outputKey": "final"
-            },
-            {
-              "conditions": {
-                "options": {
-                  "caseSensitive": true,
-                  "leftValue": "",
-                  "typeValidation": "strict",
-                  "version": 2
-                },
-                "conditions": [
-                  {
                     "id": "route-complete",
-                    "leftValue": "={{ $json.action }}",
+                    "leftValue": "={{ $json.route }}",
                     "rightValue": "complete",
                     "operator": {
                       "type": "string",
@@ -1604,78 +1532,6 @@
               },
               "renameOutput": true,
               "outputKey": "complete"
-            },
-            {
-              "conditions": {
-                "options": {
-                  "caseSensitive": true,
-                  "leftValue": "",
-                  "typeValidation": "strict",
-                  "version": 2
-                },
-                "conditions": [
-                  {
-                    "id": "prepare-refinement-route",
-                    "leftValue": "={{ $json.action }}",
-                    "rightValue": "prepare_refinement",
-                    "operator": {
-                      "type": "string",
-                      "operation": "equals"
-                    }
-                  }
-                ],
-                "combinator": "and"
-              },
-              "renameOutput": true,
-              "outputKey": "prepare_refinement"
-            },
-            {
-              "conditions": {
-                "options": {
-                  "caseSensitive": true,
-                  "leftValue": "",
-                  "typeValidation": "strict",
-                  "version": 2
-                },
-                "conditions": [
-                  {
-                    "id": "record-generation-route",
-                    "leftValue": "={{ $json.action }}",
-                    "rightValue": "record_generation",
-                    "operator": {
-                      "type": "string",
-                      "operation": "equals"
-                    }
-                  }
-                ],
-                "combinator": "and"
-              },
-              "renameOutput": true,
-              "outputKey": "record_generation"
-            },
-            {
-              "conditions": {
-                "options": {
-                  "caseSensitive": true,
-                  "leftValue": "",
-                  "typeValidation": "strict",
-                  "version": 2
-                },
-                "conditions": [
-                  {
-                    "id": "route-create_batch",
-                    "leftValue": "={{ $json.action }}",
-                    "rightValue": "create_batch",
-                    "operator": {
-                      "type": "string",
-                      "operation": "equals"
-                    }
-                  }
-                ],
-                "combinator": "and"
-              },
-              "renameOutput": true,
-              "outputKey": "create_batch"
             }
           ]
         },
@@ -1683,40 +1539,25 @@
       }
     },
     {
-      "parameters": {
-        "method": "POST",
-        "url": "http://stage-service:8129/batches",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ { run_mode: $json.config.run_mode, pipeline_variant: $json.config.pipeline_variant, config: $json.config, n8n: { workflow_id: String($workflow.id), execution_id: String($execution.id) } } }}",
-        "options": {}
-      },
-      "id": "master-create-batch",
-      "name": "Create Batch",
+      "id": "master-call-stage-service",
+      "name": "Call Stage Service",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
         1180,
-        -240
-      ]
-    },
-    {
-      "id": "master-create-run",
-      "name": "Create Immutable Run",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        1180,
-        -120
+        300
       ],
       "parameters": {
-        "method": "POST",
-        "url": "=http://stage-service:8129/batches/{{ $json.batch_id }}/runs",
+        "method": "={{ $json.request.method }}",
+        "url": "={{ $json.request.url }}",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ { language: $json.current.language, task: $json.current.task, transformation_model: $json.current.transformation_model, test_generation_model: $json.current.test_generation_model, transformation_strategy: $json.current.transformation_strategy, test_generation_strategy: $json.current.test_generation_strategy, seed: $json.current.seed, pipeline_variant: $json.current.pipeline_variant, experiment_config: { max_test_refinement_iterations: $json.config.max_test_refinement_iterations, max_transformation_refinement_iterations: $json.config.max_transformation_refinement_iterations, parser_feedback: $json.current.stages.parser_feedback, semantic_feedback: $json.current.stages.semantic_feedback, source_diagnosis: $json.current.stages.source_diagnosis }, custom_task: $json.current.custom_task || null } }}",
+        "jsonBody": "={{ $json.request.body }}",
         "options": {}
-      }
+      },
+      "onError": "continueErrorOutput",
+      "notesInFlow": true,
+      "notes": "Every stage-service call: the State Machine names the method, the URL and the body in `request`, so an action added to the control loop needs no node of its own."
     },
     {
       "id": "master-read-subworkflow",
@@ -1752,8 +1593,8 @@
       "onError": "continueErrorOutput"
     },
     {
-      "id": "master-make-callable",
-      "name": "Make Existing Workflow Callable",
+      "id": "master-adapt-subworkflow",
+      "name": "Adapt Subworkflow For This Run",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
@@ -1761,21 +1602,7 @@
         80
       ],
       "parameters": {
-        "jsCode": "const state = $('State Machine').first().json;\n  const providerNodeTypes = {\n    openai: '@n8n/n8n-nodes-langchain.lmChatOpenAi',\n    anthropic: '@n8n/n8n-nodes-langchain.lmChatAnthropic',\n    google: '@n8n/n8n-nodes-langchain.lmChatGoogleGemini',\n  };\n  const providerNodeNames = {\n    openai: 'OpenAI Chat Model',\n    anthropic: 'Anthropic Chat Model',\n    google: 'Google Gemini Chat Model',\n  };\n  const provider = state.subworkflow_input?.provider || state.subworkflow_input?.diagnosis_provider;\n  const model = state.subworkflow_input?.model;\n  const strategy = state.subworkflow_input?.strategy;\n  const expectedType = providerNodeTypes[provider];\n  if (!expectedType || typeof model !== 'string' || !model.trim()) {\n    throw new Error('Subworkflow execution requires a configured provider and model');\n  }\n\n  // The `*` in a variant selector stands for the model token alone, so the glob\n  // `Prompting_ETL_*_grammar.json` reads `..._few_shots_AND_grammar.json` back as\n  // well. A workflow declares its strategy as the longest strategy name its\n  // identity ends with; matching that exactly keeps the executed prompting\n  // strategy equal to the one recorded in the run configuration.\n  const strategyNames = ['only_prompt', 'few_shot', 'grammar', 'few_shots_AND_grammar'];\n  const declaredStrategy = (identity) => {\n    const name = String(identity || '').replace(/\\.json$/, '');\n    let declared = null;\n    for (const known of strategyNames) {\n      if (!name.endsWith(`_${known}`)) continue;\n      if (!declared || known.length > declared.length) declared = known;\n    }\n    return declared;\n  };\n  const selectorIsGlob = String(state.subworkflow_path || '').includes('*');\n  if (selectorIsGlob && !strategyNames.includes(strategy)) {\n    throw new Error(`A variant selector requires a supported strategy: ${state.subworkflow_path}`);\n  }\n\n  // Zero files read means the selector matched nothing at all, which is a\n  // different failure from \"matched, but not for this provider\" and almost always\n  // means the workflow root is not mounted into this n8n container.\n  const readAnyFile = $input.all().some(\n    (item) => typeof item.json.workflow_text === 'string' && item.json.workflow_text.trim(),\n  );\n  if (!readAnyFile) {\n    throw new Error(`No workflow file matched ${state.subworkflow_path}. Check that the workflow root is mounted into this n8n container.`);\n  }\n\n  const candidates = [];\n  for (const item of $input.all()) {\n    const raw = item.json.workflow_text;\n    if (typeof raw !== 'string' || !raw.trim()) continue;\n    let candidate;\n    try {\n      candidate = JSON.parse(raw);\n    } catch (error) {\n      throw new Error(`Invalid subworkflow JSON at ${state.subworkflow_path}: ${error.message}`);\n    }\n    if (\n      !Array.isArray(candidate.nodes)\n      || !candidate.connections\n      || !candidate.nodes.some((node) => node.type === expectedType)\n    ) continue;\n    const identity = item.binary?.data?.fileName || item.json.fileName || candidate.name;\n    if (selectorIsGlob && declaredStrategy(identity) !== strategy) continue;\n    candidates.push({ identity: String(identity || ''), workflow: candidate });\n  }\n  if (candidates.length === 0) {\n    throw new Error(`No ${provider} subworkflow matched ${state.subworkflow_path}`);\n  }\n  if (candidates.length > 1) {\n    const matched = candidates.map((entry) => entry.identity).sort().join(', ');\n    throw new Error(`Ambiguous ${provider} subworkflow for ${state.subworkflow_path}: ${matched}`);\n  }\n  const workflow = candidates[0].workflow;\n\n  const modelNode = workflow.nodes.find((node) => node.type === expectedType);\n  const currentModelSetting = provider === 'google'\n    ? modelNode.parameters.modelName\n    : modelNode.parameters.model;\n  const originalModel = currentModelSetting && typeof currentModelSetting === 'object'\n    ? currentModelSetting.value\n    : currentModelSetting;\n  if (provider === 'google') {\n    modelNode.parameters.modelName = currentModelSetting && typeof currentModelSetting === 'object'\n      ? { ...currentModelSetting, value: model, cachedResultName: model }\n      : model;\n  } else {\n    modelNode.parameters.model = currentModelSetting && typeof currentModelSetting === 'object'\n      ? { ...currentModelSetting, value: model, cachedResultName: model }\n      : model;\n  }\n\n  const normalizeNamespace = (value) => String(value)\n    .replace(/^models\\//, '')\n    .replace(/[^A-Za-z0-9_-]+/g, '-')\n    .replace(/^-+|-+$/g, '');\n  // `source-diagnosis` names the stage that produced the artifact, not a model.\n  // Rewriting it to the selected model would file the diagnosis stage's output\n  // under a model directory that never produced it.\n  const reservedArtifactNamespaces = new Set(['source-diagnosis']);\n  const artifactPathPattern = /\\/(responses|prompts)\\/([^/]+)\\//g;\n  const originalArtifactMatch = [...JSON.stringify(workflow).matchAll(artifactPathPattern)]\n    .find((match) => !reservedArtifactNamespaces.has(match[2]));\n  // The artifact namespace names the model family, not the exact model: every\n  // gpt-5 variant files under `gpt-5`, every claude-sonnet-4 variant under\n  // `claude-sonnet-4`. The variant workflow was selected by provider and already\n  // declares its family, so the family is read from the workflow rather than\n  // from a model list kept here. The exact model still reaches the model node\n  // above; Python receives the family so it selects the same artifact directory.\n  const matrixModelsNode = workflow.nodes.find((node) => node.name === 'Define LLM models to use');\n  let declaredFamily = originalArtifactMatch && !originalArtifactMatch[2].includes('{{')\n    ? originalArtifactMatch[2]\n    : null;\n  if (!declaredFamily && matrixModelsNode) {\n    // The Reactions matrix builds its paths from `llmName`, so its families are\n    // declared in the matrix node instead of in the path.\n    try {\n      const declared = JSON.parse(matrixModelsNode.parameters.jsonOutput);\n      const entry = (declared.llms || []).find((llm) => llm.node === providerNodeNames[provider]);\n      if (entry && entry.name) declaredFamily = String(entry.name);\n    } catch (error) {\n      declaredFamily = null;\n    }\n  }\n  const artifactModel = normalizeNamespace(declaredFamily || model);\n  const replaceArtifactPaths = (value) => {\n    if (typeof value === 'string') {\n      return value.replace(\n        /\\/(responses|prompts)\\/([^/]+)\\//g,\n        (match, kind, namespace) => (\n          reservedArtifactNamespaces.has(namespace) ? match : `/${kind}/${artifactModel}/`\n        ),\n      );\n    }\n    if (Array.isArray(value)) return value.map(replaceArtifactPaths);\n    if (value && typeof value === 'object') {\n      return Object.fromEntries(\n        Object.entries(value).map(([key, nested]) => [key, replaceArtifactPaths(nested)]),\n      );\n    }\n    return value;\n  };\n  for (const node of workflow.nodes) {\n    if (node !== modelNode) node.parameters = replaceArtifactPaths(node.parameters);\n  }\n  if (originalArtifactMatch && typeof workflow.name === 'string') {\n    workflow.name = workflow.name.replace(originalArtifactMatch[2], artifactModel);\n  }\n\n  const diagnosisProvenance = workflow.nodes.find((node) => node.name === 'Attach Diagnosis Provenance');\n  if (\n    diagnosisProvenance\n    && typeof diagnosisProvenance.parameters?.jsCode === 'string'\n    && typeof originalModel === 'string'\n  ) {\n    diagnosisProvenance.parameters.jsCode = diagnosisProvenance.parameters.jsCode.replaceAll(\n      originalModel,\n      model,\n    );\n  }\n\n  const matrixModels = workflow.nodes.find((node) => node.name === 'Define LLM models to use');\n  const matrixStrategies = workflow.nodes.find((node) => node.name === 'Define Strategies');\n  if (matrixModels && matrixStrategies) {\n    if (typeof strategy !== 'string') {\n      throw new Error('The Reactions generation matrix requires a selected strategy');\n    }\n    const strategyFlags = {\n      only_prompt: { Few_shot: false, Grammar: false, Helper_methods: false },\n      grammar: { Few_shot: false, Grammar: true, Helper_methods: false },\n      few_shot: { Few_shot: true, Grammar: false, Helper_methods: false },\n      few_shots_AND_grammar: { Few_shot: true, Grammar: true, Helper_methods: false },\n    }[strategy];\n    if (!strategyFlags) throw new Error(`Unsupported Reactions strategy: ${strategy}`);\n    matrixModels.parameters.jsonOutput = JSON.stringify({\n      llms: [{\n        name: artifactModel,\n        node: providerNodeNames[provider],\n      }],\n    }, null, 2);\n    matrixStrategies.parameters.jsonOutput = JSON.stringify({\n      strategies: [{\n        name: strategy,\n        ...strategyFlags,\n      }],\n    }, null, 2);\n    const selectedChain = workflow.connections[modelNode.name]\n      ?.ai_languageModel\n      ?.flat()\n      ?.find((connection) => connection.type === 'ai_languageModel')\n      ?.node;\n    const providerIf = workflow.nodes.find((node) => {\n      if (node.type !== 'n8n-nodes-base.if' || !selectedChain) return false;\n      const outputs = workflow.connections[node.name]?.main || [];\n      return outputs.some((connections) => connections.some(\n        (connection) => connection.node === selectedChain,\n      ));\n    });\n    if (!providerIf) throw new Error(`Reactions workflow has no routing branch for ${provider}`);\n    const llmCondition = providerIf.parameters.conditions.conditions.find(\n      (condition) => condition.leftValue?.includes('llmName'),\n    );\n    if (!llmCondition) throw new Error(`Reactions provider branch has no llmName condition: ${provider}`);\n    llmCondition.rightValue = artifactModel;\n  }\n\n  const callableTrigger = workflow.nodes.find(\n    (node) => node.type === 'n8n-nodes-base.executeWorkflowTrigger',\n  );\n  if (!callableTrigger) {\n    const manualTrigger = workflow.nodes.find(\n      (node) => node.type === 'n8n-nodes-base.manualTrigger',\n    );\n    if (!manualTrigger) {\n      throw new Error(`Subworkflow has no supported start node: ${state.subworkflow_path}`);\n    }\n    manualTrigger.type = 'n8n-nodes-base.executeWorkflowTrigger';\n    manualTrigger.typeVersion = 1.1;\n    manualTrigger.parameters = { inputSource: 'passthrough' };\n  }\n  workflow.active = false;\n\n  return [{\n    json: {\n      ...state,\n      ...(state.subworkflow_input || {}),\n      workflow_json: workflow,\n    },\n  }];"
-      },
-      "onError": "continueErrorOutput"
-    },
-    {
-      "id": "master-adapt-transformation-workflow",
-      "name": "Adapt Transformation Workflow Compatibility",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        1840,
-        80
-      ],
-      "parameters": {
-        "jsCode": "const input = $input.first();\nconst state = input.json;\nconst generationActions = new Set(['generate_tests', 'generate_transformations']);\nif (!generationActions.has(state.action)) return [input];\n\nconst workflow = state.workflow_json;\nconst language = state.current?.language;\nconst task = state.current?.task;\nconst runId = state.current?.run_id;\n// Where this run is mounted for n8n, as Python reported it at run creation.\n// The master spells no artifact path itself.\nconst runRoot = state.current?.n8n_run_dir;\nconst iteration = state.subworkflow_input?.refinement_iteration\n  ?? (state.action === 'generate_tests'\n    ? state.current?.test_iteration\n    : state.current?.transformation_iteration);\nif (!workflow || !Array.isArray(workflow.nodes)) {\n  throw new Error('Generation compatibility requires workflow_json');\n}\nfor (const [label, value] of [['language', language], ['task', task], ['run id', runId]]) {\n  if (typeof value !== 'string' || !/^[A-Za-z0-9._-]+$/.test(value)) {\n    throw new Error(`Unsafe generation ${label}: ${value}`);\n  }\n}\nif (!Number.isInteger(iteration) || iteration < 0) {\n  throw new Error(`Unsafe refinement iteration: ${iteration}`);\n}\nif (typeof runRoot !== 'string' || !runRoot.startsWith('/data/') || runRoot.includes('..')) {\n  throw new Error(`Unsafe run directory: ${runRoot}`);\n}\n\n// The external generation exports remain untouched on disk. This\n// invocation-local copy reads only the task selected by the master instead of\n// iterating over the language-wide prompt directory.\nconst promptReader = workflow.nodes.find((node) => node.name === 'Read prompt files');\nif (!promptReader || promptReader.type !== 'n8n-nodes-base.readWriteFile') {\n  throw new Error('Generation workflow has no supported Read prompt files node');\n}\nconst refinementPrompt = state.subworkflow_input?.prompt_path;\nconst saveFileName = workflow.nodes.find((node) => ['Save file name', 'Save reaction name'].includes(node.name));\nif (!saveFileName || saveFileName.type !== 'n8n-nodes-base.set') {\n  throw new Error('Generation workflow has no supported task-name Set node');\n}\nconst baseNameAssignment = saveFileName.parameters.assignments?.assignments?.find((assignment) => assignment.name === 'baseName');\nif (!baseNameAssignment) throw new Error('Generation workflow has no baseName assignment');\nbaseNameAssignment.value = `=${task}`;\n\nif (iteration > 0) {\n  const artifactType = state.action === 'generate_tests' ? 'semantic-test' : 'transformation';\n  const expected = `${runRoot}/refinements/${artifactType}/iteration-${String(iteration).padStart(3, '0')}/prompt.md`;\n  if (refinementPrompt !== expected || refinementPrompt.includes('..')) {\n    throw new Error(`Unsafe or stale refinement prompt path: ${refinementPrompt}`);\n  }\n  promptReader.parameters.fileSelector = `=${refinementPrompt}`;\n  const chainName = state.action === 'generate_tests' ? '(Re-)Generate test suite' : '(Re-)Generate code';\n  // A language workflow holds one chain under exactly this name. The Reactions\n  // matrix keeps one per model instead ((Re-)Generate code1/code3/Code2), and a\n  // refinement has to reach whichever of them the run's model routes to, so the\n  // name is matched as a prefix rather than in full.\n  const prefix = chainName.toLowerCase();\n  const llmChains = workflow.nodes.filter((node) => node.type === '@n8n/n8n-nodes-langchain.chainLlm' && node.name.toLowerCase().startsWith(prefix));\n  if (!llmChains.length) {\n    throw new Error(`Generation workflow has no supported LLM chain: ${chainName}`);\n  }\n  for (const llmChain of llmChains) llmChain.parameters.text = '={{ $json.prompt }}';\n  if (state.action === 'generate_tests') {\n    const assembler = workflow.nodes.find((node) => node.name === 'Assemble prompt');\n    const assembledPrompt = assembler?.parameters?.assignments?.assignments?.find((assignment) => assignment.name === 'assembled_prompt');\n    if (!assembledPrompt) throw new Error('Semantic-test workflow has no assembled_prompt assignment');\n    assembledPrompt.value = '={{ $json.prompt }}';\n  }\n} else if (state.current?.custom_task) {\n  // A custom task reads the prompt Python kept for this run at creation, not\n  // the frozen prompt of the benchmark task it borrows its metamodels from.\n  promptReader.parameters.fileSelector = `=${runRoot}/task-prompt.md`;\n} else {\n  promptReader.parameters.fileSelector = `=/data/task_prompts/${language}/${task}.txt`;\n}\n\nconst operation = state.action === 'generate_tests'\n  ? 'semantic-test-generation'\n  : 'transformation-generation';\nconst extensions = { etl: 'etl', atl: 'atl', qvto: 'qvto', reactions: 'reactions' };\nconst extension = state.action === 'generate_tests' ? 'md' : extensions[language];\nif (!extension) throw new Error(`No generated transformation extension for ${language}`);\nconst iterationName = String(iteration).padStart(3, '0');\nconst responseDirectory = `${runRoot}/responses/${operation}/iteration-${iterationName}`;\nconst responseWriter = workflow.nodes.find((node) => node.name === 'Write response to disk');\nif (!responseWriter || responseWriter.type !== 'n8n-nodes-base.readWriteFile') {\n  throw new Error('Generation workflow has no supported response writer');\n}\nresponseWriter.parameters.fileName = `=${responseDirectory}/${task}.${extension}`;\n\n// Semantic-test workflows already archive the assembled request. Keep it next\n// to the run-scoped response so the response is attributable after a later run\n// overwrites the shared convenience tree.\nif (state.action === 'generate_tests') {\n  const promptWriter = workflow.nodes.find((node) => node.name === 'Write prompt to disk');\n  if (promptWriter && promptWriter.type === 'n8n-nodes-base.readWriteFile') {\n    promptWriter.parameters.fileName = `=${responseDirectory}/prompt.md`;\n  }\n}\n\nif (state.action === 'generate_transformations') {\n  // Legacy transformation workflows were authored before Set v3.4 stripped\n  // binary data by default. Their next Extract From File node still consumes\n  // binary.data, so preserve it only in this invocation-local compatibility copy.\n  const saveName = saveFileName;\n  saveName.parameters.options = { ...(saveName.parameters.options || {}) };\n  if (Number(saveName.typeVersion || 0) >= 3.4) {\n    saveName.parameters.includeOtherFields = true;\n    saveName.parameters.options.stripBinary = false;\n  } else {\n    saveName.parameters.options.includeBinary = true;\n  }\n}\n\nreturn [input];"
+        "jsCode": "const state = $('State Machine').first().json;\n  const providerNodeTypes = {\n    openai: '@n8n/n8n-nodes-langchain.lmChatOpenAi',\n    anthropic: '@n8n/n8n-nodes-langchain.lmChatAnthropic',\n    google: '@n8n/n8n-nodes-langchain.lmChatGoogleGemini',\n  };\n  const providerNodeNames = {\n    openai: 'OpenAI Chat Model',\n    anthropic: 'Anthropic Chat Model',\n    google: 'Google Gemini Chat Model',\n  };\n  const provider = state.subworkflow_input?.provider || state.subworkflow_input?.diagnosis_provider;\n  const model = state.subworkflow_input?.model;\n  const strategy = state.subworkflow_input?.strategy;\n  const expectedType = providerNodeTypes[provider];\n  if (!expectedType || typeof model !== 'string' || !model.trim()) {\n    throw new Error('Subworkflow execution requires a configured provider and model');\n  }\n\n  // The `*` in a variant selector stands for the model token alone, so the glob\n  // `Prompting_ETL_*_grammar.json` reads `..._few_shots_AND_grammar.json` back as\n  // well. A workflow declares its strategy as the longest strategy name its\n  // identity ends with; matching that exactly keeps the executed prompting\n  // strategy equal to the one recorded in the run configuration.\n  const strategyNames = ['only_prompt', 'few_shot', 'grammar', 'few_shots_AND_grammar'];\n  const declaredStrategy = (identity) => {\n    const name = String(identity || '').replace(/\\.json$/, '');\n    let declared = null;\n    for (const known of strategyNames) {\n      if (!name.endsWith(`_${known}`)) continue;\n      if (!declared || known.length > declared.length) declared = known;\n    }\n    return declared;\n  };\n  const selectorIsGlob = String(state.subworkflow_path || '').includes('*');\n  if (selectorIsGlob && !strategyNames.includes(strategy)) {\n    throw new Error(`A variant selector requires a supported strategy: ${state.subworkflow_path}`);\n  }\n\n  // Zero files read means the selector matched nothing at all, which is a\n  // different failure from \"matched, but not for this provider\" and almost always\n  // means the workflow root is not mounted into this n8n container.\n  const readAnyFile = $input.all().some(\n    (item) => typeof item.json.workflow_text === 'string' && item.json.workflow_text.trim(),\n  );\n  if (!readAnyFile) {\n    throw new Error(`No workflow file matched ${state.subworkflow_path}. Check that the workflow root is mounted into this n8n container.`);\n  }\n\n  const candidates = [];\n  for (const item of $input.all()) {\n    const raw = item.json.workflow_text;\n    if (typeof raw !== 'string' || !raw.trim()) continue;\n    let candidate;\n    try {\n      candidate = JSON.parse(raw);\n    } catch (error) {\n      throw new Error(`Invalid subworkflow JSON at ${state.subworkflow_path}: ${error.message}`);\n    }\n    if (\n      !Array.isArray(candidate.nodes)\n      || !candidate.connections\n      || !candidate.nodes.some((node) => node.type === expectedType)\n    ) continue;\n    const identity = item.binary?.data?.fileName || item.json.fileName || candidate.name;\n    if (selectorIsGlob && declaredStrategy(identity) !== strategy) continue;\n    candidates.push({ identity: String(identity || ''), workflow: candidate });\n  }\n  if (candidates.length === 0) {\n    throw new Error(`No ${provider} subworkflow matched ${state.subworkflow_path}`);\n  }\n  if (candidates.length > 1) {\n    const matched = candidates.map((entry) => entry.identity).sort().join(', ');\n    throw new Error(`Ambiguous ${provider} subworkflow for ${state.subworkflow_path}: ${matched}`);\n  }\n  const workflow = candidates[0].workflow;\n\n  const modelNode = workflow.nodes.find((node) => node.type === expectedType);\n  const currentModelSetting = provider === 'google'\n    ? modelNode.parameters.modelName\n    : modelNode.parameters.model;\n  const originalModel = currentModelSetting && typeof currentModelSetting === 'object'\n    ? currentModelSetting.value\n    : currentModelSetting;\n  if (provider === 'google') {\n    modelNode.parameters.modelName = currentModelSetting && typeof currentModelSetting === 'object'\n      ? { ...currentModelSetting, value: model, cachedResultName: model }\n      : model;\n  } else {\n    modelNode.parameters.model = currentModelSetting && typeof currentModelSetting === 'object'\n      ? { ...currentModelSetting, value: model, cachedResultName: model }\n      : model;\n  }\n\n  const normalizeNamespace = (value) => String(value)\n    .replace(/^models\\//, '')\n    .replace(/[^A-Za-z0-9_-]+/g, '-')\n    .replace(/^-+|-+$/g, '');\n  // `source-diagnosis` names the stage that produced the artifact, not a model.\n  // Rewriting it to the selected model would file the diagnosis stage's output\n  // under a model directory that never produced it.\n  const reservedArtifactNamespaces = new Set(['source-diagnosis']);\n  const artifactPathPattern = /\\/(responses|prompts)\\/([^/]+)\\//g;\n  const originalArtifactMatch = [...JSON.stringify(workflow).matchAll(artifactPathPattern)]\n    .find((match) => !reservedArtifactNamespaces.has(match[2]));\n  // The artifact namespace names the model family, not the exact model: every\n  // gpt-5 variant files under `gpt-5`, every claude-sonnet-4 variant under\n  // `claude-sonnet-4`. The variant workflow was selected by provider and already\n  // declares its family, so the family is read from the workflow rather than\n  // from a model list kept here. The exact model still reaches the model node\n  // above; Python receives the family so it selects the same artifact directory.\n  const matrixModelsNode = workflow.nodes.find((node) => node.name === 'Define LLM models to use');\n  let declaredFamily = originalArtifactMatch && !originalArtifactMatch[2].includes('{{')\n    ? originalArtifactMatch[2]\n    : null;\n  if (!declaredFamily && matrixModelsNode) {\n    // The Reactions matrix builds its paths from `llmName`, so its families are\n    // declared in the matrix node instead of in the path.\n    try {\n      const declared = JSON.parse(matrixModelsNode.parameters.jsonOutput);\n      const entry = (declared.llms || []).find((llm) => llm.node === providerNodeNames[provider]);\n      if (entry && entry.name) declaredFamily = String(entry.name);\n    } catch (error) {\n      declaredFamily = null;\n    }\n  }\n  const artifactModel = normalizeNamespace(declaredFamily || model);\n  const replaceArtifactPaths = (value) => {\n    if (typeof value === 'string') {\n      return value.replace(\n        /\\/(responses|prompts)\\/([^/]+)\\//g,\n        (match, kind, namespace) => (\n          reservedArtifactNamespaces.has(namespace) ? match : `/${kind}/${artifactModel}/`\n        ),\n      );\n    }\n    if (Array.isArray(value)) return value.map(replaceArtifactPaths);\n    if (value && typeof value === 'object') {\n      return Object.fromEntries(\n        Object.entries(value).map(([key, nested]) => [key, replaceArtifactPaths(nested)]),\n      );\n    }\n    return value;\n  };\n  for (const node of workflow.nodes) {\n    if (node !== modelNode) node.parameters = replaceArtifactPaths(node.parameters);\n  }\n  if (originalArtifactMatch && typeof workflow.name === 'string') {\n    workflow.name = workflow.name.replace(originalArtifactMatch[2], artifactModel);\n  }\n\n  const diagnosisProvenance = workflow.nodes.find((node) => node.name === 'Attach Diagnosis Provenance');\n  if (\n    diagnosisProvenance\n    && typeof diagnosisProvenance.parameters?.jsCode === 'string'\n    && typeof originalModel === 'string'\n  ) {\n    diagnosisProvenance.parameters.jsCode = diagnosisProvenance.parameters.jsCode.replaceAll(\n      originalModel,\n      model,\n    );\n  }\n\n  const matrixModels = workflow.nodes.find((node) => node.name === 'Define LLM models to use');\n  const matrixStrategies = workflow.nodes.find((node) => node.name === 'Define Strategies');\n  if (matrixModels && matrixStrategies) {\n    if (typeof strategy !== 'string') {\n      throw new Error('The Reactions generation matrix requires a selected strategy');\n    }\n    const strategyFlags = {\n      only_prompt: { Few_shot: false, Grammar: false, Helper_methods: false },\n      grammar: { Few_shot: false, Grammar: true, Helper_methods: false },\n      few_shot: { Few_shot: true, Grammar: false, Helper_methods: false },\n      few_shots_AND_grammar: { Few_shot: true, Grammar: true, Helper_methods: false },\n    }[strategy];\n    if (!strategyFlags) throw new Error(`Unsupported Reactions strategy: ${strategy}`);\n    matrixModels.parameters.jsonOutput = JSON.stringify({\n      llms: [{\n        name: artifactModel,\n        node: providerNodeNames[provider],\n      }],\n    }, null, 2);\n    matrixStrategies.parameters.jsonOutput = JSON.stringify({\n      strategies: [{\n        name: strategy,\n        ...strategyFlags,\n      }],\n    }, null, 2);\n    const selectedChain = workflow.connections[modelNode.name]\n      ?.ai_languageModel\n      ?.flat()\n      ?.find((connection) => connection.type === 'ai_languageModel')\n      ?.node;\n    const providerIf = workflow.nodes.find((node) => {\n      if (node.type !== 'n8n-nodes-base.if' || !selectedChain) return false;\n      const outputs = workflow.connections[node.name]?.main || [];\n      return outputs.some((connections) => connections.some(\n        (connection) => connection.node === selectedChain,\n      ));\n    });\n    if (!providerIf) throw new Error(`Reactions workflow has no routing branch for ${provider}`);\n    const llmCondition = providerIf.parameters.conditions.conditions.find(\n      (condition) => condition.leftValue?.includes('llmName'),\n    );\n    if (!llmCondition) throw new Error(`Reactions provider branch has no llmName condition: ${provider}`);\n    llmCondition.rightValue = artifactModel;\n  }\n\n  const callableTrigger = workflow.nodes.find(\n    (node) => node.type === 'n8n-nodes-base.executeWorkflowTrigger',\n  );\n  if (!callableTrigger) {\n    const manualTrigger = workflow.nodes.find(\n      (node) => node.type === 'n8n-nodes-base.manualTrigger',\n    );\n    if (!manualTrigger) {\n      throw new Error(`Subworkflow has no supported start node: ${state.subworkflow_path}`);\n    }\n    manualTrigger.type = 'n8n-nodes-base.executeWorkflowTrigger';\n    manualTrigger.typeVersion = 1.1;\n    manualTrigger.parameters = { inputSource: 'passthrough' };\n  }\n  workflow.active = false;\n\n  const callable = {\n    json: {\n      ...state,\n      ...(state.subworkflow_input || {}),\n      workflow_json: workflow,\n    },\n  };\n\n  // A generation export still addresses the language-wide prompt directory and\n  // a shared response tree; below, the invocation-local copy is narrowed to\n  // this run's task and iteration. The diagnosis subworkflow needs none of it.\n  const generationActions = new Set(['generate_tests', 'generate_transformations']);\n  if (!generationActions.has(state.action)) return [callable];\n\n  const language = state.current?.language;\n  const task = state.current?.task;\n  const runId = state.current?.run_id;\n  // Where this run is mounted for n8n, as Python reported it at run creation.\n  // The master spells no artifact path itself.\n  const runRoot = state.current?.n8n_run_dir;\n  const iteration = state.subworkflow_input?.refinement_iteration\n    ?? (state.action === 'generate_tests'\n      ? state.current?.test_iteration\n      : state.current?.transformation_iteration);\n  for (const [label, value] of [['language', language], ['task', task], ['run id', runId]]) {\n    if (typeof value !== 'string' || !/^[A-Za-z0-9._-]+$/.test(value)) {\n      throw new Error(`Unsafe generation ${label}: ${value}`);\n    }\n  }\n  if (!Number.isInteger(iteration) || iteration < 0) {\n    throw new Error(`Unsafe refinement iteration: ${iteration}`);\n  }\n  if (typeof runRoot !== 'string' || !runRoot.startsWith('/data/') || runRoot.includes('..')) {\n    throw new Error(`Unsafe run directory: ${runRoot}`);\n  }\n\n  // The external generation exports remain untouched on disk. This\n  // invocation-local copy reads only the task selected by the master instead of\n  // iterating over the language-wide prompt directory.\n  const promptReader = workflow.nodes.find((node) => node.name === 'Read prompt files');\n  if (!promptReader || promptReader.type !== 'n8n-nodes-base.readWriteFile') {\n    throw new Error('Generation workflow has no supported Read prompt files node');\n  }\n  const refinementPrompt = state.subworkflow_input?.prompt_path;\n  const saveFileName = workflow.nodes.find((node) => ['Save file name', 'Save reaction name'].includes(node.name));\n  if (!saveFileName || saveFileName.type !== 'n8n-nodes-base.set') {\n    throw new Error('Generation workflow has no supported task-name Set node');\n  }\n  const baseNameAssignment = saveFileName.parameters.assignments?.assignments?.find((assignment) => assignment.name === 'baseName');\n  if (!baseNameAssignment) throw new Error('Generation workflow has no baseName assignment');\n  baseNameAssignment.value = `=${task}`;\n\n  if (iteration > 0) {\n    const artifactType = state.action === 'generate_tests' ? 'semantic-test' : 'transformation';\n    const expected = `${runRoot}/refinements/${artifactType}/iteration-${String(iteration).padStart(3, '0')}/prompt.md`;\n    if (refinementPrompt !== expected || refinementPrompt.includes('..')) {\n      throw new Error(`Unsafe or stale refinement prompt path: ${refinementPrompt}`);\n    }\n    promptReader.parameters.fileSelector = `=${refinementPrompt}`;\n    const chainName = state.action === 'generate_tests' ? '(Re-)Generate test suite' : '(Re-)Generate code';\n    // A language workflow holds one chain under exactly this name. The Reactions\n    // matrix keeps one per model instead ((Re-)Generate code1/code3/Code2), and a\n    // refinement has to reach whichever of them the run's model routes to, so the\n    // name is matched as a prefix rather than in full.\n    const prefix = chainName.toLowerCase();\n    const llmChains = workflow.nodes.filter((node) => node.type === '@n8n/n8n-nodes-langchain.chainLlm' && node.name.toLowerCase().startsWith(prefix));\n    if (!llmChains.length) {\n      throw new Error(`Generation workflow has no supported LLM chain: ${chainName}`);\n    }\n    for (const llmChain of llmChains) llmChain.parameters.text = '={{ $json.prompt }}';\n    if (state.action === 'generate_tests') {\n      const assembler = workflow.nodes.find((node) => node.name === 'Assemble prompt');\n      const assembledPrompt = assembler?.parameters?.assignments?.assignments?.find((assignment) => assignment.name === 'assembled_prompt');\n      if (!assembledPrompt) throw new Error('Semantic-test workflow has no assembled_prompt assignment');\n      assembledPrompt.value = '={{ $json.prompt }}';\n    }\n  } else if (state.current?.custom_task) {\n    // A custom task reads the prompt Python kept for this run at creation, not\n    // the frozen prompt of the benchmark task it borrows its metamodels from.\n    promptReader.parameters.fileSelector = `=${runRoot}/task-prompt.md`;\n  } else {\n    promptReader.parameters.fileSelector = `=/data/task_prompts/${language}/${task}.txt`;\n  }\n\n  const operation = state.action === 'generate_tests'\n    ? 'semantic-test-generation'\n    : 'transformation-generation';\n  const extensions = { etl: 'etl', atl: 'atl', qvto: 'qvto', reactions: 'reactions' };\n  const extension = state.action === 'generate_tests' ? 'md' : extensions[language];\n  if (!extension) throw new Error(`No generated transformation extension for ${language}`);\n  const iterationName = String(iteration).padStart(3, '0');\n  const responseDirectory = `${runRoot}/responses/${operation}/iteration-${iterationName}`;\n  const responseWriter = workflow.nodes.find((node) => node.name === 'Write response to disk');\n  if (!responseWriter || responseWriter.type !== 'n8n-nodes-base.readWriteFile') {\n    throw new Error('Generation workflow has no supported response writer');\n  }\n  responseWriter.parameters.fileName = `=${responseDirectory}/${task}.${extension}`;\n\n  // Semantic-test workflows already archive the assembled request. Keep it next\n  // to the run-scoped response so the response is attributable after a later run\n  // overwrites the shared convenience tree.\n  if (state.action === 'generate_tests') {\n    const promptWriter = workflow.nodes.find((node) => node.name === 'Write prompt to disk');\n    if (promptWriter && promptWriter.type === 'n8n-nodes-base.readWriteFile') {\n      promptWriter.parameters.fileName = `=${responseDirectory}/prompt.md`;\n    }\n  }\n\n  if (state.action === 'generate_transformations') {\n    // Legacy transformation workflows were authored before Set v3.4 stripped\n    // binary data by default. Their next Extract From File node still consumes\n    // binary.data, so preserve it only in this invocation-local compatibility copy.\n    const saveName = saveFileName;\n    saveName.parameters.options = { ...(saveName.parameters.options || {}) };\n    if (Number(saveName.typeVersion || 0) >= 3.4) {\n      saveName.parameters.includeOtherFields = true;\n      saveName.parameters.options.stripBinary = false;\n    } else {\n      saveName.parameters.options.includeBinary = true;\n    }\n  }\n\n  return [callable];"
       },
       "onError": "continueErrorOutput"
     },
@@ -1785,7 +1612,7 @@
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.2,
       "position": [
-        2060,
+        1840,
         80
       ],
       "parameters": {
@@ -1799,64 +1626,12 @@
       "onError": "continueErrorOutput"
     },
     {
-      "id": "master-python-stage",
-      "name": "Run Existing Python Stage",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        1180,
-        300
-      ],
-      "parameters": {
-        "method": "POST",
-        "url": "=http://stage-service:8129/batches/{{ $json.batch_id }}/runs/{{ $json.current.run_id }}/stages/{{ $json.stage_id }}",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ { suite_id: $json.current.suite_id, refinement_iteration: $json.stage_iteration, verbose: false } }}",
-        "options": {}
-      },
-      "onError": "continueErrorOutput"
-    },
-    {
-      "id": "master-terminal-result",
-      "name": "Record Terminal Result",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        960,
-        500
-      ],
-      "parameters": {
-        "method": "POST",
-        "url": "=http://stage-service:8129/batches/{{ $json.batch_id }}/runs/{{ $json.current.run_id }}/result",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ { status: $json.current.terminal_status || 'incomplete', terminal_state: $json.current.terminal_reason || 'NO_TERMINAL_REASON', run_mode: $json.config.run_mode, refinement_iterations_used: $json.current.test_iteration + $json.current.transformation_iteration, refinement_iterations_allowed: ($json.config.run_mode === 'transformations_only' ? 0 : $json.config.max_test_refinement_iterations) + ($json.config.run_mode === 'tests_only' ? 0 : $json.config.max_transformation_refinement_iterations), suite_id: $json.current.suite_id, test_iteration: $json.current.test_iteration, transformation_iteration: $json.current.transformation_iteration } }}",
-        "options": {}
-      }
-    },
-    {
-      "id": "master-final-artifacts",
-      "name": "Read Final Run Artifacts",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        1180,
-        500
-      ],
-      "parameters": {
-        "method": "GET",
-        "url": "=http://stage-service:8129/batches/{{ $('State Machine').first().json.batch_id }}/runs/{{ $('State Machine').first().json.current.run_id }}",
-        "options": {}
-      }
-    },
-    {
       "id": "master-capture-result",
       "name": "Capture Action Result",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2080,
+        1840,
         300
       ],
       "parameters": {
@@ -2157,59 +1932,6 @@
     },
     {
       "parameters": {
-        "method": "POST",
-        "url": "=http://stage-service:8129/batches/{{ $json.batch_id }}/runs/{{ $json.current.run_id }}/refinements",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ $json.refinement_request }}",
-        "options": {}
-      },
-      "id": "prepare-refinement-input",
-      "name": "Prepare Refinement Input",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        1500,
-        200
-      ],
-      "onError": "continueErrorOutput"
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "=http://stage-service:8129/batches/{{ $json.batch_id }}/runs/{{ $json.current.run_id }}/generations",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ $json.generation_record }}",
-        "options": {}
-      },
-      "id": "record-generation-attempt",
-      "name": "Record Generation Attempt",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        1500,
-        300
-      ],
-      "onError": "continueErrorOutput"
-    },
-    {
-      "parameters": {
-        "url": "=http://stage-service:8129/batches/{{ $json.batch_id }}/runs/{{ $json.current.run_id }}/diagnosis/execution/{{ $json.diagnosis_execution_attempt }}",
-        "options": {}
-      },
-      "id": "read-diagnosis-queue",
-      "name": "Read Diagnosis Queue",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        1500,
-        400
-      ],
-      "onError": "continueErrorOutput"
-    },
-    {
-      "parameters": {
         "jsCode": "const incoming = $input.first().json || {};\nlet source = incoming;\ntry {\n  const machine = $('State Machine').first().json;\n  if (!source?.current?.run_id && machine?.current?.run_id) source = machine;\n} catch (error) {\n  // The failing State Machine has no successful output; its input still carries the run.\n}\nconst state = JSON.parse(JSON.stringify(source));\nif (!state.current?.run_id) {\n  throw new Error('Cannot terminalize orchestration failure before a run was created');\n}\nconst failedComponent = String(state.action || incoming.error?.node?.name || 'unknown-orchestration-component');\nconst lastStage = [...(state.current.timeline || [])].reverse().find((entry) => entry.stage)?.stage || null;\nstate.current.terminal_status = 'failed';\nstate.current.terminal_reason = `ORCHESTRATION_ERROR:${failedComponent}`;\nstate.orchestration_terminal_request = {\n  status: 'failed',\n  terminal_state: state.current.terminal_reason,\n  run_mode: state.config.run_mode,\n  refinement_iterations_used: (state.current.test_iteration || 0) + (state.current.transformation_iteration || 0),\n  refinement_iterations_allowed: (state.config.run_mode === 'transformations_only' ? 0 : state.config.max_test_refinement_iterations)\n    + (state.config.run_mode === 'tests_only' ? 0 : state.config.max_transformation_refinement_iterations),\n  suite_id: state.current.suite_id || null,\n  failed_component: failedComponent,\n  last_completed_stage: lastStage,\n  test_iteration: state.current.test_iteration || 0,\n  transformation_iteration: state.current.transformation_iteration || 0,\n};\nreturn [{json: state}];"
       },
       "id": "capture-orchestration-error",
@@ -2295,7 +2017,7 @@
       "main": [
         [
           {
-            "node": "Create Immutable Run",
+            "node": "Call Stage Service",
             "type": "main",
             "index": 0
           }
@@ -2309,60 +2031,25 @@
         ],
         [
           {
-            "node": "Run Existing Python Stage",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Read Diagnosis Queue",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Record Terminal Result",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
             "node": "Final Result and Artifacts",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Prepare Refinement Input",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Record Generation Attempt",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Create Batch",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Create Immutable Run": {
+    "Call Stage Service": {
       "main": [
         [
           {
             "node": "Capture Action Result",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Capture Orchestration Error",
             "type": "main",
             "index": 0
           }
@@ -2391,7 +2078,7 @@
       "main": [
         [
           {
-            "node": "Make Existing Workflow Callable",
+            "node": "Adapt Subworkflow For This Run",
             "type": "main",
             "index": 0
           }
@@ -2405,25 +2092,7 @@
         ]
       ]
     },
-    "Make Existing Workflow Callable": {
-      "main": [
-        [
-          {
-            "node": "Adapt Transformation Workflow Compatibility",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Capture Orchestration Error",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Adapt Transformation Workflow Compatibility": {
+    "Adapt Subworkflow For This Run": {
       "main": [
         [
           {
@@ -2442,42 +2111,6 @@
       ]
     },
     "Execute Existing Subworkflow": {
-      "main": [
-        [
-          {
-            "node": "Capture Action Result",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Capture Orchestration Error",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Run Existing Python Stage": {
-      "main": [
-        [
-          {
-            "node": "Capture Action Result",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Capture Orchestration Error",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Read Final Run Artifacts": {
       "main": [
         [
           {
@@ -2663,71 +2296,6 @@
         ]
       ]
     },
-    "Record Terminal Result": {
-      "main": [
-        [
-          {
-            "node": "Read Final Run Artifacts",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Prepare Refinement Input": {
-      "main": [
-        [
-          {
-            "node": "Capture Action Result",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Capture Orchestration Error",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Record Generation Attempt": {
-      "main": [
-        [
-          {
-            "node": "Capture Action Result",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Capture Orchestration Error",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Read Diagnosis Queue": {
-      "main": [
-        [
-          {
-            "node": "Capture Action Result",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Capture Orchestration Error",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "Capture Orchestration Error": {
       "main": [
         [
@@ -2755,17 +2323,6 @@
         [
           {
             "node": "Final Result and Artifacts",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Create Batch": {
-      "main": [
-        [
-          {
-            "node": "Capture Action Result",
             "type": "main",
             "index": 0
           }

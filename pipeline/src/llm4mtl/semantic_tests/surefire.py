@@ -67,7 +67,11 @@ ENGINE_RUNTIME_MARKERS = (
     "Operation not found:",
 )
 
-TRANSFORMATION_PARSE_MARKERS = ("ETL parse errors", "ParseProblem")
+TRANSFORMATION_PARSE_MARKERS = (
+    "ETL parse errors",
+    "ParseProblem",
+    "Compilation errors found in unit",
+)
 
 # The error threw, but nothing in it identifies which phase. Never a phase claim.
 UNCLASSIFIED_RUNTIME = "unclassified_runtime"
@@ -111,7 +115,13 @@ class SurefireReport:
             if _contains(joined, ENGINE_RUNTIME_MARKERS):
                 return "engine_runtime"
             return UNCLASSIFIED_RUNTIME
-        return "assertion_failure" if self.failures else ""
+        if self.failures:
+            if _contains(
+                " ".join(self.failure_messages), TRANSFORMATION_PARSE_MARKERS
+            ):
+                return "transformation_parse"
+            return "assertion_failure"
+        return ""
 
 
 def read_surefire_reports(reports_dir: Path) -> SurefireReport | None:

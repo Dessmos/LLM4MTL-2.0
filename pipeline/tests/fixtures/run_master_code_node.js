@@ -54,15 +54,33 @@ const $ = (name) => {
   };
 };
 
+// The execution n8n is running the node under. The master records both ids on
+// the batch it creates, so a run is traceable back to the n8n execution.
+const $workflow = { id: spec.workflow_id || 'master-workflow', name: workflow.name, active: false };
+const $execution = { id: spec.execution_id || 'execution-1', mode: 'test' };
+
 // What vm2 grants a Code node beyond the language built-ins. Anything absent
 // here is absent in n8n too; `Proxy` is removed because vm2 does not expose it.
-const sandbox = { $input, $, console, process, Buffer, setTimeout, clearTimeout };
+const sandbox = {
+  $input,
+  $,
+  $workflow,
+  $execution,
+  console,
+  process,
+  Buffer,
+  setTimeout,
+  clearTimeout,
+};
 const context = vm.createContext(sandbox);
 vm.runInContext('Proxy = undefined;', context);
 
 try {
-  const run = vm.runInContext(`(function ($input, $) {\n${node.parameters.jsCode}\n})`, context);
-  const output = run($input, $);
+  const run = vm.runInContext(
+    `(function ($input, $, $workflow, $execution) {\n${node.parameters.jsCode}\n})`,
+    context,
+  );
+  const output = run($input, $, $workflow, $execution);
   process.stdout.write(JSON.stringify({ ok: true, result: output[0].json, items: output }));
 } catch (error) {
   process.stdout.write(JSON.stringify({ ok: false, error: error.message }));

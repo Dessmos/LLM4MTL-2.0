@@ -5,8 +5,8 @@ from __future__ import annotations
 import unittest
 from typing import Any, Callable
 
-from llm4mtl.languages.java_assertions import render_assertions
-from llm4mtl.languages.etl.rendering import render_assertion
+from llm4mtl.languages.java_assertions import helpers, render_assertions
+from llm4mtl.languages.etl.rendering import java_helpers, render_assertion
 
 
 ASSERTIONS = (
@@ -117,3 +117,104 @@ class JavaAssertionRenderingTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class MultiValuedPathResolutionTests(unittest.TestCase):
+
+    RENDERERS = {"shared": helpers, "etl": java_helpers}
+
+    def method(self, source: list[str], signature: str) -> str:
+        start = next(
+            index for index, line in enumerate(source) if signature in line
+        )
+        end = next(
+            index
+            for index in range(start + 1, len(source))
+            if source[index] == "    }"
+        )
+        return "\n".join(source[start : end + 1])
+
+    def test_a_path_segment_resolves_through_a_multi_valued_reference(self) -> None:
+        for name, renderer in self.RENDERERS.items():
+            with self.subTest(renderer=name):
+                rendered = self.method(
+                    renderer(), "private Object pathValue(Object object, String path)"
+                )
+                self.assertIn("current instanceof Collection<?>", rendered)
+                self.assertIn("featureValue(element, part)", rendered)
+
+    def test_a_resolved_collection_renders_its_elements(self) -> None:
+        for name, renderer in self.RENDERERS.items():
+            with self.subTest(renderer=name):
+                rendered = self.method(
+                    renderer(), "private String stringValue(Object value)"
+                )
+                self.assertIn("value instanceof Collection<?>", rendered)
+                self.assertIn('String.join(",", rendered)', rendered)
+
+    def test_string_value_renders_null_and_references_alike(self) -> None:
+        """Both harnesses print an unset value as "null" and a reference by identity."""
+        for name, renderer in self.RENDERERS.items():
+            with self.subTest(renderer=name):
+                rendered = self.method(
+                    renderer(), "private String stringValue(Object value)"
+                )
+                self.assertIn('return "null";', rendered)
+                self.assertIn('new String[] {"name", "label", "id", "value"}', rendered)
+
+    def test_path_values_keep_an_unset_terminal_value_as_null(self) -> None:
+        """``eOperations.name`` of a nameless operation is observed as "null".
+
+        The harness stringifies null as "null"; dropping it made ``[null]``
+        impossible to assert, while an intermediate null (no parent at all)
+        still contributes nothing.
+        """
+        for name, renderer in self.RENDERERS.items():
+            with self.subTest(renderer=name):
+                source = renderer()
+                path_values = self.method(source, "pathValues(")
+                self.assertIn("pathValuesFrom(object, path, true)", path_values)
+                resolver = self.method(
+                    source, "pathValuesFrom(Object object, String path, boolean keepTerminalNull)"
+                )
+                self.assertIn("if (next == null && keepTerminalNull)", resolver)
+                self.assertIn("values.add(null)", resolver)
+                self.assertIn("pathValuesFrom(next, rest, keepTerminalNull)", resolver)
+
+
+class ExpectedValueRenderingTests(unittest.TestCase):
+    """JSON booleans and nulls are written the way the harness prints them."""
+
+    MODEL_VARIABLES = {"OUT": "model0"}
+
+    def render(self, assertion: dict[str, Any]) -> list[str]:
+        shared = render_assertions([assertion], self.MODEL_VARIABLES)
+        etl = render_assertion(assertion, self.MODEL_VARIABLES)
+        self.assertEqual(shared, etl)
+        return shared
+
+    def test_boolean_and_null_object_features_match_java_rendering(self) -> None:
+        lines = self.render(
+            {
+                "kind": "objects",
+                "model": "OUT",
+                "type": "Product",
+                "features": ["name", "inStock", "note"],
+                "expected": [{"name": "Mug", "inStock": True, "note": None}],
+            }
+        )
+        self.assertIn('list("name=Mug|inStock=true|note=null")', lines[0])
+        self.assertNotIn("True", lines[0])
+        self.assertNotIn("None", lines[0])
+
+    def test_boolean_and_null_path_values_match_java_rendering(self) -> None:
+        lines = self.render(
+            {
+                "kind": "pathValues",
+                "model": "OUT",
+                "type": "EClass",
+                "path": "eOperations.name",
+                "expected": [None, False, 3],
+            }
+        )
+        self.assertIn('list("null", "false", "3")', lines[0])

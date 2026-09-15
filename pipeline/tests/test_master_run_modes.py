@@ -28,6 +28,7 @@ MASTER_WORKFLOW = (
 )
 HARNESS = Path(__file__).parent / "fixtures" / "run_master_code_node.js"
 TASK_CONTRACTS = REPOSITORY_ROOT / "benchmark" / "tasks"
+SUBWORKFLOW_ADAPTER = "Adapt Subworkflow For This Run"
 TRANSFORMATION_WORKFLOW = (
     REPOSITORY_ROOT
     / "workflows"
@@ -163,13 +164,19 @@ def _run_node(
     *,
     inputs: list[dict[str, Any]] | None = None,
     nodes: dict[str, Any] | None = None,
+    state: dict[str, Any] | None = None,
+    files: list[Path] | None = None,
 ) -> dict[str, Any]:
-    spec = {
+    spec: dict[str, Any] = {
         "master": str(MASTER_WORKFLOW),
         "node": node,
         "input": inputs or [],
         "nodes": nodes or {},
     }
+    if state is not None:
+        spec["state"] = state
+    if files is not None:
+        spec["files"] = [str(path) for path in files]
     with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as handle:
         json.dump(spec, handle)
         spec_path = handle.name
@@ -183,6 +190,39 @@ def _run_node(
     finally:
         Path(spec_path).unlink()
     return json.loads(completed.stdout)
+
+
+def _adapt(
+    workflow_path: Path,
+    *,
+    action: str,
+    current: dict[str, Any],
+    subworkflow_input: dict[str, Any] | None = None,
+    provider: str = "openai",
+    model: str = "gpt-5",
+) -> dict[str, Any]:
+    """Drive the subworkflow adapter the way the canvas does.
+
+    Selecting the variant off disk and rewriting the copy is one node, so a test
+    hands it the two things the canvas hands it: the State Machine's state, and
+    the files the read glob matched. The model is the family the file is already
+    named after, which keeps the model patching a no-op so each test reads its
+    own subject.
+    """
+    return _run_node(
+        SUBWORKFLOW_ADAPTER,
+        state={
+            "action": action,
+            "current": current,
+            "subworkflow_path": str(workflow_path),
+            "subworkflow_input": {
+                "provider": provider,
+                "model": model,
+                **(subworkflow_input or {}),
+            },
+        },
+        files=[workflow_path],
+    )
 
 
 def _model_nodes(unconfigured: tuple[str, ...] = ()) -> dict[str, Any]:
@@ -287,7 +327,10 @@ PASSING_RESULTS = {
         "status": "completed",
         "outcome_code": "SEMANTIC_PASSED",
     },
-    "final": {"artifacts": {}},
+    # The ending is recorded first; the run view is read back afterwards and is
+    # what lands in `results[].artifacts`.
+    "final": {"status": "completed", "outcome_code": "SEMANTIC_PASSED"},
+    "read_run_artifacts": {"artifacts": {}},
 }
 
 
@@ -351,40 +394,106 @@ def _drive(
 class OrchestrationFailureTests(unittest.TestCase):
 
     def test_create_run_persists_the_exact_experiment_configuration(self) -> None:
-        create = next(
-            node
-            for node in _master()["nodes"]
-            if node["name"] == "Create Immutable Run"
-        )
-        body = create["parameters"]["jsonBody"]
+        """The run creation request, as the control loop actually builds it.
 
-        self.assertIn("experiment_config:", body)
-        for field in (
-            "max_test_refinement_iterations",
-            "max_transformation_refinement_iterations",
-        ):
-            with self.subTest(field=field):
-                self.assertIn(f"{field}: $json.config.{field}", body)
-        # The feedback flags are the run's own: a custom task in the queue runs
-        # under a narrower set than the launch configured.
-        for field in ("parser_feedback", "semantic_feedback", "source_diagnosis"):
-            with self.subTest(field=field):
-                self.assertIn(f"{field}: $json.current.stages.{field}", body)
-        self.assertIn("pipeline_variant: $json.current.pipeline_variant", body)
-        self.assertIn("custom_task: $json.current.custom_task || null", body)
+        A custom task is the case that separates the two sources of the stage
+        flags: it runs under a narrower set than the launch configured, so a
+        request built from `config.stages` instead of the run's own would record
+        a run that judges against a reference it has none of.
+        """
+        configured = _configure(
+            custom_tasks={
+                "custom_task_1_name": "TreeFlattening",
+                "custom_task_1_base": "ETL / Tree2Graph",
+                "custom_task_1_prompt": "Flatten every tree.",
+            }
+        )
+        self.assertTrue(configured["ok"], configured.get("error"))
+        create_batch = _run_node("State Machine", inputs=[configured["result"]])
+        self.assertTrue(create_batch["ok"], create_batch.get("error"))
+        batched = _run_node(
+            "Capture Action Result",
+            inputs=[PASSING_RESULTS["create_batch"]],
+            nodes={"State Machine": {"json": create_batch["result"]}},
+        )
+        create_run = _run_node("State Machine", inputs=[batched["result"]])
+        self.assertTrue(create_run["ok"], create_run.get("error"))
+
+        state = create_run["result"]
+        self.assertEqual("create_run", state["action"])
+        request = state["request"]
+        self.assertEqual("POST", request["method"])
+        self.assertEqual(
+            f"http://stage-service:8129/batches/{state['batch_id']}/runs",
+            request["url"],
+        )
+
+        body = request["body"]
+        config = state["config"]
+        self.assertEqual(
+            {
+                "max_test_refinement_iterations": config[
+                    "max_test_refinement_iterations"
+                ],
+                "max_transformation_refinement_iterations": config[
+                    "max_transformation_refinement_iterations"
+                ],
+                "parser_feedback": True,
+                "semantic_feedback": True,
+                # Reference-bound for the custom task, and configured for the
+                # launch: the request carries the run's flag, not the launch's.
+                "source_diagnosis": False,
+            },
+            body["experiment_config"],
+        )
+        self.assertTrue(config["stages"]["source_diagnosis"])
+        self.assertEqual(state["current"]["pipeline_variant"], body["pipeline_variant"])
+        self.assertEqual(
+            {"name": "TreeFlattening", "prompt": "Flatten every tree."},
+            body["custom_task"],
+        )
+
+    def test_every_stage_service_request_carries_a_body_object(self) -> None:
+        """One node issues every call, so its body switch cannot vary per call.
+
+        n8n keeps no expression in the boolean `Send Body`, so the switch is a
+        literal `true` and a read has to send an empty body rather than none.
+        A `null` here reaches the service as no body at all.
+        """
+        observed: list[dict[str, Any]] = []
+        _drive(_configure()["result"], observed_states=observed)
+        requests = [
+            state["request"]
+            for state in observed
+            if state["route"] == "stage_service"
+        ]
+        self.assertTrue(requests)
+        for request in requests:
+            with self.subTest(url=request["url"]):
+                self.assertIsInstance(request["body"], dict)
 
     def test_terminal_result_reports_both_artifact_iterations(self) -> None:
-        record = next(
-            node
-            for node in _master()["nodes"]
-            if node["name"] == "Record Terminal Result"
-        )
-        body = record["parameters"]["jsonBody"]
+        """Both refinement budgets are reported, not their sum alone.
 
-        self.assertIn("test_iteration:", body)
-        self.assertIn("transformation_iteration:", body)
-        self.assertIn("max_test_refinement_iterations", body)
-        self.assertIn("max_transformation_refinement_iterations", body)
+        The two branches have independent budgets, so a terminal result that
+        only carried the total could not say which branch spent them.
+        """
+        observed: list[dict[str, Any]] = []
+        actions, _ = _drive(_configure()["result"], observed_states=observed)
+        self.assertIn("final", actions)
+        body = next(
+            state["request"]["body"]
+            for state in observed
+            if state["action"] == "final"
+        )
+
+        self.assertEqual(0, body["test_iteration"])
+        self.assertEqual(0, body["transformation_iteration"])
+        self.assertEqual(
+            body["test_iteration"] + body["transformation_iteration"],
+            body["refinement_iterations_used"],
+        )
+        self.assertEqual(4, body["refinement_iterations_allowed"])
 
     def test_persistence_http_errors_build_a_terminal_result_request(self) -> None:
         configured = _configure()
@@ -536,27 +645,21 @@ class TransformationWorkflowCompatibilityTests(unittest.TestCase):
 
     def test_selected_task_path_and_binary_are_adapted_in_memory(self) -> None:
         original_text = TRANSFORMATION_WORKFLOW.read_text(encoding="utf-8")
-        workflow = json.loads(original_text)
 
-        adapted = _run_node(
-            "Adapt Transformation Workflow Compatibility",
-            inputs=[
-                {
-                    "action": "generate_transformations",
-                    "current": {
-                        "language": "etl",
-                        "task": "Tree2Graph",
-                        "run_id": "run-transform-1",
-                        "n8n_run_dir": "/data/artifacts/runs/batch_001/run-transform-1",
-                        "refinement_iteration": 1,
-                    },
-                    "subworkflow_input": {
-                        "refinement_iteration": 1,
-                        "prompt_path": "/data/artifacts/runs/batch_001/run-transform-1/refinements/transformation/iteration-001/prompt.md",
-                    },
-                    "workflow_json": workflow,
-                }
-            ],
+        adapted = _adapt(
+            TRANSFORMATION_WORKFLOW,
+            action="generate_transformations",
+            current={
+                "language": "etl",
+                "task": "Tree2Graph",
+                "run_id": "run-transform-1",
+                "n8n_run_dir": "/data/artifacts/runs/batch_001/run-transform-1",
+                "refinement_iteration": 1,
+            },
+            subworkflow_input={
+                "refinement_iteration": 1,
+                "prompt_path": "/data/artifacts/runs/batch_001/run-transform-1/refinements/transformation/iteration-001/prompt.md",
+            },
         )
 
         self.assertTrue(adapted["ok"], adapted.get("error"))
@@ -603,27 +706,21 @@ class TransformationWorkflowCompatibilityTests(unittest.TestCase):
             / "Prompting_tests_ETL_gpt-5_few_shot.json"
         )
         original_text = workflow_path.read_text(encoding="utf-8")
-        workflow = json.loads(original_text)
 
-        adapted = _run_node(
-            "Adapt Transformation Workflow Compatibility",
-            inputs=[
-                {
-                    "action": "generate_tests",
-                    "current": {
-                        "language": "etl",
-                        "task": "Tree2Graph",
-                        "run_id": "run-tests-1",
-                        "n8n_run_dir": "/data/artifacts/runs/batch_001/run-tests-1",
-                        "refinement_iteration": 2,
-                    },
-                    "subworkflow_input": {
-                        "refinement_iteration": 2,
-                        "prompt_path": "/data/artifacts/runs/batch_001/run-tests-1/refinements/semantic-test/iteration-002/prompt.md",
-                    },
-                    "workflow_json": workflow,
-                }
-            ],
+        adapted = _adapt(
+            workflow_path,
+            action="generate_tests",
+            current={
+                "language": "etl",
+                "task": "Tree2Graph",
+                "run_id": "run-tests-1",
+                "n8n_run_dir": "/data/artifacts/runs/batch_001/run-tests-1",
+                "refinement_iteration": 2,
+            },
+            subworkflow_input={
+                "refinement_iteration": 2,
+                "prompt_path": "/data/artifacts/runs/batch_001/run-tests-1/refinements/semantic-test/iteration-002/prompt.md",
+            },
         )
         self.assertTrue(adapted["ok"], adapted.get("error"))
         nodes = {
@@ -661,24 +758,17 @@ class TransformationWorkflowCompatibilityTests(unittest.TestCase):
             / "test_generation"
             / "Prompting_tests_ETL_gpt-5_few_shot.json"
         )
-        workflow = json.loads(workflow_path.read_text(encoding="utf-8"))
-
-        adapted = _run_node(
-            "Adapt Transformation Workflow Compatibility",
-            inputs=[
-                {
-                    "action": "generate_tests",
-                    "current": {
-                        "language": "etl",
-                        "task": "Tree2Graph",
-                        "run_id": "run-tests-initial",
-                        "n8n_run_dir": "/data/artifacts/runs/batch_001/run-tests-initial",
-                        "refinement_iteration": 0,
-                    },
-                    "subworkflow_input": {"refinement_iteration": 0},
-                    "workflow_json": workflow,
-                }
-            ],
+        adapted = _adapt(
+            workflow_path,
+            action="generate_tests",
+            current={
+                "language": "etl",
+                "task": "Tree2Graph",
+                "run_id": "run-tests-initial",
+                "n8n_run_dir": "/data/artifacts/runs/batch_001/run-tests-initial",
+                "refinement_iteration": 0,
+            },
+            subworkflow_input={"refinement_iteration": 0},
         )
 
         self.assertTrue(adapted["ok"], adapted.get("error"))
@@ -703,22 +793,42 @@ class TransformationWorkflowCompatibilityTests(unittest.TestCase):
         )
 
     def test_non_generation_subworkflows_are_not_modified(self) -> None:
-        workflow = {
-            "nodes": [{"name": "Diagnosis", "parameters": {}}],
-            "connections": {},
-        }
-        adapted = _run_node(
-            "Adapt Transformation Workflow Compatibility",
-            inputs=[
-                {
-                    "action": "diagnose",
-                    "current": {"language": "etl", "task": "Tree2Graph"},
-                    "workflow_json": workflow,
-                }
-            ],
+        """The generation rewrites stop at the actions that generate.
+
+        The diagnosis subworkflow carries none of the anchors they look for -
+        no `Read prompt files`, no task-name Set node - so the adapter throws on
+        it the moment those rewrites reach a non-generation subworkflow.
+        """
+        diagnosis = (
+            REPOSITORY_ROOT
+            / "workflows"
+            / "n8n"
+            / "subworkflows"
+            / "diagnosis"
+            / "llm-diagnosis.json"
+        )
+        original = json.loads(diagnosis.read_text(encoding="utf-8"))
+        self.assertNotIn(
+            "Read prompt files", [node["name"] for node in original["nodes"]]
+        )
+
+        adapted = _adapt(
+            diagnosis,
+            action="diagnose",
+            current={"language": "etl", "task": "Tree2Graph"},
         )
         self.assertTrue(adapted["ok"], adapted.get("error"))
-        self.assertEqual(workflow, adapted["result"]["workflow_json"])
+        callable_workflow = adapted["result"]["workflow_json"]
+        self.assertEqual(
+            [node["name"] for node in original["nodes"]],
+            [node["name"] for node in callable_workflow["nodes"]],
+        )
+        self.assertNotIn(
+            "semantic-test-generation", json.dumps(callable_workflow)
+        )
+        self.assertNotIn(
+            "transformation-generation", json.dumps(callable_workflow)
+        )
 
 
 @unittest.skipUnless(shutil.which("node"), "the master workflow's Code nodes need Node")
@@ -785,7 +895,7 @@ class RunModeTests(unittest.TestCase):
         nodes = {node["name"]: node for node in master["nodes"]}
         for name in (
             "State Machine",
-            "Adapt Transformation Workflow Compatibility",
+            "Adapt Subworkflow For This Run",
             "Validate Config and Build Run Queue",
         ):
             code = nodes[name]["parameters"]["jsCode"]
@@ -816,6 +926,7 @@ class RunModeTests(unittest.TestCase):
                 "technical",
                 "reference",
                 "final",
+                "read_run_artifacts",
                 "complete",
             ],
             actions,
@@ -844,6 +955,7 @@ class RunModeTests(unittest.TestCase):
                 "record_generation",
                 "syntax",
                 "final",
+                "read_run_artifacts",
                 "complete",
             ],
             actions,
@@ -871,6 +983,7 @@ class RunModeTests(unittest.TestCase):
                 "syntax",
                 "execution",
                 "final",
+                "read_run_artifacts",
                 "complete",
             ],
             actions,
@@ -1947,24 +2060,18 @@ class CustomTaskTests(unittest.TestCase):
         self.assertIn("execution", [entry["action"] for entry in benchmark["timeline"]])
 
     def test_a_custom_task_reads_the_prompt_its_run_was_created_with(self) -> None:
-        workflow = json.loads(TRANSFORMATION_WORKFLOW.read_text(encoding="utf-8"))
-        adapted = _run_node(
-            "Adapt Transformation Workflow Compatibility",
-            inputs=[
-                {
-                    "action": "generate_transformations",
-                    "current": {
-                        "language": "etl",
-                        "task": "Tree2Graph",
-                        "run_id": "run-custom-1",
-                        "n8n_run_dir": "/data/artifacts/runs/batch_001/run-custom-1",
-                        "transformation_iteration": 0,
-                        "custom_task": {"name": "TreeFlattening", "prompt": "p"},
-                    },
-                    "subworkflow_input": {"refinement_iteration": 0},
-                    "workflow_json": workflow,
-                }
-            ],
+        adapted = _adapt(
+            TRANSFORMATION_WORKFLOW,
+            action="generate_transformations",
+            current={
+                "language": "etl",
+                "task": "Tree2Graph",
+                "run_id": "run-custom-1",
+                "n8n_run_dir": "/data/artifacts/runs/batch_001/run-custom-1",
+                "transformation_iteration": 0,
+                "custom_task": {"name": "TreeFlattening", "prompt": "p"},
+            },
+            subworkflow_input={"refinement_iteration": 0},
         )
         self.assertTrue(adapted["ok"], adapted.get("error"))
         nodes = {

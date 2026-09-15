@@ -64,6 +64,15 @@ creates it:
 
 For `plainXml`, use `"kind": "plainXml"` and omit `metamodelUri`.
 
+A `plainXml` model is read by the Epsilon PlainXml driver, whose names differ
+from the tag names: the type of an element is its tag name prefixed with `t_`,
+the text of an element is the feature `text`, and an attribute is the feature
+`a_<attribute>`. The `feed` element is type `t_feed`, its `href` attribute is
+`a_href`, and a namespaced tag such as `dc:creator` is `t_dc:creator`. Use only
+`t_`-prefixed type names in assertions on a `plainXml` model; a bare tag name
+such as `feed` is not a type there, and the run fails before any assertion is
+evaluated.
+
 Every assertion must contain all four common fields:
 
 - `kind`;
@@ -129,6 +138,34 @@ The only allowed assertion shapes are:
 `count.expected` must be an integer. All other `expected` values above must be
 arrays. Do not put type names, counts, feature definitions, or reference
 definitions inside `expected`.
+
+How the harness reads a value. Every entry of `expected` other than
+`count.expected` is compared as text with what the harness reads from the
+model, rendered the way Java prints it:
+
+- a boolean attribute reads as `"true"` or `"false"`; write these strings,
+  never JSON `true` or `false`;
+- a number reads as Java prints it, for example `"5"`, `"1200.5"`, `"3.0"`;
+- an unset attribute or an empty single-valued reference reads as `"null"`;
+  write the string `"null"`, never JSON `null` and never `""`;
+- a reference reads as the `name`, `label`, `id`, or `value` of the referenced
+  object, whichever of those features the object has first;
+- a multi-valued feature contributes one entry per element, so an empty
+  collection contributes no entry at all.
+
+`type` matches the exact class name and nothing else. An assertion on an
+abstract type or a supertype sees none of its subtypes' instances: to count the
+`InterruptTask` objects a rule creates, name `InterruptTask`, not `Task`, and
+to count `Female` objects name `Female`, not `Person`. When a rule creates one
+of several concrete types, assert the concrete type it creates.
+
+`referencePairs` pairs every value reached through `source` with every value
+reached through `target` on the same link object. It fits a link with two
+distinct single-valued references, such as `from`/`to`. For a link that holds
+its ends in one multi-valued reference, do not name that reference as both
+`source` and `target` (that yields every combination, including an end paired
+with itself); use `pathValues` on the reference instead, for example
+`"path": "<ends>.<identityFeature>"` with one expected entry per end.
 
 The complete response shape is:
 

@@ -1,5 +1,23 @@
-Create an ATL transformation module named `CPL2SPL` that transforms the CPL metamodel into the SPL metamodel.
+Create an ATL transformation module named `CPL2SPL` that transforms a CPL model (root `CPL`) into an SPL model.
 
-Define helpers `statement`, `locations`, and `isSimple` exactly as in the code to derive the effective statement node, compute location sequences along containment, and classify simple proxies.
+Helpers:
+- `statement` on `Node`: a node is its own statement, except a `Location`, whose statement is the statement of its `contents`.
+- `locations` on `Element`: the enclosing `Location` elements, innermost first; the `CPL` root has none, a `Location` contributes itself followed by its container's locations, and every other element inherits its container's locations.
+- `isSimple` on `Proxy`: true when `busy`, `noAnswer`, `redirection`, `failure`, and `default` are all unset.
 
-Add rules `CPL2Program`, `SubAction2Function`, `Incoming2Method`, `Proxy2Return`, `Proxy2Select`, `Busy2SelectCase`, `NoAnswer2SelectCase`, `Redirection2SelectCase`, `Default2SelectDefault`, `SubCall2Return`, `Redirect2Return`, `AddressSwitch2SelectStat`, `SwitchedAddress2SelectCase`, `Otherwise2SelectDefault`, and a helper-based rule `Location2URIConstant`, implementing the precise CPL‑to‑SPL mappings and OCL conditions shown.
+Rules:
+- `CPL2Program`: the `CPL` root becomes a `Program` with one `Service` named `'unnamed'`, whose `declarations` are the functions produced from `subActions` and whose `sessions` hold one `Dialog` whose `methods` are the results of `incoming` and `outgoing`. Only `Incoming` has a rule, so the dialog holds at most one `Method`; an `Outgoing` produces nothing.
+- `SubAction2Function`: a `SubAction` becomes a `LocalFunctionDeclaration` named by its `id`, with a `SimpleType` return type `response`; its `statements` hold the statement of `contents` when present, otherwise nothing.
+- `Incoming2Method`: an `Incoming` becomes a `Method` with `direction` `in`, a `SIPMethodName` `INVITE`, a `SimpleType` `response`, and `statements` derived from `contents` as above.
+- `Proxy2Return`: a simple `Proxy` becomes a `ReturnStat` returning a `ForwardExp` (`isParallel` true iff `ordering = 'parallel'`) whose `exp` is a `ConstantExp` without a value.
+- `Proxy2Select`: a non-simple `Proxy` becomes a `CompoundStat` of two statements: a `DeclarationStat` declaring a `VariableDeclaration` named `'r'` of `SimpleType` `response`, initialised with a `ForwardExp` (`isParallel` as above) whose `ConstantExp` value is the `URIConstant` of the first enclosing `Location`; and a `SelectStat` on that variable whose `selectCases` come from `busy`, `noAnswer`, `redirection`, and `failure` and whose `selectDefault` comes from `default`. Such a proxy must therefore lie inside a `Location`.
+- `Busy2SelectCase`, `NoAnswer2SelectCase`, `Redirection2SelectCase`: each becomes a `SelectCase` with one `ResponseConstant` value and `statements` derived from `contents`; the comment before the case is `'// busy'`, `'// noanswer'`, or `'// redirection'`, and the response is a `ClientErrorResponse` with `errorKind` `BUSY_HERE` or `REQUEST_TIMEOUT`, or a `RedirectionErrorResponse` with no `errorKind`.
+- `Default2SelectDefault`: a `Default` becomes a `SelectDefault` commented `'// default'` with `statements` derived from `contents`.
+- `SubCall2Return`: a `SubCall` becomes a `ReturnStat` returning a `FunctionCallExp` whose `FunctionCall` targets the function created for the `SubAction` whose `id` equals the call's `ref`.
+- `Redirect2Return`: a `Redirect` becomes a `ReturnStat` returning a `WithExp` whose `exp` is a `ConstantExp` holding a `ResponseConstant` with a `RedirectionErrorResponse` (`MOVED_PERMANENTLY` when `permanent = 'true'`, otherwise `MOVED_TEMPORARILY`) and whose `msgFields` are a `ReasonMessageField` with the `StringConstant` `'unspecified'` and a `HeadedMessageField` with `headerId` `'#contact:'`.
+- `AddressSwitch2SelectStat`: an `AddressSwitch` becomes a `SelectStat` on a `SIPHeaderPlace` whose `header` is `FROM` when `field = 'origin'` and `TO` otherwise; its `selectCases` are the results of `addresses` and `notPresent`, and its `selectDefault` is the result of `otherwise`. No rule matches `NotPresent`, so only the `addresses` yield cases.
+- `SwitchedAddress2SelectCase`: a `SwitchedAddress` becomes a `SelectCase` whose single value is a `StringConstant` holding `is`, with `statements` derived from `contents`.
+- `Otherwise2SelectDefault`: an `Otherwise` becomes a `SelectDefault` with `statements` derived from `contents`.
+- `Location2URIConstant` (lazy): a `Location` becomes a `URIConstant` whose `uri` is the location's `url`.
+
+`Outgoing`, `NotPresent`, `Failure`, and `Reject` have no rule and produce no target element. `contents` of a `NodeContainer` holds a single `Node` (a switch, a `Location`, a `SubCall`, or an action such as `Proxy`, `Redirect`, or `Reject`); `Incoming`, `Outgoing`, `SubAction`, `Busy`, and the other containers are not nodes and cannot be nested in `contents`.

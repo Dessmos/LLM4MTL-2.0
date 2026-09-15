@@ -126,6 +126,7 @@ def build_failure_report(request: ReportRequest) -> dict[str, Any]:
     is_diagnosis_eligible = diagnosis_reason == "parser_passed_and_semantic_test_failed"
     if (
         is_diagnosis_eligible
+        and assertion is not None
         and failure is not None
         and failure["kind"] == "assertion_failure"
     ):

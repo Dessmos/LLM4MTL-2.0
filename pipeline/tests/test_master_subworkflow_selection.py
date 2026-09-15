@@ -26,7 +26,7 @@ from typing import Any
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOWS_ROOT = REPOSITORY_ROOT / "workflows" / "n8n"
 MASTER_WORKFLOW = WORKFLOWS_ROOT / "main" / "llm4mtl-agent-workflow.json"
-CODE_NODE = "Make Existing Workflow Callable"
+CODE_NODE = "Adapt Subworkflow For This Run"
 HARNESS = Path(__file__).parent / "fixtures" / "run_master_code_node.js"
 
 STRATEGIES = ("only_prompt", "few_shot", "grammar", "few_shots_AND_grammar")
@@ -282,13 +282,15 @@ class MasterSubworkflowSelectionTests(unittest.TestCase):
     def test_every_persistence_and_workflow_read_error_reaches_terminalization(
         self,
     ) -> None:
+        """A run ends on the record rather than only in the n8n execution log.
+
+        One node issues every stage-service call, so its error output carries
+        the refinement and generation persistence failures that used to have a
+        node each.
+        """
         workflow = _master_document()
         nodes = {node["name"]: node for node in workflow["nodes"]}
-        for name in (
-            "Read Existing Subworkflow",
-            "Prepare Refinement Input",
-            "Record Generation Attempt",
-        ):
+        for name in ("Read Existing Subworkflow", "Call Stage Service"):
             with self.subTest(node=name):
                 self.assertEqual("continueErrorOutput", nodes[name]["onError"])
                 error_targets = workflow["connections"][name]["main"][1]
@@ -299,13 +301,48 @@ class MasterSubworkflowSelectionTests(unittest.TestCase):
 
     def test_every_http_request_has_an_absolute_service_url(self) -> None:
         """A missing base URL must fail export validation, not a live run."""
+        shared = "={{ $json.request.url }}"
         for node in _master_document()["nodes"]:
             if node["type"] != "n8n-nodes-base.httpRequest":
                 continue
             with self.subTest(node=node["name"]):
                 url = node["parameters"]["url"]
                 self.assertNotIn("stage_service_url", url)
-                self.assertRegex(url.removeprefix("="), r"^https?://")
+                if url != shared:
+                    self.assertRegex(url.removeprefix("="), r"^https?://")
+
+        # The shared node issues whatever the State Machine built, so the base
+        # every one of those requests is built from is pinned there instead.
+        machine = _node_code("State Machine")
+        base = re.search(r"const stageService = '([^']+)';", machine)
+        self.assertIsNotNone(base, "the State Machine names no stage service")
+        self.assertRegex(base.group(1), r"^https?://")
+        built = re.findall(r"url: `([^`]+)`", machine)
+        self.assertTrue(built, "the State Machine builds no request url")
+        for url in built:
+            with self.subTest(url=url):
+                self.assertRegex(url, r"^\$\{(stageService|batchUrl\(\)|runUrl\(\))\}")
+
+    def test_the_shared_request_node_keeps_its_body_switch_literal(self) -> None:
+        """`Send Body` is a boolean parameter, and n8n keeps no expression there.
+
+        Saving the workflow strips the leading `=` from a boolean parameter, and
+        the `jsonBody`/`specifyBody` that switch gates are pruned along with it.
+        What is left is a node that still reaches the stage service and sends
+        nothing: Python answered 422 for a body it was never given, and the
+        error surfaced two nodes later as a run that could not be terminalized.
+        """
+        node = next(
+            node
+            for node in _master_document()["nodes"]
+            if node["name"] == "Call Stage Service"
+        )
+        self.assertIs(True, node["parameters"]["sendBody"])
+        self.assertEqual("json", node["parameters"]["specifyBody"])
+        self.assertEqual("={{ $json.request.body }}", node["parameters"]["jsonBody"])
+        # The switch is one for every request, so a read carries an empty body
+        # rather than none.
+        self.assertNotIn("body: null", _node_code("State Machine"))
 
     def test_the_artifact_namespace_is_the_model_family_not_the_exact_model(
         self,

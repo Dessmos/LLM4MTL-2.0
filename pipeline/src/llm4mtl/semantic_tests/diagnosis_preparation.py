@@ -30,7 +30,7 @@ only when exactly one case could have produced that method.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterator
@@ -492,6 +492,8 @@ def _prepare_pair(
 
     reference_execution = _reference_observation(paths, execution)
     failures = _recorded_failures(archived.surefire_reports)
+    if pair.get("failure_stage") != "assertion_failure":
+        failures = [replace(failure, kind="runtime_error") for failure in failures]
     if not failures:
         # No per-test entry at all: the run failed before Surefire could
         # attribute anything to a test method (a transformation the engine

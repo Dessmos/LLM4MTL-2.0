@@ -238,7 +238,7 @@ class ReactionsAdapter:
                 diagnostic=(
                     ""
                     if completed.returncode == 0 and output.is_file()
-                    else diagnostic[-500:]
+                    else diagnostic[:500]
                 ),
             )
         return observations

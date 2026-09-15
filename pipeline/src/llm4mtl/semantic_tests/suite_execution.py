@@ -128,7 +128,11 @@ def _classify_from_reports(
             timed_out=False,
             maven_exit_code=result.exit_code,
             failure_stage=failure_stage,
-            error_summary=reports.first_error or summarize_error(result.output),
+            error_summary=(
+                reports.first_error
+                or reports.first_failure
+                or summarize_error(result.output)
+            ),
         )
 
     assertions_passed = reports.failures == 0 and reports.errors == 0

@@ -243,26 +243,43 @@ keeps the existing `incomplete` reason.
 ## Orchestration core
 
 ```text
-State Machine -> Route Next Action -> action -> Capture Action Result -> State Machine
+State Machine -> Route Next Action -> lane -> Capture Action Result -> State Machine
 ```
 
 Deliberately compact — one Switch and one control loop rather than a
-duplicated IF graph per stage. `Create Immutable Run`, the Python stage HTTP
-calls, `Make Existing Workflow Callable` (exact strategy-suffix matching and the
-reserved `/responses/source-diagnosis/` namespace), timeline recording, terminal
-statuses, and refinement routing stay centralized here. Test and transformation
-refinements have independent `0..3` budgets; a failure in one branch therefore
-cannot exhaust the other branch before it starts. Test refinement after semantic
-diagnosis re-runs extraction, technical validation, reference validation, and
-execution, but not syntax validation of the unchanged transformation.
+duplicated IF graph per stage. The Switch routes on `route`, the lane the State
+Machine put the action in, so it has three branches rather than one per action:
+`stage_service`, `subworkflow`, `complete`.
 
-`Adapt Transformation Workflow Compatibility` operates only on the transient
-workflow JSON passed to `Execute Existing Subworkflow`. For both generation
-branches it narrows the prompt reader to the selected task and makes the raw
-response run- and artifact-iteration-scoped. For transformations it additionally
-preserves the `binary.data` that legacy Set nodes passed through before n8n 2.x.
-The external workflow exports on disk are not edited, and non-generation
-subworkflows are returned unchanged.
+`Call Stage Service` issues every call to Python. The State Machine names the
+method, the URL and the body of each in `request`, so an action added to the
+control loop needs no node of its own, and every request
+body is built in the one place the tests already drive. Ending a run is two of
+those actions rather than a branch of its own: `final` records the terminal
+result, and `read_run_artifacts` then reads the run view back, so what lands in
+`results[].artifacts` is a run already carrying its ending.
+
+The node's `Send Body` switch is a literal `true`, never an expression: it is a
+boolean parameter, and n8n strips the leading `=` from one on save and prunes
+the JSON body the switch gates along with it, leaving a node that calls the
+service and sends nothing. Every request therefore carries a body object, and
+a read carries an empty one. Timeline recording,
+terminal statuses, and refinement routing are centralized here as well. Test and
+transformation refinements have independent `0..3` budgets; a failure in one
+branch therefore cannot exhaust the other branch before it starts. Test
+refinement after semantic diagnosis re-runs extraction, technical validation,
+reference validation, and execution, but not syntax validation of the unchanged
+transformation.
+
+`Adapt Subworkflow For This Run` turns the selected export into the transient
+workflow JSON passed to `Execute Existing Subworkflow`: exact strategy-suffix
+matching, the reserved `/responses/source-diagnosis/` namespace, and the run's
+model pinned into the provider node. For both generation branches it then
+narrows the prompt reader to the selected task and makes the raw response run-
+and artifact-iteration-scoped. For transformations it additionally preserves the
+`binary.data` that legacy Set nodes passed through before n8n 2.x. The external
+workflow exports on disk are not edited, and a non-generation subworkflow leaves
+after selection, with none of the generation rewrites applied.
 
 There is one master workflow. Run modes are configuration, not three copies.
 
@@ -330,7 +347,12 @@ refuses.
    `generation-result.schema.json`.
 3. **Stages** — `POST /batches/{batch_id}/runs/{run_id}/stages/{stage}`; n8n
    reads `{status, outcome_code, artifacts}` and routes on it.
-4. **Batch result** — when the queue is exhausted, `Final Result and Artifacts`
+4. **Run result** — where the run ended is recorded with
+   `POST /batches/{batch_id}/runs/{run_id}/result`, and the run view is then
+   read back with `GET /batches/{batch_id}/runs/{run_id}` into the launch's
+   `results[].artifacts`. The order is load-bearing: the view is of a run that
+   already carries its terminal result.
+5. **Batch result** — when the queue is exhausted, `Final Result and Artifacts`
    is recorded once to `POST /batches/{batch_id}/result`, so the launch can be
    read from `batch-result.json` before any run is opened.
 

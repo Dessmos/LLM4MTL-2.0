@@ -9,6 +9,7 @@ from llm4mtl.semantic_tests.codegen.java_rendering import (
     escape_java,
     java_string_array,
     java_string_list,
+    java_value,
     object_signatures,
 )
 
@@ -66,7 +67,7 @@ def _render_path_collection_assertion(
     type_name: str,
     message: str,
 ) -> list[str]:
-    expected = java_string_list([str(value) for value in assertion["expected"]])
+    expected = java_string_list([java_value(value) for value in assertion["expected"]])
     if kind in {"featureValues", "pathValues"}:
         path_key = "feature" if kind == "featureValues" else "path"
         path = escape_java(str(assertion[path_key]))
@@ -148,7 +149,10 @@ def _render_reference_pairs_assertion(
     type_name: str,
     message: str,
 ) -> list[str]:
-    expected = [f"{pair['source']}->{pair['target']}" for pair in assertion["expected"]]
+    expected = [
+        f"{java_value(pair['source'])}->{java_value(pair['target'])}"
+        for pair in assertion["expected"]
+    ]
     source = escape_java(str(assertion["source"]))
     target = escape_java(str(assertion["target"]))
     actual = f'referencePairs({model}, "{type_name}", "{source}", "{target}")'
@@ -226,10 +230,12 @@ def helpers() -> list[str]:
         "        return matches;",
         "    }",
         "",
+        # An unset terminal value is an observation ("null"), not an absence:
+        # a suite must be able to say that a created operation has no name.
         "    private List<String> pathValues(List<EObject> roots, String typeName, String path) {",
         "        List<String> values = new ArrayList<>();",
         ALL_OF_TYPE_LOOP,
-        "            for (Object value : pathValuesFrom(object, path)) values.add(stringValue(value));",
+        "            for (Object value : pathValuesFrom(object, path, true)) values.add(stringValue(value));",
         "        }",
         "        return values;",
         "    }",
@@ -288,13 +294,23 @@ def helpers() -> list[str]:
         "    private Object pathValue(Object object, String path) {",
         "        Object current = object;",
         '        for (String part : path.split("\\\\.")) {',
-        "            current = featureValue(current, part);",
+        "            if (current instanceof Collection<?>) {",
+        "                List<Object> resolved = new ArrayList<>();",
+        "                for (Object element : (Collection<?>) current) addFlattened(resolved, featureValue(element, part));",
+        "                current = resolved;",
+        "            } else {",
+        "                current = featureValue(current, part);",
+        "            }",
         "            if (current == null) return null;",
         "        }",
         "        return current;",
         "    }",
         "",
         "    private List<Object> pathValuesFrom(Object object, String path) {",
+        "        return pathValuesFrom(object, path, false);",
+        "    }",
+        "",
+        "    private List<Object> pathValuesFrom(Object object, String path, boolean keepTerminalNull) {",
         "        List<Object> values = new ArrayList<>();",
         "        if (object == null) return values;",
         "        if (path == null || path.isEmpty()) { addFlattened(values, object); return values; }",
@@ -305,8 +321,9 @@ def helpers() -> list[str]:
         "        addFlattened(current, object);",
         "        for (Object value : current) {",
         "            Object next = featureValue(value, first);",
-        "            if (rest.isEmpty()) addFlattened(values, next);",
-        "            else values.addAll(pathValuesFrom(next, rest));",
+        "            if (!rest.isEmpty()) values.addAll(pathValuesFrom(next, rest, keepTerminalNull));",
+        "            else if (next == null && keepTerminalNull) values.add(null);",
+        "            else addFlattened(values, next);",
         "        }",
         "        return values;",
         "    }",
@@ -325,6 +342,11 @@ def helpers() -> list[str]:
         "",
         "    private String stringValue(Object value) {",
         '        if (value == null) return "null";',
+        "        if (value instanceof Collection<?>) {",
+        "            List<String> rendered = new ArrayList<>();",
+        "            for (Object element : (Collection<?>) value) rendered.add(stringValue(element));",
+        '            return String.join(",", rendered);',
+        "        }",
         "        if (value instanceof EObject) {",
         "            EObject object = (EObject) value;",
         '            for (String candidate : new String[] {"name", "label", "id", "value"}) {',

@@ -1,5 +1,5 @@
 Create a QVT-O transformation named **t** that takes an input and output model of type **ECORE**.  
-In its **main** mapping, iterate over the root **EPackage** elements of the input model and map each to the output using a mapping named **p2p**.  
+In its **main** operation, iterate over the root **EPackage** elements of the input model and map each to the output using a mapping named **p2p**.  
 In **p2p**, copy the package name and map all contained classifiers using a mapping called **makeClass**.  
-Define specialized **makeClass** mappings for **ENamedElement**, **EClassifier**, **EClass**, and **EDataType**, each creating a new **EClass** with a prefix reflecting its source type.  
-Also include a **c2c** mapping that prefixes classifier names with “mapped”.
+Define four mappings that all carry the same name **makeClass** on the context types **ENamedElement**, **EClassifier**, **EClass**, and **EDataType** (plain `mapping <Type>::makeClass() : EClass` declarations with no `inherits`, `merges`, or other extension clause; QVT-O has no `overrides` keyword), each creating a new **EClass** whose name is a literal prefix followed by the source element's name. The prefixes are exactly `NE:` for **ENamedElement**, `CLASSIFIER:` for **EClassifier**, `CLASS:` for **EClass**, and `DT:` for **EDataType**. The most specific mapping for the source's runtime type applies, so an **EClass** named `Class1` becomes an **EClass** named `CLASS:Class1` and an **EDataType** named `Data1` becomes `DT:Data1`.  
+Also include a **c2c** mapping from **EClassifier** to **EClass** that prefixes the classifier name with `mapped`; **p2p** does not call it.

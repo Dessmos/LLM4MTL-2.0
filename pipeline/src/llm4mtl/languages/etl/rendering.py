@@ -10,6 +10,7 @@ from llm4mtl.semantic_tests.codegen.java_rendering import (
     java_bool,
     java_string_array,
     java_string_list,
+    java_value,
     object_signatures,
     safe_temp_prefix,
     sanitize_method_name,
@@ -233,7 +234,7 @@ def _render_path_assertion(
     type_name: str,
     message: str,
 ) -> list[str]:
-    expected = java_string_list([str(value) for value in assertion["expected"]])
+    expected = java_string_list([java_value(value) for value in assertion["expected"]])
     path_key = "feature" if kind == "featureValues" else "path"
     path = escape_java(str(assertion[path_key]))
     actual = f'pathValues({model_var}, "{type_name}", "{path}")'
@@ -272,7 +273,7 @@ def _render_relationship_assertion(
     assertion: dict[str, Any], model_var: str, type_name: str, message: str
 ) -> list[str]:
     if assertion["kind"] == "treePaths":
-        expected = java_string_list([str(value) for value in assertion["expected"]])
+        expected = java_string_list([java_value(value) for value in assertion["expected"]])
         label_feature = escape_java(str(assertion.get("labelFeature") or "label"))
         children_feature = escape_java(
             str(assertion.get("childrenFeature") or "children")
@@ -280,7 +281,10 @@ def _render_relationship_assertion(
         actual = f'treePaths({model_var}, "{type_name}", "{label_feature}", "{children_feature}")'
         return render_count_assertion(expected, actual, assertion, message)
 
-    expected = [f"{pair['source']}->{pair['target']}" for pair in assertion["expected"]]
+    expected = [
+        f"{java_value(pair['source'])}->{java_value(pair['target'])}"
+        for pair in assertion["expected"]
+    ]
     source = escape_java(str(assertion["source"]))
     target = escape_java(str(assertion["target"]))
     actual = f'referencePairs({model_var}, "{type_name}", "{source}", "{target}")'
@@ -319,10 +323,12 @@ def java_helpers() -> list[str]:
         "        return model.getAllOfType(typeName);",
         "    }",
         "",
+        # An unset terminal value is an observation ("null"), not an absence:
+        # a suite must be able to say that a created element has no name.
         "    private List<String> pathValues(IModel model, String typeName, String path) throws Exception {",
         "        List<String> values = new ArrayList<>();",
         ALL_OF_TYPE_LOOP,
-        "            for (Object value : pathValuesFrom(object, path)) {",
+        "            for (Object value : pathValuesFrom(object, path, true)) {",
         "                values.add(stringValue(value));",
         "            }",
         "        }",
@@ -395,7 +401,15 @@ def java_helpers() -> list[str]:
         "    private Object pathValue(Object object, String path) {",
         "        Object current = object;",
         '        for (String part : path.split("\\\\.")) {',
-        "            current = featureValue(current, part);",
+        "            if (current instanceof Collection<?>) {",
+        "                List<Object> resolved = new ArrayList<>();",
+        "                for (Object element : (Collection<?>) current) {",
+        "                    addFlattened(resolved, featureValue(element, part));",
+        "                }",
+        "                current = resolved;",
+        "            } else {",
+        "                current = featureValue(current, part);",
+        "            }",
         "            if (current == null) {",
         "                return null;",
         "            }",
@@ -404,6 +418,10 @@ def java_helpers() -> list[str]:
         "    }",
         "",
         "    private List<Object> pathValuesFrom(Object object, String path) {",
+        "        return pathValuesFrom(object, path, false);",
+        "    }",
+        "",
+        "    private List<Object> pathValuesFrom(Object object, String path, boolean keepTerminalNull) {",
         "        List<Object> values = new ArrayList<>();",
         "        if (path == null || path.isEmpty()) {",
         "            addFlattened(values, object);",
@@ -416,11 +434,14 @@ def java_helpers() -> list[str]:
         "        addFlattened(currentValues, object);",
         "        for (Object current : currentValues) {",
         "            Object next = featureValue(current, first);",
-        "            if (rest.isEmpty()) {",
-        "                addFlattened(values, next);",
+        "            if (!rest.isEmpty()) {",
+        "                values.addAll(pathValuesFrom(next, rest, keepTerminalNull));",
+        "            }",
+        "            else if (next == null && keepTerminalNull) {",
+        "                values.add(null);",
         "            }",
         "            else {",
-        "                values.addAll(pathValuesFrom(next, rest));",
+        "                addFlattened(values, next);",
         "            }",
         "        }",
         "        return values;",
@@ -446,8 +467,29 @@ def java_helpers() -> list[str]:
         "        return null;",
         "    }",
         "",
+        # Same rendering as the shared harness, so one contract describes both:
+        # an unset value reads "null" and a reference reads its identity.
         "    private String stringValue(Object value) {",
-        "        return value == null ? null : String.valueOf(value);",
+        '        if (value == null) {',
+        '            return "null";',
+        "        }",
+        "        if (value instanceof Collection<?>) {",
+        "            List<String> rendered = new ArrayList<>();",
+        "            for (Object element : (Collection<?>) value) {",
+        "                rendered.add(stringValue(element));",
+        "            }",
+        '            return String.join(",", rendered);',
+        "        }",
+        "        if (value instanceof EObject) {",
+        "            EObject object = (EObject) value;",
+        '            for (String candidate : new String[] {"name", "label", "id", "value"}) {',
+        "                EStructuralFeature feature = object.eClass().getEStructuralFeature(candidate);",
+        "                if (feature != null && object.eGet(feature) != null) {",
+        "                    return String.valueOf(object.eGet(feature));",
+        "                }",
+        "            }",
+        "        }",
+        "        return String.valueOf(value);",
         "    }",
         "",
         "    private Map<String, Integer> counts(Collection<String> values) {",

@@ -131,6 +131,30 @@ class PhaseClassificationTests(unittest.TestCase):
         self.assertFalse(observation.is_reference_valid)
         self.assertEqual("assertion_failure", observation.failure_stage)
 
+    def test_a_transformation_compile_failure_is_not_an_oracle_disagreement(
+        self,
+    ) -> None:
+        compile_failure = (
+            "Transformation failed: Compilation errors found in unit "
+            "'file:/work/target/classes/transformations/Mappings.qvto' "
+            "==> expected: <0> but was: <4>"
+        )
+        observation = classify_maven_run(
+            CONSOLE,
+            SurefireReport(
+                tests=2,
+                failures=2,
+                errors=0,
+                failure_messages=(compile_failure, compile_failure),
+            ),
+        )
+
+        self.assertEqual("transformation_parse", observation.failure_stage)
+        self.assertFalse(observation.assertions_evaluated)
+        self.assertFalse(observation.engine_started)
+        self.assertFalse(observation.is_reference_valid)
+        self.assertEqual(compile_failure, observation.error_summary)
+
     def test_an_error_wins_over_a_coincident_assertion_failure(self) -> None:
         # The real report has both. A run that threw never reached a trustworthy
         # verdict, so it must not be recorded as one.

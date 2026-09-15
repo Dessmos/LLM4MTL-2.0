@@ -342,12 +342,19 @@ class N8nArtifactRoutingTests(unittest.TestCase):
         nodes = {node["name"]: node for node in master["nodes"]}
         connections = master["connections"]
 
-        record = nodes["Record Terminal Result"]
-        self.assertEqual("n8n-nodes-base.httpRequest", record["type"])
-        self.assertEqual("POST", record["parameters"]["method"])
-        self.assertIn("/result", record["parameters"]["url"])
-        body = record["parameters"]["jsonBody"]
-        # Only what the orchestration owns; stage statuses are read off the run.
+        # One node issues every stage-service call, so each request is built
+        # where its action is chosen.
+        machine = nodes["State Machine"]["parameters"]["jsCode"]
+        self.assertEqual(
+            "={{ $json.request.body }}",
+            nodes["Call Stage Service"]["parameters"]["jsonBody"],
+        )
+
+        terminal = machine.split("if (action === 'final') {", 1)[1].split(
+            "\n  }\n", 1
+        )[0]
+        self.assertIn("method: 'POST'", terminal)
+        self.assertIn("${runUrl()}/result", terminal)
         for reported in (
             "status:",
             "terminal_state:",
@@ -355,27 +362,36 @@ class N8nArtifactRoutingTests(unittest.TestCase):
             "refinement_iterations_used:",
             "refinement_iterations_allowed:",
         ):
-            self.assertIn(reported, body)
-        self.assertNotIn("syntax_status", body)
-        self.assertNotIn("semantic_status", body)
+            self.assertIn(reported, terminal)
+        # Only what the orchestration owns; stage statuses are read off the run.
+        self.assertNotIn("syntax_status", terminal)
+        self.assertNotIn("semantic_status", terminal)
 
         # Each stage call states which refinement iteration it belongs to, so
         # the run's copy of the transformation is filed under the right one even
         # when the suite id deliberately stays behind.
-        stage_body = nodes["Run Existing Python Stage"]["parameters"]["jsonBody"]
-        self.assertIn("refinement_iteration: $json.stage_iteration", stage_body)
+        self.assertIn("refinement_iteration: state.stage_iteration", machine)
 
-        # The final branch records the ending before it reads the artifacts.
-        final_branch = connections["Route Next Action"]["main"][4]
-        self.assertEqual("Record Terminal Result", final_branch[0]["node"])
-        self.assertEqual(
-            "Read Final Run Artifacts",
-            connections["Record Terminal Result"]["main"][0][0]["node"],
+        # The ending is recorded before the artifacts are read: the run view
+        # only reaches `results` once the run carries its terminal result.
+        self.assertIn("if (action === 'read_run_artifacts') {", machine)
+        self.assertIn("method: 'GET', url: runUrl(), body: {}", machine)
+        after_final = machine.split("} else if (completed === 'final') {", 1)[1]
+        self.assertLess(
+            after_final.index("choose('read_run_artifacts');"),
+            after_final.index("state.results.push({"),
         )
-        # That node no longer receives the state directly, so it may not read
-        # the run id from $json.
-        artifacts_url = nodes["Read Final Run Artifacts"]["parameters"]["url"]
-        self.assertIn("$('State Machine').first().json.current.run_id", artifacts_url)
+
+        # Both are lanes of the shared node, so neither has a branch of its own.
+        lanes = [
+            rule["outputKey"]
+            for rule in nodes["Route Next Action"]["parameters"]["rules"]["values"]
+        ]
+        self.assertEqual(["stage_service", "subworkflow", "complete"], lanes)
+        self.assertEqual(
+            "Call Stage Service",
+            connections["Route Next Action"]["main"][0][0]["node"],
+        )
 
     def test_no_workflow_tree_keeps_its_own_copy_of_the_benchmark(self) -> None:
         """Task inputs live in benchmark/ only.
