@@ -176,6 +176,9 @@ def normalize_failure(
     status = {
         "transformation_parse": OutcomeStatus.PARSE_FAILED,
         "java_compilation": OutcomeStatus.COMPILE_FAILED,
+        # The suite's own models loaded on the reference, so a load failure here
+        # is the generated transformation naming a model or metamodel wrongly.
+        "model_loading": OutcomeStatus.RUNTIME_FAILED,
         "engine_runtime": OutcomeStatus.RUNTIME_FAILED,
         UNCLASSIFIED_RUNTIME: OutcomeStatus.RUNTIME_FAILED,
         "infrastructure": OutcomeStatus.INFRASTRUCTURE_FAILED,

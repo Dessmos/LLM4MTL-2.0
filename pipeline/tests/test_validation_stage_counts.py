@@ -363,11 +363,28 @@ class TransformationExecutionCountTests(unittest.TestCase):
                     counts["evaluated"], counts["passed"] + counts["failed"]
                 )
 
+    def test_a_model_loading_failure_of_a_generated_transformation_is_a_failure(
+        self,
+    ) -> None:
+        """The suite's models loaded on the reference; the transformation did not.
+
+        An ATL module that declares `from IN : item` when the harness binds
+        `Item` fails at model loading. Counting that as "could not run" hid it
+        behind SKIPPED_NO_PARSED_TRANSFORMATIONS and an incomplete run.
+        """
+        counts = self.counts_for(
+            self.unclassified_observation(failure_stage="model_loading")
+        )
+
+        self.assertEqual(1, counts["failed"])
+        self.assertEqual(1, counts["evaluated"])
+        self.assertEqual(0, counts["skipped"])
+
     def test_a_pair_the_harness_could_not_run_stays_out_of_the_denominator(
         self,
     ) -> None:
         counts = self.counts_for(
-            self.unclassified_observation(failure_stage="model_loading")
+            self.unclassified_observation(failure_stage="artifact_validation")
         )
 
         self.assertEqual(1, counts["skipped"])

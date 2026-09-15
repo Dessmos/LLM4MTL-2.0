@@ -170,6 +170,7 @@ class EtlAdapter:
             )
         status = {
             "transformation_parse": OutcomeStatus.PARSE_FAILED,
+            "model_loading": OutcomeStatus.RUNTIME_FAILED,
             "engine_runtime": OutcomeStatus.RUNTIME_FAILED,
             UNCLASSIFIED_RUNTIME: OutcomeStatus.RUNTIME_FAILED,
             "infrastructure": OutcomeStatus.INFRASTRUCTURE_FAILED,
