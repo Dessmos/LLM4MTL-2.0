@@ -34,6 +34,7 @@ from llm4mtl.run_store.generations import (
     prepare_generation_response_directory,
     record_generation,
     task_prompt_source,
+    write_metamodel,
     write_task_prompt,
 )
 from llm4mtl.run_store.identity import InvalidRunIdError, resolve_contained_dir
@@ -66,17 +67,22 @@ def create_run(
     manifest: dict[str, Any],
     *,
     task_prompt: str | None = None,
+    metamodel: str | None = None,
 ) -> RunPaths:
     """Create the run directory, write the immutable manifest, and open the event log.
 
     ``task_prompt`` is a custom task prompt the run reads instead of the frozen
-    benchmark prompt; it is kept beside the manifest that hashed it.
+    benchmark prompt, and ``metamodel`` the metamodel it reads instead of the
+    ones a task contract names; both are kept beside the manifest that hashed
+    them.
     """
     paths = open_run(batch_root, run_id)
     paths.root.mkdir(parents=True, exist_ok=True)
     write_manifest(paths, {"run_id": run_id, **manifest})
     if task_prompt is not None:
         write_task_prompt(paths, task_prompt)
+    if metamodel is not None:
+        write_metamodel(paths, metamodel)
     if manifest.get("test_generation_model") is not None:
         prepare_generation_response_directory(
             paths, artifact_type="semantic-test", iteration=0
@@ -119,6 +125,7 @@ __all__ = [
     "prepare_generation_response_directory",
     "record_generation",
     "task_prompt_source",
+    "write_metamodel",
     "write_task_prompt",
     "RefinementPreparationError",
     "prepare_refinement",

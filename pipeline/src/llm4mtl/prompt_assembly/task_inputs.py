@@ -3,7 +3,8 @@
 The task contract is the only mapping from a reference transformation to its
 metamodel files.  Callers receive the reference, those exact metamodels, and the
 language grammar; the raw contract is intentionally not included in the LLM
-input.
+input.  A custom task supplies its own metamodel instead and resolves through
+:func:`resolve_custom_task_inputs`, which produces the same shape.
 """
 
 from __future__ import annotations
@@ -23,6 +24,21 @@ from llm4mtl.paths import REPO_ROOT, TARGET, require_repository_relative
 from llm4mtl.serialization.hashing import file_sha256
 
 TASK_NAME = re.compile(r"^[A-Za-z0-9._-]+$")
+
+# What a custom task's metamodel is called in the prompt, in place of the
+# repository path a contract-selected one has.
+CUSTOM_METAMODEL_PATH = "custom-task-metamodel"
+
+
+def _grammar_path(language_key: str) -> Path:
+    grammar_path = (
+        TARGET.prompt_assets / "transformations" / "grammar" / language_key / "EBNF.txt"
+    )
+    if not grammar_path.is_file():
+        raise TaskInputResolutionError(
+            f"grammar not found for language {language_key!r}"
+        )
+    return grammar_path
 
 
 class TaskInputResolutionError(ValueError):
@@ -46,8 +62,8 @@ class ResolvedTaskInputs:
 
     language: str
     task: str
-    contract_path: str
-    reference: PromptInputFile
+    contract_path: str | None
+    reference: PromptInputFile | None
     metamodels: tuple[PromptInputFile, ...]
     metamodel_uris: tuple[str, ...]
     grammar: PromptInputFile
@@ -89,7 +105,7 @@ class ResolvedTaskInputs:
             "language": self.language,
             "task": self.task,
             "contract_path": self.contract_path,
-            "reference": self.reference.to_dict(),
+            "reference": None if self.reference is None else self.reference.to_dict(),
             "metamodels": [metamodel.to_dict() for metamodel in self.metamodels],
             "metamodel_text": self.metamodel_text,
             "metamodel_uris": list(self.metamodel_uris),
@@ -100,6 +116,42 @@ class ResolvedTaskInputs:
             ],
             "prerequisite_prompt_text": self.prerequisite_prompt_text,
         }
+
+
+def resolve_custom_task_inputs(
+    language: str,
+    task: str,
+    metamodel: str,
+    *,
+    metamodel_path: str = CUSTOM_METAMODEL_PATH,
+) -> ResolvedTaskInputs:
+    """The prompt inputs of a task whose metamodel the user wrote or attached.
+
+    The metamodel arrives with the run rather than through a contract, so there
+    is no contract and no reference to resolve; the grammar is the language's,
+    as it is for every task.
+    """
+    if not TASK_NAME.fullmatch(task):
+        raise TaskInputResolutionError(f"invalid task name: {task!r}")
+    if not metamodel.strip():
+        raise TaskInputResolutionError(f"custom task {task!r} supplied no metamodel")
+
+    try:
+        config = language_config(language)
+    except KeyError as exc:
+        raise TaskInputResolutionError(str(exc)) from exc
+
+    return ResolvedTaskInputs(
+        language=config.language_key,
+        task=task,
+        contract_path=None,
+        reference=None,
+        metamodels=(PromptInputFile(path=metamodel_path, content=metamodel),),
+        # Namespace URIs come from a contract, and a custom metamodel has none:
+        # the prompt then states no URI rather than one from another task's.
+        metamodel_uris=(),
+        grammar=_read_input(_grammar_path(config.language_key)),
+    )
 
 
 def resolve_task_inputs(language: str, task: str) -> ResolvedTaskInputs:
@@ -135,13 +187,7 @@ def resolve_task_inputs(language: str, task: str) -> ResolvedTaskInputs:
     _validate_reference_identity(contract, reference_path, language_key, task)
     metamodel_paths, metamodel_uris = _contract_metamodels(contract)
 
-    grammar_path = (
-        TARGET.prompt_assets / "transformations" / "grammar" / language_key / "EBNF.txt"
-    )
-    if not grammar_path.is_file():
-        raise TaskInputResolutionError(
-            f"grammar not found for language {language_key!r}"
-        )
+    grammar_path = _grammar_path(language_key)
 
     return ResolvedTaskInputs(
         language=language_key,

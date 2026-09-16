@@ -185,15 +185,21 @@ class StageServiceTests(unittest.TestCase):
         )
         self.assertEqual(422, response.status_code)
 
-    def test_a_custom_task_prompt_is_kept_by_its_run_and_hashed_into_its_manifest(
+    def test_a_custom_task_keeps_both_its_inputs_and_hashes_them_into_its_manifest(
         self,
     ) -> None:
         prompt = "Flatten every tree into one graph node per leaf.\n"
+        metamodel = "class Tree { children: Tree[] }\n"
         created = self.client.post(
             f"/batches/{BATCH}/runs",
             json=run_payload(
+                task="TreeFlattening",
                 pipeline_variant="full:custom-task:TreeFlattening",
-                custom_task={"name": "TreeFlattening", "prompt": prompt},
+                custom_task={
+                    "name": "TreeFlattening",
+                    "prompt": prompt,
+                    "metamodel": metamodel,
+                },
             ),
         )
         self.assertEqual(200, created.status_code, created.text)
@@ -202,18 +208,52 @@ class StageServiceTests(unittest.TestCase):
 
         paths = run_store.open_run(self.batch_root, run_id)
         self.assertEqual(prompt, paths.task_prompt.read_text(encoding="utf-8"))
+        self.assertEqual(metamodel, paths.metamodel.read_text(encoding="utf-8"))
         manifest = run_store.read_manifest(paths)
         assert manifest is not None
-        # The identity stays the benchmark task whose inputs the run resolves.
-        self.assertEqual("Tree2Graph", manifest["task"])
+        # Nothing is borrowed, so the identity is the custom task's own name.
+        self.assertEqual("TreeFlattening", manifest["task"])
         hashes = manifest["provenance"]["input_hashes"]
         self.assertEqual(hashlib.sha256(prompt.encode()).hexdigest(), hashes["task_prompt"])
         self.assertEqual("custom", hashes["task_prompt_source"])
-        self.assertEqual(64, len(hashes["reference_transformation"]))
         self.assertEqual(
-            {"name": "TreeFlattening", "benchmark_task": "Tree2Graph"},
+            {"custom-task-metamodel": hashlib.sha256(metamodel.encode()).hexdigest()},
+            hashes["metamodels"],
+        )
+        self.assertEqual("custom", hashes["metamodel_source"])
+        # No contract selected these inputs and no reference implements them,
+        # and every stage that would read either is disabled for such a run.
+        self.assertIsNone(hashes["reference_transformation"])
+        self.assertIsNone(hashes["task_contract"])
+        self.assertEqual(
+            {"name": "TreeFlattening"},
             manifest["provenance"]["custom_task"],
         )
+
+    def test_a_custom_task_resolves_the_metamodel_it_was_created_with(self) -> None:
+        metamodel = "class Tree { children: Tree[] }"
+        response = self.client.post(
+            "/prompt-inputs/resolve",
+            json={
+                "language": "etl",
+                "task": "TreeFlattening",
+                "metamodel": metamodel,
+            },
+        )
+        self.assertEqual(200, response.status_code, response.text)
+        body = response.json()
+        self.assertEqual("TreeFlattening", body["task"])
+        self.assertIn(metamodel, body["metamodel_text"])
+        # The grammar is the language's, as it is for every task.
+        self.assertEqual(
+            "prompt_assets/transformations/grammar/etl/EBNF.txt",
+            body["grammar"]["path"],
+        )
+        # Nothing of another task's leaks in: no reference to copy from, and no
+        # namespace URI a contract would have named.
+        self.assertIsNone(body["reference"])
+        self.assertIsNone(body["contract_path"])
+        self.assertEqual("", body["metamodel_uri_text"])
 
     def test_a_benchmark_run_keeps_no_task_prompt_of_its_own(self) -> None:
         created = self.client.post(

@@ -587,5 +587,77 @@ class RefinementGenerationContractTests(unittest.TestCase):
             read_diagnosis_queue(self.paths.root, 1)
 
 
+class CustomTaskRefinementContextTests(unittest.TestCase):
+    """What a refinement prompt restates for a run that supplied its metamodel.
+
+    The generation being refined was produced from the metamodel the run was
+    created with. A prompt that restated a contract's metamodels instead would
+    be asking about a different task, so refinement re-reads the run's own copy.
+    """
+
+    METAMODEL = "class Tree { children: Tree[] }\n"
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.root = Path(self._tmp.name)
+        self.paths = run_store.create_run(
+            self.root / "runs",
+            "custom-1",
+            {
+                **IDENTITY,
+                "task": "TreeFlattening",
+                "pipeline_variant": "full:custom-task:TreeFlattening",
+                "provenance": build_provenance(
+                    "etl",
+                    "TreeFlattening",
+                    custom_task_prompt="Flatten every tree.\n",
+                    custom_task_metamodel=self.METAMODEL,
+                ),
+            },
+            task_prompt="Flatten every tree.\n",
+            metamodel=self.METAMODEL,
+        )
+        self.manifest = run_store.read_manifest(self.paths)
+        assert self.manifest is not None
+
+    def test_refinement_restates_the_metamodel_the_run_was_created_with(self) -> None:
+        previous = self.paths.generation_response(
+            "transformation-generation", 0, "TreeFlattening.etl"
+        )
+        previous.parent.mkdir(parents=True, exist_ok=True)
+        previous.write_text("rule Flatten {}\n", encoding="utf-8")
+        # The syntax failure this refinement answers.
+        attempt = self.paths.stage_attempt_dir("syntax-validation", 1)
+        attempt.mkdir(parents=True, exist_ok=True)
+        write_json(
+            attempt / "result.json",
+            {"status": "failed", "outcome_code": "SYNTAX_INVALID", "counts": {}},
+        )
+
+        prepared = run_store.prepare_refinement(
+            self.paths,
+            self.manifest,
+            artifact_type="transformation",
+            iteration=1,
+            previous_iteration=0,
+            provider="openai",
+            model="gpt-5",
+            reason="SYNTAX_INVALID",
+            run_diagnoses=self.paths.root / "diagnosis",
+        )
+        request = read_json(
+            self.paths.refinement_dir("transformation", 1) / "request.json"
+        )
+        context = request["original_task_context"]
+        self.assertEqual(1, len(context["metamodels"]))
+        self.assertEqual(self.METAMODEL, context["metamodels"][0]["content"])
+        self.assertIn("metamodel.txt", context["metamodels"][0]["path"])
+        # The prompt the LLM is handed says the same thing the request records.
+        prompt = (self.paths.root / prepared["prompt_file"]).read_text(encoding="utf-8")
+        self.assertIn(self.METAMODEL.strip(), prompt)
+        self.assertNotIn("Tree2Graph", prompt)
+
+
 if __name__ == "__main__":
     unittest.main()

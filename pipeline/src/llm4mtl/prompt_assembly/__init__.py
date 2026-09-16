@@ -12,11 +12,13 @@ from __future__ import annotations
 from llm4mtl.prompt_assembly.task_inputs import (
     ResolvedTaskInputs,
     TaskInputResolutionError,
+    resolve_custom_task_inputs,
     resolve_task_inputs,
 )
 
 __all__ = [
     "ResolvedTaskInputs",
     "TaskInputResolutionError",
+    "resolve_custom_task_inputs",
     "resolve_task_inputs",
 ]

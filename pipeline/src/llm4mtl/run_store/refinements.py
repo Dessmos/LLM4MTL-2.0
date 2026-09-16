@@ -12,7 +12,9 @@ from llm4mtl.artifact_schemas import validate_artifact
 from llm4mtl.conventions import default_generated_tests_root, language_config
 from llm4mtl.paths import REPO_ROOT, TARGET
 from llm4mtl.prompt_assembly.task_inputs import (
+    ResolvedTaskInputs,
     TaskInputResolutionError,
+    resolve_custom_task_inputs,
     resolve_task_inputs,
 )
 from llm4mtl.run_store.attempts import existing_attempts
@@ -70,7 +72,7 @@ def prepare_refinement(
     language = str(manifest["language"])
     task = str(manifest["task"])
     try:
-        context = resolve_task_inputs(language, task)
+        context = _task_context(paths, language, task)
     except TaskInputResolutionError as exc:
         raise RefinementPreparationError(str(exc)) from exc
     prompt_path = task_prompt_source(paths, manifest)
@@ -225,6 +227,28 @@ def _previous_artifact_files(
             f"previous {artifact_type} iteration {iteration:03d} is missing"
         )
     return [_text_artifact(path) for path in existing]
+
+
+def _task_context(paths: RunPaths, language: str, task: str) -> ResolvedTaskInputs:
+    """The prompt inputs refinement restates: a custom task's own metamodel when
+    the run kept one, the contract's files otherwise."""
+    if paths.metamodel.is_file():
+        return resolve_custom_task_inputs(
+            language,
+            task,
+            paths.metamodel.read_text(encoding="utf-8"),
+            metamodel_path=_artifact_path(paths.metamodel),
+        )
+    return resolve_task_inputs(language, task)
+
+
+def _artifact_path(path: Path) -> str:
+    """Repository-relative when the run is inside the repository, absolute when
+    a configured artifact root put it elsewhere; both resolve against REPO_ROOT."""
+    try:
+        return path.relative_to(REPO_ROOT).as_posix()
+    except ValueError:
+        return path.as_posix()
 
 
 def _feedback_source(reason: str) -> str:

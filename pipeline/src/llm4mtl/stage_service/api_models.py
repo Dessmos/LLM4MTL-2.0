@@ -25,18 +25,18 @@ class RunExperimentConfig(BaseModel):
 
 
 class CustomTaskSpec(BaseModel):
-    """A user-authored task prompt, run over a benchmark task's inputs.
+    """A user-authored task prompt over a user-supplied metamodel.
 
-    The run's ``task`` stays the benchmark task: its contract, metamodels, and
-    reference are what every stage resolves. The custom prompt only replaces the
-    frozen task prompt the generators read, and the name is how the run is
-    recognised in its id and its batch summary.
+    The prompt replaces the frozen task prompt and the metamodel the files a
+    task contract would have named. The name is the run's ``task``: such a run
+    borrows nothing from the benchmark, so there is no other task to name.
     """
 
     model_config = ConfigDict(extra="forbid")
 
     name: str = Field(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9._-]+$")
     prompt: str = Field(min_length=1)
+    metamodel: str = Field(min_length=1)
 
 
 class RunCreateRequest(BaseModel):
@@ -215,12 +215,17 @@ class GenerationRecordRequest(BaseModel):
 
 
 class PromptInputsRequest(BaseModel):
-    """Identity of the task whose exact prompt inputs must be resolved."""
+    """Identity of the task whose exact prompt inputs must be resolved.
+
+    ``metamodel`` is the text a custom task was created with; given, it is
+    resolved instead of consulting a contract.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
     language: Language
     task: str = Field(min_length=1, pattern=r"^[A-Za-z0-9._-]+$")
+    metamodel: str | None = Field(default=None, min_length=1)
 
 
 class DiagnosisRecordRequest(BaseModel):

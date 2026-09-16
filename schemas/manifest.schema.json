@@ -164,7 +164,7 @@
         },
         "input_hashes": {
           "type": "object",
-          "description": "Content hashes of the hand-authored inputs that decide the run's outcome: the reference transformation, the task contract, and the metamodels. Without them a stored result cannot be tied to the inputs it was produced from.",
+          "description": "Content hashes of the hand-authored inputs that decide the run's outcome: the reference transformation, the task contract, and the metamodels. Without them a stored result cannot be tied to the inputs it was produced from. A custom task hashes the metamodel supplied with the run instead, and records null for the two it has none of.",
           "required": [
             "reference_transformation",
             "task_contract",
@@ -173,16 +173,24 @@
           "additionalProperties": true,
           "properties": {
             "reference_transformation": {
-              "type": "string",
-              "pattern": "^[0-9a-f]{64}$"
+              "type": [
+                "string",
+                "null"
+              ],
+              "pattern": "^[0-9a-f]{64}$",
+              "description": "Content hash of this input. Null exactly when the run names no benchmark task: a custom task supplies its own metamodel, so it resolves through no contract and is judged against no reference, and every stage that would read them is disabled for it."
             },
             "task_contract": {
-              "type": "string",
-              "pattern": "^[0-9a-f]{64}$"
+              "type": [
+                "string",
+                "null"
+              ],
+              "pattern": "^[0-9a-f]{64}$",
+              "description": "Content hash of this input. Null exactly when the run names no benchmark task: a custom task supplies its own metamodel, so it resolves through no contract and is judged against no reference, and every stage that would read them is disabled for it."
             },
             "metamodels": {
               "type": "object",
-              "description": "Hash per metamodel file the task contract names, keyed by repository-relative path. The key is always present, so a run that recorded nothing is distinguishable from one that never recorded. It is empty exactly when the contract names no metamodel file at all \u2014 a task whose models are all metamodel-less, such as the plainXml slots of etl/rss2atom. Requiring at least one entry here made such a task impossible to run: provenance has no file to hash, so the manifest could never be written.",
+              "description": "Hash per metamodel file the task contract names, keyed by repository-relative path. The key is always present, so a run that recorded nothing is distinguishable from one that never recorded. It is empty exactly when the contract names no metamodel file at all \u2014 a task whose models are all metamodel-less, such as the plainXml slots of etl/rss2atom. Requiring at least one entry here made such a task impossible to run: provenance has no file to hash, so the manifest could never be written. For a custom task this holds the one metamodel the run was created with, keyed by the name the prompt pastes it under rather than a repository path.",
               "additionalProperties": {
                 "type": "string",
                 "pattern": "^[0-9a-f]{64}$"

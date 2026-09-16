@@ -36,6 +36,7 @@ def build_provenance(
     task: str,
     *,
     custom_task_prompt: str | None = None,
+    custom_task_metamodel: str | None = None,
     **extra: Any,
 ) -> dict[str, Any]:
     """Collect the provenance block for a run manifest.
@@ -43,7 +44,9 @@ def build_provenance(
     Extra keyword arguments are merged in, so a caller can record facts only it
     knows (for example the resolved-config hash of a local runner invocation).
     ``custom_task_prompt`` is the user-authored prompt a run reads instead of
-    the frozen benchmark prompt; its hash is recorded in place of the frozen one.
+    the frozen benchmark prompt, and ``custom_task_metamodel`` the metamodel it
+    reads instead of the ones a task contract names; each is hashed in place of
+    the input it replaces.
     """
     from llm4mtl.languages import UnsupportedLanguageError, language_adapter
 
@@ -70,14 +73,21 @@ def build_provenance(
             **language_tool_versions,
         },
         "input_hashes": input_hashes(
-            language, task, custom_task_prompt=custom_task_prompt
+            language,
+            task,
+            custom_task_prompt=custom_task_prompt,
+            custom_task_metamodel=custom_task_metamodel,
         ),
         **extra,
     }
 
 
 def input_hashes(
-    language: str, task: str, *, custom_task_prompt: str | None = None
+    language: str,
+    task: str,
+    *,
+    custom_task_prompt: str | None = None,
+    custom_task_metamodel: str | None = None,
 ) -> dict[str, Any]:
     """Content hashes of the hand-authored inputs that decide this run's outcome.
 
@@ -91,9 +101,10 @@ def input_hashes(
     creation: recording ``null`` would create evidence that cannot be tied to
     the behavioural oracle and structural contract that produced it.
 
-    A custom task prompt replaces only the frozen prompt: ``task_prompt`` then
-    hashes the text the run was given and ``task_prompt_source`` says so, while
-    the oracle, contract, and metamodels stay those of the benchmark task.
+    A custom task prompt replaces the frozen prompt, and a custom task metamodel
+    the contract-selected ones: ``task_prompt`` and ``metamodels`` then hash the
+    text the run was given, and the reference and contract it has none of are
+    recorded as null.
     """
     from llm4mtl.conventions import (
         default_references_root,
@@ -102,12 +113,33 @@ def input_hashes(
         language_config,
     )
     from llm4mtl.task_contracts import load_task_contract
+    from llm4mtl.prompt_assembly.task_inputs import CUSTOM_METAMODEL_PATH
     from llm4mtl.serialization.hashing import file_sha256
 
     try:
         config = language_config(language)
     except KeyError as exc:
         raise ProvenanceError(str(exc)) from exc
+
+    if custom_task_metamodel is not None:
+        if custom_task_prompt is None:
+            raise ProvenanceError(
+                f"custom task metamodel without a custom task prompt: {language}/{task}"
+            )
+        return {
+            "reference_transformation": None,
+            "task_contract": None,
+            "metamodels": {
+                CUSTOM_METAMODEL_PATH: hashlib.sha256(
+                    custom_task_metamodel.encode("utf-8")
+                ).hexdigest()
+            },
+            "task_prompt": hashlib.sha256(
+                custom_task_prompt.encode("utf-8")
+            ).hexdigest(),
+            "task_prompt_source": "custom",
+            "metamodel_source": "custom",
+        }
 
     reference = next(default_references_root(config).glob(f"{task}.*"), None)
     contract_path = default_task_contracts_root(config) / f"{task}.json"

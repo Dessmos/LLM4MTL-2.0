@@ -50,6 +50,11 @@ class RunPaths:
         return self.root / "task-prompt.md"
 
     @property
+    def metamodel(self) -> Path:
+        """The custom task metamodel this run was created with, when it has one."""
+        return self.root / "metamodel.txt"
+
+    @property
     def events(self) -> Path:
         return self.root / "events.jsonl"
 

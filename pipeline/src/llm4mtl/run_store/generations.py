@@ -59,6 +59,14 @@ def write_task_prompt(paths: RunPaths, prompt: str) -> Path:
     return paths.task_prompt
 
 
+def write_metamodel(paths: RunPaths, metamodel: str) -> Path:
+    """Keep the custom task metamodel a run was created with, exactly once."""
+    if paths.metamodel.exists():
+        raise GenerationRecordError(f"metamodel already recorded: {paths.metamodel}")
+    paths.metamodel.write_text(metamodel, encoding="utf-8")
+    return paths.metamodel
+
+
 def record_generation(
     paths: RunPaths,
     manifest: dict[str, Any],

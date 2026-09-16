@@ -132,11 +132,15 @@ def _metamodel_uri(model: dict[str, Any]) -> str:
 
 
 def _metamodel_name(model: dict[str, Any]) -> str:
+    """The .ecore the harness loads this model against.
+
+    A task contract names the file for every benchmark task. A custom task has
+    no contract, so the model's own name stands in, the way the alias and the
+    nsURI above already fall back rather than refusing to render.
+    """
     path = model.get("metamodelFile")
     if not path:
-        raise ValueError(
-            f"ATL model {model.get('name')} has no deterministic metamodel file"
-        )
+        return f"{_runtime_name(model)}.ecore"
     return str(path).replace("\\", "/").split("/")[-1]
 
 

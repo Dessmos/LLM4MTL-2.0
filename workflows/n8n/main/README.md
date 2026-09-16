@@ -47,27 +47,69 @@ what a run may leave unconfigured is decided in validation, not by hiding fields
 
 ### 2. Custom tasks
 
-Up to five slots, each a native text input (name), dropdown (the benchmark task
-whose metamodels the custom task uses, spelled `ETL / Tree2Graph`), and textarea
-(the prompt). The language follows from the benchmark task. Slot *n+1* opens
-when the `+ Add another custom task` tick at the end of slot *n* is set — that
-tick is an ordinary single-option checkbox, and the disclosure is a `:has()`
-rule in the custom CSS, so a closed slot still submits its empty inputs and the
-queue builder reads them as an unused slot. A slot with some but not all of its
-three values is refused rather than defaulted.
+The section is closed by default: a launch that runs benchmark tasks only
+shows one line and a `+ Add a custom task` tick, and none of the 29 fields
+below it. Setting that tick opens slot 1; slot *n+1* opens when the
+`+ Add another custom task` tick at the end of slot *n* is set. Both ticks are
+ordinary single-option checkboxes and the disclosure is one `:has()` rule in the
+custom CSS over the field wrappers that follow them. A hidden field still
+submits its empty input, which the queue builder reads as an unused slot.
 
-A custom task is queued as one run of its benchmark task: that task's contract,
-metamodels, and reference are what Python resolves, and `task` in the manifest
-names it. What is the custom task's own is the prompt (sent as `custom_task`
-on `POST /batches/{batch_id}/runs`, kept by Python as the run's
-`task-prompt.md`, and hashed into the manifest in place of the frozen prompt),
-the run id, the `pipeline_variant` (`<variant>:custom-task:<name>`), and the
-stage flags: the borrowed reference does not implement the custom prompt, so
-`technical_validation`, `reference_validation`, `semantic_execution`, and
-`source_diagnosis` are disabled for that run only. Every other flag, both
-refinement budgets, the providers, and the strategies are the ones chosen on this
-screen, and the benchmark tasks in the same queue run under the full chosen
-configuration.
+Two details of n8n's own markup decide how that rule is written, and both are
+pinned by `pipeline/tests/test_master_run_modes.py`. The wrappers are
+`.inputs-wrapper > div`, not `.form-group`: n8n wraps a checkbox group in a bare
+div and gives `.form-group` only to the other field types, so a rule written
+against `.form-group` never matches the tick. And the section ends at
+`#field-35` rather than at a marker with an id of its own: n8n runs every html
+field through sanitize-html, which allows no attributes on a div, so an id
+written into the marker never reaches the page — while the hidden input n8n
+generates per field, keyed by position, does. Inserting a field above the marker
+moves that number and fails the suite, because a stale anchor hides sections 3
+through 6 along with the slots.
+
+Each of the five slots is a native text input (name), dropdown (the language:
+ETL, ATL, QVT-O, Reactions), textarea (the metamodel), file input (the metamodel
+as an attachment instead), and textarea (the prompt). Nothing is borrowed from
+the benchmark: the slot carries its own language and its own metamodel. A slot
+with some but not all of its values is refused rather than defaulted, and so is
+one that both writes and attaches a metamodel: two metamodels in one slot leave
+the run to guess which one the prompt was written against.
+
+The written metamodel arrives on the submitted item's json; an attached one
+arrives as binary, keyed by the upload field's label with every non-word
+character replaced (`Custom_task_1___metamodel_file_0`). The queue builder finds
+that key by what it contains, base64-decodes it, and records where the metamodel
+came from in `config.custom_tasks[].metamodel_source` (`form` or `file`).
+
+A custom task is queued under its own name: `task` in the run spec is the custom
+task's name, not a benchmark task. The slot supplies the language, the metamodel,
+and the prompt, and all three travel as `custom_task` on
+`POST /batches/{batch_id}/runs`. Python keeps the prompt as the run's
+`task-prompt.md` and the metamodel as its `metamodel.txt`, and hashes both into
+the manifest: the prompt in place of the frozen one, the metamodel in place of
+the files a contract would have named, with `reference_transformation` and
+`task_contract` recorded as null because such a run has neither and no stage of
+it reads either.
+
+Both halves reach the generators through the invocation-local subworkflow copy
+the `Adapt Subworkflow For This Run` node builds. It points `Read prompt files`
+at the run's `task-prompt.md`, and rewrites the `Resolve exact task inputs` body
+to `{language, task, metamodel}` — a literal, not an n8n expression, so metamodel
+text containing `{{` cannot be evaluated. The stage service then answers from
+that text instead of a contract, so nothing of another task's metamodels,
+namespace URIs, or reference reaches the prompt. A benchmark task in the same
+queue keeps the generated `={{ { language: '<lang>', task: $json.baseName } }}`
+body and resolves through its contract exactly as before.
+
+The run id, the `pipeline_variant` (`<variant>:custom-task:<name>`), and the
+stage flags are the custom task's own: nothing implements the custom prompt over
+the supplied metamodel, so `technical_validation`, `reference_validation`,
+`semantic_execution`, and `source_diagnosis` are disabled for that run only.
+Every other flag, both refinement budgets, the providers, and the strategies are
+the ones chosen on this screen, and the benchmark tasks in the same queue run
+under the full chosen configuration. Refinement re-reads the run's own
+`metamodel.txt`, so a refinement prompt restates the metamodel the generation it
+is refining was produced from.
 
 A custom task therefore generates the semantic tests and the transformation,
 extracts the tests, parses the transformation, and refines either on
@@ -381,12 +423,19 @@ the tests either.
   the transformation strategy, and its value is then ignored. n8n form fields have
   no conditional disclosure, so which roles a run actually requires is enforced in
   validation, where it has to be correct anyway. The one exception is the custom
-  task slots, whose progressive disclosure is a CSS `:has()` rule over native
-  inputs (Chrome 105, Safari 15.4, Firefox 121); in an older browser every slot is
-  simply visible, and the submitted values are identical.
-* Custom tasks borrow a benchmark task's metamodels. A prompt over metamodels the
-  benchmark does not have is a new benchmark task (`docs/adding-task.md`), because
-  the contract those stages resolve is built from a reference transformation.
+  task section, whose progressive disclosure is a CSS `:has()` rule over native
+  inputs (Chrome 105, Safari 15.4, Firefox 121); in an older browser the whole
+  section is simply visible, and the submitted values are identical.
+* A custom task's metamodel reaches the run as text on the request, so it has no
+  task contract and no reference transformation behind it, and no namespace URIs:
+  the prompt states none rather than another task's. That is what keeps the
+  reference-bound stages disabled for such a run; a metamodel that should be
+  judged against an oracle is a new benchmark task (`docs/adding-task.md`).
+* An attached metamodel is read from the form item's binary in the queue builder,
+  which needs n8n's in-memory binary mode (the default). Under
+  `N8N_DEFAULT_BINARY_DATA_MODE=filesystem` the upload arrives as a reference
+  rather than its content, and the slot is refused with a message saying so —
+  paste the metamodel into the textarea instead.
 * One screen means one long screen — the full configuration is roughly 3700px
   tall with every language expanded. That is the trade for a single link and a
   single node, and the numbered sections carry the structure the pages used to.

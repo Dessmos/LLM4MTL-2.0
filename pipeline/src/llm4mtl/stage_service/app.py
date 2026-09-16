@@ -13,6 +13,7 @@ from llm4mtl.languages import language_adapter
 from llm4mtl.paths import TARGET, ArtifactRoots, repository_relative
 from llm4mtl.prompt_assembly.task_inputs import (
     TaskInputResolutionError,
+    resolve_custom_task_inputs,
     resolve_task_inputs,
 )
 from llm4mtl.provenance import ProvenanceError, build_provenance
@@ -128,8 +129,13 @@ def health() -> dict[str, str]:
     responses={422: UNPROCESSABLE_RESPONSE},
 )
 def resolve_prompt_inputs(request: PromptInputsRequest) -> dict[str, Any]:
-    """Return only the exact LLM inputs selected by the task contract."""
+    """Return only the exact LLM inputs of this task: a custom task's own
+    metamodel when the request carries one, its task contract's otherwise."""
     try:
+        if request.metamodel is not None:
+            return resolve_custom_task_inputs(
+                request.language, request.task, request.metamodel
+            ).to_dict()
         return resolve_task_inputs(request.language, request.task).to_dict()
     except TaskInputResolutionError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -229,8 +235,8 @@ def create_run(batch_id: str, request: RunCreateRequest) -> RunCreateResponse:
         )
     batch, _ = _require_batch(batch_id)
     custom = request.custom_task
-    # A custom task is recognised by its own name in the run id; its identity
-    # axis stays the benchmark task whose contract and oracle it resolves.
+    # A custom task is its own identity axis: nothing about it is resolved
+    # through another task, so its name is the task the manifest records.
     run_id = request.run_id or generate_run_id(
         PipelineConfig(
             language=request.language,
@@ -242,12 +248,10 @@ def create_run(batch_id: str, request: RunCreateRequest) -> RunCreateResponse:
             request.language,
             request.task,
             custom_task_prompt=custom.prompt if custom is not None else None,
+            custom_task_metamodel=custom.metamodel if custom is not None else None,
         )
         if custom is not None:
-            provenance["custom_task"] = {
-                "name": custom.name,
-                "benchmark_task": request.task,
-            }
+            provenance["custom_task"] = {"name": custom.name}
         manifest = {
             "batch_id": batch.batch_id,
             "language": request.language,
@@ -268,6 +272,7 @@ def create_run(batch_id: str, request: RunCreateRequest) -> RunCreateResponse:
             run_id,
             manifest,
             task_prompt=custom.prompt if custom is not None else None,
+            metamodel=custom.metamodel if custom is not None else None,
         )
     except run_store.ManifestExistsError as exc:
         raise HTTPException(

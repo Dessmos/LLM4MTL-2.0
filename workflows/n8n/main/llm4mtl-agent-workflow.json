@@ -67,7 +67,25 @@
             {
               "fieldType": "html",
               "elementName": "custom_tasks_heading",
-              "html": "<h3>2. Custom tasks</h3><p>Optional. A custom task is your own prompt run over the metamodels, task contract, and reference of one benchmark task. Give it a name, pick the benchmark task whose metamodels it uses, and write the prompt; the language follows from that task. Tick <code>+ Add another custom task</code> to open the next slot (up to five).</p><p>The borrowed reference does not implement your prompt, so a custom task never runs technical validation, reference validation, semantic execution, or source diagnosis: it generates the semantic tests and the transformation, extracts the tests, and parses the transformation. Such a run ends as <code>incomplete / SEMANTIC_EXECUTION_DISABLED</code>, which is its expected terminal point. Benchmark tasks selected below keep the configuration chosen in sections 4–6.</p>"
+              "html": "<h3>2. Custom tasks</h3><p>Optional. Your own prompt over your own metamodel, in the language you pick. Leave this closed to run benchmark tasks only.</p>"
+            },
+            {
+              "fieldLabel": "Custom tasks",
+              "fieldName": "custom_tasks_enabled",
+              "fieldType": "checkbox",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "+ Add a custom task"
+                  }
+                ]
+              },
+              "requiredField": false
+            },
+            {
+              "fieldType": "html",
+              "elementName": "custom_tasks_note",
+              "html": "<p>Give the task a name, choose its language, supply the metamodel — write it in the box or attach the file, not both — and write the prompt. Tick <code>+ Add another custom task</code> at the end of a slot to open the next one (up to five).</p><p>Nothing in the benchmark implements your prompt, so a custom task never runs technical validation, reference validation, semantic execution, or source diagnosis: it generates the semantic tests and the transformation, extracts the tests, and parses the transformation. Such a run ends as <code>incomplete / SEMANTIC_EXECUTION_DISABLED</code>, which is its expected terminal point.</p>"
             },
             {
               "fieldLabel": "Custom task 1 — name",
@@ -77,154 +95,40 @@
               "requiredField": false
             },
             {
-              "fieldLabel": "Custom task 1 — benchmark task providing the metamodels",
-              "fieldName": "custom_task_1_base",
+              "fieldLabel": "Custom task 1 — language",
+              "fieldName": "custom_task_1_language",
               "fieldType": "dropdown",
               "fieldOptions": {
                 "values": [
                   {
-                    "option": "ETL / OO2DB"
+                    "option": "ETL"
                   },
                   {
-                    "option": "ETL / Tree2Graph"
+                    "option": "ATL"
                   },
                   {
-                    "option": "ETL / base"
+                    "option": "QVT-O"
                   },
                   {
-                    "option": "ETL / equivalent"
-                  },
-                  {
-                    "option": "ETL / greedy"
-                  },
-                  {
-                    "option": "ETL / inheritance"
-                  },
-                  {
-                    "option": "ETL / lazy"
-                  },
-                  {
-                    "option": "ETL / multiple_targets"
-                  },
-                  {
-                    "option": "ETL / primary"
-                  },
-                  {
-                    "option": "ETL / rss2atom"
-                  },
-                  {
-                    "option": "ATL / AmaltheaToAscet_All"
-                  },
-                  {
-                    "option": "ATL / BibTeX2DocBook_All"
-                  },
-                  {
-                    "option": "ATL / CPL2SPL_All"
-                  },
-                  {
-                    "option": "ATL / Class2Interface_All"
-                  },
-                  {
-                    "option": "ATL / DSL2KM3_All"
-                  },
-                  {
-                    "option": "ATL / Document2Report_All"
-                  },
-                  {
-                    "option": "ATL / FamiliesToPersons_All"
-                  },
-                  {
-                    "option": "ATL / Grafcet2PetriNet_All"
-                  },
-                  {
-                    "option": "ATL / IEEE1471_2_MoDAF_All"
-                  },
-                  {
-                    "option": "ATL / Item2Product_All"
-                  },
-                  {
-                    "option": "ATL / Make2Ant_All"
-                  },
-                  {
-                    "option": "ATL / NetworkToGraph_All"
-                  },
-                  {
-                    "option": "ATL / PetriNet2Grafcet_All"
-                  },
-                  {
-                    "option": "ATL / User2Account_All"
-                  },
-                  {
-                    "option": "ATL / XML2DSL_All"
-                  },
-                  {
-                    "option": "QVT-O / Constructors"
-                  },
-                  {
-                    "option": "QVT-O / MappingBody"
-                  },
-                  {
-                    "option": "QVT-O / MappingExtensionDisjuncts"
-                  },
-                  {
-                    "option": "QVT-O / MappingExtensionInherits"
-                  },
-                  {
-                    "option": "QVT-O / MappingExtensionMerges"
-                  },
-                  {
-                    "option": "QVT-O / Mappings"
-                  },
-                  {
-                    "option": "QVT-O / MappingsWhenClause"
-                  },
-                  {
-                    "option": "QVT-O / ModelExtents"
-                  },
-                  {
-                    "option": "QVT-O / OverridingMappings"
-                  },
-                  {
-                    "option": "QVT-O / ResolveExpressions"
-                  },
-                  {
-                    "option": "Reactions / AmaltheaToAscet_ComponentContainerInsertedAsRoot"
-                  },
-                  {
-                    "option": "Reactions / AmaltheaToAscet_TaskCreated"
-                  },
-                  {
-                    "option": "Reactions / AmaltheaToAscet_TaskDeleted"
-                  },
-                  {
-                    "option": "Reactions / FamiliesToPersons_CreatedFather"
-                  },
-                  {
-                    "option": "Reactions / FamiliesToPersons_DeletedFamily"
-                  },
-                  {
-                    "option": "Reactions / FamiliesToPersons_DeletedMember"
-                  },
-                  {
-                    "option": "Reactions / FamiliesToPersons_InsertedDaughter"
-                  },
-                  {
-                    "option": "Reactions / FamiliesToPersons_InsertedFamilyRegister"
-                  },
-                  {
-                    "option": "Reactions / NetworkToGraph_ComponentDeleted"
-                  },
-                  {
-                    "option": "Reactions / NetworkToGraph_ComponentInsertedIntoSystem"
-                  },
-                  {
-                    "option": "Reactions / NetworkToGraph_ComponentRenamed"
-                  },
-                  {
-                    "option": "Reactions / NetworkToGraph_CreateAndRegisterRoot"
+                    "option": "Reactions"
                   }
                 ]
               },
+              "requiredField": false
+            },
+            {
+              "fieldLabel": "Custom task 1 — metamodel",
+              "fieldName": "custom_task_1_metamodel",
+              "fieldType": "textarea",
+              "placeholder": "The metamodel the transformation reads and writes; leave empty to attach it as a file instead",
+              "requiredField": false
+            },
+            {
+              "fieldLabel": "Custom task 1 — metamodel file",
+              "fieldName": "custom_task_1_metamodel_file",
+              "fieldType": "file",
+              "multipleFiles": false,
+              "acceptFileTypes": ".ecore,.emf,.xmi,.km3,.xsd,.xml,.txt",
               "requiredField": false
             },
             {
@@ -255,154 +159,40 @@
               "requiredField": false
             },
             {
-              "fieldLabel": "Custom task 2 — benchmark task providing the metamodels",
-              "fieldName": "custom_task_2_base",
+              "fieldLabel": "Custom task 2 — language",
+              "fieldName": "custom_task_2_language",
               "fieldType": "dropdown",
               "fieldOptions": {
                 "values": [
                   {
-                    "option": "ETL / OO2DB"
+                    "option": "ETL"
                   },
                   {
-                    "option": "ETL / Tree2Graph"
+                    "option": "ATL"
                   },
                   {
-                    "option": "ETL / base"
+                    "option": "QVT-O"
                   },
                   {
-                    "option": "ETL / equivalent"
-                  },
-                  {
-                    "option": "ETL / greedy"
-                  },
-                  {
-                    "option": "ETL / inheritance"
-                  },
-                  {
-                    "option": "ETL / lazy"
-                  },
-                  {
-                    "option": "ETL / multiple_targets"
-                  },
-                  {
-                    "option": "ETL / primary"
-                  },
-                  {
-                    "option": "ETL / rss2atom"
-                  },
-                  {
-                    "option": "ATL / AmaltheaToAscet_All"
-                  },
-                  {
-                    "option": "ATL / BibTeX2DocBook_All"
-                  },
-                  {
-                    "option": "ATL / CPL2SPL_All"
-                  },
-                  {
-                    "option": "ATL / Class2Interface_All"
-                  },
-                  {
-                    "option": "ATL / DSL2KM3_All"
-                  },
-                  {
-                    "option": "ATL / Document2Report_All"
-                  },
-                  {
-                    "option": "ATL / FamiliesToPersons_All"
-                  },
-                  {
-                    "option": "ATL / Grafcet2PetriNet_All"
-                  },
-                  {
-                    "option": "ATL / IEEE1471_2_MoDAF_All"
-                  },
-                  {
-                    "option": "ATL / Item2Product_All"
-                  },
-                  {
-                    "option": "ATL / Make2Ant_All"
-                  },
-                  {
-                    "option": "ATL / NetworkToGraph_All"
-                  },
-                  {
-                    "option": "ATL / PetriNet2Grafcet_All"
-                  },
-                  {
-                    "option": "ATL / User2Account_All"
-                  },
-                  {
-                    "option": "ATL / XML2DSL_All"
-                  },
-                  {
-                    "option": "QVT-O / Constructors"
-                  },
-                  {
-                    "option": "QVT-O / MappingBody"
-                  },
-                  {
-                    "option": "QVT-O / MappingExtensionDisjuncts"
-                  },
-                  {
-                    "option": "QVT-O / MappingExtensionInherits"
-                  },
-                  {
-                    "option": "QVT-O / MappingExtensionMerges"
-                  },
-                  {
-                    "option": "QVT-O / Mappings"
-                  },
-                  {
-                    "option": "QVT-O / MappingsWhenClause"
-                  },
-                  {
-                    "option": "QVT-O / ModelExtents"
-                  },
-                  {
-                    "option": "QVT-O / OverridingMappings"
-                  },
-                  {
-                    "option": "QVT-O / ResolveExpressions"
-                  },
-                  {
-                    "option": "Reactions / AmaltheaToAscet_ComponentContainerInsertedAsRoot"
-                  },
-                  {
-                    "option": "Reactions / AmaltheaToAscet_TaskCreated"
-                  },
-                  {
-                    "option": "Reactions / AmaltheaToAscet_TaskDeleted"
-                  },
-                  {
-                    "option": "Reactions / FamiliesToPersons_CreatedFather"
-                  },
-                  {
-                    "option": "Reactions / FamiliesToPersons_DeletedFamily"
-                  },
-                  {
-                    "option": "Reactions / FamiliesToPersons_DeletedMember"
-                  },
-                  {
-                    "option": "Reactions / FamiliesToPersons_InsertedDaughter"
-                  },
-                  {
-                    "option": "Reactions / FamiliesToPersons_InsertedFamilyRegister"
-                  },
-                  {
-                    "option": "Reactions / NetworkToGraph_ComponentDeleted"
-                  },
-                  {
-                    "option": "Reactions / NetworkToGraph_ComponentInsertedIntoSystem"
-                  },
-                  {
-                    "option": "Reactions / NetworkToGraph_ComponentRenamed"
-                  },
-                  {
-                    "option": "Reactions / NetworkToGraph_CreateAndRegisterRoot"
+                    "option": "Reactions"
                   }
                 ]
               },
+              "requiredField": false
+            },
+            {
+              "fieldLabel": "Custom task 2 — metamodel",
+              "fieldName": "custom_task_2_metamodel",
+              "fieldType": "textarea",
+              "placeholder": "The metamodel the transformation reads and writes; leave empty to attach it as a file instead",
+              "requiredField": false
+            },
+            {
+              "fieldLabel": "Custom task 2 — metamodel file",
+              "fieldName": "custom_task_2_metamodel_file",
+              "fieldType": "file",
+              "multipleFiles": false,
+              "acceptFileTypes": ".ecore,.emf,.xmi,.km3,.xsd,.xml,.txt",
               "requiredField": false
             },
             {
@@ -433,154 +223,40 @@
               "requiredField": false
             },
             {
-              "fieldLabel": "Custom task 3 — benchmark task providing the metamodels",
-              "fieldName": "custom_task_3_base",
+              "fieldLabel": "Custom task 3 — language",
+              "fieldName": "custom_task_3_language",
               "fieldType": "dropdown",
               "fieldOptions": {
                 "values": [
                   {
-                    "option": "ETL / OO2DB"
+                    "option": "ETL"
                   },
                   {
-                    "option": "ETL / Tree2Graph"
+                    "option": "ATL"
                   },
                   {
-                    "option": "ETL / base"
+                    "option": "QVT-O"
                   },
                   {
-                    "option": "ETL / equivalent"
-                  },
-                  {
-                    "option": "ETL / greedy"
-                  },
-                  {
-                    "option": "ETL / inheritance"
-                  },
-                  {
-                    "option": "ETL / lazy"
-                  },
-                  {
-                    "option": "ETL / multiple_targets"
-                  },
-                  {
-                    "option": "ETL / primary"
-                  },
-                  {
-                    "option": "ETL / rss2atom"
-                  },
-                  {
-                    "option": "ATL / AmaltheaToAscet_All"
-                  },
-                  {
-                    "option": "ATL / BibTeX2DocBook_All"
-                  },
-                  {
-                    "option": "ATL / CPL2SPL_All"
-                  },
-                  {
-                    "option": "ATL / Class2Interface_All"
-                  },
-                  {
-                    "option": "ATL / DSL2KM3_All"
-                  },
-                  {
-                    "option": "ATL / Document2Report_All"
-                  },
-                  {
-                    "option": "ATL / FamiliesToPersons_All"
-                  },
-                  {
-                    "option": "ATL / Grafcet2PetriNet_All"
-                  },
-                  {
-                    "option": "ATL / IEEE1471_2_MoDAF_All"
-                  },
-                  {
-                    "option": "ATL / Item2Product_All"
-                  },
-                  {
-                    "option": "ATL / Make2Ant_All"
-                  },
-                  {
-                    "option": "ATL / NetworkToGraph_All"
-                  },
-                  {
-                    "option": "ATL / PetriNet2Grafcet_All"
-                  },
-                  {
-                    "option": "ATL / User2Account_All"
-                  },
-                  {
-                    "option": "ATL / XML2DSL_All"
-                  },
-                  {
-                    "option": "QVT-O / Constructors"
-                  },
-                  {
-                    "option": "QVT-O / MappingBody"
-                  },
-                  {
-                    "option": "QVT-O / MappingExtensionDisjuncts"
-                  },
-                  {
-                    "option": "QVT-O / MappingExtensionInherits"
-                  },
-                  {
-                    "option": "QVT-O / MappingExtensionMerges"
-                  },
-                  {
-                    "option": "QVT-O / Mappings"
-                  },
-                  {
-                    "option": "QVT-O / MappingsWhenClause"
-                  },
-                  {
-                    "option": "QVT-O / ModelExtents"
-                  },
-                  {
-                    "option": "QVT-O / OverridingMappings"
-                  },
-                  {
-                    "option": "QVT-O / ResolveExpressions"
-                  },
-                  {
-                    "option": "Reactions / AmaltheaToAscet_ComponentContainerInsertedAsRoot"
-                  },
-                  {
-                    "option": "Reactions / AmaltheaToAscet_TaskCreated"
-                  },
-                  {
-                    "option": "Reactions / AmaltheaToAscet_TaskDeleted"
-                  },
-                  {
-                    "option": "Reactions / FamiliesToPersons_CreatedFather"
-                  },
-                  {
-                    "option": "Reactions / FamiliesToPersons_DeletedFamily"
-                  },
-                  {
-                    "option": "Reactions / FamiliesToPersons_DeletedMember"
-                  },
-                  {
-                    "option": "Reactions / FamiliesToPersons_InsertedDaughter"
-                  },
-                  {
-                    "option": "Reactions / FamiliesToPersons_InsertedFamilyRegister"
-                  },
-                  {
-                    "option": "Reactions / NetworkToGraph_ComponentDeleted"
-                  },
-                  {
-                    "option": "Reactions / NetworkToGraph_ComponentInsertedIntoSystem"
-                  },
-                  {
-                    "option": "Reactions / NetworkToGraph_ComponentRenamed"
-                  },
-                  {
-                    "option": "Reactions / NetworkToGraph_CreateAndRegisterRoot"
+                    "option": "Reactions"
                   }
                 ]
               },
+              "requiredField": false
+            },
+            {
+              "fieldLabel": "Custom task 3 — metamodel",
+              "fieldName": "custom_task_3_metamodel",
+              "fieldType": "textarea",
+              "placeholder": "The metamodel the transformation reads and writes; leave empty to attach it as a file instead",
+              "requiredField": false
+            },
+            {
+              "fieldLabel": "Custom task 3 — metamodel file",
+              "fieldName": "custom_task_3_metamodel_file",
+              "fieldType": "file",
+              "multipleFiles": false,
+              "acceptFileTypes": ".ecore,.emf,.xmi,.km3,.xsd,.xml,.txt",
               "requiredField": false
             },
             {
@@ -611,154 +287,40 @@
               "requiredField": false
             },
             {
-              "fieldLabel": "Custom task 4 — benchmark task providing the metamodels",
-              "fieldName": "custom_task_4_base",
+              "fieldLabel": "Custom task 4 — language",
+              "fieldName": "custom_task_4_language",
               "fieldType": "dropdown",
               "fieldOptions": {
                 "values": [
                   {
-                    "option": "ETL / OO2DB"
+                    "option": "ETL"
                   },
                   {
-                    "option": "ETL / Tree2Graph"
+                    "option": "ATL"
                   },
                   {
-                    "option": "ETL / base"
+                    "option": "QVT-O"
                   },
                   {
-                    "option": "ETL / equivalent"
-                  },
-                  {
-                    "option": "ETL / greedy"
-                  },
-                  {
-                    "option": "ETL / inheritance"
-                  },
-                  {
-                    "option": "ETL / lazy"
-                  },
-                  {
-                    "option": "ETL / multiple_targets"
-                  },
-                  {
-                    "option": "ETL / primary"
-                  },
-                  {
-                    "option": "ETL / rss2atom"
-                  },
-                  {
-                    "option": "ATL / AmaltheaToAscet_All"
-                  },
-                  {
-                    "option": "ATL / BibTeX2DocBook_All"
-                  },
-                  {
-                    "option": "ATL / CPL2SPL_All"
-                  },
-                  {
-                    "option": "ATL / Class2Interface_All"
-                  },
-                  {
-                    "option": "ATL / DSL2KM3_All"
-                  },
-                  {
-                    "option": "ATL / Document2Report_All"
-                  },
-                  {
-                    "option": "ATL / FamiliesToPersons_All"
-                  },
-                  {
-                    "option": "ATL / Grafcet2PetriNet_All"
-                  },
-                  {
-                    "option": "ATL / IEEE1471_2_MoDAF_All"
-                  },
-                  {
-                    "option": "ATL / Item2Product_All"
-                  },
-                  {
-                    "option": "ATL / Make2Ant_All"
-                  },
-                  {
-                    "option": "ATL / NetworkToGraph_All"
-                  },
-                  {
-                    "option": "ATL / PetriNet2Grafcet_All"
-                  },
-                  {
-                    "option": "ATL / User2Account_All"
-                  },
-                  {
-                    "option": "ATL / XML2DSL_All"
-                  },
-                  {
-                    "option": "QVT-O / Constructors"
-                  },
-                  {
-                    "option": "QVT-O / MappingBody"
-                  },
-                  {
-                    "option": "QVT-O / MappingExtensionDisjuncts"
-                  },
-                  {
-                    "option": "QVT-O / MappingExtensionInherits"
-                  },
-                  {
-                    "option": "QVT-O / MappingExtensionMerges"
-                  },
-                  {
-                    "option": "QVT-O / Mappings"
-                  },
-                  {
-                    "option": "QVT-O / MappingsWhenClause"
-                  },
-                  {
-                    "option": "QVT-O / ModelExtents"
-                  },
-                  {
-                    "option": "QVT-O / OverridingMappings"
-                  },
-                  {
-                    "option": "QVT-O / ResolveExpressions"
-                  },
-                  {
-                    "option": "Reactions / AmaltheaToAscet_ComponentContainerInsertedAsRoot"
-                  },
-                  {
-                    "option": "Reactions / AmaltheaToAscet_TaskCreated"
-                  },
-                  {
-                    "option": "Reactions / AmaltheaToAscet_TaskDeleted"
-                  },
-                  {
-                    "option": "Reactions / FamiliesToPersons_CreatedFather"
-                  },
-                  {
-                    "option": "Reactions / FamiliesToPersons_DeletedFamily"
-                  },
-                  {
-                    "option": "Reactions / FamiliesToPersons_DeletedMember"
-                  },
-                  {
-                    "option": "Reactions / FamiliesToPersons_InsertedDaughter"
-                  },
-                  {
-                    "option": "Reactions / FamiliesToPersons_InsertedFamilyRegister"
-                  },
-                  {
-                    "option": "Reactions / NetworkToGraph_ComponentDeleted"
-                  },
-                  {
-                    "option": "Reactions / NetworkToGraph_ComponentInsertedIntoSystem"
-                  },
-                  {
-                    "option": "Reactions / NetworkToGraph_ComponentRenamed"
-                  },
-                  {
-                    "option": "Reactions / NetworkToGraph_CreateAndRegisterRoot"
+                    "option": "Reactions"
                   }
                 ]
               },
+              "requiredField": false
+            },
+            {
+              "fieldLabel": "Custom task 4 — metamodel",
+              "fieldName": "custom_task_4_metamodel",
+              "fieldType": "textarea",
+              "placeholder": "The metamodel the transformation reads and writes; leave empty to attach it as a file instead",
+              "requiredField": false
+            },
+            {
+              "fieldLabel": "Custom task 4 — metamodel file",
+              "fieldName": "custom_task_4_metamodel_file",
+              "fieldType": "file",
+              "multipleFiles": false,
+              "acceptFileTypes": ".ecore,.emf,.xmi,.km3,.xsd,.xml,.txt",
               "requiredField": false
             },
             {
@@ -789,154 +351,40 @@
               "requiredField": false
             },
             {
-              "fieldLabel": "Custom task 5 — benchmark task providing the metamodels",
-              "fieldName": "custom_task_5_base",
+              "fieldLabel": "Custom task 5 — language",
+              "fieldName": "custom_task_5_language",
               "fieldType": "dropdown",
               "fieldOptions": {
                 "values": [
                   {
-                    "option": "ETL / OO2DB"
+                    "option": "ETL"
                   },
                   {
-                    "option": "ETL / Tree2Graph"
+                    "option": "ATL"
                   },
                   {
-                    "option": "ETL / base"
+                    "option": "QVT-O"
                   },
                   {
-                    "option": "ETL / equivalent"
-                  },
-                  {
-                    "option": "ETL / greedy"
-                  },
-                  {
-                    "option": "ETL / inheritance"
-                  },
-                  {
-                    "option": "ETL / lazy"
-                  },
-                  {
-                    "option": "ETL / multiple_targets"
-                  },
-                  {
-                    "option": "ETL / primary"
-                  },
-                  {
-                    "option": "ETL / rss2atom"
-                  },
-                  {
-                    "option": "ATL / AmaltheaToAscet_All"
-                  },
-                  {
-                    "option": "ATL / BibTeX2DocBook_All"
-                  },
-                  {
-                    "option": "ATL / CPL2SPL_All"
-                  },
-                  {
-                    "option": "ATL / Class2Interface_All"
-                  },
-                  {
-                    "option": "ATL / DSL2KM3_All"
-                  },
-                  {
-                    "option": "ATL / Document2Report_All"
-                  },
-                  {
-                    "option": "ATL / FamiliesToPersons_All"
-                  },
-                  {
-                    "option": "ATL / Grafcet2PetriNet_All"
-                  },
-                  {
-                    "option": "ATL / IEEE1471_2_MoDAF_All"
-                  },
-                  {
-                    "option": "ATL / Item2Product_All"
-                  },
-                  {
-                    "option": "ATL / Make2Ant_All"
-                  },
-                  {
-                    "option": "ATL / NetworkToGraph_All"
-                  },
-                  {
-                    "option": "ATL / PetriNet2Grafcet_All"
-                  },
-                  {
-                    "option": "ATL / User2Account_All"
-                  },
-                  {
-                    "option": "ATL / XML2DSL_All"
-                  },
-                  {
-                    "option": "QVT-O / Constructors"
-                  },
-                  {
-                    "option": "QVT-O / MappingBody"
-                  },
-                  {
-                    "option": "QVT-O / MappingExtensionDisjuncts"
-                  },
-                  {
-                    "option": "QVT-O / MappingExtensionInherits"
-                  },
-                  {
-                    "option": "QVT-O / MappingExtensionMerges"
-                  },
-                  {
-                    "option": "QVT-O / Mappings"
-                  },
-                  {
-                    "option": "QVT-O / MappingsWhenClause"
-                  },
-                  {
-                    "option": "QVT-O / ModelExtents"
-                  },
-                  {
-                    "option": "QVT-O / OverridingMappings"
-                  },
-                  {
-                    "option": "QVT-O / ResolveExpressions"
-                  },
-                  {
-                    "option": "Reactions / AmaltheaToAscet_ComponentContainerInsertedAsRoot"
-                  },
-                  {
-                    "option": "Reactions / AmaltheaToAscet_TaskCreated"
-                  },
-                  {
-                    "option": "Reactions / AmaltheaToAscet_TaskDeleted"
-                  },
-                  {
-                    "option": "Reactions / FamiliesToPersons_CreatedFather"
-                  },
-                  {
-                    "option": "Reactions / FamiliesToPersons_DeletedFamily"
-                  },
-                  {
-                    "option": "Reactions / FamiliesToPersons_DeletedMember"
-                  },
-                  {
-                    "option": "Reactions / FamiliesToPersons_InsertedDaughter"
-                  },
-                  {
-                    "option": "Reactions / FamiliesToPersons_InsertedFamilyRegister"
-                  },
-                  {
-                    "option": "Reactions / NetworkToGraph_ComponentDeleted"
-                  },
-                  {
-                    "option": "Reactions / NetworkToGraph_ComponentInsertedIntoSystem"
-                  },
-                  {
-                    "option": "Reactions / NetworkToGraph_ComponentRenamed"
-                  },
-                  {
-                    "option": "Reactions / NetworkToGraph_CreateAndRegisterRoot"
+                    "option": "Reactions"
                   }
                 ]
               },
+              "requiredField": false
+            },
+            {
+              "fieldLabel": "Custom task 5 — metamodel",
+              "fieldName": "custom_task_5_metamodel",
+              "fieldType": "textarea",
+              "placeholder": "The metamodel the transformation reads and writes; leave empty to attach it as a file instead",
+              "requiredField": false
+            },
+            {
+              "fieldLabel": "Custom task 5 — metamodel file",
+              "fieldName": "custom_task_5_metamodel_file",
+              "fieldType": "file",
+              "multipleFiles": false,
+              "acceptFileTypes": ".ecore,.emf,.xmi,.km3,.xsd,.xml,.txt",
               "requiredField": false
             },
             {
@@ -1412,7 +860,7 @@
           "buttonLabel": "Start pipeline",
           "appendAttribution": false,
           "path": "llm4mtl-master",
-          "customCss": "/* LLM4MTL master configuration wizard.\n   Presentation only. Every option stays the form's own native input plus its\n   label, so the submitted values are exactly what n8n submits without this\n   stylesheet; the card is the label, and the input is stretched over it. */\n\n:root {\n  --container-width: 720px;\n}\n\n.container {\n  text-align: left;\n}\n\n.form-label {\n  font-weight: 600;\n}\n\n/* radio and checkbox groups share this markup, so both become card grids. */\n.multiselect {\n  display: grid;\n  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));\n  gap: 10px;\n  margin-top: 6px;\n}\n\n.multiselect .multiselect-option {\n  position: relative;\n  display: block;\n  padding-top: 0;\n}\n\n.multiselect .multiselect-option > input.multiselect-checkbox {\n  position: absolute;\n  top: 0;\n  left: 0;\n  width: 100%;\n  height: 100%;\n  min-width: 0;\n  margin: 0;\n  border: none;\n  border-radius: 10px;\n  background: none;\n  opacity: 0;\n  cursor: pointer;\n  z-index: 1;\n}\n\n.multiselect .multiselect-option > label {\n  display: block;\n  height: 100%;\n  padding: 14px 16px;\n  border: 1px solid var(--color-input-border);\n  border-radius: 10px;\n  background-color: var(--color-card-bg);\n  color: var(--color-label);\n  font-weight: 500;\n  line-height: 1.35;\n  text-align: left;\n  cursor: pointer;\n}\n\n.multiselect .multiselect-option > input.multiselect-checkbox:hover + label {\n  border-color: var(--color-focus-border);\n}\n\n.multiselect .multiselect-option > input.multiselect-checkbox:checked + label {\n  border-color: var(--color-submit-btn-bg);\n  box-shadow: inset 0 0 0 1px var(--color-submit-btn-bg);\n  color: var(--color-header);\n}\n\n/* Run mode is the decision every other screen depends on, so its three cards\n   carry a one-line explanation of what the mode actually executes. */\n.multiselect .multiselect-option > input[value='Semantic Tests Only'] + label::before {\n  content: '🧪';\n}\n.multiselect .multiselect-option > input[value='Transformations Only'] + label::before {\n  content: '⚙️';\n}\n.multiselect .multiselect-option > input[value='Full Pipeline'] + label::before {\n  content: '🚀';\n}\n.multiselect .multiselect-option > input[value='Semantic Tests Only'] + label::before,\n.multiselect .multiselect-option > input[value='Transformations Only'] + label::before,\n.multiselect .multiselect-option > input[value='Full Pipeline'] + label::before {\n  display: inline-block;\n  margin-right: 6px;\n}\n.multiselect .multiselect-option > input[value='Semantic Tests Only'] + label::after {\n  content: 'Generate and validate semantic tests';\n}\n.multiselect .multiselect-option > input[value='Transformations Only'] + label::after {\n  content: 'Generate transformations and parse them';\n}\n.multiselect .multiselect-option > input[value='Full Pipeline'] + label::after {\n  content: 'Both branches, semantic execution, diagnosis';\n}\n.multiselect .multiselect-option > input[value='Semantic Tests Only'] + label::after,\n.multiselect .multiselect-option > input[value='Transformations Only'] + label::after,\n.multiselect .multiselect-option > input[value='Full Pipeline'] + label::after {\n  display: block;\n  margin-top: 4px;\n  color: var(--color-link);\n  font-size: var(--font-size-link);\n  font-weight: 400;\n}\n\n@media only screen and (max-width: 500px) {\n  .multiselect {\n    grid-template-columns: 1fr;\n  }\n}\n\n/* Custom task slots. Each slot ends with a native \"+ Add another custom task\"\n   tick. While it is unticked, everything after it stays hidden; the end marker\n   of the section restores the rest of the screen. A hidden slot still submits\n   its empty inputs, which the queue builder reads as an unused slot. Needs\n   :has() (Chrome 105, Safari 15.4, Firefox 121). */\n.form-group:has(input.multiselect-checkbox[value='+ Add another custom task']:not(:checked)) ~ .form-group {\n  display: none;\n}\n\n.form-group:has(#custom-tasks-end),\n.form-group:has(#custom-tasks-end) ~ .form-group {\n  display: block;\n}\n\n.form-group:has(input.multiselect-checkbox[value='+ Add another custom task']) .form-label {\n  display: none;\n}\n\n.multiselect:has(> .multiselect-option > input[value='+ Add another custom task']) {\n  grid-template-columns: max-content;\n}\n",
+          "customCss": "/* LLM4MTL master configuration wizard.\n   Presentation only. Every option stays the form's own native input plus its\n   label, so the submitted values are exactly what n8n submits without this\n   stylesheet; the card is the label, and the input is stretched over it. */\n\n:root {\n  --container-width: 720px;\n}\n\n.container {\n  text-align: left;\n}\n\n.form-label {\n  font-weight: 600;\n}\n\n/* radio and checkbox groups share this markup, so both become card grids. */\n.multiselect {\n  display: grid;\n  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));\n  gap: 10px;\n  margin-top: 6px;\n}\n\n.multiselect .multiselect-option {\n  position: relative;\n  display: block;\n  padding-top: 0;\n}\n\n.multiselect .multiselect-option > input.multiselect-checkbox {\n  position: absolute;\n  top: 0;\n  left: 0;\n  width: 100%;\n  height: 100%;\n  min-width: 0;\n  margin: 0;\n  border: none;\n  border-radius: 10px;\n  background: none;\n  opacity: 0;\n  cursor: pointer;\n  z-index: 1;\n}\n\n.multiselect .multiselect-option > label {\n  display: block;\n  height: 100%;\n  padding: 14px 16px;\n  border: 1px solid var(--color-input-border);\n  border-radius: 10px;\n  background-color: var(--color-card-bg);\n  color: var(--color-label);\n  font-weight: 500;\n  line-height: 1.35;\n  text-align: left;\n  cursor: pointer;\n}\n\n.multiselect .multiselect-option > input.multiselect-checkbox:hover + label {\n  border-color: var(--color-focus-border);\n}\n\n.multiselect .multiselect-option > input.multiselect-checkbox:checked + label {\n  border-color: var(--color-submit-btn-bg);\n  box-shadow: inset 0 0 0 1px var(--color-submit-btn-bg);\n  color: var(--color-header);\n}\n\n/* Run mode is the decision every other screen depends on, so its three cards\n   carry a one-line explanation of what the mode actually executes. */\n.multiselect .multiselect-option > input[value='Semantic Tests Only'] + label::before {\n  content: '🧪';\n}\n.multiselect .multiselect-option > input[value='Transformations Only'] + label::before {\n  content: '⚙️';\n}\n.multiselect .multiselect-option > input[value='Full Pipeline'] + label::before {\n  content: '🚀';\n}\n.multiselect .multiselect-option > input[value='Semantic Tests Only'] + label::before,\n.multiselect .multiselect-option > input[value='Transformations Only'] + label::before,\n.multiselect .multiselect-option > input[value='Full Pipeline'] + label::before {\n  display: inline-block;\n  margin-right: 6px;\n}\n.multiselect .multiselect-option > input[value='Semantic Tests Only'] + label::after {\n  content: 'Generate and validate semantic tests';\n}\n.multiselect .multiselect-option > input[value='Transformations Only'] + label::after {\n  content: 'Generate transformations and parse them';\n}\n.multiselect .multiselect-option > input[value='Full Pipeline'] + label::after {\n  content: 'Both branches, semantic execution, diagnosis';\n}\n.multiselect .multiselect-option > input[value='Semantic Tests Only'] + label::after,\n.multiselect .multiselect-option > input[value='Transformations Only'] + label::after,\n.multiselect .multiselect-option > input[value='Full Pipeline'] + label::after {\n  display: block;\n  margin-top: 4px;\n  color: var(--color-link);\n  font-size: var(--font-size-link);\n  font-weight: 400;\n}\n\n@media only screen and (max-width: 500px) {\n  .multiselect {\n    grid-template-columns: 1fr;\n  }\n}\n\n/* Custom task slots. The section opens on \"+ Add a custom task\" and each slot\n   ends with \"+ Add another custom task\"; while a tick is unset every field\n   after it stays hidden, and the end marker of the section restores the rest of\n   the screen. A hidden field still submits its empty input, which the queue\n   builder reads as an unused slot.\n\n   Two things about n8n's own markup decide how this is written.\n\n   The wrappers are `.inputs-wrapper > div`, not `.form-group`: n8n wraps a\n   checkbox group in a bare div and gives `.form-group` only to the other field\n   types, so a rule written against `.form-group` never sees the tick it has to\n   react to.\n\n   The section ends at `#field-35`, not at an id of its own: n8n runs every\n   html field through sanitize-html, which allows no attributes on a div, so an\n   id written into the marker is stripped before it reaches the page. What does\n   survive is the hidden input n8n generates for each field, keyed by position\n   -- `field-35` is the `custom_tasks_end` marker. Reordering the fields above\n   it moves that number, and `test_master_run_modes.py` recomputes it, so the\n   suite fails rather than the form silently hiding the rest of the screen.\n\n   Needs :has() (Chrome 105, Safari 15.4, Firefox 121); without it every field\n   is simply visible and the submitted values are identical. */\n.inputs-wrapper > div:has(input.multiselect-checkbox[value='+ Add a custom task']:not(:checked)) ~ div,\n.inputs-wrapper > div:has(input.multiselect-checkbox[value='+ Add another custom task']:not(:checked)) ~ div {\n  display: none;\n}\n\n.inputs-wrapper > div:has(#field-35),\n.inputs-wrapper > div:has(#field-35) ~ div {\n  display: block;\n}\n\n.inputs-wrapper > div:has(input.multiselect-checkbox[value='+ Add a custom task']) > .form-label,\n.inputs-wrapper > div:has(input.multiselect-checkbox[value='+ Add another custom task']) > .form-label {\n  display: none;\n}\n\n.multiselect:has(> .multiselect-option > input[value='+ Add a custom task']),\n.multiselect:has(> .multiselect-option > input[value='+ Add another custom task']) {\n  grid-template-columns: max-content;\n}\n\n/* One slot reads as one block: the tick that opens the next slot is also the\n   rule between them. */\n.inputs-wrapper > div:has(input.multiselect-checkbox[value='+ Add another custom task']) {\n  margin-top: 22px;\n  padding-top: 22px;\n  border-top: 1px solid var(--color-input-border);\n}\n",
           "respondWithOptions": {
             "values": {
               "respondWith": "text",
@@ -1432,7 +880,7 @@
         300
       ],
       "parameters": {
-        "jsCode": "// One configuration screen, so the whole configuration arrives as one item.\nconst form = $input.first().json;\n\nconst asList = (value) => {\n  if (Array.isArray(value)) return value.map(String).map((item) => item.trim()).filter(Boolean);\n  if (typeof value !== 'string') return [];\n  return value.split(',').map((item) => item.trim()).filter(Boolean);\n};\n\nconst providers = {\n  OpenAI: {\n    id: 'openai',\n    nodeSuffix: 'OpenAI Chat Model',\n    artifactModel: 'gpt-5',\n  },\n  Anthropic: {\n    id: 'anthropic',\n    nodeSuffix: 'Anthropic Chat Model',\n    artifactModel: 'claude-sonnet-4',\n  },\n  'Google Gemini': {\n    id: 'google',\n    nodeSuffix: 'Google Gemini Chat Model',\n    artifactModel: 'gemini-2-5-pro',\n  },\n};\nconst roleNodes = {\n  transformation: 'Transformation Generation',\n  semantic_test: 'Semantic Test Generation',\n  source_diagnosis: 'Source Diagnosis',\n  refinement: 'Refinement',\n};\n// The form picks a provider; the exact model and the credential stay in the\n// built-in selector of the matching standard AI Model node on the canvas. That\n// selector is the provider's own model list, so the master never carries one.\nconst selectedModel = (role, providerLabel) => {\n  const provider = providers[providerLabel];\n  if (!provider) throw new Error(`Select a supported provider for ${role}`);\n  const nodeName = `${roleNodes[role]} - ${provider.nodeSuffix}`;\n  const parameters = $(nodeName).params;\n  const configuredModel = provider.id === 'google' ? parameters.modelName : parameters.model;\n  const model = configuredModel && typeof configuredModel === 'object'\n    ? configuredModel.value\n    : configuredModel;\n  if (typeof model !== 'string' || !model.trim()) {\n    throw new Error(`Select a model in the built-in selector of ${nodeName}`);\n  }\n  return {\n    provider: provider.id,\n    model: model.trim(),\n    artifact_model: provider.artifactModel,\n    configuration_node: nodeName,\n  };\n};\n\n// run_mode is the pipeline the user intends to execute. The stage flags below\n// say which components of that pipeline are enabled; the two are separate axes\n// and a run records both.\nconst runModes = {\n  'Semantic Tests Only': 'tests_only',\n  'Transformations Only': 'transformations_only',\n  'Full Pipeline': 'full',\n};\nconst runMode = runModes[form.run_mode];\nif (!runMode) throw new Error('Select a supported run mode');\nconst runsTests = runMode !== 'transformations_only';\nconst runsTransformations = runMode !== 'tests_only';\n\nconst languageOptions = {\n  ETL: 'etl',\n  ATL: 'atl',\n  'QVT-O': 'qvto',\n  Reactions: 'reactions',\n};\nconst languages = [...new Set(asList(form.languages).map((label) => languageOptions[label]))];\nif (languages.some((language) => !language)) {\n  throw new Error('Select a supported language');\n}\n\n// Custom tasks: a user-authored prompt run over one benchmark task's\n// metamodels, contract, and reference. A slot left entirely blank is unused;\n// a half-filled one is a mistake rather than a task with defaults.\nconst CUSTOM_TASK_SLOTS = 5;\nconst customTasks = [];\nfor (let slot = 1; slot <= CUSTOM_TASK_SLOTS; slot += 1) {\n  const name = String(form[`custom_task_${slot}_name`] || '').trim();\n  const base = String(form[`custom_task_${slot}_base`] || '').trim();\n  const prompt = String(form[`custom_task_${slot}_prompt`] || '').trim();\n  if (!name && !base && !prompt) continue;\n  if (!name || !base || !prompt) {\n    throw new Error(`Custom task ${slot} needs a name, a benchmark task, and a prompt`);\n  }\n  if (!/^[A-Za-z0-9._-]{1,64}$/.test(name)) {\n    throw new Error(`Unsupported custom task name: ${name}`);\n  }\n  const [baseLabel, baseTask] = base.split(' / ');\n  const language = languageOptions[baseLabel];\n  if (!language || !baseTask || !/^[A-Za-z0-9._-]+$/.test(baseTask)) {\n    throw new Error(`Custom task ${name} names no benchmark task: ${base}`);\n  }\n  if (customTasks.some((task) => task.name === name)) {\n    throw new Error(`Custom task name used twice: ${name}`);\n  }\n  customTasks.push({ name, language, base_task: baseTask, prompt });\n}\nif (languages.length === 0 && customTasks.length === 0) {\n  throw new Error('Select at least one language or define a custom task');\n}\n\n// Task names come from benchmark/tasks/<language>/task_contracts, which the form\n// lists. A second copy of that list here would be the thing that goes stale, so\n// the master checks the shape and lets POST /runs refuse a task whose contract\n// does not exist.\nconst taskFields = {\n  etl: 'etl_tasks',\n  atl: 'atl_tasks',\n  qvto: 'qvto_tasks',\n  reactions: 'reactions_tasks',\n};\nconst tasksByLanguage = {};\nfor (const language of languages) {\n  const tasks = asList(form[taskFields[language]]);\n  if (tasks.length === 0) {\n    throw new Error(`Select at least one task for ${language}`);\n  }\n  for (const task of tasks) {\n    if (!/^[A-Za-z0-9._-]+$/.test(task)) {\n      throw new Error(`Unsupported task name for ${language}: ${task}`);\n    }\n  }\n  tasksByLanguage[language] = tasks;\n}\n\nconst stageFields = [\n  'test_generation',\n  'test_extraction',\n  'technical_validation',\n  'reference_validation',\n  'transformation_generation',\n  'syntax_validation',\n  'semantic_execution',\n  'source_diagnosis',\n  'parser_feedback',\n  'semantic_feedback',\n  'test_refinement',\n  'transformation_refinement',\n];\n// The named profiles are the RQ4 variants the repository already defines in\n// experiments/variants/. Custom ablation is the escape hatch that can express\n// any of the twelve components.\nconst ablationProfiles = {\n  'Standard full configuration': { id: 'full', disabled: [] },\n  'No parser feedback': { id: 'no-parser-feedback', disabled: ['parser_feedback'] },\n  'No semantic feedback': { id: 'no-semantic-feedback', disabled: ['semantic_feedback'] },\n  'No failure diagnosis': { id: 'no-failure-diagnosis', disabled: ['source_diagnosis'] },\n};\nconst profileLabel = form.ablation_profile;\nconst customComponents = asList(form.disabled_components);\nlet disabledStages;\nlet ablationId;\nif (profileLabel === 'Custom ablation') {\n  for (const component of customComponents) {\n    if (!stageFields.includes(component)) {\n      throw new Error(`Unknown pipeline component: ${component}`);\n    }\n  }\n  disabledStages = stageFields.filter((stage) => customComponents.includes(stage));\n  ablationId = disabledStages.length === 0 ? 'full' : `custom:${disabledStages.join('+')}`;\n} else if (ablationProfiles[profileLabel]) {\n  // A named profile fixes its disabled set. Honouring an extra selection here\n  // would run an ablation the recorded variant id does not name.\n  if (customComponents.length > 0) {\n    throw new Error('Select \"Custom ablation\" to disable individual components');\n  }\n  disabledStages = ablationProfiles[profileLabel].disabled;\n  ablationId = ablationProfiles[profileLabel].id;\n} else {\n  throw new Error('Select a supported experiment configuration');\n}\nconst stages = {};\nfor (const stage of stageFields) {\n  stages[stage] = !disabledStages.includes(stage);\n}\n// A custom task has no oracle of its own: the benchmark reference it borrows\n// its metamodels from does not implement the custom prompt, so every stage\n// that judges against that reference is disabled for it, and with them the\n// diagnosis that needs their evidence. The benchmark tasks of the same launch\n// keep the configuration chosen on this screen.\nconst customTaskDisabled = ['technical_validation', 'reference_validation', 'semantic_execution', 'source_diagnosis'];\nconst customStages = { ...stages };\nfor (const stage of customTaskDisabled) customStages[stage] = false;\n// A launch with benchmark tasks reaches everything the chosen configuration\n// reaches; one made only of custom tasks reaches less, and must not demand a\n// model for a role none of its runs can call.\nconst reachStages = languages.length > 0 ? stages : customStages;\n\nconst refinementOptions = [0, 1, 2, 3];\nconst maxTestRefinementIterations = Number(form.max_test_refinement_iterations);\nconst maxTransformationRefinementIterations = Number(form.max_transformation_refinement_iterations);\nif (!refinementOptions.includes(maxTestRefinementIterations)) {\n  throw new Error('Test refinement iterations must be selected from 0 through 3');\n}\nif (!refinementOptions.includes(maxTransformationRefinementIterations)) {\n  throw new Error('Transformation refinement iterations must be selected from 0 through 3');\n}\n\n// The card shows the reading name; the run records the canonical strategy id,\n// which is what the variant workflows are named after and what the manifest and\n// the prompting-strategy axis carry.\nconst strategyIds = {\n  'Prompt only': 'only_prompt',\n  'Few-shot': 'few_shot',\n  Grammar: 'grammar',\n  'Few-shot + Grammar': 'few_shots_AND_grammar',\n};\n\n// Reachability follows from the final configuration: the run mode decides which\n// branches exist, the stage flags decide which of their components run. A role\n// nothing can call is left unconfigured rather than demanded from the user.\nconst reachable = {\n  semantic_test: runsTests && reachStages.test_generation,\n  transformation: runsTransformations && reachStages.transformation_generation,\n  source_diagnosis: runMode === 'full' && reachStages.semantic_execution && reachStages.semantic_feedback && reachStages.source_diagnosis,\n  refinement: (\n    (maxTestRefinementIterations > 0 && runsTests && reachStages.test_generation && reachStages.test_refinement)\n    || (maxTransformationRefinementIterations > 0 && runsTransformations && reachStages.transformation_generation && reachStages.transformation_refinement)\n  ),\n};\n\nconst llms = {};\nif (reachable.semantic_test) {\n  const strategy = strategyIds[form.semantic_test_strategy];\n  if (!strategy) throw new Error('Select a supported Semantic Test Generation strategy');\n  llms.semantic_test = {\n    ...selectedModel('semantic_test', form.semantic_test_provider),\n    strategy,\n  };\n}\nif (reachable.transformation) {\n  const strategy = strategyIds[form.transformation_strategy];\n  if (!strategy) throw new Error('Select a supported Transformation Generation strategy');\n  llms.transformation = {\n    ...selectedModel('transformation', form.transformation_provider),\n    strategy,\n  };\n}\nif (reachable.source_diagnosis) {\n  llms.source_diagnosis = selectedModel('source_diagnosis', form.source_diagnosis_provider);\n}\nif (reachable.refinement) {\n  llms.refinement = selectedModel('refinement', form.refinement_provider);\n}\n\nconst root = String(form.n8n_workflow_root || '/data/repository/workflows/n8n').replace(/\\/$/, '');\nif (!root.startsWith('/data/') || root.includes('..')) {\n  throw new Error('Workflow root must be a contained read-only mount below /data');\n}\n\n// The variant identifies both axes: which pipeline ran and which components were\n// ablated. A standard full run keeps the plain 'full' id earlier runs recorded.\nconst pipelineVariant = ablationId === 'full' ? runMode : `${runMode}:${ablationId}`;\nconst labels = {\n  etl: 'ETL',\n  atl: 'ATL',\n  qvto: 'QVTO',\n  reactions: 'Reactions',\n};\n\n// One run per task. A custom task runs as its benchmark task -- that is the\n// identity Python resolves the contract, metamodels, and reference by -- with\n// its own stage flags, its prompt, and a variant that names it.\nconst runSpec = (language, task, custom) => {\n  const label = labels[language];\n  const transformationWorkflow = !llms.transformation\n    ? null\n    : language === 'reactions'\n      ? `${root}/transformations/workflows/updated_reactions_workflow/generate_reactions/LLM4MTL_Generate_Reactions_for_all_Configurations.json`\n      : `${root}/transformations/workflows/${language}_variants/Prompting_${label}_*_${llms.transformation.strategy}.json`;\n  return {\n    language,\n    language_label: label,\n    task,\n    run_mode: runMode,\n    // Python selects artifacts by the stable family directory. The exact\n    // provider model remains in config.llms and is passed only to n8n LLM nodes.\n    transformation_model: llms.transformation ? llms.transformation.artifact_model : null,\n    test_generation_model: llms.semantic_test ? llms.semantic_test.artifact_model : null,\n    transformation_strategy: llms.transformation ? llms.transformation.strategy : null,\n    test_generation_strategy: llms.semantic_test ? llms.semantic_test.strategy : null,\n    seed: 1,\n    pipeline_variant: custom ? `${pipelineVariant}:custom-task:${custom.name}` : pipelineVariant,\n    stages: custom ? customStages : stages,\n    custom_task: custom ? { name: custom.name, prompt: custom.prompt } : null,\n    test_generation_workflow: llms.semantic_test\n      ? `${root}/tests/workflows/${language}_variants/test_generation/Prompting_tests_${label}_*_${llms.semantic_test.strategy}.json`\n      : null,\n    transformation_generation_workflow: transformationWorkflow,\n    diagnosis_workflow: llms.source_diagnosis\n      ? `${root}/subworkflows/diagnosis/llm-diagnosis.json`\n      : null,\n  };\n};\nconst runSpecs = [];\nfor (const custom of customTasks) {\n  runSpecs.push(runSpec(custom.language, custom.base_task, custom));\n}\nfor (const language of languages) {\n  for (const task of tasksByLanguage[language]) {\n    runSpecs.push(runSpec(language, task, null));\n  }\n}\n\nreturn [{\n  json: {\n    config: {\n      run_mode: runMode,\n      llms,\n      max_test_refinement_iterations: maxTestRefinementIterations,\n      max_transformation_refinement_iterations: maxTransformationRefinementIterations,\n      stages,\n      ablation_profile: ablationId,\n      disabled_stages: disabledStages,\n      pipeline_variant: pipelineVariant,\n      custom_tasks: customTasks.map(({ name, language, base_task }) => ({ name, language, base_task })),\n    },\n    run_specs: runSpecs,\n    run_index: 0,\n    // One launch is one batch. Python claims it first, and every run of this\n    // queue is created below it; the two directory spellings arrive with it.\n    batch_id: null,\n    batch_dir: null,\n    n8n_batch_dir: null,\n    current: {\n      ...runSpecs[0],\n      run_id: null,\n      run_dir: null,\n      n8n_run_dir: null,\n      suite_id: null,\n      test_iteration: 0,\n      transformation_iteration: 0,\n      generation_purpose: 'initial',\n      has_transformation: false,\n      timeline: [],\n      terminal_status: null,\n      terminal_reason: null,\n    },\n    results: [],\n    action: null,\n    completed_action: null,\n    last_result: null,\n  },\n}];"
+        "jsCode": "// One configuration screen, so the whole configuration arrives as one item.\nconst form = $input.first().json;\n\nconst asList = (value) => {\n  if (Array.isArray(value)) return value.map(String).map((item) => item.trim()).filter(Boolean);\n  if (typeof value !== 'string') return [];\n  return value.split(',').map((item) => item.trim()).filter(Boolean);\n};\n\nconst providers = {\n  OpenAI: {\n    id: 'openai',\n    nodeSuffix: 'OpenAI Chat Model',\n    artifactModel: 'gpt-5',\n  },\n  Anthropic: {\n    id: 'anthropic',\n    nodeSuffix: 'Anthropic Chat Model',\n    artifactModel: 'claude-sonnet-4',\n  },\n  'Google Gemini': {\n    id: 'google',\n    nodeSuffix: 'Google Gemini Chat Model',\n    artifactModel: 'gemini-2-5-pro',\n  },\n};\nconst roleNodes = {\n  transformation: 'Transformation Generation',\n  semantic_test: 'Semantic Test Generation',\n  source_diagnosis: 'Source Diagnosis',\n  refinement: 'Refinement',\n};\n// The form picks a provider; the exact model and the credential stay in the\n// built-in selector of the matching standard AI Model node on the canvas. That\n// selector is the provider's own model list, so the master never carries one.\nconst selectedModel = (role, providerLabel) => {\n  const provider = providers[providerLabel];\n  if (!provider) throw new Error(`Select a supported provider for ${role}`);\n  const nodeName = `${roleNodes[role]} - ${provider.nodeSuffix}`;\n  const parameters = $(nodeName).params;\n  const configuredModel = provider.id === 'google' ? parameters.modelName : parameters.model;\n  const model = configuredModel && typeof configuredModel === 'object'\n    ? configuredModel.value\n    : configuredModel;\n  if (typeof model !== 'string' || !model.trim()) {\n    throw new Error(`Select a model in the built-in selector of ${nodeName}`);\n  }\n  return {\n    provider: provider.id,\n    model: model.trim(),\n    artifact_model: provider.artifactModel,\n    configuration_node: nodeName,\n  };\n};\n\n// run_mode is the pipeline the user intends to execute. The stage flags below\n// say which components of that pipeline are enabled; the two are separate axes\n// and a run records both.\nconst runModes = {\n  'Semantic Tests Only': 'tests_only',\n  'Transformations Only': 'transformations_only',\n  'Full Pipeline': 'full',\n};\nconst runMode = runModes[form.run_mode];\nif (!runMode) throw new Error('Select a supported run mode');\nconst runsTests = runMode !== 'transformations_only';\nconst runsTransformations = runMode !== 'tests_only';\n\nconst languageOptions = {\n  ETL: 'etl',\n  ATL: 'atl',\n  'QVT-O': 'qvto',\n  Reactions: 'reactions',\n};\nconst languages = [...new Set(asList(form.languages).map((label) => languageOptions[label]))];\nif (languages.some((language) => !language)) {\n  throw new Error('Select a supported language');\n}\n\n// Custom tasks: a user-authored prompt run over the user's own metamodel, in\n// the language the same slot picks. A slot left entirely blank is unused; a\n// half-filled one is a mistake rather than a task with defaults.\nconst CUSTOM_TASK_SLOTS = 5;\n// An attached metamodel arrives as binary, not on the item's json. n8n spells\n// that key from the upload field's label, so the slot is matched by what the\n// key contains rather than by one exact spelling.\nconst submitted = $input.first();\nconst attachedMetamodel = (slot) => {\n  const entry = Object.entries(submitted.binary || {}).find(([key]) => {\n    const flat = key.toLowerCase().replace(/[^a-z0-9]+/g, '_');\n    return flat.includes(`custom_task_${slot}_`) && flat.includes('metamodel');\n  });\n  if (!entry) return '';\n  const [key, file] = entry;\n  if (typeof file.data !== 'string' || !file.data) {\n    throw new Error(`Attached metamodel of custom task ${slot} arrived without its content: ${key}`);\n  }\n  return Buffer.from(file.data, 'base64').toString('utf8').trim();\n};\nconst customTasks = [];\nfor (let slot = 1; slot <= CUSTOM_TASK_SLOTS; slot += 1) {\n  const name = String(form[`custom_task_${slot}_name`] || '').trim();\n  const languageLabel = String(form[`custom_task_${slot}_language`] || '').trim();\n  const writtenMetamodel = String(form[`custom_task_${slot}_metamodel`] || '').trim();\n  const attached = attachedMetamodel(slot);\n  const prompt = String(form[`custom_task_${slot}_prompt`] || '').trim();\n  if (!name && !languageLabel && !writtenMetamodel && !attached && !prompt) continue;\n  if (!name || !languageLabel || !prompt) {\n    throw new Error(`Custom task ${slot} needs a name, a language, a metamodel, and a prompt`);\n  }\n  if (!/^[A-Za-z0-9._-]{1,64}$/.test(name)) {\n    throw new Error(`Unsupported custom task name: ${name}`);\n  }\n  const language = languageOptions[languageLabel];\n  if (!language) {\n    throw new Error(`Custom task ${name} names no supported language: ${languageLabel}`);\n  }\n  // Written or attached, never both: two metamodels in one slot leave the run\n  // to guess which one the prompt was written against.\n  if (writtenMetamodel && attached) {\n    throw new Error(`Custom task ${name} has a written and an attached metamodel; keep one`);\n  }\n  const metamodel = writtenMetamodel || attached;\n  if (!metamodel) {\n    throw new Error(`Custom task ${name} needs a metamodel: write one or attach a file`);\n  }\n  if (customTasks.some((task) => task.name === name)) {\n    throw new Error(`Custom task name used twice: ${name}`);\n  }\n  customTasks.push({\n    name,\n    language,\n    prompt,\n    metamodel,\n    metamodel_source: attached ? 'file' : 'form',\n  });\n}\nif (languages.length === 0 && customTasks.length === 0) {\n  throw new Error('Select at least one language or define a custom task');\n}\n\n// Task names come from benchmark/tasks/<language>/task_contracts, which the form\n// lists. A second copy of that list here would be the thing that goes stale, so\n// the master checks the shape and lets POST /runs refuse a task whose contract\n// does not exist.\nconst taskFields = {\n  etl: 'etl_tasks',\n  atl: 'atl_tasks',\n  qvto: 'qvto_tasks',\n  reactions: 'reactions_tasks',\n};\nconst tasksByLanguage = {};\nfor (const language of languages) {\n  const tasks = asList(form[taskFields[language]]);\n  if (tasks.length === 0) {\n    throw new Error(`Select at least one task for ${language}`);\n  }\n  for (const task of tasks) {\n    if (!/^[A-Za-z0-9._-]+$/.test(task)) {\n      throw new Error(`Unsupported task name for ${language}: ${task}`);\n    }\n  }\n  tasksByLanguage[language] = tasks;\n}\n\nconst stageFields = [\n  'test_generation',\n  'test_extraction',\n  'technical_validation',\n  'reference_validation',\n  'transformation_generation',\n  'syntax_validation',\n  'semantic_execution',\n  'source_diagnosis',\n  'parser_feedback',\n  'semantic_feedback',\n  'test_refinement',\n  'transformation_refinement',\n];\n// The named profiles are the RQ4 variants the repository already defines in\n// experiments/variants/. Custom ablation is the escape hatch that can express\n// any of the twelve components.\nconst ablationProfiles = {\n  'Standard full configuration': { id: 'full', disabled: [] },\n  'No parser feedback': { id: 'no-parser-feedback', disabled: ['parser_feedback'] },\n  'No semantic feedback': { id: 'no-semantic-feedback', disabled: ['semantic_feedback'] },\n  'No failure diagnosis': { id: 'no-failure-diagnosis', disabled: ['source_diagnosis'] },\n};\nconst profileLabel = form.ablation_profile;\nconst customComponents = asList(form.disabled_components);\nlet disabledStages;\nlet ablationId;\nif (profileLabel === 'Custom ablation') {\n  for (const component of customComponents) {\n    if (!stageFields.includes(component)) {\n      throw new Error(`Unknown pipeline component: ${component}`);\n    }\n  }\n  disabledStages = stageFields.filter((stage) => customComponents.includes(stage));\n  ablationId = disabledStages.length === 0 ? 'full' : `custom:${disabledStages.join('+')}`;\n} else if (ablationProfiles[profileLabel]) {\n  // A named profile fixes its disabled set. Honouring an extra selection here\n  // would run an ablation the recorded variant id does not name.\n  if (customComponents.length > 0) {\n    throw new Error('Select \"Custom ablation\" to disable individual components');\n  }\n  disabledStages = ablationProfiles[profileLabel].disabled;\n  ablationId = ablationProfiles[profileLabel].id;\n} else {\n  throw new Error('Select a supported experiment configuration');\n}\nconst stages = {};\nfor (const stage of stageFields) {\n  stages[stage] = !disabledStages.includes(stage);\n}\n// A custom task has no oracle of its own: nothing in the benchmark implements\n// the user's prompt over the user's metamodel, so every stage that judges\n// against a reference is disabled for it, and with them the diagnosis that\n// needs their evidence. The benchmark tasks of the same launch keep the\n// configuration chosen on this screen.\nconst customTaskDisabled = ['technical_validation', 'reference_validation', 'semantic_execution', 'source_diagnosis'];\nconst customStages = { ...stages };\nfor (const stage of customTaskDisabled) customStages[stage] = false;\n// A launch with benchmark tasks reaches everything the chosen configuration\n// reaches; one made only of custom tasks reaches less, and must not demand a\n// model for a role none of its runs can call.\nconst reachStages = languages.length > 0 ? stages : customStages;\n\nconst refinementOptions = [0, 1, 2, 3];\nconst maxTestRefinementIterations = Number(form.max_test_refinement_iterations);\nconst maxTransformationRefinementIterations = Number(form.max_transformation_refinement_iterations);\nif (!refinementOptions.includes(maxTestRefinementIterations)) {\n  throw new Error('Test refinement iterations must be selected from 0 through 3');\n}\nif (!refinementOptions.includes(maxTransformationRefinementIterations)) {\n  throw new Error('Transformation refinement iterations must be selected from 0 through 3');\n}\n\n// The card shows the reading name; the run records the canonical strategy id,\n// which is what the variant workflows are named after and what the manifest and\n// the prompting-strategy axis carry.\nconst strategyIds = {\n  'Prompt only': 'only_prompt',\n  'Few-shot': 'few_shot',\n  Grammar: 'grammar',\n  'Few-shot + Grammar': 'few_shots_AND_grammar',\n};\n\n// Reachability follows from the final configuration: the run mode decides which\n// branches exist, the stage flags decide which of their components run. A role\n// nothing can call is left unconfigured rather than demanded from the user.\nconst reachable = {\n  semantic_test: runsTests && reachStages.test_generation,\n  transformation: runsTransformations && reachStages.transformation_generation,\n  source_diagnosis: runMode === 'full' && reachStages.semantic_execution && reachStages.semantic_feedback && reachStages.source_diagnosis,\n  refinement: (\n    (maxTestRefinementIterations > 0 && runsTests && reachStages.test_generation && reachStages.test_refinement)\n    || (maxTransformationRefinementIterations > 0 && runsTransformations && reachStages.transformation_generation && reachStages.transformation_refinement)\n  ),\n};\n\nconst llms = {};\nif (reachable.semantic_test) {\n  const strategy = strategyIds[form.semantic_test_strategy];\n  if (!strategy) throw new Error('Select a supported Semantic Test Generation strategy');\n  llms.semantic_test = {\n    ...selectedModel('semantic_test', form.semantic_test_provider),\n    strategy,\n  };\n}\nif (reachable.transformation) {\n  const strategy = strategyIds[form.transformation_strategy];\n  if (!strategy) throw new Error('Select a supported Transformation Generation strategy');\n  llms.transformation = {\n    ...selectedModel('transformation', form.transformation_provider),\n    strategy,\n  };\n}\nif (reachable.source_diagnosis) {\n  llms.source_diagnosis = selectedModel('source_diagnosis', form.source_diagnosis_provider);\n}\nif (reachable.refinement) {\n  llms.refinement = selectedModel('refinement', form.refinement_provider);\n}\n\nconst root = String(form.n8n_workflow_root || '/data/repository/workflows/n8n').replace(/\\/$/, '');\nif (!root.startsWith('/data/') || root.includes('..')) {\n  throw new Error('Workflow root must be a contained read-only mount below /data');\n}\n\n// The variant identifies both axes: which pipeline ran and which components were\n// ablated. A standard full run keeps the plain 'full' id earlier runs recorded.\nconst pipelineVariant = ablationId === 'full' ? runMode : `${runMode}:${ablationId}`;\nconst labels = {\n  etl: 'ETL',\n  atl: 'ATL',\n  qvto: 'QVTO',\n  reactions: 'Reactions',\n};\n\n// One run per task. A custom task runs under its own name -- that is the\n// identity its prompt and its metamodel are recorded against -- with its own\n// stage flags and a variant that names it.\nconst runSpec = (language, task, custom) => {\n  const label = labels[language];\n  const transformationWorkflow = !llms.transformation\n    ? null\n    : language === 'reactions'\n      ? `${root}/transformations/workflows/updated_reactions_workflow/generate_reactions/LLM4MTL_Generate_Reactions_for_all_Configurations.json`\n      : `${root}/transformations/workflows/${language}_variants/Prompting_${label}_*_${llms.transformation.strategy}.json`;\n  return {\n    language,\n    language_label: label,\n    task,\n    run_mode: runMode,\n    // Python selects artifacts by the stable family directory. The exact\n    // provider model remains in config.llms and is passed only to n8n LLM nodes.\n    transformation_model: llms.transformation ? llms.transformation.artifact_model : null,\n    test_generation_model: llms.semantic_test ? llms.semantic_test.artifact_model : null,\n    transformation_strategy: llms.transformation ? llms.transformation.strategy : null,\n    test_generation_strategy: llms.semantic_test ? llms.semantic_test.strategy : null,\n    seed: 1,\n    pipeline_variant: custom ? `${pipelineVariant}:custom-task:${custom.name}` : pipelineVariant,\n    stages: custom ? customStages : stages,\n    custom_task: custom\n      ? { name: custom.name, prompt: custom.prompt, metamodel: custom.metamodel }\n      : null,\n    test_generation_workflow: llms.semantic_test\n      ? `${root}/tests/workflows/${language}_variants/test_generation/Prompting_tests_${label}_*_${llms.semantic_test.strategy}.json`\n      : null,\n    transformation_generation_workflow: transformationWorkflow,\n    diagnosis_workflow: llms.source_diagnosis\n      ? `${root}/subworkflows/diagnosis/llm-diagnosis.json`\n      : null,\n  };\n};\nconst runSpecs = [];\nfor (const custom of customTasks) {\n  runSpecs.push(runSpec(custom.language, custom.name, custom));\n}\nfor (const language of languages) {\n  for (const task of tasksByLanguage[language]) {\n    runSpecs.push(runSpec(language, task, null));\n  }\n}\n\nreturn [{\n  json: {\n    config: {\n      run_mode: runMode,\n      llms,\n      max_test_refinement_iterations: maxTestRefinementIterations,\n      max_transformation_refinement_iterations: maxTransformationRefinementIterations,\n      stages,\n      ablation_profile: ablationId,\n      disabled_stages: disabledStages,\n      pipeline_variant: pipelineVariant,\n      custom_tasks: customTasks.map(({ name, language, metamodel_source }) => ({ name, language, metamodel_source })),\n    },\n    run_specs: runSpecs,\n    run_index: 0,\n    // One launch is one batch. Python claims it first, and every run of this\n    // queue is created below it; the two directory spellings arrive with it.\n    batch_id: null,\n    batch_dir: null,\n    n8n_batch_dir: null,\n    current: {\n      ...runSpecs[0],\n      run_id: null,\n      run_dir: null,\n      n8n_run_dir: null,\n      suite_id: null,\n      test_iteration: 0,\n      transformation_iteration: 0,\n      generation_purpose: 'initial',\n      has_transformation: false,\n      timeline: [],\n      terminal_status: null,\n      terminal_reason: null,\n    },\n    results: [],\n    action: null,\n    completed_action: null,\n    last_result: null,\n  },\n}];"
       }
     },
     {
@@ -1602,7 +1050,7 @@
         80
       ],
       "parameters": {
-        "jsCode": "const state = $('State Machine').first().json;\n  const providerNodeTypes = {\n    openai: '@n8n/n8n-nodes-langchain.lmChatOpenAi',\n    anthropic: '@n8n/n8n-nodes-langchain.lmChatAnthropic',\n    google: '@n8n/n8n-nodes-langchain.lmChatGoogleGemini',\n  };\n  const providerNodeNames = {\n    openai: 'OpenAI Chat Model',\n    anthropic: 'Anthropic Chat Model',\n    google: 'Google Gemini Chat Model',\n  };\n  const provider = state.subworkflow_input?.provider || state.subworkflow_input?.diagnosis_provider;\n  const model = state.subworkflow_input?.model;\n  const strategy = state.subworkflow_input?.strategy;\n  const expectedType = providerNodeTypes[provider];\n  if (!expectedType || typeof model !== 'string' || !model.trim()) {\n    throw new Error('Subworkflow execution requires a configured provider and model');\n  }\n\n  // The `*` in a variant selector stands for the model token alone, so the glob\n  // `Prompting_ETL_*_grammar.json` reads `..._few_shots_AND_grammar.json` back as\n  // well. A workflow declares its strategy as the longest strategy name its\n  // identity ends with; matching that exactly keeps the executed prompting\n  // strategy equal to the one recorded in the run configuration.\n  const strategyNames = ['only_prompt', 'few_shot', 'grammar', 'few_shots_AND_grammar'];\n  const declaredStrategy = (identity) => {\n    const name = String(identity || '').replace(/\\.json$/, '');\n    let declared = null;\n    for (const known of strategyNames) {\n      if (!name.endsWith(`_${known}`)) continue;\n      if (!declared || known.length > declared.length) declared = known;\n    }\n    return declared;\n  };\n  const selectorIsGlob = String(state.subworkflow_path || '').includes('*');\n  if (selectorIsGlob && !strategyNames.includes(strategy)) {\n    throw new Error(`A variant selector requires a supported strategy: ${state.subworkflow_path}`);\n  }\n\n  // Zero files read means the selector matched nothing at all, which is a\n  // different failure from \"matched, but not for this provider\" and almost always\n  // means the workflow root is not mounted into this n8n container.\n  const readAnyFile = $input.all().some(\n    (item) => typeof item.json.workflow_text === 'string' && item.json.workflow_text.trim(),\n  );\n  if (!readAnyFile) {\n    throw new Error(`No workflow file matched ${state.subworkflow_path}. Check that the workflow root is mounted into this n8n container.`);\n  }\n\n  const candidates = [];\n  for (const item of $input.all()) {\n    const raw = item.json.workflow_text;\n    if (typeof raw !== 'string' || !raw.trim()) continue;\n    let candidate;\n    try {\n      candidate = JSON.parse(raw);\n    } catch (error) {\n      throw new Error(`Invalid subworkflow JSON at ${state.subworkflow_path}: ${error.message}`);\n    }\n    if (\n      !Array.isArray(candidate.nodes)\n      || !candidate.connections\n      || !candidate.nodes.some((node) => node.type === expectedType)\n    ) continue;\n    const identity = item.binary?.data?.fileName || item.json.fileName || candidate.name;\n    if (selectorIsGlob && declaredStrategy(identity) !== strategy) continue;\n    candidates.push({ identity: String(identity || ''), workflow: candidate });\n  }\n  if (candidates.length === 0) {\n    throw new Error(`No ${provider} subworkflow matched ${state.subworkflow_path}`);\n  }\n  if (candidates.length > 1) {\n    const matched = candidates.map((entry) => entry.identity).sort().join(', ');\n    throw new Error(`Ambiguous ${provider} subworkflow for ${state.subworkflow_path}: ${matched}`);\n  }\n  const workflow = candidates[0].workflow;\n\n  const modelNode = workflow.nodes.find((node) => node.type === expectedType);\n  const currentModelSetting = provider === 'google'\n    ? modelNode.parameters.modelName\n    : modelNode.parameters.model;\n  const originalModel = currentModelSetting && typeof currentModelSetting === 'object'\n    ? currentModelSetting.value\n    : currentModelSetting;\n  if (provider === 'google') {\n    modelNode.parameters.modelName = currentModelSetting && typeof currentModelSetting === 'object'\n      ? { ...currentModelSetting, value: model, cachedResultName: model }\n      : model;\n  } else {\n    modelNode.parameters.model = currentModelSetting && typeof currentModelSetting === 'object'\n      ? { ...currentModelSetting, value: model, cachedResultName: model }\n      : model;\n  }\n\n  const normalizeNamespace = (value) => String(value)\n    .replace(/^models\\//, '')\n    .replace(/[^A-Za-z0-9_-]+/g, '-')\n    .replace(/^-+|-+$/g, '');\n  // `source-diagnosis` names the stage that produced the artifact, not a model.\n  // Rewriting it to the selected model would file the diagnosis stage's output\n  // under a model directory that never produced it.\n  const reservedArtifactNamespaces = new Set(['source-diagnosis']);\n  const artifactPathPattern = /\\/(responses|prompts)\\/([^/]+)\\//g;\n  const originalArtifactMatch = [...JSON.stringify(workflow).matchAll(artifactPathPattern)]\n    .find((match) => !reservedArtifactNamespaces.has(match[2]));\n  // The artifact namespace names the model family, not the exact model: every\n  // gpt-5 variant files under `gpt-5`, every claude-sonnet-4 variant under\n  // `claude-sonnet-4`. The variant workflow was selected by provider and already\n  // declares its family, so the family is read from the workflow rather than\n  // from a model list kept here. The exact model still reaches the model node\n  // above; Python receives the family so it selects the same artifact directory.\n  const matrixModelsNode = workflow.nodes.find((node) => node.name === 'Define LLM models to use');\n  let declaredFamily = originalArtifactMatch && !originalArtifactMatch[2].includes('{{')\n    ? originalArtifactMatch[2]\n    : null;\n  if (!declaredFamily && matrixModelsNode) {\n    // The Reactions matrix builds its paths from `llmName`, so its families are\n    // declared in the matrix node instead of in the path.\n    try {\n      const declared = JSON.parse(matrixModelsNode.parameters.jsonOutput);\n      const entry = (declared.llms || []).find((llm) => llm.node === providerNodeNames[provider]);\n      if (entry && entry.name) declaredFamily = String(entry.name);\n    } catch (error) {\n      declaredFamily = null;\n    }\n  }\n  const artifactModel = normalizeNamespace(declaredFamily || model);\n  const replaceArtifactPaths = (value) => {\n    if (typeof value === 'string') {\n      return value.replace(\n        /\\/(responses|prompts)\\/([^/]+)\\//g,\n        (match, kind, namespace) => (\n          reservedArtifactNamespaces.has(namespace) ? match : `/${kind}/${artifactModel}/`\n        ),\n      );\n    }\n    if (Array.isArray(value)) return value.map(replaceArtifactPaths);\n    if (value && typeof value === 'object') {\n      return Object.fromEntries(\n        Object.entries(value).map(([key, nested]) => [key, replaceArtifactPaths(nested)]),\n      );\n    }\n    return value;\n  };\n  for (const node of workflow.nodes) {\n    if (node !== modelNode) node.parameters = replaceArtifactPaths(node.parameters);\n  }\n  if (originalArtifactMatch && typeof workflow.name === 'string') {\n    workflow.name = workflow.name.replace(originalArtifactMatch[2], artifactModel);\n  }\n\n  const diagnosisProvenance = workflow.nodes.find((node) => node.name === 'Attach Diagnosis Provenance');\n  if (\n    diagnosisProvenance\n    && typeof diagnosisProvenance.parameters?.jsCode === 'string'\n    && typeof originalModel === 'string'\n  ) {\n    diagnosisProvenance.parameters.jsCode = diagnosisProvenance.parameters.jsCode.replaceAll(\n      originalModel,\n      model,\n    );\n  }\n\n  const matrixModels = workflow.nodes.find((node) => node.name === 'Define LLM models to use');\n  const matrixStrategies = workflow.nodes.find((node) => node.name === 'Define Strategies');\n  if (matrixModels && matrixStrategies) {\n    if (typeof strategy !== 'string') {\n      throw new Error('The Reactions generation matrix requires a selected strategy');\n    }\n    const strategyFlags = {\n      only_prompt: { Few_shot: false, Grammar: false, Helper_methods: false },\n      grammar: { Few_shot: false, Grammar: true, Helper_methods: false },\n      few_shot: { Few_shot: true, Grammar: false, Helper_methods: false },\n      few_shots_AND_grammar: { Few_shot: true, Grammar: true, Helper_methods: false },\n    }[strategy];\n    if (!strategyFlags) throw new Error(`Unsupported Reactions strategy: ${strategy}`);\n    matrixModels.parameters.jsonOutput = JSON.stringify({\n      llms: [{\n        name: artifactModel,\n        node: providerNodeNames[provider],\n      }],\n    }, null, 2);\n    matrixStrategies.parameters.jsonOutput = JSON.stringify({\n      strategies: [{\n        name: strategy,\n        ...strategyFlags,\n      }],\n    }, null, 2);\n    const selectedChain = workflow.connections[modelNode.name]\n      ?.ai_languageModel\n      ?.flat()\n      ?.find((connection) => connection.type === 'ai_languageModel')\n      ?.node;\n    const providerIf = workflow.nodes.find((node) => {\n      if (node.type !== 'n8n-nodes-base.if' || !selectedChain) return false;\n      const outputs = workflow.connections[node.name]?.main || [];\n      return outputs.some((connections) => connections.some(\n        (connection) => connection.node === selectedChain,\n      ));\n    });\n    if (!providerIf) throw new Error(`Reactions workflow has no routing branch for ${provider}`);\n    const llmCondition = providerIf.parameters.conditions.conditions.find(\n      (condition) => condition.leftValue?.includes('llmName'),\n    );\n    if (!llmCondition) throw new Error(`Reactions provider branch has no llmName condition: ${provider}`);\n    llmCondition.rightValue = artifactModel;\n  }\n\n  const callableTrigger = workflow.nodes.find(\n    (node) => node.type === 'n8n-nodes-base.executeWorkflowTrigger',\n  );\n  if (!callableTrigger) {\n    const manualTrigger = workflow.nodes.find(\n      (node) => node.type === 'n8n-nodes-base.manualTrigger',\n    );\n    if (!manualTrigger) {\n      throw new Error(`Subworkflow has no supported start node: ${state.subworkflow_path}`);\n    }\n    manualTrigger.type = 'n8n-nodes-base.executeWorkflowTrigger';\n    manualTrigger.typeVersion = 1.1;\n    manualTrigger.parameters = { inputSource: 'passthrough' };\n  }\n  workflow.active = false;\n\n  const callable = {\n    json: {\n      ...state,\n      ...(state.subworkflow_input || {}),\n      workflow_json: workflow,\n    },\n  };\n\n  // A generation export still addresses the language-wide prompt directory and\n  // a shared response tree; below, the invocation-local copy is narrowed to\n  // this run's task and iteration. The diagnosis subworkflow needs none of it.\n  const generationActions = new Set(['generate_tests', 'generate_transformations']);\n  if (!generationActions.has(state.action)) return [callable];\n\n  const language = state.current?.language;\n  const task = state.current?.task;\n  const runId = state.current?.run_id;\n  // Where this run is mounted for n8n, as Python reported it at run creation.\n  // The master spells no artifact path itself.\n  const runRoot = state.current?.n8n_run_dir;\n  const iteration = state.subworkflow_input?.refinement_iteration\n    ?? (state.action === 'generate_tests'\n      ? state.current?.test_iteration\n      : state.current?.transformation_iteration);\n  for (const [label, value] of [['language', language], ['task', task], ['run id', runId]]) {\n    if (typeof value !== 'string' || !/^[A-Za-z0-9._-]+$/.test(value)) {\n      throw new Error(`Unsafe generation ${label}: ${value}`);\n    }\n  }\n  if (!Number.isInteger(iteration) || iteration < 0) {\n    throw new Error(`Unsafe refinement iteration: ${iteration}`);\n  }\n  if (typeof runRoot !== 'string' || !runRoot.startsWith('/data/') || runRoot.includes('..')) {\n    throw new Error(`Unsafe run directory: ${runRoot}`);\n  }\n\n  // The external generation exports remain untouched on disk. This\n  // invocation-local copy reads only the task selected by the master instead of\n  // iterating over the language-wide prompt directory.\n  const promptReader = workflow.nodes.find((node) => node.name === 'Read prompt files');\n  if (!promptReader || promptReader.type !== 'n8n-nodes-base.readWriteFile') {\n    throw new Error('Generation workflow has no supported Read prompt files node');\n  }\n  const refinementPrompt = state.subworkflow_input?.prompt_path;\n  const saveFileName = workflow.nodes.find((node) => ['Save file name', 'Save reaction name'].includes(node.name));\n  if (!saveFileName || saveFileName.type !== 'n8n-nodes-base.set') {\n    throw new Error('Generation workflow has no supported task-name Set node');\n  }\n  const baseNameAssignment = saveFileName.parameters.assignments?.assignments?.find((assignment) => assignment.name === 'baseName');\n  if (!baseNameAssignment) throw new Error('Generation workflow has no baseName assignment');\n  baseNameAssignment.value = `=${task}`;\n\n  if (iteration > 0) {\n    const artifactType = state.action === 'generate_tests' ? 'semantic-test' : 'transformation';\n    const expected = `${runRoot}/refinements/${artifactType}/iteration-${String(iteration).padStart(3, '0')}/prompt.md`;\n    if (refinementPrompt !== expected || refinementPrompt.includes('..')) {\n      throw new Error(`Unsafe or stale refinement prompt path: ${refinementPrompt}`);\n    }\n    promptReader.parameters.fileSelector = `=${refinementPrompt}`;\n    const chainName = state.action === 'generate_tests' ? '(Re-)Generate test suite' : '(Re-)Generate code';\n    // A language workflow holds one chain under exactly this name. The Reactions\n    // matrix keeps one per model instead ((Re-)Generate code1/code3/Code2), and a\n    // refinement has to reach whichever of them the run's model routes to, so the\n    // name is matched as a prefix rather than in full.\n    const prefix = chainName.toLowerCase();\n    const llmChains = workflow.nodes.filter((node) => node.type === '@n8n/n8n-nodes-langchain.chainLlm' && node.name.toLowerCase().startsWith(prefix));\n    if (!llmChains.length) {\n      throw new Error(`Generation workflow has no supported LLM chain: ${chainName}`);\n    }\n    for (const llmChain of llmChains) llmChain.parameters.text = '={{ $json.prompt }}';\n    if (state.action === 'generate_tests') {\n      const assembler = workflow.nodes.find((node) => node.name === 'Assemble prompt');\n      const assembledPrompt = assembler?.parameters?.assignments?.assignments?.find((assignment) => assignment.name === 'assembled_prompt');\n      if (!assembledPrompt) throw new Error('Semantic-test workflow has no assembled_prompt assignment');\n      assembledPrompt.value = '={{ $json.prompt }}';\n    }\n  } else if (state.current?.custom_task) {\n    // A custom task reads the prompt Python kept for this run at creation, not\n    // the frozen prompt of the benchmark task it borrows its metamodels from.\n    promptReader.parameters.fileSelector = `=${runRoot}/task-prompt.md`;\n  } else {\n    promptReader.parameters.fileSelector = `=/data/task_prompts/${language}/${task}.txt`;\n  }\n\n  const operation = state.action === 'generate_tests'\n    ? 'semantic-test-generation'\n    : 'transformation-generation';\n  const extensions = { etl: 'etl', atl: 'atl', qvto: 'qvto', reactions: 'reactions' };\n  const extension = state.action === 'generate_tests' ? 'md' : extensions[language];\n  if (!extension) throw new Error(`No generated transformation extension for ${language}`);\n  const iterationName = String(iteration).padStart(3, '0');\n  const responseDirectory = `${runRoot}/responses/${operation}/iteration-${iterationName}`;\n  const responseWriter = workflow.nodes.find((node) => node.name === 'Write response to disk');\n  if (!responseWriter || responseWriter.type !== 'n8n-nodes-base.readWriteFile') {\n    throw new Error('Generation workflow has no supported response writer');\n  }\n  responseWriter.parameters.fileName = `=${responseDirectory}/${task}.${extension}`;\n\n  // Semantic-test workflows already archive the assembled request. Keep it next\n  // to the run-scoped response so the response is attributable after a later run\n  // overwrites the shared convenience tree.\n  if (state.action === 'generate_tests') {\n    const promptWriter = workflow.nodes.find((node) => node.name === 'Write prompt to disk');\n    if (promptWriter && promptWriter.type === 'n8n-nodes-base.readWriteFile') {\n      promptWriter.parameters.fileName = `=${responseDirectory}/prompt.md`;\n    }\n  }\n\n  if (state.action === 'generate_transformations') {\n    // Legacy transformation workflows were authored before Set v3.4 stripped\n    // binary data by default. Their next Extract From File node still consumes\n    // binary.data, so preserve it only in this invocation-local compatibility copy.\n    const saveName = saveFileName;\n    saveName.parameters.options = { ...(saveName.parameters.options || {}) };\n    if (Number(saveName.typeVersion || 0) >= 3.4) {\n      saveName.parameters.includeOtherFields = true;\n      saveName.parameters.options.stripBinary = false;\n    } else {\n      saveName.parameters.options.includeBinary = true;\n    }\n  }\n\n  return [callable];"
+        "jsCode": "const state = $('State Machine').first().json;\n  const providerNodeTypes = {\n    openai: '@n8n/n8n-nodes-langchain.lmChatOpenAi',\n    anthropic: '@n8n/n8n-nodes-langchain.lmChatAnthropic',\n    google: '@n8n/n8n-nodes-langchain.lmChatGoogleGemini',\n  };\n  const providerNodeNames = {\n    openai: 'OpenAI Chat Model',\n    anthropic: 'Anthropic Chat Model',\n    google: 'Google Gemini Chat Model',\n  };\n  const provider = state.subworkflow_input?.provider || state.subworkflow_input?.diagnosis_provider;\n  const model = state.subworkflow_input?.model;\n  const strategy = state.subworkflow_input?.strategy;\n  const expectedType = providerNodeTypes[provider];\n  if (!expectedType || typeof model !== 'string' || !model.trim()) {\n    throw new Error('Subworkflow execution requires a configured provider and model');\n  }\n\n  // The `*` in a variant selector stands for the model token alone, so the glob\n  // `Prompting_ETL_*_grammar.json` reads `..._few_shots_AND_grammar.json` back as\n  // well. A workflow declares its strategy as the longest strategy name its\n  // identity ends with; matching that exactly keeps the executed prompting\n  // strategy equal to the one recorded in the run configuration.\n  const strategyNames = ['only_prompt', 'few_shot', 'grammar', 'few_shots_AND_grammar'];\n  const declaredStrategy = (identity) => {\n    const name = String(identity || '').replace(/\\.json$/, '');\n    let declared = null;\n    for (const known of strategyNames) {\n      if (!name.endsWith(`_${known}`)) continue;\n      if (!declared || known.length > declared.length) declared = known;\n    }\n    return declared;\n  };\n  const selectorIsGlob = String(state.subworkflow_path || '').includes('*');\n  if (selectorIsGlob && !strategyNames.includes(strategy)) {\n    throw new Error(`A variant selector requires a supported strategy: ${state.subworkflow_path}`);\n  }\n\n  // Zero files read means the selector matched nothing at all, which is a\n  // different failure from \"matched, but not for this provider\" and almost always\n  // means the workflow root is not mounted into this n8n container.\n  const readAnyFile = $input.all().some(\n    (item) => typeof item.json.workflow_text === 'string' && item.json.workflow_text.trim(),\n  );\n  if (!readAnyFile) {\n    throw new Error(`No workflow file matched ${state.subworkflow_path}. Check that the workflow root is mounted into this n8n container.`);\n  }\n\n  const candidates = [];\n  for (const item of $input.all()) {\n    const raw = item.json.workflow_text;\n    if (typeof raw !== 'string' || !raw.trim()) continue;\n    let candidate;\n    try {\n      candidate = JSON.parse(raw);\n    } catch (error) {\n      throw new Error(`Invalid subworkflow JSON at ${state.subworkflow_path}: ${error.message}`);\n    }\n    if (\n      !Array.isArray(candidate.nodes)\n      || !candidate.connections\n      || !candidate.nodes.some((node) => node.type === expectedType)\n    ) continue;\n    const identity = item.binary?.data?.fileName || item.json.fileName || candidate.name;\n    if (selectorIsGlob && declaredStrategy(identity) !== strategy) continue;\n    candidates.push({ identity: String(identity || ''), workflow: candidate });\n  }\n  if (candidates.length === 0) {\n    throw new Error(`No ${provider} subworkflow matched ${state.subworkflow_path}`);\n  }\n  if (candidates.length > 1) {\n    const matched = candidates.map((entry) => entry.identity).sort().join(', ');\n    throw new Error(`Ambiguous ${provider} subworkflow for ${state.subworkflow_path}: ${matched}`);\n  }\n  const workflow = candidates[0].workflow;\n\n  const modelNode = workflow.nodes.find((node) => node.type === expectedType);\n  const currentModelSetting = provider === 'google'\n    ? modelNode.parameters.modelName\n    : modelNode.parameters.model;\n  const originalModel = currentModelSetting && typeof currentModelSetting === 'object'\n    ? currentModelSetting.value\n    : currentModelSetting;\n  if (provider === 'google') {\n    modelNode.parameters.modelName = currentModelSetting && typeof currentModelSetting === 'object'\n      ? { ...currentModelSetting, value: model, cachedResultName: model }\n      : model;\n  } else {\n    modelNode.parameters.model = currentModelSetting && typeof currentModelSetting === 'object'\n      ? { ...currentModelSetting, value: model, cachedResultName: model }\n      : model;\n  }\n\n  const normalizeNamespace = (value) => String(value)\n    .replace(/^models\\//, '')\n    .replace(/[^A-Za-z0-9_-]+/g, '-')\n    .replace(/^-+|-+$/g, '');\n  // `source-diagnosis` names the stage that produced the artifact, not a model.\n  // Rewriting it to the selected model would file the diagnosis stage's output\n  // under a model directory that never produced it.\n  const reservedArtifactNamespaces = new Set(['source-diagnosis']);\n  const artifactPathPattern = /\\/(responses|prompts)\\/([^/]+)\\//g;\n  const originalArtifactMatch = [...JSON.stringify(workflow).matchAll(artifactPathPattern)]\n    .find((match) => !reservedArtifactNamespaces.has(match[2]));\n  // The artifact namespace names the model family, not the exact model: every\n  // gpt-5 variant files under `gpt-5`, every claude-sonnet-4 variant under\n  // `claude-sonnet-4`. The variant workflow was selected by provider and already\n  // declares its family, so the family is read from the workflow rather than\n  // from a model list kept here. The exact model still reaches the model node\n  // above; Python receives the family so it selects the same artifact directory.\n  const matrixModelsNode = workflow.nodes.find((node) => node.name === 'Define LLM models to use');\n  let declaredFamily = originalArtifactMatch && !originalArtifactMatch[2].includes('{{')\n    ? originalArtifactMatch[2]\n    : null;\n  if (!declaredFamily && matrixModelsNode) {\n    // The Reactions matrix builds its paths from `llmName`, so its families are\n    // declared in the matrix node instead of in the path.\n    try {\n      const declared = JSON.parse(matrixModelsNode.parameters.jsonOutput);\n      const entry = (declared.llms || []).find((llm) => llm.node === providerNodeNames[provider]);\n      if (entry && entry.name) declaredFamily = String(entry.name);\n    } catch (error) {\n      declaredFamily = null;\n    }\n  }\n  const artifactModel = normalizeNamespace(declaredFamily || model);\n  const replaceArtifactPaths = (value) => {\n    if (typeof value === 'string') {\n      return value.replace(\n        /\\/(responses|prompts)\\/([^/]+)\\//g,\n        (match, kind, namespace) => (\n          reservedArtifactNamespaces.has(namespace) ? match : `/${kind}/${artifactModel}/`\n        ),\n      );\n    }\n    if (Array.isArray(value)) return value.map(replaceArtifactPaths);\n    if (value && typeof value === 'object') {\n      return Object.fromEntries(\n        Object.entries(value).map(([key, nested]) => [key, replaceArtifactPaths(nested)]),\n      );\n    }\n    return value;\n  };\n  for (const node of workflow.nodes) {\n    if (node !== modelNode) node.parameters = replaceArtifactPaths(node.parameters);\n  }\n  if (originalArtifactMatch && typeof workflow.name === 'string') {\n    workflow.name = workflow.name.replace(originalArtifactMatch[2], artifactModel);\n  }\n\n  const diagnosisProvenance = workflow.nodes.find((node) => node.name === 'Attach Diagnosis Provenance');\n  if (\n    diagnosisProvenance\n    && typeof diagnosisProvenance.parameters?.jsCode === 'string'\n    && typeof originalModel === 'string'\n  ) {\n    diagnosisProvenance.parameters.jsCode = diagnosisProvenance.parameters.jsCode.replaceAll(\n      originalModel,\n      model,\n    );\n  }\n\n  const matrixModels = workflow.nodes.find((node) => node.name === 'Define LLM models to use');\n  const matrixStrategies = workflow.nodes.find((node) => node.name === 'Define Strategies');\n  if (matrixModels && matrixStrategies) {\n    if (typeof strategy !== 'string') {\n      throw new Error('The Reactions generation matrix requires a selected strategy');\n    }\n    const strategyFlags = {\n      only_prompt: { Few_shot: false, Grammar: false, Helper_methods: false },\n      grammar: { Few_shot: false, Grammar: true, Helper_methods: false },\n      few_shot: { Few_shot: true, Grammar: false, Helper_methods: false },\n      few_shots_AND_grammar: { Few_shot: true, Grammar: true, Helper_methods: false },\n    }[strategy];\n    if (!strategyFlags) throw new Error(`Unsupported Reactions strategy: ${strategy}`);\n    matrixModels.parameters.jsonOutput = JSON.stringify({\n      llms: [{\n        name: artifactModel,\n        node: providerNodeNames[provider],\n      }],\n    }, null, 2);\n    matrixStrategies.parameters.jsonOutput = JSON.stringify({\n      strategies: [{\n        name: strategy,\n        ...strategyFlags,\n      }],\n    }, null, 2);\n    const selectedChain = workflow.connections[modelNode.name]\n      ?.ai_languageModel\n      ?.flat()\n      ?.find((connection) => connection.type === 'ai_languageModel')\n      ?.node;\n    const providerIf = workflow.nodes.find((node) => {\n      if (node.type !== 'n8n-nodes-base.if' || !selectedChain) return false;\n      const outputs = workflow.connections[node.name]?.main || [];\n      return outputs.some((connections) => connections.some(\n        (connection) => connection.node === selectedChain,\n      ));\n    });\n    if (!providerIf) throw new Error(`Reactions workflow has no routing branch for ${provider}`);\n    const llmCondition = providerIf.parameters.conditions.conditions.find(\n      (condition) => condition.leftValue?.includes('llmName'),\n    );\n    if (!llmCondition) throw new Error(`Reactions provider branch has no llmName condition: ${provider}`);\n    llmCondition.rightValue = artifactModel;\n  }\n\n  const callableTrigger = workflow.nodes.find(\n    (node) => node.type === 'n8n-nodes-base.executeWorkflowTrigger',\n  );\n  if (!callableTrigger) {\n    const manualTrigger = workflow.nodes.find(\n      (node) => node.type === 'n8n-nodes-base.manualTrigger',\n    );\n    if (!manualTrigger) {\n      throw new Error(`Subworkflow has no supported start node: ${state.subworkflow_path}`);\n    }\n    manualTrigger.type = 'n8n-nodes-base.executeWorkflowTrigger';\n    manualTrigger.typeVersion = 1.1;\n    manualTrigger.parameters = { inputSource: 'passthrough' };\n  }\n  workflow.active = false;\n\n  const callable = {\n    json: {\n      ...state,\n      ...(state.subworkflow_input || {}),\n      workflow_json: workflow,\n    },\n  };\n\n  // A generation export still addresses the language-wide prompt directory and\n  // a shared response tree; below, the invocation-local copy is narrowed to\n  // this run's task and iteration. The diagnosis subworkflow needs none of it.\n  const generationActions = new Set(['generate_tests', 'generate_transformations']);\n  if (!generationActions.has(state.action)) return [callable];\n\n  const language = state.current?.language;\n  const task = state.current?.task;\n  const runId = state.current?.run_id;\n  // Where this run is mounted for n8n, as Python reported it at run creation.\n  // The master spells no artifact path itself.\n  const runRoot = state.current?.n8n_run_dir;\n  const iteration = state.subworkflow_input?.refinement_iteration\n    ?? (state.action === 'generate_tests'\n      ? state.current?.test_iteration\n      : state.current?.transformation_iteration);\n  for (const [label, value] of [['language', language], ['task', task], ['run id', runId]]) {\n    if (typeof value !== 'string' || !/^[A-Za-z0-9._-]+$/.test(value)) {\n      throw new Error(`Unsafe generation ${label}: ${value}`);\n    }\n  }\n  if (!Number.isInteger(iteration) || iteration < 0) {\n    throw new Error(`Unsafe refinement iteration: ${iteration}`);\n  }\n  if (typeof runRoot !== 'string' || !runRoot.startsWith('/data/') || runRoot.includes('..')) {\n    throw new Error(`Unsafe run directory: ${runRoot}`);\n  }\n\n  // The external generation exports remain untouched on disk. This\n  // invocation-local copy reads only the task selected by the master instead of\n  // iterating over the language-wide prompt directory.\n  const promptReader = workflow.nodes.find((node) => node.name === 'Read prompt files');\n  if (!promptReader || promptReader.type !== 'n8n-nodes-base.readWriteFile') {\n    throw new Error('Generation workflow has no supported Read prompt files node');\n  }\n  const refinementPrompt = state.subworkflow_input?.prompt_path;\n  const saveFileName = workflow.nodes.find((node) => ['Save file name', 'Save reaction name'].includes(node.name));\n  if (!saveFileName || saveFileName.type !== 'n8n-nodes-base.set') {\n    throw new Error('Generation workflow has no supported task-name Set node');\n  }\n  const baseNameAssignment = saveFileName.parameters.assignments?.assignments?.find((assignment) => assignment.name === 'baseName');\n  if (!baseNameAssignment) throw new Error('Generation workflow has no baseName assignment');\n  baseNameAssignment.value = `=${task}`;\n\n  if (iteration > 0) {\n    const artifactType = state.action === 'generate_tests' ? 'semantic-test' : 'transformation';\n    const expected = `${runRoot}/refinements/${artifactType}/iteration-${String(iteration).padStart(3, '0')}/prompt.md`;\n    if (refinementPrompt !== expected || refinementPrompt.includes('..')) {\n      throw new Error(`Unsafe or stale refinement prompt path: ${refinementPrompt}`);\n    }\n    promptReader.parameters.fileSelector = `=${refinementPrompt}`;\n    const chainName = state.action === 'generate_tests' ? '(Re-)Generate test suite' : '(Re-)Generate code';\n    // A language workflow holds one chain under exactly this name. The Reactions\n    // matrix keeps one per model instead ((Re-)Generate code1/code3/Code2), and a\n    // refinement has to reach whichever of them the run's model routes to, so the\n    // name is matched as a prefix rather than in full.\n    const prefix = chainName.toLowerCase();\n    const llmChains = workflow.nodes.filter((node) => node.type === '@n8n/n8n-nodes-langchain.chainLlm' && node.name.toLowerCase().startsWith(prefix));\n    if (!llmChains.length) {\n      throw new Error(`Generation workflow has no supported LLM chain: ${chainName}`);\n    }\n    for (const llmChain of llmChains) llmChain.parameters.text = '={{ $json.prompt }}';\n    if (state.action === 'generate_tests') {\n      const assembler = workflow.nodes.find((node) => node.name === 'Assemble prompt');\n      const assembledPrompt = assembler?.parameters?.assignments?.assignments?.find((assignment) => assignment.name === 'assembled_prompt');\n      if (!assembledPrompt) throw new Error('Semantic-test workflow has no assembled_prompt assignment');\n      assembledPrompt.value = '={{ $json.prompt }}';\n    }\n  } else if (state.current?.custom_task) {\n    // A custom task reads the prompt Python kept for this run at creation, not\n    // a frozen benchmark prompt.\n    promptReader.parameters.fileSelector = `=${runRoot}/task-prompt.md`;\n  } else {\n    promptReader.parameters.fileSelector = `=/data/task_prompts/${language}/${task}.txt`;\n  }\n\n  // A benchmark task resolves its metamodels through its contract; a custom\n  // task asks for the one the launch supplied. A literal body, not an n8n\n  // expression, so metamodel text containing braces cannot be evaluated.\n  if (state.current?.custom_task) {\n    const metamodel = state.current.custom_task.metamodel;\n    if (typeof metamodel !== 'string' || !metamodel.trim()) {\n      throw new Error(`Custom task ${state.current.custom_task.name} carries no metamodel`);\n    }\n    const resolver = workflow.nodes.find((node) => node.name === 'Resolve exact task inputs');\n    if (!resolver || resolver.type !== 'n8n-nodes-base.httpRequest') {\n      throw new Error('Generation workflow has no supported Resolve exact task inputs node');\n    }\n    resolver.parameters.jsonBody = JSON.stringify({ language, task, metamodel });\n  }\n\n  const operation = state.action === 'generate_tests'\n    ? 'semantic-test-generation'\n    : 'transformation-generation';\n  const extensions = { etl: 'etl', atl: 'atl', qvto: 'qvto', reactions: 'reactions' };\n  const extension = state.action === 'generate_tests' ? 'md' : extensions[language];\n  if (!extension) throw new Error(`No generated transformation extension for ${language}`);\n  const iterationName = String(iteration).padStart(3, '0');\n  const responseDirectory = `${runRoot}/responses/${operation}/iteration-${iterationName}`;\n  const responseWriter = workflow.nodes.find((node) => node.name === 'Write response to disk');\n  if (!responseWriter || responseWriter.type !== 'n8n-nodes-base.readWriteFile') {\n    throw new Error('Generation workflow has no supported response writer');\n  }\n  responseWriter.parameters.fileName = `=${responseDirectory}/${task}.${extension}`;\n\n  // Semantic-test workflows already archive the assembled request. Keep it next\n  // to the run-scoped response so the response is attributable after a later run\n  // overwrites the shared convenience tree.\n  if (state.action === 'generate_tests') {\n    const promptWriter = workflow.nodes.find((node) => node.name === 'Write prompt to disk');\n    if (promptWriter && promptWriter.type === 'n8n-nodes-base.readWriteFile') {\n      promptWriter.parameters.fileName = `=${responseDirectory}/prompt.md`;\n    }\n  }\n\n  if (state.action === 'generate_transformations') {\n    // Legacy transformation workflows were authored before Set v3.4 stripped\n    // binary data by default. Their next Extract From File node still consumes\n    // binary.data, so preserve it only in this invocation-local compatibility copy.\n    const saveName = saveFileName;\n    saveName.parameters.options = { ...(saveName.parameters.options || {}) };\n    if (Number(saveName.typeVersion || 0) >= 3.4) {\n      saveName.parameters.includeOtherFields = true;\n      saveName.parameters.options.stripBinary = false;\n    } else {\n      saveName.parameters.options.includeBinary = true;\n    }\n  }\n\n  return [callable];"
       },
       "onError": "continueErrorOutput"
     },

@@ -23,7 +23,8 @@ const node = workflow.nodes.find((candidate) => candidate.name === spec.node);
 if (!node) throw new Error(`${workflowPath} has no node named ${spec.node}`);
 
 // `files` reads real workflow variants off disk the way the readWriteFile glob
-// feeds the node; `input` passes items straight through.
+// feeds the node; `input` passes items straight through. `binary` is the item's
+// binary side, which is where the form trigger puts an uploaded file.
 const items = spec.files
   ? spec.files.map((file) => ({
     json: {
@@ -32,7 +33,10 @@ const items = spec.files
     },
     binary: { data: { fileName: path.basename(file) } },
   }))
-  : (spec.input || []).map((json) => ({ json }));
+  : (spec.input || []).map((json, index) => ({
+    json,
+    binary: (spec.binary || [])[index] || {},
+  }));
 
 const $input = {
   all: () => items,

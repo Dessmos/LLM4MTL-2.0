@@ -3,6 +3,10 @@ in this folder files for n8n work
 task_inputs.py      -   n8n asks via HTTP for a specific files.
                         POST /prompt-inputs/resolve  →  resolve_task_inputs(language, task)
                         by reading JSON files understand what n8n needs.
+                        A custom task sends its own metamodel with the request:
+                        POST /prompt-inputs/resolve {language, task, metamodel}
+                          →  resolve_custom_task_inputs(...)
+                        which consults no contract and no reference.
 
 
 

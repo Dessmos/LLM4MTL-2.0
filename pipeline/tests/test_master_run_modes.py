@@ -13,6 +13,7 @@ Action Result`` code under Node instead of restating their rules in Python.
 
 from __future__ import annotations
 
+import base64
 import json
 import shutil
 import subprocess
@@ -70,14 +71,17 @@ STRATEGY_LABELS = {
     "Few-shot + Grammar": "few_shots_AND_grammar",
 }
 CUSTOM_TASK_SLOTS = 5
-CUSTOM_TASK_FIELDS = tuple(
+# The tick that opens the section, then each slot's own fields. The ticks are
+# presentation: the queue builder reads a slot by whether it was filled in.
+CUSTOM_TASK_FIELDS = ("custom_tasks_enabled",) + tuple(
     f"custom_task_{slot}_{part}"
     for slot in range(1, CUSTOM_TASK_SLOTS + 1)
-    for part in ("name", "base", "prompt", "more")
+    for part in ("name", "language", "metamodel", "metamodel_file", "prompt", "more")
     if not (slot == CUSTOM_TASK_SLOTS and part == "more")
 )
-# The stages a custom task never runs: they all judge against the benchmark
-# reference, which does not implement the custom prompt.
+# The stages a custom task never runs: they all judge against a reference, and
+# nothing in the benchmark implements the custom prompt over the user's
+# metamodel.
 CUSTOM_TASK_DISABLED = (
     "technical_validation",
     "reference_validation",
@@ -112,6 +116,15 @@ def _form_fields() -> list[dict[str, Any]]:
         if node["type"] == "n8n-nodes-base.formTrigger"
     )
     return trigger["parameters"]["formFields"]["values"]
+
+
+def _form_css() -> str:
+    trigger = next(
+        node
+        for node in _master()["nodes"]
+        if node["type"] == "n8n-nodes-base.formTrigger"
+    )
+    return trigger["parameters"]["options"]["customCss"]
 
 
 def _field_options(field_name: str) -> list[str]:
@@ -159,6 +172,19 @@ def _as_submitted(values: dict[str, Any]) -> dict[str, Any]:
     return submitted
 
 
+def _as_uploaded(files: dict[str, str]) -> dict[str, Any]:
+    """The binary side of a submitted form, one entry per uploaded file.
+
+    n8n hands a Code node an uploaded file base64-encoded under ``data``, keyed
+    by the upload field's label with every non-word character replaced, so the
+    tests submit attachments the same way.
+    """
+    return {
+        key: {"data": base64.b64encode(text.encode("utf-8")).decode("ascii")}
+        for key, text in files.items()
+    }
+
+
 def _run_node(
     node: str,
     *,
@@ -166,6 +192,7 @@ def _run_node(
     nodes: dict[str, Any] | None = None,
     state: dict[str, Any] | None = None,
     files: list[Path] | None = None,
+    binary: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     spec: dict[str, Any] = {
         "master": str(MASTER_WORKFLOW),
@@ -173,6 +200,8 @@ def _run_node(
         "input": inputs or [],
         "nodes": nodes or {},
     }
+    if binary is not None:
+        spec["binary"] = binary
     if state is not None:
         spec["state"] = state
     if files is not None:
@@ -253,8 +282,14 @@ def _configure(
     disabled_components: str = "",
     unconfigured_roles: tuple[str, ...] = (),
     custom_tasks: dict[str, str] | None = None,
+    attached_metamodels: dict[str, str] | None = None,
 ) -> dict[str, Any]:
-    """Submit the configuration screen and build the run queue."""
+    """Submit the configuration screen and build the run queue.
+
+    ``attached_metamodels`` maps a binary key the form trigger would create for
+    an upload field to that file's text, which is how a metamodel arrives when
+    the user attaches it instead of writing it.
+    """
     chosen = {"etl_tasks": "Tree2Graph", **(tasks or {}), **(custom_tasks or {})}
     provider_choice = {
         "semantic_test_provider": "OpenAI",
@@ -284,6 +319,7 @@ def _configure(
                 }
             )
         ],
+        binary=[_as_uploaded(attached_metamodels or {})],
         nodes=_model_nodes(unconfigured_roles),
     )
 
@@ -404,7 +440,8 @@ class OrchestrationFailureTests(unittest.TestCase):
         configured = _configure(
             custom_tasks={
                 "custom_task_1_name": "TreeFlattening",
-                "custom_task_1_base": "ETL / Tree2Graph",
+                "custom_task_1_language": "ETL",
+                "custom_task_1_metamodel": "class Tree { children: Tree[] }",
                 "custom_task_1_prompt": "Flatten every tree.",
             }
         )
@@ -449,7 +486,11 @@ class OrchestrationFailureTests(unittest.TestCase):
         self.assertTrue(config["stages"]["source_diagnosis"])
         self.assertEqual(state["current"]["pipeline_variant"], body["pipeline_variant"])
         self.assertEqual(
-            {"name": "TreeFlattening", "prompt": "Flatten every tree."},
+            {
+                "name": "TreeFlattening",
+                "prompt": "Flatten every tree.",
+                "metamodel": "class Tree { children: Tree[] }",
+            },
             body["custom_task"],
         )
 
@@ -1851,7 +1892,15 @@ class ConfigurationPresentationTests(unittest.TestCase):
         would show up and return nothing usable, so every field a run reads has to
         stay a real option input.
         """
-        submitted_types = {"radio", "checkbox", "dropdown", "hiddenField", "text", "textarea"}
+        submitted_types = {
+            "radio",
+            "checkbox",
+            "dropdown",
+            "hiddenField",
+            "text",
+            "textarea",
+            "file",
+        }
         for field in _form_fields():
             if field["fieldType"] == "html":
                 continue
@@ -1930,45 +1979,138 @@ class ConfigurationPresentationTests(unittest.TestCase):
 
 @unittest.skipUnless(shutil.which("node"), "the master workflow's Code nodes need Node")
 class CustomTaskTests(unittest.TestCase):
-    """A custom task is a user prompt run as one benchmark task.
+    """A custom task is a user prompt run over a user-supplied metamodel.
 
-    The benchmark task lends its contract, metamodels, and reference, so the
-    run's identity stays that task; the prompt, the stage flags, and the variant
-    are the custom task's own. Everything reference-bound is disabled for it
-    while the benchmark tasks of the same launch keep the configured set.
+    The slot carries everything the run needs: the language, the metamodel —
+    written into the form or attached as a file — and the prompt, so the run's
+    identity is the custom task's own name rather than a borrowed benchmark
+    task. Nothing implements that prompt, so everything reference-bound is
+    disabled for it while the benchmark tasks of the same launch keep the
+    configured set.
     """
 
+    METAMODEL = "class Tree { children: Tree[] }"
     CUSTOM = {
         "custom_task_1_name": "TreeFlattening",
-        "custom_task_1_base": "ETL / Tree2Graph",
+        "custom_task_1_language": "ETL",
+        "custom_task_1_metamodel": METAMODEL,
         "custom_task_1_prompt": "Flatten every tree into one graph node per leaf.",
     }
+    # How n8n keys the upload field of slot 1: the field's label with every
+    # non-word character replaced, and the file's index appended.
+    ATTACHMENT_KEY = "Custom_task_1___metamodel_file_0"
 
-    def test_the_slot_offers_every_benchmark_task_with_its_language(self) -> None:
-        expected = set()
-        for language, label in (
-            ("etl", "ETL"),
-            ("atl", "ATL"),
-            ("qvto", "QVT-O"),
-            ("reactions", "Reactions"),
-        ):
-            for path in (TASK_CONTRACTS / language / "task_contracts").glob("*.json"):
-                expected.add(f"{label} / {path.stem}")
+    def test_the_section_is_closed_until_a_custom_task_is_added(self) -> None:
+        """Nothing of a custom task is on screen until its tick is set.
+
+        The fields are static in the workflow JSON, so the section is collapsed
+        by the same `:has()` rule that opens slot n+1: while a tick is unset,
+        every following field is hidden. A closed section still submits its
+        empty inputs, which the queue builder reads as no custom task at all.
+        """
+        fields = _form_fields()
+        names = [field.get("fieldName") or field.get("elementName") for field in fields]
+        opener = names.index("custom_tasks_enabled")
+        heading = names.index("custom_tasks_heading")
+        end = names.index("custom_tasks_end")
+        self.assertLess(heading, opener, "the section says what it is before the tick")
+        # Everything a custom task needs sits between the tick and the marker
+        # that restores the rest of the screen.
+        for slot in range(1, CUSTOM_TASK_SLOTS + 1):
+            for part in ("name", "language", "metamodel", "metamodel_file", "prompt"):
+                with self.subTest(field=f"custom_task_{slot}_{part}"):
+                    self.assertLess(opener, names.index(f"custom_task_{slot}_{part}"))
+                    self.assertLess(names.index(f"custom_task_{slot}_{part}"), end)
+        self.assertLess(opener, names.index("custom_tasks_note"))
+
+        css = _form_css()
+        # The wrappers have to be addressed as `.inputs-wrapper > div`. n8n's
+        # form template gives `.form-group` to every field type except a
+        # checkbox group, which it wraps in a bare div — so a rule written
+        # against `.form-group` never sees the tick it has to react to, and the
+        # section renders fully expanded however the tick is set.
+        self.assertIn(
+            ".inputs-wrapper > div:has(input.multiselect-checkbox"
+            "[value='+ Add a custom task']:not(:checked)) ~ div",
+            css,
+        )
+        self.assertIn(
+            ".inputs-wrapper > div:has(input.multiselect-checkbox"
+            "[value='+ Add another custom task']:not(:checked)) ~ div",
+            css,
+        )
+        self.assertNotIn(".form-group:has(input.multiselect-checkbox", css)
+
+    def test_the_section_ends_on_the_id_n8n_actually_renders(self) -> None:
+        """The rest of the screen is restored by position, because it must be.
+
+        Those two ticks hide every field that follows them, so something has to
+        say where the section stops. It cannot say so with an id of its own: n8n
+        puts every html field through sanitize-html, which allows no attributes
+        on a div, so `id="custom-tasks-end"` is stripped before it reaches the
+        page and the rule silently matches nothing — which hides sections 3
+        through 6 along with the slots.
+
+        What n8n does render for every field is a hidden input keyed by
+        position, `field-<index>`. That is the anchor, and this test recomputes
+        the index so that inserting a field above the marker fails here instead
+        of blanking the second half of the form.
+        """
+        fields = _form_fields()
+        end = next(
+            index
+            for index, field in enumerate(fields)
+            if field.get("elementName") == "custom_tasks_end"
+        )
+        css = _form_css()
+        self.assertIn(f".inputs-wrapper > div:has(#field-{end}) ~ div", css)
+        self.assertIn(f".inputs-wrapper > div:has(#field-{end}),", css)
+        # The marker carries no id of its own, so nothing may rely on one.
+        self.assertNotIn("#custom-tasks-end", css)
+
+    def test_a_launch_that_never_opens_the_section_queues_no_custom_task(self) -> None:
+        config = _configure()
+        self.assertTrue(config["ok"], config.get("error"))
+        self.assertEqual([], config["result"]["config"]["custom_tasks"])
+        self.assertIsNone(config["result"]["run_specs"][0]["custom_task"])
+
+    def test_the_slot_offers_every_supported_language(self) -> None:
         for slot in range(1, CUSTOM_TASK_SLOTS + 1):
             with self.subTest(slot=slot):
                 self.assertEqual(
-                    expected, set(_field_options(f"custom_task_{slot}_base"))
+                    ["ETL", "ATL", "QVT-O", "Reactions"],
+                    _field_options(f"custom_task_{slot}_language"),
                 )
 
-    def test_a_custom_task_runs_as_its_benchmark_task_under_its_own_flags(self) -> None:
+    def test_the_slot_takes_the_metamodel_as_text_or_as_a_file(self) -> None:
+        fields = {
+            field.get("fieldName"): field
+            for field in _form_fields()
+            if field.get("fieldName")
+        }
+        for slot in range(1, CUSTOM_TASK_SLOTS + 1):
+            with self.subTest(slot=slot):
+                self.assertEqual(
+                    "textarea", fields[f"custom_task_{slot}_metamodel"]["fieldType"]
+                )
+                upload = fields[f"custom_task_{slot}_metamodel_file"]
+                self.assertEqual("file", upload["fieldType"])
+                self.assertFalse(upload["multipleFiles"])
+                self.assertNotIn(f"custom_task_{slot}_base", fields)
+
+    def test_a_custom_task_runs_under_its_own_name_and_flags(self) -> None:
         config = _configure(custom_tasks=self.CUSTOM)
         self.assertTrue(config["ok"], config.get("error"))
         custom, benchmark = config["result"]["run_specs"]
 
         self.assertEqual("etl", custom["language"])
-        self.assertEqual("Tree2Graph", custom["task"])
+        self.assertEqual("TreeFlattening", custom["task"])
         self.assertEqual(
-            {"name": "TreeFlattening", "prompt": self.CUSTOM["custom_task_1_prompt"]},
+            {
+                "name": "TreeFlattening",
+                "prompt": self.CUSTOM["custom_task_1_prompt"],
+                "metamodel": self.METAMODEL,
+            },
             custom["custom_task"],
         )
         self.assertEqual("full:custom-task:TreeFlattening", custom["pipeline_variant"])
@@ -1983,9 +2125,37 @@ class CustomTaskTests(unittest.TestCase):
         self.assertEqual("full", benchmark["pipeline_variant"])
         self.assertEqual(config["result"]["config"]["stages"], benchmark["stages"])
         self.assertEqual(
-            [{"name": "TreeFlattening", "language": "etl", "base_task": "Tree2Graph"}],
+            [
+                {
+                    "name": "TreeFlattening",
+                    "language": "etl",
+                    "metamodel_source": "form",
+                }
+            ],
             config["result"]["config"]["custom_tasks"],
         )
+
+    def test_an_attached_metamodel_is_read_from_the_uploaded_file(self) -> None:
+        written = {**self.CUSTOM}
+        del written["custom_task_1_metamodel"]
+        config = _configure(
+            custom_tasks=written,
+            attached_metamodels={self.ATTACHMENT_KEY: self.METAMODEL},
+        )
+        self.assertTrue(config["ok"], config.get("error"))
+        custom = config["result"]["run_specs"][0]
+        self.assertEqual(self.METAMODEL, custom["custom_task"]["metamodel"])
+        self.assertEqual(
+            "file", config["result"]["config"]["custom_tasks"][0]["metamodel_source"]
+        )
+
+    def test_a_slot_with_a_written_and_an_attached_metamodel_is_refused(self) -> None:
+        config = _configure(
+            custom_tasks=self.CUSTOM,
+            attached_metamodels={self.ATTACHMENT_KEY: "class Other {}"},
+        )
+        self.assertFalse(config["ok"])
+        self.assertIn("keep one", config["error"])
 
     def test_a_custom_task_keeps_the_ablation_the_launch_chose(self) -> None:
         config = _configure(
@@ -2017,20 +2187,22 @@ class CustomTaskTests(unittest.TestCase):
         self.assertIn("at least one language or define a custom task", config["error"])
 
     def test_a_half_filled_or_repeated_slot_is_refused(self) -> None:
+        METAMODEL = self.METAMODEL
         cases = {
             "name only": {"custom_task_1_name": "Lonely"},
             "no name": {
-                "custom_task_1_base": "ETL / Tree2Graph",
+                "custom_task_1_language": "ETL",
+                "custom_task_1_metamodel": METAMODEL,
                 "custom_task_1_prompt": "prompt",
             },
             "bad name": {**self.CUSTOM, "custom_task_1_name": "no spaces allowed"},
-            # Whether the benchmark task exists is not checked here: the slot
-            # offers only contracts on disk, and POST /runs refuses any other.
-            "no language": {**self.CUSTOM, "custom_task_1_base": "Nope"},
+            "no metamodel": {**self.CUSTOM, "custom_task_1_metamodel": ""},
+            "no language": {**self.CUSTOM, "custom_task_1_language": "Nope"},
             "repeated name": {
                 **self.CUSTOM,
                 "custom_task_2_name": "TreeFlattening",
-                "custom_task_2_base": "ATL / Class2Interface_All",
+                "custom_task_2_language": "ATL",
+                "custom_task_2_metamodel": METAMODEL,
                 "custom_task_2_prompt": "prompt",
             },
         }
@@ -2059,17 +2231,23 @@ class CustomTaskTests(unittest.TestCase):
         self.assertEqual("SEMANTIC_PASSED", benchmark["reason"])
         self.assertIn("execution", [entry["action"] for entry in benchmark["timeline"]])
 
-    def test_a_custom_task_reads_the_prompt_its_run_was_created_with(self) -> None:
+    def test_a_custom_task_reads_the_prompt_and_metamodel_it_was_created_with(
+        self,
+    ) -> None:
         adapted = _adapt(
             TRANSFORMATION_WORKFLOW,
             action="generate_transformations",
             current={
                 "language": "etl",
-                "task": "Tree2Graph",
+                "task": "TreeFlattening",
                 "run_id": "run-custom-1",
                 "n8n_run_dir": "/data/artifacts/runs/batch_001/run-custom-1",
                 "transformation_iteration": 0,
-                "custom_task": {"name": "TreeFlattening", "prompt": "p"},
+                "custom_task": {
+                    "name": "TreeFlattening",
+                    "prompt": "p",
+                    "metamodel": self.METAMODEL,
+                },
             },
             subworkflow_input={"refinement_iteration": 0},
         )
@@ -2080,6 +2258,45 @@ class CustomTaskTests(unittest.TestCase):
         self.assertEqual(
             "=/data/artifacts/runs/batch_001/run-custom-1/task-prompt.md",
             nodes["Read prompt files"]["parameters"]["fileSelector"],
+        )
+        # A literal body, not an expression: metamodel text is arbitrary, and
+        # `{{` in it would otherwise be evaluated by n8n.
+        body = nodes["Resolve exact task inputs"]["parameters"]["jsonBody"]
+        self.assertFalse(body.startswith("="))
+        self.assertEqual(
+            {
+                "language": "etl",
+                "task": "TreeFlattening",
+                "metamodel": self.METAMODEL,
+            },
+            json.loads(body),
+        )
+
+    def test_a_benchmark_task_resolves_through_its_contract_as_before(self) -> None:
+        adapted = _adapt(
+            TRANSFORMATION_WORKFLOW,
+            action="generate_transformations",
+            current={
+                "language": "etl",
+                "task": "Tree2Graph",
+                "run_id": "run-benchmark-1",
+                "n8n_run_dir": "/data/artifacts/runs/batch_001/run-benchmark-1",
+                "transformation_iteration": 0,
+                "custom_task": None,
+            },
+            subworkflow_input={"refinement_iteration": 0},
+        )
+        self.assertTrue(adapted["ok"], adapted.get("error"))
+        nodes = {
+            node["name"]: node for node in adapted["result"]["workflow_json"]["nodes"]
+        }
+        self.assertEqual(
+            "=/data/task_prompts/etl/Tree2Graph.txt",
+            nodes["Read prompt files"]["parameters"]["fileSelector"],
+        )
+        self.assertEqual(
+            "={{ { language: 'etl', task: $json.baseName } }}",
+            nodes["Resolve exact task inputs"]["parameters"]["jsonBody"],
         )
 
 
