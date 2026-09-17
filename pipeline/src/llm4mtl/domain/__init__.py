@@ -12,6 +12,13 @@ adapters and the pipeline depend on `domain`, never the other way round.
 from __future__ import annotations
 
 from llm4mtl.domain.artifacts import ArtifactRef
+from llm4mtl.domain.diagnosis import (
+    AMBIGUOUS,
+    DIAGNOSIS_CLASSIFICATIONS,
+    TEST_DEFECT,
+    TRANSFORMATION_DEFECT,
+    aggregate_classifications,
+)
 from llm4mtl.domain.evidence import RawExecutionEvidence, SurefireArtifact
 from llm4mtl.domain.observations import (
     CONTRACT_VIOLATION,
@@ -38,11 +45,13 @@ from llm4mtl.domain.scenarios import (
 from llm4mtl.domain.suites import GeneratedSuite
 
 __all__ = [
+    "AMBIGUOUS",
     "ArtifactRef",
     "ArtifactValidation",
     "ChangeKind",
     "ChangeOperation",
     "CONTRACT_VIOLATION",
+    "DIAGNOSIS_CLASSIFICATIONS",
     "EXTRACTION_FAILED",
     "ElementRef",
     "ElementSpec",
@@ -61,5 +70,8 @@ __all__ = [
     "SemanticSuite",
     "SuiteExecutionObservation",
     "SurefireArtifact",
+    "TEST_DEFECT",
+    "TRANSFORMATION_DEFECT",
     "TransformationOutcome",
+    "aggregate_classifications",
 ]

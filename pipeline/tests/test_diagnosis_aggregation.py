@@ -16,7 +16,7 @@ import unittest
 from pathlib import Path
 from typing import Any
 
-from llm4mtl.evaluation.diagnosis_aggregation import (
+from llm4mtl.semantic_tests.diagnosis_aggregation import (
     DiagnosisAggregationError,
     aggregate_run_diagnoses,
     failure_fingerprint,

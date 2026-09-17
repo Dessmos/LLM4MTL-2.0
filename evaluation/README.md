@@ -52,6 +52,35 @@ The headline comparison is always `T0 -> Tfinal`. Intermediate iterations stay
 in the CSV for trajectory plots but do not change the Repair Success Rate or
 Regression Rate denominators.
 
+## Refinement trajectory
+
+`metrics.csv` reports the frozen `T0 -> Tfinal` comparison and nothing else. To
+see how a refinement loop got there, derive a separate report from the same
+`heldout.csv`:
+
+```bash
+PYTHONPATH=pipeline/src .venv/bin/python -m evaluation.heldout.trajectory \
+  --run-ids evaluation/runs.txt \
+  --heldout evaluation/results/heldout.csv \
+  --output evaluation/results/heldout-trajectory.csv
+```
+
+It writes one row per stored iteration, then one row per iteration cohort with
+`run_id = ALL`. No metric numerator, denominator, or population changes: this
+report is read alongside `metrics.csv`, never instead of it.
+
+Three properties make the trend honest rather than merely pretty:
+
+- runs end at different iterations, so a cohort row counts only the runs that
+  actually reached that iteration and states it in `runs_in_cohort`. Finished
+  runs are absent, not carried forward;
+- `T0` has no previous iteration, so its four delta columns stay blank instead
+  of reporting a zero-sized change;
+- `repaired_*` and `regressed_*` count only `FAIL -> PASS` and `PASS -> FAIL`,
+  matching the frozen regression definition. A case leaving `ERROR` or
+  `NOT_RUN` never becomes a silent repair; it remains visible in `error_count`
+  and `not_run_count`.
+
 ## Qualified mutation evaluation
 
 `generate_mutants.py` applies exact, deterministic text replacements. A mutation

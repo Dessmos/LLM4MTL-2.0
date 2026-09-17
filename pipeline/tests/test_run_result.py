@@ -21,7 +21,7 @@ from fastapi.testclient import TestClient
 from llm4mtl import run_store
 from llm4mtl.paths import ArtifactRoots
 from llm4mtl.provenance import build_provenance
-from llm4mtl.run_store.results import aggregate_classification
+from llm4mtl.domain import aggregate_classifications
 from llm4mtl.serialization.json_io import read_json, write_json
 from llm4mtl.stage_service.app import app
 
@@ -46,20 +46,20 @@ TERMINAL = {
 class AggregateClassificationTests(unittest.TestCase):
 
     def test_the_aggregate_is_conservative_and_never_a_majority_vote(self) -> None:
-        self.assertIsNone(aggregate_classification([]))
+        self.assertIsNone(aggregate_classifications([]))
         self.assertEqual(
             "TRANSFORMATION_DEFECT",
-            aggregate_classification(["TRANSFORMATION_DEFECT"] * 3),
+            aggregate_classifications(["TRANSFORMATION_DEFECT"] * 3),
         )
         # One of each kind means the evidence points at both artefacts, and
         # three-to-one is still both.
         self.assertEqual(
             "AMBIGUOUS",
-            aggregate_classification(["TRANSFORMATION_DEFECT"] * 3 + ["TEST_DEFECT"]),
+            aggregate_classifications(["TRANSFORMATION_DEFECT"] * 3 + ["TEST_DEFECT"]),
         )
         self.assertEqual(
             "AMBIGUOUS",
-            aggregate_classification(["TRANSFORMATION_DEFECT", "AMBIGUOUS"]),
+            aggregate_classifications(["TRANSFORMATION_DEFECT", "AMBIGUOUS"]),
         )
 
 

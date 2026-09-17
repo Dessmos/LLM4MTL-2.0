@@ -34,8 +34,9 @@ import hashlib
 import re
 from collections import Counter
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
+from llm4mtl.domain.diagnosis import aggregate_classifications
 from llm4mtl.serialization.json_io import read_json
 
 SCHEMA_VERSION = "1.0"
@@ -85,24 +86,10 @@ def aggregate_run_diagnoses(
         "attempt": index.get("attempt", attempt),
         "pairs": pairs,
         "totals": totals,
-        "aggregate_verdict": aggregate_verdict(
+        "aggregate_verdict": aggregate_classifications(
             [cluster["verdict"] for pair in pairs for cluster in pair["clusters"]]
         ),
     }
-
-
-def aggregate_verdict(verdicts: Iterable[str | None]) -> str | None:
-    """The conservative aggregate the pipeline routes on, over any set of verdicts."""
-    present = [verdict for verdict in verdicts if verdict]
-    if not present:
-        return None
-    if "AMBIGUOUS" in present:
-        return "AMBIGUOUS"
-    has_transformation = "TRANSFORMATION_DEFECT" in present
-    has_test = "TEST_DEFECT" in present
-    if has_transformation and has_test:
-        return "AMBIGUOUS"
-    return "TRANSFORMATION_DEFECT" if has_transformation else "TEST_DEFECT"
 
 
 def failure_fingerprint(report: dict[str, Any]) -> dict[str, Any]:
@@ -187,7 +174,7 @@ def _aggregate_pair(
 
     for cluster in clusters.values():
         cluster["diagnosed"] = len(cluster["classifications"])
-        cluster["verdict"] = aggregate_verdict(cluster["classifications"])
+        cluster["verdict"] = aggregate_classifications(cluster["classifications"])
         cluster["agreement"] = _agreement(cluster["classifications"])
 
     ordered = list(clusters.values())
@@ -200,7 +187,7 @@ def _aggregate_pair(
         "affected_test_cases": len(affected),
         "unique_failure_clusters": len(ordered),
         "clusters": ordered,
-        "aggregate_verdict": aggregate_verdict(
+        "aggregate_verdict": aggregate_classifications(
             [cluster["verdict"] for cluster in ordered]
         ),
     }

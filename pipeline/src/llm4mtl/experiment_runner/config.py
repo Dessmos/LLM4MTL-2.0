@@ -9,10 +9,11 @@ from typing import Any
 
 from llm4mtl.experiment_runner.models import PipelineConfig
 from llm4mtl.run_store.identity import RUN_ID_PATTERN
+from llm4mtl.vocabulary import EXPERIMENT_MODEL_FAMILIES, STRATEGIES
 
 
-ALLOWED_MODELS = {"gpt-5", "claude-sonnet-4", "gemini-2-5-pro"}
-ALLOWED_STRATEGIES = {"only_prompt", "few_shot", "grammar", "few_shots_AND_grammar"}
+ALLOWED_MODELS = frozenset(EXPERIMENT_MODEL_FAMILIES)
+ALLOWED_STRATEGIES = frozenset(STRATEGIES)
 PIPELINE_STAGES = ("extract", "technical", "reference", "parsing", "semantic")
 _YamlLine = tuple[int, str]
 

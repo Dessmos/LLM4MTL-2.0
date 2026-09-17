@@ -1,4 +1,4 @@
-"""Source Diagnosis evidence is prepared after Stage 11, and only from it.
+"""Source Diagnosis evidence is prepared after the execution stage, and only from it.
 
 The ordering property is the one the proposal turns on: a generated test earns
 the right to say something about a generated transformation by first passing on

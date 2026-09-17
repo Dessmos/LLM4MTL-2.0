@@ -19,6 +19,7 @@ from typing import Any
 
 from llm4mtl.conventions import LANGUAGE_CONFIGS, n8n_workflows_root
 from llm4mtl.paths import TARGET
+from llm4mtl.vocabulary import MODEL_FAMILIES
 from llm4mtl.prompt_assembly.n8n_exports.synchronizers import (
     GENERATE_CODE_NODE,
     GENERATE_PROMPT_NODE,
@@ -30,28 +31,8 @@ from llm4mtl.prompt_assembly.n8n_exports.synchronizers import (
 )
 
 
-MODELS = (
-    "gpt-5",
-    "claude-sonnet-4",
-    "gemini-2-5-pro",
-    "qwen2-5-coder-7b",
-)
-
-# The prompting axis, spelled exactly as experiments/matrices/*.yaml spells it.
-# Response directories are named after these, and a stage selects a run's
-# responses by directory name — so a language that spells one of them
-# differently (QVT-O's former "zero_shot" and "few_shot_AND_grammar") produces
-# results no matrix can ever select.
-STRATEGIES = (
-    "only_prompt",
-    "grammar",
-    "few_shot",
-    "few_shots_AND_grammar",
-)
-
-
 def _model_from_filename(path: Path) -> str:
-    for model in MODELS:
+    for model in MODEL_FAMILIES:
         if model in path.name:
             return model
     raise ValueError(f"cannot infer model from {path}")

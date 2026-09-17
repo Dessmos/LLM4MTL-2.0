@@ -23,12 +23,12 @@ from llm4mtl.languages import (
     language_adapter,
 )
 from llm4mtl.paths import TARGET
-from llm4mtl.prompt_assembly.n8n_exports.sync import STRATEGIES
 from llm4mtl.semantic_tests.suite_execution import (
     GENERATED_TRANSFORMATION_ROLE,
     record_observation,
     snapshot_dir,
 )
+from llm4mtl.vocabulary import STRATEGIES
 from llm4mtl.serialization.hashing import file_sha256
 from llm4mtl.task_contracts.build_language_task_contracts import (
     BUILDERS,

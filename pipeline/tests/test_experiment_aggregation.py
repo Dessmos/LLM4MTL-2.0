@@ -1,14 +1,20 @@
 from __future__ import annotations
 
+import sys
 import tempfile
 import unittest
 from pathlib import Path
 
 from llm4mtl import run_store
+from llm4mtl.paths import REPO_ROOT
 from llm4mtl.provenance import build_provenance
 from llm4mtl.stage_contract import SCHEMA_VERSION as STAGE_SCHEMA_VERSION
-from llm4mtl.evaluation.experiment_aggregation import aggregate_stage
-from llm4mtl.evaluation.experiment_significance import mcnemar
+
+# The offline evaluation layer lives beside the package, not inside it.
+sys.path.insert(0, str(REPO_ROOT))
+
+from evaluation.experiment_aggregation import aggregate_stage  # noqa: E402
+from evaluation.experiment_significance import mcnemar  # noqa: E402
 
 
 class AggregationTests(unittest.TestCase):
@@ -105,12 +111,14 @@ class AggregationTests(unittest.TestCase):
             run_store.prepare_refinement(
                 paths,
                 manifest,
-                artifact_type="transformation",
-                iteration=1,
-                previous_iteration=0,
-                provider="anthropic",
-                model="claude-sonnet-4-20250514",
-                reason="SYNTAX_INVALID",
+                run_store.RefinementRequest(
+                    artifact_type="transformation",
+                    iteration=1,
+                    previous_iteration=0,
+                    provider="anthropic",
+                    model="claude-sonnet-4-20250514",
+                    reason="SYNTAX_INVALID",
+                ),
                 run_diagnoses=root / "diagnoses" / paths.root.name,
             )
             refined = paths.generation_response(

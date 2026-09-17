@@ -11,14 +11,13 @@ from llm4mtl.conventions import (
     task_prompt_candidates_root,
 )
 from llm4mtl.experiment_runner.orchestrator import ExperimentOrchestrator
-from llm4mtl.paths import MIGRATION_MAP, REPO_ROOT, TARGET
+from llm4mtl.paths import REPO_ROOT, TARGET
 from llm4mtl.prompt_assembly.n8n_exports import (
     synchronize_prompt_generation,
     synchronize_test_generation,
     synchronize_transformation_generation,
 )
 from llm4mtl.prompt_assembly.n8n_exports.prompts import INPUTS
-from llm4mtl.prompt_assembly.n8n_exports.sync import MODELS, STRATEGIES
 from llm4mtl.prompt_assembly.n8n_exports.synchronizers import PROMPT_INPUT_NODE
 from llm4mtl.prompt_assembly.n8n_exports.workflow_graph import (
     PROVIDER_MODEL_IDS,
@@ -26,10 +25,11 @@ from llm4mtl.prompt_assembly.n8n_exports.workflow_graph import (
     normalize_node_entry_ids,
     rename_connection_node,
 )
+from llm4mtl.vocabulary import EXPERIMENT_MODEL_FAMILIES, MODEL_FAMILIES, STRATEGIES
 
 # Transformation generation is a full model x strategy grid per language. The
 # Reactions grid is driven by one matrix workflow instead of twelve exports.
-TRANSFORMATION_MODELS = tuple(model for model in MODELS if model != "qwen2-5-coder-7b")
+TRANSFORMATION_MODELS = EXPERIMENT_MODEL_FAMILIES
 EXPECTED_TRANSFORMATION_WORKFLOWS = {
     (language, model, strategy)
     for language in ("atl", "etl", "qvto")
@@ -73,14 +73,13 @@ class ActivePathTests(unittest.TestCase):
         self.assertEqual(REPO_ROOT, ExperimentOrchestrator().repo_root)
         self.assertTrue(REPO_ROOT.is_dir())
 
-    def test_target_layout_matches_migrated_directories(self) -> None:
+    def test_target_layout_names_the_repository_areas(self) -> None:
         self.assertEqual(REPO_ROOT / "prompt_assets", TARGET.prompt_assets)
         self.assertTrue(TARGET.prompt_assets.is_dir())
-        self.assertEqual(
-            TARGET.package / "transformation_execution",
-            MIGRATION_MAP["pipeline/transformation_validation"][1],
-        )
-        self.assertEqual(TARGET.workflows / "tests", MIGRATION_MAP["n8n/tests"][1])
+        self.assertEqual(REPO_ROOT / "pipeline" / "src" / "llm4mtl", TARGET.package)
+        self.assertTrue(TARGET.package.is_dir())
+        self.assertEqual(REPO_ROOT / "workflows" / "n8n", TARGET.workflows)
+        self.assertTrue((TARGET.workflows / "tests").is_dir())
 
     def test_results_consumers_read_are_not_kept_inside_a_run(self) -> None:
         """A run holds state; what other work consumes lives beside it.
@@ -229,7 +228,7 @@ class N8nWorkflowTests(unittest.TestCase):
     def test_prompt_generation_is_the_first_llm_stage_for_every_language(self) -> None:
         for language, config in LANGUAGE_CONFIGS.items():
             root = n8n_workflows_root(config) / "prompt_generation"
-            for model in MODELS:
+            for model in MODEL_FAMILIES:
                 workflow = (
                     root
                     / f"Prompt_generation_tests_{config.workflow_language}_{model}.json"
@@ -807,7 +806,7 @@ class N8nWorkflowTests(unittest.TestCase):
                 if node.get("parameters", {}).get("fileName")
             )
             with self.subTest(workflow=workflow.name):
-                self.assertIn(model, MODELS)
+                self.assertIn(model, MODEL_FAMILIES)
                 self.assertIn(strategy, STRATEGIES)
                 self.assertEqual(
                     f"{language.upper()}_{model}_{strategy}", payload["name"]

@@ -550,7 +550,7 @@ def prepare_run_refinement(
         prepared = run_store.prepare_refinement(
             paths,
             manifest,
-            **request.model_dump(mode="json"),
+            run_store.RefinementRequest(**request.model_dump(mode="json")),
             run_diagnoses=_run_diagnoses(batch_id, run_id),
         )
     except run_store.RefinementPreparationError as exc:

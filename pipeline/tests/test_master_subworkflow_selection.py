@@ -22,6 +22,8 @@ import unittest
 from pathlib import Path
 from typing import Any
 
+from llm4mtl.vocabulary import STRATEGIES
+
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOWS_ROOT = REPOSITORY_ROOT / "workflows" / "n8n"
@@ -29,7 +31,6 @@ MASTER_WORKFLOW = WORKFLOWS_ROOT / "main" / "llm4mtl-agent-workflow.json"
 CODE_NODE = "Adapt Subworkflow For This Run"
 HARNESS = Path(__file__).parent / "fixtures" / "run_master_code_node.js"
 
-STRATEGIES = ("only_prompt", "few_shot", "grammar", "few_shots_AND_grammar")
 LANGUAGE_LABELS = {"etl": "ETL", "atl": "ATL", "qvto": "QVTO"}
 # The model token a variant file is named after, per provider. Passing it as the
 # selected model keeps the model-patching step a no-op so the assertions read

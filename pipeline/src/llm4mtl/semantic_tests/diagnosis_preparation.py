@@ -1,4 +1,4 @@
-"""Prepare Source Diagnosis evidence, and only after Stage 11 has failed.
+"""Prepare Source Diagnosis evidence, and only after the execution stage has failed.
 
 The order matters more than anything else in this module. A generated test earns
 the right to say something about a generated transformation by first passing on
@@ -94,7 +94,7 @@ def prepare_after_execution_stage(
     payload: dict[str, Any],
     attempt: int,
 ) -> dict[str, Any] | None:
-    """Assemble diagnosis evidence when — and only when — Stage 11 failed.
+    """Assemble diagnosis evidence when — and only when — the execution stage failed.
 
     Called by both stage entry points right after the execution attempt has been
     recorded. It reads that attempt and writes nothing else: preparation is

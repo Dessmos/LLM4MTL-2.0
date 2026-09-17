@@ -30,6 +30,7 @@ from evaluation.coverage.calculate_coverage import (
     covered_eclasses,
 )
 from evaluation.heldout.run_heldout import classify_surefire_cases
+from evaluation.heldout.trajectory import trajectory_rows
 from evaluation.mutation.generate_mutants import generate_mutants
 from llm4mtl.domain import RawExecutionEvidence, SurefireArtifact
 from llm4mtl.task_contracts import ModelContract
@@ -314,6 +315,103 @@ class MetricAggregationTests(unittest.TestCase):
         self.assertEqual(2, metric["numerator"])
         self.assertEqual(3, metric["denominator"])
         self.assertEqual(2 / 3, metric["value"])
+
+
+class HeldoutTrajectoryTests(unittest.TestCase):
+
+    def test_trajectory_keeps_every_stored_iteration(self) -> None:
+        runs = (_selected_run("R1"),)
+        heldout = [
+            _heldout("R1", 0, "H1", "PASS"),
+            _heldout("R1", 0, "H2", "FAIL"),
+            _heldout("R1", 1, "H1", "PASS"),
+            _heldout("R1", 1, "H2", "FAIL"),
+            _heldout("R1", 2, "H1", "PASS"),
+            _heldout("R1", 2, "H2", "PASS"),
+        ]
+
+        rows = [row for row in trajectory_rows(runs, heldout) if row["run_id"] == "R1"]
+
+        self.assertEqual([0, 1, 2], [row["iteration"] for row in rows])
+        self.assertEqual([0.5, 0.5, 1.0], [row["pass_rate"] for row in rows])
+        self.assertEqual([0, 0, 1], [row["transformations_passing"] for row in rows])
+        self.assertEqual(["true", "false", "false"], [row["is_initial"] for row in rows])
+        self.assertEqual(["false", "false", "true"], [row["is_final"] for row in rows])
+
+    def test_trajectory_step_deltas_are_blank_at_t0_and_skip_error_transitions(
+        self,
+    ) -> None:
+        runs = (_selected_run("R1"),)
+        heldout = [
+            _heldout("R1", 0, "H1", "PASS"),
+            _heldout("R1", 0, "H2", "FAIL"),
+            _heldout("R1", 0, "H3", "ERROR"),
+            _heldout("R1", 1, "H1", "FAIL"),
+            _heldout("R1", 1, "H2", "PASS"),
+            _heldout("R1", 1, "H3", "PASS"),
+        ]
+
+        initial, refined = trajectory_rows(runs, heldout)[:2]
+
+        self.assertEqual(1, initial["error_count"])
+        for field in (
+            "repaired_since_previous",
+            "regressed_since_previous",
+            "repaired_since_initial",
+            "regressed_since_initial",
+        ):
+            with self.subTest(field=field):
+                self.assertEqual("", initial[field])
+        self.assertEqual(1, refined["repaired_since_previous"])
+        self.assertEqual(1, refined["regressed_since_previous"])
+        self.assertEqual(1, refined["repaired_since_initial"])
+        self.assertEqual(1, refined["regressed_since_initial"])
+
+    def test_cohort_rows_expose_how_many_runs_reached_each_iteration(self) -> None:
+        runs = (_selected_run("R1"), _selected_run("R2"))
+        heldout = [
+            _heldout("R1", 0, "H1", "FAIL"),
+            _heldout("R1", 1, "H1", "PASS"),
+            _heldout("R1", 2, "H1", "PASS"),
+            _heldout("R2", 0, "H1", "FAIL"),
+            _heldout("R2", 1, "H1", "FAIL"),
+        ]
+
+        cohorts = {
+            row["iteration"]: row
+            for row in trajectory_rows(runs, heldout)
+            if row["run_id"] == "ALL"
+        }
+
+        self.assertEqual([0, 1, 2], sorted(cohorts))
+        self.assertEqual(2, cohorts[0]["runs_in_cohort"])
+        self.assertEqual(2, cohorts[1]["runs_in_cohort"])
+        self.assertEqual(1, cohorts[2]["runs_in_cohort"])
+        self.assertEqual(0.5, cohorts[1]["pass_rate"])
+        self.assertEqual(1.0, cohorts[2]["pass_rate"])
+        self.assertEqual("", cohorts[2]["language"])
+        self.assertEqual("", cohorts[2]["is_final"])
+
+    def test_trajectory_rejects_a_gap_between_iterations(self) -> None:
+        runs = (_selected_run("R1"),)
+        heldout = [
+            _heldout("R1", 0, "H1", "PASS"),
+            _heldout("R1", 2, "H1", "PASS"),
+        ]
+
+        with self.assertRaisesRegex(EvaluationInputError, "contiguous from 0"):
+            trajectory_rows(runs, heldout)
+
+    def test_trajectory_rejects_a_case_population_that_changes_mid_loop(self) -> None:
+        runs = (_selected_run("R1"),)
+        heldout = [
+            _heldout("R1", 0, "H1", "PASS"),
+            _heldout("R1", 0, "H2", "FAIL"),
+            _heldout("R1", 1, "H1", "PASS"),
+        ]
+
+        with self.assertRaisesRegex(EvaluationInputError, "population changed"):
+            trajectory_rows(runs, heldout)
 
 
 def _write_run(

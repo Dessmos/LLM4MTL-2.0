@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -43,31 +44,45 @@ class RefinementPreparationError(ValueError):
     """Raised when the preceding artifact or its recorded feedback is absent."""
 
 
+@dataclass(frozen=True)
+class RefinementRequest:
+    """What the orchestration asks Python to package for refinement iteration N.
+
+    ``execution_attempt`` names the execution whose failure reports and diagnoses
+    enter the prompt. A semantic refinement requires it; every other feedback
+    source must leave it unset, because no execution produced that feedback.
+    """
+
+    artifact_type: str
+    iteration: int
+    previous_iteration: int
+    provider: str
+    model: str
+    reason: str
+    execution_attempt: int | None = None
+
+
 def prepare_refinement(
     paths: RunPaths,
     manifest: dict[str, Any],
+    request: RefinementRequest,
     *,
-    artifact_type: str,
-    iteration: int,
-    previous_iteration: int,
-    provider: str,
-    model: str,
-    reason: str,
     run_diagnoses: Path,
-    execution_attempt: int | None = None,
 ) -> dict[str, Any]:
     """Write the request and exact prompt consumed by refinement iteration N.
 
     ``run_diagnoses`` is this run's directory in the diagnoses area, resolved by
     the caller through the artifact layout; only the verdicts recorded there for
-    ``execution_attempt`` enter the prompt.
+    ``request.execution_attempt`` enter the prompt.
     """
-    if iteration != previous_iteration + 1 or iteration < 1:
+    if request.iteration != request.previous_iteration + 1 or request.iteration < 1:
         raise RefinementPreparationError(
             "refinement iteration must be exactly previous_iteration + 1"
         )
-    if artifact_type not in {"transformation", "semantic-test"}:
-        raise RefinementPreparationError(f"unsupported artifact type: {artifact_type}")
+    if request.artifact_type not in {"transformation", "semantic-test"}:
+        raise RefinementPreparationError(
+            f"unsupported artifact type: {request.artifact_type}"
+        )
 
     language = str(manifest["language"])
     task = str(manifest["task"])
@@ -83,13 +98,14 @@ def prepare_refinement(
             for metamodel in context.metamodels
         ],
         "supporting_files": _supporting_context(
-            language, artifact_type, manifest, context.grammar.path
+            language, request.artifact_type, manifest, context.grammar.path
         ),
     }
     previous_files = _previous_artifact_files(
-        paths, manifest, artifact_type, previous_iteration
+        paths, manifest, request.artifact_type, request.previous_iteration
     )
-    source = _feedback_source(reason)
+    source = _feedback_source(request.reason)
+    execution_attempt = request.execution_attempt
     if source == "semantic" and execution_attempt is None:
         raise RefinementPreparationError(
             "semantic refinement requires the execution attempt that produced it"
@@ -101,7 +117,9 @@ def prepare_refinement(
     if execution_attempt is not None:
         failure_reports = _failure_report_facts(paths, execution_attempt)
     elif source == "reference":
-        failure_reports = _reference_failure_facts(paths, manifest, previous_iteration)
+        failure_reports = _reference_failure_facts(
+            paths, manifest, request.previous_iteration
+        )
     else:
         failure_reports = []
     diagnoses = (
@@ -113,13 +131,13 @@ def prepare_refinement(
         raise RefinementPreparationError(
             f"execution attempt {execution_attempt} has no failure reports"
         )
-    if reason.startswith("DIAGNOSED_") and not diagnoses:
+    if request.reason.startswith("DIAGNOSED_") and not diagnoses:
         raise RefinementPreparationError(
             f"execution attempt {execution_attempt} has no matching diagnoses"
         )
     feedback = {
         "source": source,
-        "reason": reason,
+        "reason": request.reason,
         "stage_facts": _stage_facts(paths, source, execution_attempt),
         "failure_reports": failure_reports,
         "diagnoses": diagnoses,
@@ -127,25 +145,25 @@ def prepare_refinement(
     instruction = (
         "Repair the previous transformation. Preserve behavior unrelated to the "
         "reported defect. Return only the complete corrected transformation."
-        if artifact_type == "transformation"
+        if request.artifact_type == "transformation"
         else "Repair the previous generated semantic test. Preserve valid cases, models, "
         "and assertions unrelated to the reported defect. Return only the complete "
         "corrected file-oriented test response."
     )
-    directory = paths.refinement_dir(artifact_type, iteration)
-    request_path = directory / REQUEST_FILENAME
+    directory = paths.refinement_dir(request.artifact_type, request.iteration)
+    request_file = directory / REQUEST_FILENAME
     rendered_prompt_path = directory / PROMPT_FILENAME
     payload = {
         "schema_version": SCHEMA_VERSION,
         "run_id": paths.root.name,
         "task": task,
         "language": language,
-        "artifact_type": artifact_type,
-        "iteration": iteration,
-        "previous_iteration": previous_iteration,
+        "artifact_type": request.artifact_type,
+        "iteration": request.iteration,
+        "previous_iteration": request.previous_iteration,
         "execution_attempt": execution_attempt,
-        "provider": provider,
-        "model": model,
+        "provider": request.provider,
+        "model": request.model,
         "original_task_context": original_context,
         "previous_artifact": {"files": previous_files},
         "feedback": feedback,
@@ -157,32 +175,32 @@ def prepare_refinement(
     prompt = _render_prompt(payload)
     try:
         prepare_generation_response_directory(
-            paths, artifact_type=artifact_type, iteration=iteration
+            paths, artifact_type=request.artifact_type, iteration=request.iteration
         )
     except (GenerationRecordError, OSError) as exc:
         raise RefinementPreparationError(
-            f"cannot prepare {artifact_type} generation directory for "
-            f"iteration {iteration:03d}: {exc}"
+            f"cannot prepare {request.artifact_type} generation directory for "
+            f"iteration {request.iteration:03d}: {exc}"
         ) from exc
     _write_text_once(rendered_prompt_path, prompt)
     try:
-        write_json_once(request_path, payload)
+        write_json_once(request_file, payload)
     except FileExistsError:
-        existing = read_json(request_path)
+        existing = read_json(request_file)
         validate_artifact("refinement-request", existing)
         if _without_time(existing) != _without_time(payload):
             raise RefinementPreparationError(
-                f"refinement request already exists with different content: {request_path}"
+                f"refinement request already exists with different content: {request_file}"
             )
         payload = existing
     # Both paths are run-relative: where the run is mounted for the caller is
     # the caller's knowledge, not this store's.
     return {
-        "artifact_type": artifact_type,
-        "iteration": iteration,
-        "previous_iteration": previous_iteration,
+        "artifact_type": request.artifact_type,
+        "iteration": request.iteration,
+        "previous_iteration": request.previous_iteration,
         "prompt_file": payload["prompt_file"],
-        "request_path": _run_path(paths, request_path),
+        "request_path": _run_path(paths, request_file),
         "feedback_source": source,
     }
 

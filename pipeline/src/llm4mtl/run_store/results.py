@@ -26,6 +26,7 @@ from pathlib import Path
 from typing import Any
 
 from llm4mtl.artifact_schemas import validate_artifact
+from llm4mtl.domain.diagnosis import aggregate_classifications
 from llm4mtl.run_store import stages as stage_store
 from llm4mtl.run_store.attempts import existing_attempts
 from llm4mtl.run_store.models import RunPaths
@@ -91,7 +92,7 @@ def record_result(
         "transformation_iteration": terminal.get("transformation_iteration"),
         "syntax_status": _stage_status(paths, SYNTAX_STAGE),
         "semantic_status": _stage_status(paths, EXECUTION_STAGE),
-        "diagnosis": aggregate_classification(classifications),
+        "diagnosis": aggregate_classifications(classifications),
         "diagnosis_records": len(classifications),
         "diagnosis_classifications": classifications,
         "stages": _stage_summary(paths),
@@ -108,25 +109,6 @@ def record_result(
         return existing
     write_json(result_path(paths), result)
     return result
-
-
-def aggregate_classification(classifications: list[str]) -> str | None:
-    """The run's single verdict over every diagnosis it recorded.
-
-    Conservative on purpose, and never a majority vote: one ambiguous verdict, or
-    one of each defect kind, means the evidence points at both artefacts. This is
-    the rule the orchestration routes on, applied here to the persisted records
-    so the stored result cannot disagree with them.
-    """
-    if not classifications:
-        return None
-    if "AMBIGUOUS" in classifications:
-        return "AMBIGUOUS"
-    has_transformation = "TRANSFORMATION_DEFECT" in classifications
-    has_test = "TEST_DEFECT" in classifications
-    if has_transformation and has_test:
-        return "AMBIGUOUS"
-    return "TRANSFORMATION_DEFECT" if has_transformation else "TEST_DEFECT"
 
 
 def _recorded_classifications(run_diagnoses: Path) -> list[str]:

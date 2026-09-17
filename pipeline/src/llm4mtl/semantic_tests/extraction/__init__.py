@@ -1,1 +1,1 @@
-"""Extraction of generated ETL suites from Markdown responses."""
+"""Extraction of generated semantic-test suites from Markdown responses."""

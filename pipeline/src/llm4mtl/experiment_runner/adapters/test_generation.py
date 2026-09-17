@@ -18,7 +18,9 @@ from llm4mtl.semantic_tests.extraction.cli import extract_one
 from llm4mtl.semantic_tests.extraction.discovery import response_target_from_path
 from llm4mtl.semantic_tests.reference_validation.runner import validate_suite
 from llm4mtl.semantic_tests.suites.discovery import (
+    candidate_identity,
     candidate_suite_directories,
+    matches_selection,
     suite_from_path,
 )
 from llm4mtl.semantic_tests.technical_validation.suite import check_suite
@@ -294,12 +296,15 @@ class TestGenerationAdapter:
         tasks = set(config.tasks)
         models = fixed_selection("test-generation model", config.test_models)
         strategies = fixed_selection("strategy", config.test_strategies)
-        suites = sorted(
+        return sorted(
             path
             for path in candidate_suite_directories(self.generated_tests_root(config))
-            if path.parts[-3] in models
-            and path.parts[-2] in strategies
-            and (config.all_tasks or path.parts[-5] in tasks)
-            and (not config.suite_id or path.name == config.suite_id)
+            if matches_selection(
+                candidate_identity(path),
+                tasks=tasks,
+                models=models,
+                strategies=strategies,
+                all_tasks=config.all_tasks,
+                suite_id=config.suite_id,
+            )
         )
-        return suites

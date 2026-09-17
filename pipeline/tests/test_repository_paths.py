@@ -41,8 +41,8 @@ INSIDE = {
         "pipeline/src/llm4mtl",
     ),
     "a path containing a space": (
-        "pipeline/src/llm4mtl/evaluation/etl/ETL Parser/run_parser.py",
-        "pipeline/src/llm4mtl/evaluation/etl/ETL Parser/run_parser.py",
+        "evaluation/legacy/etl/ETL Parser/run_parser.py",
+        "evaluation/legacy/etl/ETL Parser/run_parser.py",
     ),
 }
 OUTSIDE = Path("/tmp/not-in-this-repository/run.json")

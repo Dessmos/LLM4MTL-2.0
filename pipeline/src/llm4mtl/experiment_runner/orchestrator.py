@@ -22,12 +22,12 @@ from llm4mtl.experiment_runner.config import (
     ConfigError,
     validate_config,
 )
-from llm4mtl.evaluation.diagnosis_aggregation import aggregate_run_diagnoses
 from llm4mtl.experiment_runner.models import PipelineConfig, RunResult, StageResult
 from llm4mtl.paths import REPO_ROOT, TARGET, ArtifactRoots
 from llm4mtl.provenance import build_provenance
 from llm4mtl.run_store.attempts import existing_attempts
 from llm4mtl.run_store.identity import validate_opaque_id
+from llm4mtl.semantic_tests.diagnosis_aggregation import aggregate_run_diagnoses
 from llm4mtl.semantic_tests.diagnosis_preparation import prepare_execution_diagnosis
 from llm4mtl.semantic_tests.failure_report import (
     read_request_payload,

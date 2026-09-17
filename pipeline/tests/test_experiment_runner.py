@@ -23,15 +23,13 @@ from llm4mtl.experiment_runner.config import (
 from llm4mtl.experiment_runner.models import PipelineConfig, RunResult, StageResult
 from llm4mtl.experiment_runner.orchestrator import ExperimentOrchestrator
 from llm4mtl.experiment_runner.adapters.transformation_validation import TransformationValidationAdapter
-from llm4mtl.paths import LEGACY_PROJECT_ROOT, TARGET, ArtifactRoots
+from llm4mtl.paths import REPO_ROOT, TARGET, ArtifactRoots
 from llm4mtl.semantic_tests.failure_report import DIFF_FIELDS, FailureReportError
 from llm4mtl.semantic_tests.failure_report.request import (
     ReportRequest,
     _validate_difference,
 )
 
-
-REPO_ROOT = LEGACY_PROJECT_ROOT
 
 
 class ConfigTests(unittest.TestCase):

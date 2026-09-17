@@ -1,13 +1,13 @@
-"""Express a generated ETL suite in the shared scenario contract.
+"""Express a generated suite in the shared scenario contract.
 
 Every generated suite must be representable in :mod:`llm4mtl.domain` before it
 is allowed to execute. This is what keeps the shared contract honest: if a suite
-the ETL path accepts cannot be expressed, the contract is wrong and says so
-loudly, rather than the contract quietly describing only the parts of ETL that
-happened to fit.
+a language's renderer accepts cannot be expressed, the contract is wrong and says
+so loudly, rather than the contract quietly describing only the parts of one
+language that happened to fit.
 
-The engine-specific parts of a slot (Epsilon model kind, load/store flags, the
-runtime model name) stay out of the shared types and remain in the spec the ETL
+The engine-specific parts of a slot (model kind, load/store flags, the runtime
+model name) stay out of the shared types and remain in the spec the language
 renderer consumes. What the shared contract carries is what every language has:
 named model slots with roles and metamodels, and expectations over them.
 """
@@ -30,7 +30,7 @@ from llm4mtl.domain import (
 )
 from llm4mtl.semantic_tests.semantic_spec import effective_models
 
-# Assertion vocabulary of the ETL spec -> the shared expectation vocabulary.
+# Assertion vocabulary of semantic_cases.json -> the shared expectation vocabulary.
 EXPECTATION_KINDS = {
     "count": "count",
     "featureValues": "feature_values",

@@ -1,9 +1,11 @@
 """Generate deterministic Java tests from semantic-case artifacts.
 
-Public facade for the extraction pipeline. The god-module this replaced is now
-split into focused submodules: `parsing` (parse/validate), `normalization`
-(schema-variant coercion), `legacy_adapter` (Tree2Graph), `spec` (shared
-accessors), and the sibling `etl.codegen` package (Java harness emitter).
+Public facade for the extraction pipeline, split into focused submodules:
+`parsing` (parse/validate), `normalization` (schema-variant coercion) and
+`legacy_adapter` (Tree2Graph). Shared spec accessors live in
+:mod:`llm4mtl.semantic_tests.semantic_spec`; the Java harness is emitted by
+:mod:`llm4mtl.semantic_tests.codegen` together with each language's
+``rendering`` module.
 
 The LLM authors semantic cases and input models; it never authors executable
 test infrastructure. Java that arrives in a response is discarded unconditionally
@@ -105,9 +107,9 @@ def render_generated_suite(
     generated[SEMANTIC_CASES_FILE] = json.dumps(spec, indent=2) + "\n"
 
     # The suite must be expressible in the shared scenario contract before it may
-    # execute. A suite the ETL path accepts but the contract cannot describe is a
-    # defect in the contract, and it has to surface here rather than leave the
-    # shared representation quietly ETL-shaped.
+    # execute. A suite a language's renderer accepts but the contract cannot
+    # describe is a defect in the contract, and it has to surface here rather
+    # than leave the shared representation quietly shaped after one language.
     try:
         suite_from_spec(
             spec,

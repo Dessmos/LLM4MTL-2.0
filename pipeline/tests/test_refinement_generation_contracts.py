@@ -164,12 +164,14 @@ class RefinementGenerationContractTests(unittest.TestCase):
         prepared = run_store.prepare_refinement(
             self.paths,
             self.manifest,
-            artifact_type="transformation",
-            iteration=1,
-            previous_iteration=0,
-            provider="google",
-            model="gemini-2.5-pro",
-            reason="SYNTAX_INVALID",
+            run_store.RefinementRequest(
+                artifact_type="transformation",
+                iteration=1,
+                previous_iteration=0,
+                provider="google",
+                model="gemini-2.5-pro",
+                reason="SYNTAX_INVALID",
+            ),
             run_diagnoses=self.root / "diagnoses" / self.paths.root.name,
         )
 
@@ -245,12 +247,14 @@ class RefinementGenerationContractTests(unittest.TestCase):
         prepared = run_store.prepare_refinement(
             paths,
             manifest,
-            artifact_type="transformation",
-            iteration=1,
-            previous_iteration=0,
-            provider="google",
-            model="gemini-2.5-pro",
-            reason="SYNTAX_INVALID",
+            run_store.RefinementRequest(
+                artifact_type="transformation",
+                iteration=1,
+                previous_iteration=0,
+                provider="google",
+                model="gemini-2.5-pro",
+                reason="SYNTAX_INVALID",
+            ),
             run_diagnoses=self.root / "diagnoses" / paths.root.name,
         )
         request = read_json(paths.root / prepared["request_path"])
@@ -338,12 +342,14 @@ class RefinementGenerationContractTests(unittest.TestCase):
         prepared = run_store.prepare_refinement(
             self.paths,
             self.manifest,
-            artifact_type="semantic-test",
-            iteration=1,
-            previous_iteration=0,
-            provider="openai",
-            model="gpt-5.3-codex",
-            reason="REFERENCE_VALIDATION_FAILED",
+            run_store.RefinementRequest(
+                artifact_type="semantic-test",
+                iteration=1,
+                previous_iteration=0,
+                provider="openai",
+                model="gpt-5.3-codex",
+                reason="REFERENCE_VALIDATION_FAILED",
+            ),
             run_diagnoses=self.root / "diagnoses" / self.paths.root.name,
         )
 
@@ -391,12 +397,14 @@ class RefinementGenerationContractTests(unittest.TestCase):
         run_store.prepare_refinement(
             self.paths,
             self.manifest,
-            artifact_type="transformation",
-            iteration=1,
-            previous_iteration=0,
-            provider="google",
-            model="gemini-2.5-pro",
-            reason="SYNTAX_INVALID",
+            run_store.RefinementRequest(
+                artifact_type="transformation",
+                iteration=1,
+                previous_iteration=0,
+                provider="google",
+                model="gemini-2.5-pro",
+                reason="SYNTAX_INVALID",
+            ),
             run_diagnoses=self.root / "diagnoses" / self.paths.root.name,
         )
         refined = self.paths.generation_response(
@@ -455,12 +463,14 @@ class RefinementGenerationContractTests(unittest.TestCase):
             run_store.prepare_refinement(
                 self.paths,
                 self.manifest,
-                artifact_type="transformation",
-                iteration=1,
-                previous_iteration=0,
-                provider="google",
-                model="gemini-2.5-pro",
-                reason="SYNTAX_INVALID",
+                run_store.RefinementRequest(
+                    artifact_type="transformation",
+                    iteration=1,
+                    previous_iteration=0,
+                    provider="google",
+                    model="gemini-2.5-pro",
+                    reason="SYNTAX_INVALID",
+                ),
                 run_diagnoses=self.root / "diagnoses" / self.paths.root.name,
             )
 
@@ -511,14 +521,16 @@ class RefinementGenerationContractTests(unittest.TestCase):
         prepared = run_store.prepare_refinement(
             self.paths,
             self.manifest,
-            artifact_type="semantic-test",
-            iteration=1,
-            previous_iteration=0,
-            provider="google",
-            model="gemini-2.5-pro",
-            reason="DIAGNOSED_TEST_DEFECT",
+            run_store.RefinementRequest(
+                artifact_type="semantic-test",
+                iteration=1,
+                previous_iteration=0,
+                provider="google",
+                model="gemini-2.5-pro",
+                reason="DIAGNOSED_TEST_DEFECT",
+                execution_attempt=2,
+            ),
             run_diagnoses=run_diagnoses,
-            execution_attempt=2,
         )
 
         request = read_json(self.paths.root / prepared["request_path"])
@@ -638,12 +650,14 @@ class CustomTaskRefinementContextTests(unittest.TestCase):
         prepared = run_store.prepare_refinement(
             self.paths,
             self.manifest,
-            artifact_type="transformation",
-            iteration=1,
-            previous_iteration=0,
-            provider="openai",
-            model="gpt-5",
-            reason="SYNTAX_INVALID",
+            run_store.RefinementRequest(
+                artifact_type="transformation",
+                iteration=1,
+                previous_iteration=0,
+                provider="openai",
+                model="gpt-5",
+                reason="SYNTAX_INVALID",
+            ),
             run_diagnoses=self.paths.root / "diagnosis",
         )
         request = read_json(

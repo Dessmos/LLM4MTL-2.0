@@ -36,7 +36,9 @@ from llm4mtl.semantic_tests.suite_execution import (
     record_observation,
 )
 from llm4mtl.semantic_tests.suites.discovery import (
+    candidate_identity,
     candidate_suite_directories,
+    matches_selection,
     suite_from_path,
 )
 from llm4mtl.semantic_tests.validation import workspace_for
@@ -53,7 +55,7 @@ def _matching_execution_pairs(
         (suite, transformation)
         for suite in suites
         for transformation in transformations
-        if suite.parts[-5] == transformation.stem
+        if candidate_identity(suite).task == transformation.stem
     ]
 
 
@@ -295,13 +297,14 @@ class TransformationValidationAdapter:
     ) -> bool:
         if not path.is_dir():
             return False
-        if path.parts[-3] not in models or path.parts[-2] not in strategies:
-            return False
-        if not config.all_tasks and path.parts[-5] not in tasks:
-            return False
-        if config.suite_id and path.name != config.suite_id:
-            return False
-        return True
+        return matches_selection(
+            candidate_identity(path),
+            tasks=tasks,
+            models=models,
+            strategies=strategies,
+            all_tasks=config.all_tasks,
+            suite_id=config.suite_id,
+        )
 
     def _has_valid_reference_observation(
         self,

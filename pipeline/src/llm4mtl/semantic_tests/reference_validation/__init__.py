@@ -1,4 +1,4 @@
-"""Reference-validation support for generated ETL semantic suites.
+"""Reference-validation support for generated semantic suites.
 
 Public API (facade); import from this package rather than its submodules.
 """

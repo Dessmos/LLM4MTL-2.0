@@ -1,1 +1,1 @@
-"""Technical validation of extracted ETL generated suites."""
+"""Technical validation of extracted generated suites."""
