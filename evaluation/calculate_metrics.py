@@ -8,28 +8,23 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 from evaluation._common import (
+    RUN_IDENTITY_FIELDS,
     EvaluationInputError,
     SelectedRun,
+    blank_identity,
+    group_heldout_observations,
     parse_bool,
     preflight_runs,
     read_csv,
     read_json_object,
+    run_identity,
     write_csv,
 )
 from llm4mtl.conventions import default_generated_tests_root, language_config
 from llm4mtl.paths import TARGET
 
 
-FIELDNAMES = (
-    "run_id",
-    "language",
-    "task",
-    "pipeline_variant",
-    "max_test_refinement_iterations",
-    "max_transformation_refinement_iterations",
-    "parser_feedback",
-    "semantic_feedback",
-    "source_diagnosis",
+FIELDNAMES = RUN_IDENTITY_FIELDS + (
     "metric",
     "numerator",
     "denominator",
@@ -157,33 +152,7 @@ def _heldout_counts(
     selected_runs: Sequence[SelectedRun],
     rows: list[dict[str, str]],
 ) -> dict[str, dict[str, int]]:
-    selected_ids = {run.run_id for run in selected_runs}
-    grouped: dict[str, dict[int, dict[str, str]]] = defaultdict(
-        lambda: defaultdict(dict)
-    )
-    for line, row in enumerate(rows, start=2):
-        run_id = row.get("run_id", "")
-        if run_id not in selected_ids:
-            raise EvaluationInputError(
-                f"held-out CSV line {line} references unselected run {run_id!r}"
-            )
-        try:
-            iteration = int(row.get("iteration", ""))
-        except ValueError as exc:
-            raise EvaluationInputError(
-                f"held-out CSV line {line} has invalid iteration"
-            ) from exc
-        test_id = row.get("test_id", "")
-        result = row.get("result", "")
-        if not test_id or result not in {"PASS", "FAIL", "ERROR", "NOT_RUN"}:
-            raise EvaluationInputError(
-                f"held-out CSV line {line} has invalid test_id/result"
-            )
-        if test_id in grouped[run_id][iteration]:
-            raise EvaluationInputError(
-                f"duplicate held-out observation for {run_id}/{iteration}/{test_id}"
-            )
-        grouped[run_id][iteration][test_id] = result
+    grouped = group_heldout_observations(selected_runs, rows)
     counts: dict[str, dict[str, int]] = {}
     for selected_run in selected_runs:
         run_iterations = grouped.get(selected_run.run_id)
@@ -345,19 +314,8 @@ def _run_metric(
     denominator: int,
     unit: str,
 ) -> dict[str, Any]:
-    config = selected_run.manifest["experiment_config"]
     return {
-        "run_id": selected_run.run_id,
-        "language": selected_run.language,
-        "task": selected_run.task,
-        "pipeline_variant": selected_run.manifest["pipeline_variant"],
-        "max_test_refinement_iterations": config["max_test_refinement_iterations"],
-        "max_transformation_refinement_iterations": config[
-            "max_transformation_refinement_iterations"
-        ],
-        "parser_feedback": str(config["parser_feedback"]).lower(),
-        "semantic_feedback": str(config["semantic_feedback"]).lower(),
-        "source_diagnosis": str(config["source_diagnosis"]).lower(),
+        **run_identity(selected_run),
         "metric": metric,
         "numerator": numerator,
         "denominator": denominator,
@@ -373,15 +331,7 @@ def _aggregate_metric(
     unit: str,
 ) -> dict[str, Any]:
     return {
-        "run_id": "ALL",
-        "language": "",
-        "task": "",
-        "pipeline_variant": "",
-        "max_test_refinement_iterations": "",
-        "max_transformation_refinement_iterations": "",
-        "parser_feedback": "",
-        "semantic_feedback": "",
-        "source_diagnosis": "",
+        **blank_identity(),
         "metric": metric,
         "numerator": numerator,
         "denominator": denominator,

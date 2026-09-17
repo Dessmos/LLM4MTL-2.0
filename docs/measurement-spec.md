@@ -179,6 +179,14 @@ fixed held-out / mutation inputs
         -> metrics.csv
 ```
 
+`heldout-trajectory.csv` is derived from `heldout.csv` as a reporting view of
+the intermediate `Ti -> Ti+1` results section 4 already permits. It is not a
+metric: it adds no numerator, denominator, or population to the eight above, and
+`metrics.csv` stays the authoritative `T0 -> Tfinal` result. Its per-iteration
+cohort rows state how many runs reached each iteration, because runs end at
+different iterations and an average over a shrinking population would otherwise
+read as a trend.
+
 Every per-run metric row retains language, task, pipeline variant, both
 refinement budgets, and all three ablation flags. Aggregate rows expose their
 population and denominator and do not invent a single configuration label for

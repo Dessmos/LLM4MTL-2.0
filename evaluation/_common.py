@@ -19,6 +19,13 @@ REQUIRED_EXPERIMENT_FIELDS = (
     "semantic_feedback",
     "source_diagnosis",
 )
+RUN_IDENTITY_FIELDS = (
+    "run_id",
+    "language",
+    "task",
+    "pipeline_variant",
+) + REQUIRED_EXPERIMENT_FIELDS
+HELDOUT_RESULTS = frozenset({"PASS", "FAIL", "ERROR", "NOT_RUN"})
 
 
 class EvaluationInputError(ValueError):
@@ -199,6 +206,80 @@ def read_csv(path: Path) -> list[dict[str, str]]:
             return list(csv.DictReader(stream))
     except OSError as exc:
         raise EvaluationInputError(f"cannot read CSV {path}: {exc}") from exc
+
+
+def run_identity(selected_run: SelectedRun) -> dict[str, Any]:
+    """Return the grouping axes every derived per-run row must carry.
+
+    Language, task, pipeline variant, both refinement budgets, and all three
+    ablation flags are defined once here so two derived reports of the same
+    campaign can never disagree about which configuration produced a row.
+    """
+    config = selected_run.manifest["experiment_config"]
+    return {
+        "run_id": selected_run.run_id,
+        "language": selected_run.language,
+        "task": selected_run.task,
+        "pipeline_variant": selected_run.manifest["pipeline_variant"],
+        "max_test_refinement_iterations": config["max_test_refinement_iterations"],
+        "max_transformation_refinement_iterations": config[
+            "max_transformation_refinement_iterations"
+        ],
+        "parser_feedback": str(config["parser_feedback"]).lower(),
+        "semantic_feedback": str(config["semantic_feedback"]).lower(),
+        "source_diagnosis": str(config["source_diagnosis"]).lower(),
+    }
+
+
+def blank_identity(run_id: str = "ALL") -> dict[str, Any]:
+    """Return the axes of a row that summarises more than one configuration.
+
+    A mixed population gets no invented configuration label; the row exposes its
+    own population and denominator instead.
+    """
+    return {
+        field: run_id if field == "run_id" else ""
+        for field in RUN_IDENTITY_FIELDS
+    }
+
+
+def group_heldout_observations(
+    selected_runs: Sequence[SelectedRun],
+    rows: Sequence[Mapping[str, str]],
+) -> dict[str, dict[int, dict[str, str]]]:
+    """Group validated held-out observations by run, iteration, and case id.
+
+    One owner for these rules: every derived held-out report rejects the same
+    unselected runs, unreadable iterations, unrecognized outcomes, and repeated
+    observations of one case within one iteration.
+    """
+    selected_ids = {run.run_id for run in selected_runs}
+    grouped: dict[str, dict[int, dict[str, str]]] = {}
+    for line, row in enumerate(rows, start=2):
+        run_id = row.get("run_id", "")
+        if run_id not in selected_ids:
+            raise EvaluationInputError(
+                f"held-out CSV line {line} references unselected run {run_id!r}"
+            )
+        try:
+            iteration = int(row.get("iteration", ""))
+        except ValueError as exc:
+            raise EvaluationInputError(
+                f"held-out CSV line {line} has invalid iteration"
+            ) from exc
+        test_id = row.get("test_id", "")
+        result = row.get("result", "")
+        if not test_id or result not in HELDOUT_RESULTS:
+            raise EvaluationInputError(
+                f"held-out CSV line {line} has invalid test_id/result"
+            )
+        iterations = grouped.setdefault(run_id, {}).setdefault(iteration, {})
+        if test_id in iterations:
+            raise EvaluationInputError(
+                f"duplicate held-out observation for {run_id}/{iteration}/{test_id}"
+            )
+        iterations[test_id] = result
+    return grouped
 
 
 def parse_bool(value: object, *, field: str) -> bool:
