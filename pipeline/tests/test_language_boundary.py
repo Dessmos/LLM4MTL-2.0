@@ -31,8 +31,6 @@ from llm4mtl.domain import (
     TransformationOutcome,
 )
 from llm4mtl.external_tools.maven import CommandResult
-from llm4mtl.experiment_runner.config import validate_config
-from llm4mtl.stages.models import PipelineConfig
 from llm4mtl.languages import (
     REQUIRED_LANGUAGES,
     LanguageAdapter,
@@ -44,6 +42,12 @@ from llm4mtl.languages.reactions.adapter import (
     ReactionsAdapter,
     _contains_only_unresolved_linkage_diagnostics,
 )
+from llm4mtl.languages.reactions.prerequisites import (
+    SEGMENT_NAME,
+    UnmergeableTransformationError,
+    bind_segment,
+)
+from llm4mtl.languages.reactions.rendering import segment_name
 
 
 class RegistryTests(unittest.TestCase):
@@ -64,16 +68,6 @@ class RegistryTests(unittest.TestCase):
         adapter = language_adapter("etl")
         self.assertIsInstance(adapter, LanguageAdapter)
         self.assertEqual("etl", adapter.language_id)
-
-
-class PipelineLanguageResolutionTests(unittest.TestCase):
-
-    def test_the_runner_accepts_reactions(self) -> None:
-        config = PipelineConfig(language="reactions", tasks=["FamiliesToPersons"])
-        validate_config(config)
-
-    def test_the_runner_accepts_the_implemented_language(self) -> None:
-        validate_config(PipelineConfig(language="etl", tasks=["Tree2Graph"]))
 
 
 class ConventionsTests(unittest.TestCase):
@@ -376,6 +370,41 @@ class ReactionsParserNormalizationTests(unittest.TestCase):
                 "Syntax issues (1):\nno viable alternative at input ']' (ERROR)"
             )
         )
+
+
+class ReactionsSegmentBindingTests(unittest.TestCase):
+    """The harness finds a Reactions transformation by its segment name."""
+
+    def test_every_reference_names_its_one_segment_after_its_task(self) -> None:
+        references = sorted(default_references_root(REACTIONS_CONFIG).glob("*.reactions"))
+        self.assertTrue(references)
+        for reference in references:
+            with self.subTest(task=reference.stem):
+                source = reference.read_text(encoding="utf-8")
+                self.assertEqual(
+                    [segment_name(reference.stem)], SEGMENT_NAME.findall(source)
+                )
+
+    def test_the_first_segment_takes_the_given_name(self) -> None:
+        source = (
+            'import "urn:a" as a\n'
+            "reactions: chosenName\n"
+            "in reaction to changes in a\n"
+            "reactions: second\n"
+        )
+
+        bound = bind_segment(source, "task_Name")
+
+        self.assertEqual(["task_Name", "second"], SEGMENT_NAME.findall(bound))
+        self.assertIn('import "urn:a" as a\n', bound)
+
+    def test_a_transformation_without_a_segment_cannot_be_bound(self) -> None:
+        for source in ("routine orphan() {\n}\n", "reactions:\n"):
+            with self.subTest(source=source):
+                with self.assertRaisesRegex(
+                    UnmergeableTransformationError, "no reactions segment"
+                ):
+                    bind_segment(source, "task")
 
 
 class ReactionsPrerequisiteMergeTests(unittest.TestCase):

@@ -6,7 +6,8 @@ Standard case — Surefire identifies the method: `nodesArePreserved` failed wit
 Early crash — the engine crashed before a single test could report back. There is nothing specific to name. In this case, the dossier covers the pair as a whole: this specific suite against this specific transformation—and that’s it.
 
 
-To run manually: llm4mtl diagnosis report --request request.json --output .../failure-report.json
+Diagnosis preparation builds these reports after every failed execution.
+There is no manual command for it.
 
 
 _init_.py       - interface of the folder
@@ -22,5 +23,4 @@ semantic_cases.py	- how a case and an assertion are named
 surefire_view.py	- takes data from XML files
 artifacts.py	- reads the files a report needs
 models.py	    - constants
-cli.py	        - local start
 

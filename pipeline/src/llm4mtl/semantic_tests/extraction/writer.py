@@ -89,9 +89,6 @@ def write_failed_candidate(
         violations=violations,
     )
     suite_dir = allocate_suite_dir(target, options)
-    if options.dry_run:
-        return suite_dir, validation
-
     suite_dir.mkdir(parents=True, exist_ok=True)
     metadata = build_metadata(target, suite_dir.name, {}, validation, adapter)
     _write_metadata(suite_dir, metadata)
@@ -108,9 +105,6 @@ def write_suite(
     extracted, validation = adapter.render_suite_artifacts(target.task, extracted)
     suite_dir = allocate_suite_dir(target, options)
     suite_id = suite_dir.name
-
-    if options.dry_run:
-        return suite_dir, validation
 
     suite_dir.mkdir(parents=True, exist_ok=True)
     for relative_path, content in extracted.items():

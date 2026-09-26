@@ -14,11 +14,7 @@ from llm4mtl.stages.models import (
     PipelineConfig,
     StageResult,
 )
-from llm4mtl.stages.selection import (
-    dry_run_result,
-    hash_paths,
-    nothing_selected_result,
-)
+from llm4mtl.stages.selection import hash_paths, nothing_selected_result
 from llm4mtl.stages.transformation_validation import (
     TransformationValidationAdapter,
 )
@@ -31,7 +27,7 @@ class TransformationParserAdapter:
     def __init__(self) -> None:
         self.selector = TransformationValidationAdapter()
 
-    def parse(self, config: PipelineConfig, dry_run: bool) -> StageResult:
+    def parse(self, config: PipelineConfig) -> StageResult:
         transformations = self.selector.select_transformations(config)
         input_hash = hash_paths(transformations)
         details: dict[str, object] = {
@@ -40,13 +36,6 @@ class TransformationParserAdapter:
         if not transformations:
             return nothing_selected_result(
                 TRANSFORMATION_PARSING_STAGE_NAME, details, input_hash
-            )
-        if dry_run:
-            return dry_run_result(
-                TRANSFORMATION_PARSING_STAGE_NAME,
-                len(transformations),
-                details,
-                input_hash,
             )
 
         observations = self._parse_in_run_workspace(config, transformations)

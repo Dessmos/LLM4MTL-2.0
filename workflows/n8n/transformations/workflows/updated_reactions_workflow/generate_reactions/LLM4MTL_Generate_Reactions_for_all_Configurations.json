@@ -429,7 +429,7 @@
     {
       "parameters": {
         "promptType": "define",
-        "text": "={{ $json.prompt }}\n\n-- End of request.\nHere are the authoritative metamodel files:\n{{ $json.metamodel_text }}\n\nThe metamodel namespace URIs for this task are:\n{{ $json.metamodel_uri_text }}\n\n{{ $if($('Extract text from examples file').isExecuted, \"Here are some examples as guideline:\\n\" + $('Extract text from examples file').item.json.examples, \"\") }}\n\n{{ $if($('Extract text from grammar').isExecuted, \"Here is the grammar of the Language:\\n\" + $('Extract text from grammar').item.json.grammar, \"\") }}\n\n{{ $if($('Extract text from helper methods').isExecuted, \"Here are helper methods you can use:\\n\" + $('Extract text from helper methods').item.json.helper_methods, \"\") }}",
+        "text": "={{ $json.prompt }}\n\n-- End of request.\nHere are the authoritative metamodel files:\n{{ $json.metamodel_text }}\n\nThe metamodel namespace URIs for this task are:\n{{ $json.metamodel_uri_text }}\n\n{{ $if($json.Few_shot === true && $('Extract text from examples file').isExecuted, \"Here are some examples as guideline:\\n\" + $('Extract text from examples file').item.json.examples, \"\") }}\n\n{{ $if($json.Grammar === true && $('Extract text from grammar').isExecuted, \"Here is the grammar of the Language:\\n\" + $('Extract text from grammar').item.json.grammar, \"\") }}\n\n{{ $if($json.Helper_methods === true && $('Extract text from helper methods').isExecuted, \"Here are helper methods you can use:\\n\" + $('Extract text from helper methods').item.json.helper_methods, \"\") }}",
         "messages": {
           "messageValues": [
             {
@@ -452,7 +452,7 @@
     {
       "parameters": {
         "promptType": "define",
-        "text": "={{ $json.prompt }}\n\n-- End of request.\nHere are the authoritative metamodel files:\n{{ $json.metamodel_text }}\n\nThe metamodel namespace URIs for this task are:\n{{ $json.metamodel_uri_text }}\n\n{{ $if($('Extract text from examples file').isExecuted, \"Here are some examples as guideline:\\n\" + $('Extract text from examples file').item.json.examples, \"\") }}\n\n{{ $if($('Extract text from grammar').isExecuted, \"Here is the grammar of the Language:\\n\" + $('Extract text from grammar').item.json.grammar, \"\") }}\n\n{{ $if($('Extract text from helper methods').isExecuted, \"Here are helper methods you can use:\\n\" + $('Extract text from helper methods').item.json.helper_methods, \"\") }}",
+        "text": "={{ $json.prompt }}\n\n-- End of request.\nHere are the authoritative metamodel files:\n{{ $json.metamodel_text }}\n\nThe metamodel namespace URIs for this task are:\n{{ $json.metamodel_uri_text }}\n\n{{ $if($json.Few_shot === true && $('Extract text from examples file').isExecuted, \"Here are some examples as guideline:\\n\" + $('Extract text from examples file').item.json.examples, \"\") }}\n\n{{ $if($json.Grammar === true && $('Extract text from grammar').isExecuted, \"Here is the grammar of the Language:\\n\" + $('Extract text from grammar').item.json.grammar, \"\") }}\n\n{{ $if($json.Helper_methods === true && $('Extract text from helper methods').isExecuted, \"Here are helper methods you can use:\\n\" + $('Extract text from helper methods').item.json.helper_methods, \"\") }}",
         "messages": {
           "messageValues": [
             {
@@ -555,7 +555,7 @@
     {
       "parameters": {
         "promptType": "define",
-        "text": "={{ $json.prompt }}\n\n-- End of request.\nHere are the authoritative metamodel files:\n{{ $json.metamodel_text }}\n\nThe metamodel namespace URIs for this task are:\n{{ $json.metamodel_uri_text }}\n\n{{ $if($('Extract text from examples file').isExecuted, \"Here are some examples as guideline:\\n\" + $('Extract text from examples file').item.json.examples, \"\") }}\n\n{{ $if($('Extract text from grammar').isExecuted, \"Here is the grammar of the Language:\\n\" + $('Extract text from grammar').item.json.grammar, \"\") }}\n\n{{ $if($('Extract text from helper methods').isExecuted, \"Here are helper methods you can use:\\n\" + $('Extract text from helper methods').item.json.helper_methods, \"\") }}",
+        "text": "={{ $json.prompt }}\n\n-- End of request.\nHere are the authoritative metamodel files:\n{{ $json.metamodel_text }}\n\nThe metamodel namespace URIs for this task are:\n{{ $json.metamodel_uri_text }}\n\n{{ $if($json.Few_shot === true && $('Extract text from examples file').isExecuted, \"Here are some examples as guideline:\\n\" + $('Extract text from examples file').item.json.examples, \"\") }}\n\n{{ $if($json.Grammar === true && $('Extract text from grammar').isExecuted, \"Here is the grammar of the Language:\\n\" + $('Extract text from grammar').item.json.grammar, \"\") }}\n\n{{ $if($json.Helper_methods === true && $('Extract text from helper methods').isExecuted, \"Here are helper methods you can use:\\n\" + $('Extract text from helper methods').item.json.helper_methods, \"\") }}",
         "messages": {
           "messageValues": [
             {

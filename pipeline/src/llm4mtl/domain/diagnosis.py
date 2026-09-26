@@ -4,8 +4,8 @@ A diagnosis classifies one recorded failure as a defect of the transformation,
 a defect of the test, or as ambiguous. A run can hold several verdicts, because
 each prepared failure report is diagnosed on its own. Wherever Python combines
 them into one decision, it uses this rule: the run's terminal result
-(``run_store.results``) and the diagnosis clustering
-(``semantic_tests.diagnosis_aggregation``) both call it.
+(``run_store.results``) and the offline diagnosis clustering
+(``evaluation/diagnosis_aggregation.py``) both call it.
 
 The n8n master workflow routes on the same rule, written again in its own
 JavaScript. A change here must be made there too.

@@ -131,6 +131,24 @@ PYTHONPATH=pipeline/src .venv/bin/python -m evaluation.mutation.run_mutants \
   --output evaluation/results/mutation-observations.csv
 ```
 
+## Diagnosis agreement
+
+Source Diagnosis gets one report per failing test case, so one broken
+transformation that fails three cases yields three verdicts about one defect.
+`diagnosis_aggregation` groups one execution attempt's reports by the failure
+they describe (failure stage, exception type, normalized message, top stack
+frame, transformation hash) and reports, per group, the verdicts it received and
+how far they agree. It never changes a verdict and writes nothing; it prints
+JSON:
+
+```bash
+PYTHONPATH=pipeline/src .venv/bin/python -m evaluation.diagnosis_aggregation \
+  --batch batch_004 --run <run-id> [--attempt N]
+```
+
+Without `--attempt` it reads the run's latest execution attempt. `agreement` is
+null, not 1.0, when nothing was diagnosed.
+
 ## EClass coverage and aggregation
 
 Coverage is static: an eligible EClass is covered by an instance in a generated

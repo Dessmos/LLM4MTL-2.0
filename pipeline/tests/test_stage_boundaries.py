@@ -1,8 +1,8 @@
 """Boundary cases of the stage adapters.
 
-Each stage returns a result before doing any work when it selected nothing or
-when it only plans a dry run. These tests pin those early results, and the
-branches of the work itself that no other test reaches.
+Each stage returns a result before doing any work when it selected nothing.
+These tests pin those early results, and the branches of the work itself that
+no other test reaches.
 """
 
 from __future__ import annotations
@@ -76,26 +76,13 @@ class ExtractionBoundaryTests(TemporaryTreeTestCase):
         config = etl_config(responses=[str(self.root / "missing.md")])
         adapter = GenerationAdapter()
 
-        for dry_run in (False, True):
-            with self.subTest(dry_run=dry_run):
-                with patch("llm4mtl.stages.test_generation.extract_one") as extract:
-                    result = adapter.extract(config, dry_run)
-
-                self.assertEqual("extraction", result.name)
-                self.assertEqual("error", result.status)
-                self.assertEqual({"selected": 0, "failed": 1}, result.counts)
-                self.assertEqual({"responses": []}, result.details)
-                extract.assert_not_called()
-
-    def test_a_dry_run_plans_the_selected_responses_only(self) -> None:
-        response = self.make_file("responses/Tree2Graph.md")
-        adapter = GenerationAdapter()
-
         with patch("llm4mtl.stages.test_generation.extract_one") as extract:
-            result = adapter.extract(etl_config(responses=[str(response)]), True)
+            result = adapter.extract(config)
 
-        self.assertEqual("dry_run", result.status)
-        self.assertEqual({"selected": 1}, result.counts)
+        self.assertEqual("extraction", result.name)
+        self.assertEqual("error", result.status)
+        self.assertEqual({"selected": 0, "failed": 1}, result.counts)
+        self.assertEqual({"responses": []}, result.details)
         extract.assert_not_called()
 
     def test_a_suite_id_needs_exactly_one_response(self) -> None:
@@ -104,7 +91,7 @@ class ExtractionBoundaryTests(TemporaryTreeTestCase):
         config = etl_config(responses=[str(first), str(second)], suite_id="s1")
 
         with self.assertRaisesRegex(ConfigError, "exactly one response"):
-            GenerationAdapter().extract(config, False)
+            GenerationAdapter().extract(config)
 
     def test_extraction_needs_exactly_one_test_model(self) -> None:
         response = self.make_file("responses/Tree2Graph.md")
@@ -113,7 +100,7 @@ class ExtractionBoundaryTests(TemporaryTreeTestCase):
         )
 
         with self.assertRaisesRegex(ConfigError, "exactly one test-generation model"):
-            GenerationAdapter().extract(config, False)
+            GenerationAdapter().extract(config)
 
     def test_each_response_is_extracted_under_the_run_identity(self) -> None:
         response = self.make_file("responses/Tree2Graph.md")
@@ -129,7 +116,7 @@ class ExtractionBoundaryTests(TemporaryTreeTestCase):
                 return_value=(False, "no semantic_cases.json block"),
             ),
         ):
-            result = adapter.extract(etl_config(responses=[str(response)]), False)
+            result = adapter.extract(etl_config(responses=[str(response)]))
 
         self.assertEqual("completed", result.status)
         self.assertEqual({"selected": 1, "created": 0, "failed": 1}, result.counts)
@@ -153,27 +140,17 @@ class SuiteValidationBoundaryTests(TemporaryTreeTestCase):
 
     def test_zero_selected_suites_is_an_error_for_both_gates(self) -> None:
         adapter = GenerationAdapter()
-        config = etl_config(suites=[str(self.root / "missing")])
+        config = etl_config()
 
         for gate in (adapter.technical_validation, adapter.reference_validation):
             with self.subTest(gate=gate.__name__):
-                result = gate(config, False)
+                with patch.object(
+                    adapter, "generated_tests_root", return_value=self.root / "none"
+                ):
+                    result = gate(config)
 
                 self.assertEqual("error", result.status)
                 self.assertEqual({"selected": 0, "failed": 1}, result.counts)
-
-    def test_a_dry_run_counts_the_suites_without_validating(self) -> None:
-        suite = self.make_suite()
-        adapter = GenerationAdapter()
-
-        with patch("llm4mtl.stages.test_generation.check_suite") as check:
-            result = adapter.technical_validation(
-                etl_config(suites=[str(suite)]), True
-            )
-
-        self.assertEqual("dry_run", result.status)
-        self.assertEqual({"selected": 1}, result.counts)
-        check.assert_not_called()
 
     def test_skipped_suites_record_the_reason_of_their_gate(self) -> None:
         suite_path = self.make_suite()
@@ -181,7 +158,7 @@ class SuiteValidationBoundaryTests(TemporaryTreeTestCase):
             "etl", suite_path, "Tree2Graph", "gpt-5", "few_shot", "suite_001"
         )
         adapter = GenerationAdapter()
-        config = etl_config(suites=[str(suite_path)])
+        config = etl_config()
         cases = (
             ("reference", [SuiteVerdict(suite, NOT_EXECUTABLE)], "SKIPPED_NOT_EXECUTABLE"),
             ("reference", [SuiteVerdict(suite, VALIDATED)], None),
@@ -193,10 +170,15 @@ class SuiteValidationBoundaryTests(TemporaryTreeTestCase):
             with self.subTest(gate=gate_name, reason=expected_reason):
                 gate = getattr(adapter, f"{gate_name}_validation")
                 with (
+                    patch.object(
+                        adapter,
+                        "generated_tests_root",
+                        return_value=self.root / "generated",
+                    ),
                     patch.object(adapter, "validation_context", return_value=None),
                     patch.object(adapter, "_suite_verdicts", return_value=verdicts),
                 ):
-                    result = gate(config, False)
+                    result = gate(config)
 
                 self.assertEqual(expected_reason, result.details.get("skip_reason"))
 
@@ -205,7 +187,7 @@ class SuiteValidationBoundaryTests(TemporaryTreeTestCase):
     ) -> None:
         """Documents current behaviour; whether it should stay is an open question.
 
-        With no suite id and no explicit suites, selection reads the shared
+        With no suite id, selection reads the shared
         generated-tests tree, not a run-scoped one. Every suite there that
         matches the task, model and strategy is selected, including suites an
         earlier run left behind.
@@ -235,7 +217,7 @@ class ExecutionBoundaryTests(TemporaryTreeTestCase):
             patch.object(adapter, "select_validated_suites", return_value=[suite]),
             patch.object(adapter, "_execute_pairs") as execute,
         ):
-            result = adapter.semantic_validation(config, False)
+            result = adapter.semantic_validation(config)
 
         self.assertEqual("error", result.status)
         self.assertEqual(
@@ -319,34 +301,20 @@ class PairExecutionTests(TemporaryTreeTestCase):
 class SyntaxValidationBoundaryTests(TemporaryTreeTestCase):
 
     def test_zero_selected_transformations_is_an_error(self) -> None:
-        config = etl_config(transformation_selection_locked=True)
-        adapter = TransformationParserAdapter()
+        config = etl_config(transformations=[str(self.root / "missing.etl")])
 
-        for dry_run in (False, True):
-            with self.subTest(dry_run=dry_run):
-                result = adapter.parse(config, dry_run)
+        result = TransformationParserAdapter().parse(config)
 
-                self.assertEqual("transformation_parsing", result.name)
-                self.assertEqual("error", result.status)
-                self.assertEqual({"selected": 0, "failed": 1}, result.counts)
-
-    def test_a_dry_run_counts_the_transformations_without_parsing(self) -> None:
-        transformation = self.make_file("transformations/Tree2Graph.etl")
-        adapter = TransformationParserAdapter()
-
-        with patch("llm4mtl.stages.transformation_parser.language_adapter") as lookup:
-            result = adapter.parse(etl_config(transformations=[str(transformation)]), True)
-
-        self.assertEqual("dry_run", result.status)
-        self.assertEqual({"selected": 1}, result.counts)
-        lookup.assert_not_called()
+        self.assertEqual("transformation_parsing", result.name)
+        self.assertEqual("error", result.status)
+        self.assertEqual({"selected": 0, "failed": 1}, result.counts)
 
     def test_parsing_needs_a_run_directory_for_its_evidence(self) -> None:
         transformation = self.make_file("transformations/Tree2Graph.etl")
         adapter = TransformationParserAdapter()
 
         with self.assertRaisesRegex(ConfigError, "resolved run directory"):
-            adapter.parse(etl_config(transformations=[str(transformation)]), False)
+            adapter.parse(etl_config(transformations=[str(transformation)]))
 
     def test_without_an_engine_workspace_parsing_uses_the_runs_own(self) -> None:
         transformation = self.make_file("transformations/Tree2Graph.etl")
@@ -363,7 +331,7 @@ class SyntaxValidationBoundaryTests(TemporaryTreeTestCase):
             "llm4mtl.stages.transformation_parser.language_adapter",
             return_value=language,
         ):
-            result = TransformationParserAdapter().parse(config, False)
+            result = TransformationParserAdapter().parse(config)
 
         workspace = language.parse_transformations.call_args.args[1]
         self.assertEqual(run_dir / "workspaces" / "etl", workspace.engine_dir)

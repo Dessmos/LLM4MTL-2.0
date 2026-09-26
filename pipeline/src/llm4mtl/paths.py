@@ -39,8 +39,8 @@ class ArtifactRoots:
     Nothing else may derive one of these locations from another: a module that
     knows a run directory asks this class where the run's diagnoses are. It
     never reads the directory name back and joins it somewhere else. The stage
-    service and the local runner both get their instance from
-    ``TARGET.artifact_roots``; tests redirect it into a temporary tree.
+    service gets its instance from ``TARGET.artifact_roots``; tests redirect it
+    into a temporary tree.
     """
 
     artifacts_work: Path

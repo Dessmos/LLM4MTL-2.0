@@ -8,7 +8,6 @@ asks it instead of counting path components of its own.
 
 from __future__ import annotations
 
-import argparse
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -56,13 +55,12 @@ def matches_selection(
     tasks: set[str],
     models: set[str],
     strategies: set[str],
-    all_tasks: bool,
     suite_id: str | None,
 ) -> bool:
     """Whether a candidate belongs to the selection a stage was asked to judge."""
     if identity.llm not in models or identity.strategy not in strategies:
         return False
-    if not all_tasks and identity.task not in tasks:
+    if identity.task not in tasks:
         return False
     return not suite_id or identity.suite_id == suite_id
 
@@ -83,38 +81,6 @@ def candidate_suite_directories(generated_tests_root: Path) -> list[Path]:
 
 class SuiteIdentityError(ValueError):
     """A path does not name a candidate suite as ``<task>/candidates/<llm>/<strategy>/<suite>``."""
-
-
-def discover_suites(args: argparse.Namespace, language: str) -> list[GeneratedSuite]:
-    """Discover candidate suites selected by validation CLI arguments."""
-    root = args.generated_tests_root.resolve()
-    if args.suite:
-        return [
-            suite_from_path(path.resolve(), language)
-            for path in args.suite
-        ]
-
-    if args.task:
-        task_dirs = [root / args.task]
-    else:
-        task_dirs = sorted(path for path in root.iterdir() if path.is_dir())
-
-    suites: list[GeneratedSuite] = []
-    for task_dir in task_dirs:
-        suites.extend(_discover_task_suites(task_dir, root, language))
-    return suites
-
-
-def _discover_task_suites(
-    task_dir: Path,
-    generated_tests_root: Path,
-    language: str,
-) -> list[GeneratedSuite]:
-    return [
-        suite_from_path(suite_dir.resolve(), language)
-        for suite_dir in candidate_suite_directories(generated_tests_root)
-        if candidate_identity(suite_dir).task == task_dir.name
-    ]
 
 
 def suite_from_path(path: Path, language: str) -> GeneratedSuite:

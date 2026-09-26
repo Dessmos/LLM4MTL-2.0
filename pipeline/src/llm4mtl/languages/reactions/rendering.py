@@ -34,7 +34,19 @@ FEATURE_OPERATIONS = {
 }
 
 
+def segment_name(task: str) -> str:
+    """The reactions segment a rendered test runs: the task name, first letter lower.
+
+    This is how the test finds the transformation, the way other languages find
+    it by a fixed file name. Every reference names its one segment like this,
+    and the adapter gives a generated transformation the same name before it
+    runs, so no test depends on a name the generation happened to choose.
+    """
+    return task[:1].lower() + task[1:]
+
+
 def _specification(task: str) -> str:
+    """The class Vitruv generates for :func:`segment_name` of ``task``."""
     return f"{task}ChangePropagationSpecification"
 
 
@@ -42,7 +54,7 @@ def render_reactions_test(class_name: str, spec: dict[str, Any], task: str) -> s
     """Render the JUnit class that runs every test case of ``spec`` in Vitruv."""
     # Always one specification: the adapter merges prerequisites into this
     # task's reactions file (see ``ReactionsAdapter._with_prerequisites``).
-    reaction_name = task[:1].lower() + task[1:]
+    reaction_name = segment_name(task)
     specification = _specification(task)
     return "\n".join(
         [

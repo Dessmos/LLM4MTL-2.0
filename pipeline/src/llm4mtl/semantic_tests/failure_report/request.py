@@ -8,7 +8,6 @@ anything outside the tree that run was recorded in.
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -26,7 +25,6 @@ from llm4mtl.semantic_tests.failure_report.models import (
     PAIR_REQUEST_FIELDS,
     PAIR_SCOPE,
 )
-from llm4mtl.serialization.json_io import read_json
 
 
 @dataclass(frozen=True)
@@ -130,22 +128,6 @@ def request_type(scope: str) -> type:
         raise FailureReportError(
             f"unknown failure-report scope {scope!r} (known: {known})"
         ) from None
-
-
-def read_request_payload(path: Path) -> Any:
-    """Read one repository-contained request document, without interpreting it.
-
-    Reading and validating are separate steps because the scope decides which
-    boundary the payload has to satisfy, and the caller — not this function —
-    knows which kind of failure it recorded.
-    """
-    request_path = _input_path(path, "request")
-    try:
-        return read_json(request_path)
-    except (OSError, json.JSONDecodeError) as exc:
-        raise FailureReportError(
-            f"cannot read failure-report request from {request_path}: {exc}"
-        ) from exc
 
 
 def _request_payload(

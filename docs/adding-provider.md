@@ -16,10 +16,10 @@ artifacts.
    directory or workflow name.
 4. Verify that the exported workflow contains no credentials.
 
-Current compatibility note: `experiment_runner/config.py` still validates model
-names through `ALLOWED_MODELS`. Until that allowlist is moved to n8n-owned data,
-adding a model also requires updating it and its tests. Python uses this only as
-validation; it does not select the provider or model.
+Python does not validate model names; it records the provider and model that
+n8n reports. A new model family that needs its own generated workflow exports
+is added to `MODEL_FAMILIES` in `llm4mtl/vocabulary.py`, which the export
+generator (`prompt_assembly/n8n_exports`) reads.
 
 ## New provider
 

@@ -3,8 +3,7 @@
 > Status: active guide for the current adapter architecture.
 
 A language extends the pipeline through the typed adapter boundary. It does not
-copy the experiment runner, validation funnel, run store, stage service, or n8n
-routing.
+copy the validation funnel, run store, stage service, or n8n routing.
 
 The four thesis languages are `etl`, `atl`, `qvto`, and `reactions`; all four
 implement this contract. Their packages are the concrete examples to follow.
@@ -100,6 +99,14 @@ class ExampleAdapter:
 
 Use `pipeline/src/llm4mtl/languages/etl/adapter.py` as the executable reference,
 not as a source of ETL defaults for another language.
+
+`execute_suite` must let the rendered test find the transformation under test
+by a name the adapter decides, never by a name the generation chose. ETL, ATL
+and QVT-O copy it to a fixed file named after the task; Reactions also names its
+segment after the task, because the test looks the transformation up by that
+name. The shared `execute_maven_suite` deletes the previous run's Surefire
+reports before Maven starts, so a harness whose build can fail before the test
+module never has an earlier run's reports read as its own.
 
 ## Registration and conventions
 

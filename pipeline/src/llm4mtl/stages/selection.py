@@ -1,7 +1,6 @@
 """Input selection and input hashing shared by the stages.
 
-Also the two results a stage returns before it does any work: nothing was
-selected, or this is a dry run.
+Also the result a stage returns when it selected nothing to work on.
 """
 
 from __future__ import annotations
@@ -11,7 +10,6 @@ from collections.abc import Iterator
 from pathlib import Path
 
 from llm4mtl.semantic_tests.suites.discovery import (
-    CANDIDATES_DIRECTORY,
     candidate_identity,
     candidate_suite_directories,
     matches_selection,
@@ -79,7 +77,7 @@ def select_generated_files(
         for path in root.glob(f"*/*/*.{extension}")
         if path.parent.parent.name in models
         and path.parent.name in strategies
-        and (config.all_tasks or path.stem in tasks)
+        and path.stem in tasks
     )
 
 
@@ -89,16 +87,10 @@ def select_candidate_suites(
 ) -> list[Path]:
     """Candidate suite directories this stage was asked to judge.
 
-    Explicit ``config.suites`` win. Otherwise the suites are read from the
-    shared ``generated_tests_root`` tree and filtered by the run's task, test
-    model, test strategy and, when set, suite id.
+    The suites are read from the shared ``generated_tests_root`` tree and
+    filtered by the run's task, test model, test strategy and, when set, suite
+    id.
     """
-    if config.suites:
-        return sorted(
-            Path(path).resolve()
-            for path in config.suites
-            if Path(path).is_dir() and CANDIDATES_DIRECTORY in Path(path).parts
-        )
     tasks = set(config.tasks)
     models = fixed_selection("test-generation model", config.test_models)
     strategies = fixed_selection("strategy", config.test_strategies)
@@ -110,7 +102,6 @@ def select_candidate_suites(
             tasks=tasks,
             models=models,
             strategies=strategies,
-            all_tasks=config.all_tasks,
             suite_id=config.suite_id,
         )
     )
@@ -123,13 +114,3 @@ def nothing_selected_result(
 ) -> StageResult:
     """The result of a stage that found no input: an error with one failure."""
     return StageResult(name, "error", {"selected": 0, "failed": 1}, details, input_hash)
-
-
-def dry_run_result(
-    name: str,
-    selected: int,
-    details: dict[str, object],
-    input_hash: str,
-) -> StageResult:
-    """The result of a dry run: what the stage would work on, and nothing more."""
-    return StageResult(name, "dry_run", {"selected": selected}, details, input_hash)

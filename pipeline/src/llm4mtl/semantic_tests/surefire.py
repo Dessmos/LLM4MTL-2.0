@@ -175,6 +175,16 @@ def _aggregate(report_roots: list[ET.Element]) -> SurefireReport:
     )
 
 
+def testcase_method_name(case_name: str) -> str:
+    """The Java method a ``<testcase name="...">`` names, without its parameters.
+
+    Surefire writes a JUnit 5 method that takes parameters with their types,
+    for example ``createsMale(Path)`` for a test that receives a ``@TempDir``.
+    The Reactions harness does that; the other harnesses' methods take none.
+    """
+    return case_name.split("(", 1)[0]
+
+
 def testcase_outcome(case: ET.Element) -> tuple[str, ET.Element | None]:
     """The outcome of one ``<testcase>``: ``passed``, ``failed``, or ``error``.
 

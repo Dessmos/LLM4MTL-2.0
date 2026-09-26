@@ -11,17 +11,27 @@ figure that makes the consistency of those verdicts measurable.
 
 from __future__ import annotations
 
+import io
+import sys
 import tempfile
 import unittest
 from pathlib import Path
 from typing import Any
+from unittest.mock import patch
 
-from llm4mtl.semantic_tests.diagnosis_aggregation import (
+from llm4mtl.paths import REPO_ROOT, ArtifactRoots
+from llm4mtl.serialization.json_io import write_json
+
+# The offline evaluation layer lives beside the package, not inside it.
+sys.path.insert(0, str(REPO_ROOT))
+
+from evaluation.diagnosis_aggregation import (  # noqa: E402
     DiagnosisAggregationError,
     aggregate_run_diagnoses,
     failure_fingerprint,
+    latest_execution_attempt,
+    main,
 )
-from llm4mtl.serialization.json_io import write_json
 
 RUN_ID = "agg-1"
 TRANSFORMATION_SHA = "a" * 64
@@ -270,6 +280,40 @@ class RunAggregationTests(unittest.TestCase):
     def test_an_attempt_without_prepared_evidence_is_refused(self) -> None:
         with self.assertRaises(DiagnosisAggregationError):
             aggregate_run_diagnoses(self.run_dir, 1, self.diagnoses)
+
+
+class LatestExecutionAttemptTests(unittest.TestCase):
+
+    def test_the_highest_recorded_attempt_is_chosen(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            attempts = Path(tmp) / "stages" / "execution" / "attempts"
+            for name in ("attempt-001", "attempt-003", "attempt-002", "notes"):
+                (attempts / name).mkdir(parents=True)
+
+            self.assertEqual(3, latest_execution_attempt(Path(tmp)))
+
+    def test_a_run_without_an_execution_attempt_is_refused(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaisesRegex(
+                DiagnosisAggregationError, "recorded no execution attempt"
+            ):
+                latest_execution_attempt(Path(tmp))
+
+
+class CommandLineTests(unittest.TestCase):
+
+    def test_missing_evidence_is_reported_as_an_error_not_a_traceback(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            # A run directory with no execution attempt in it.
+            layout = ArtifactRoots(Path(tmp))
+            with (
+                patch("evaluation.diagnosis_aggregation.TARGET", layout),
+                patch("sys.stderr", new_callable=io.StringIO) as stderr,
+            ):
+                code = main(["--batch", "batch_001", "--run", "run-1"])
+
+        self.assertEqual(1, code)
+        self.assertIn("recorded no execution attempt", stderr.getvalue())
 
 
 if __name__ == "__main__":

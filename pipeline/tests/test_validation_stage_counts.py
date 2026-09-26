@@ -180,7 +180,6 @@ class TestGenerationAdapterValidationTests(unittest.TestCase):
                                     result = adapter._validate_suites(
                                         name,
                                         config,
-                                        dry_run=False,
                                         judge_as_oracle=judge_as_oracle,
                                     )
 
@@ -209,12 +208,10 @@ class ObservationScopeTests(unittest.TestCase):
             TestGenerationAdapter as GenerationAdapter,
         )
         from llm4mtl.stages.models import PipelineConfig
-        from llm4mtl.paths import REPO_ROOT
 
         scoped = GenerationAdapter().observations_root(
             PipelineConfig(
                 language="etl",
-                run_id="etl-smoke-1",
                 run_dir="/tmp/etl-smoke-1",
             )
         )
@@ -248,10 +245,16 @@ class ObservationScopeTests(unittest.TestCase):
             config = PipelineConfig(
                 language="etl",
                 tasks=["Tree2Graph"],
-                suites=[str(suite_path)],
-                run_id="run-001",
+                test_models=["gpt-5"],
+                test_strategies=["few_shot"],
             )
             adapter = TransformationValidationAdapter()
+            # The run's candidates are read from the shared generated-tests tree.
+            tree = patch.object(
+                adapter, "validated_tests_root", return_value=Path(temp_dir)
+            )
+            tree.start()
+            self.addCleanup(tree.stop)
 
             with (
                 patch(
@@ -280,37 +283,6 @@ class ObservationScopeTests(unittest.TestCase):
                 ),
             ):
                 self.assertEqual([], adapter.select_validated_suites(config))
-
-    def test_dry_run_selects_candidates_without_requiring_run_observations(
-        self,
-    ) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            suite_path = (
-                Path(temp_dir)
-                / "Tree2Graph"
-                / "candidates"
-                / "gpt-5"
-                / "few_shot"
-                / "suite_001"
-            )
-            suite_path.mkdir(parents=True)
-            config = PipelineConfig(
-                language="etl",
-                tasks=["Tree2Graph"],
-                suites=[str(suite_path)],
-            )
-            adapter = TransformationValidationAdapter()
-
-            with patch(
-                "llm4mtl.stages.transformation_validation.read_observation"
-            ) as read_observation_mock:
-                selected = adapter.select_validated_suites(
-                    config,
-                    require_observation=False,
-                )
-
-            self.assertEqual([suite_path.resolve()], selected)
-            read_observation_mock.assert_not_called()
 
 
 class TransformationExecutionCountTests(unittest.TestCase):

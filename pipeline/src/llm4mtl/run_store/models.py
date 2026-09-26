@@ -25,9 +25,7 @@ the launch that created it (see ``run_store.batches``) — and is described by:
   that says where each came from.
 * ``result.json`` — the terminal result, written once when the run ends.
 
-``<stage>`` is always a contract stage id (see ``llm4mtl.vocabulary``), so a
-run directory reads the same whether the local runner or the stage service wrote
-it.
+``<stage>`` is always a contract stage id (see ``llm4mtl.vocabulary``).
 
 This class knows only the inside of a run. Where the run sits — its batch, its
 diagnoses directory, how n8n sees it — is ``llm4mtl.paths.ArtifactRoots``, and

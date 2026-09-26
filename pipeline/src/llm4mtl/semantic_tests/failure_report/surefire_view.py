@@ -23,7 +23,7 @@ from llm4mtl.semantic_tests.failure_report.models import (
     RUNTIME_ERROR_KIND,
     SYSTEM_ERR_EXCERPT_CHARS,
 )
-from llm4mtl.semantic_tests.surefire import testcase_outcome
+from llm4mtl.semantic_tests.surefire import testcase_method_name, testcase_outcome
 
 
 def _surefire_evidence(
@@ -57,7 +57,7 @@ def _matching_surefire_cases(
         except (ET.ParseError, OSError) as exc:
             raise FailureReportError(f"invalid Surefire report {path}: {exc}") from exc
         for case in root.iter("testcase"):
-            if case.get("name") == method_name:
+            if testcase_method_name(str(case.get("name") or "")) == method_name:
                 yield path, case
 
 

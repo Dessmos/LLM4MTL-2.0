@@ -25,7 +25,7 @@ from llm4mtl.semantic_tests.suite_execution import (
     read_observation,
     record_observation,
 )
-from llm4mtl.semantic_tests.technical_validation.suite import check_suite, technical_row
+from llm4mtl.semantic_tests.technical_validation.suite import check_suite
 from llm4mtl.semantic_tests.validation import ValidationContext, workspace_for
 
 ASSERTION_FAILURE = CommandResult(
@@ -145,10 +145,9 @@ class TechnicalValidationTests(FunnelFixture):
         ):
             verdict = check_suite(self.suite, self.context())
 
-        row = technical_row(verdict)
         self.assertTrue(verdict.is_technically_executable)
         self.assertEqual("TECHNICALLY_EXECUTABLE", verdict.status)
-        self.assertEqual("False", row["assertions_passed"])
+        self.assertFalse(verdict.observation.assertions_passed)
         self.assertEqual("assertion_failure", verdict.failure_stage)
 
     def test_compile_failure_is_not_technically_valid(self) -> None:

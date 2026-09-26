@@ -316,7 +316,6 @@ execution attempt recorded
 Preparation reads only the immutable attempt that was just written. It never
 changes the stage result, the run status, or the events timeline, and a failure
 to assemble evidence is recorded in the index rather than failing the stage.
-The same assembly is available as `llm4mtl diagnosis prepare --batch <batch-id> --run <run-id>`.
 
 The mapping back from a Surefire method to a semantic case is the renderer's own
 name function applied to every case; the mapping from a failure message to an

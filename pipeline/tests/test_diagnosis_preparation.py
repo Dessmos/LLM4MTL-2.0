@@ -540,6 +540,30 @@ class DiagnosisPreparationTests(unittest.TestCase):
         self.assertEqual("createsNodes", failure["test_method"])
         self.assertEqual("1", failure["expected"])
 
+    def test_a_method_that_takes_parameters_is_found_by_its_name(self) -> None:
+        """Surefire names a JUnit 5 method with parameters as ``name(Types)``.
+
+        The Reactions harness passes every test a ``@TempDir Path``. Without
+        matching on the bare name, no Reactions failure could be diagnosed.
+        """
+        observation = self._complete_failing_run()
+        self._archive_evidence(
+            observation,
+            _surefire_xml(MISMATCH_MESSAGE).replace(METHOD, f"{METHOD}(Path)"),
+        )
+
+        index = prepare_execution_diagnosis(self.run_dir, 1)
+        entry = index["pairs"][0]["reports"][0]
+
+        self.assertEqual("created", entry["status"], entry.get("detail"))
+        self.assertEqual(CASE, entry["test_case_id"])
+        self.assertEqual("assertion-001", entry["assertion_id"])
+        report = read_json(REPO_ROOT / entry["report"])
+        failure = report["test_case_result"]["failure"]
+        # The recorded fact keeps the name exactly as Surefire wrote it.
+        self.assertEqual(f"{METHOD}(Path)", failure["test_method"])
+        self.assertEqual("1", failure["expected"])
+
     def test_the_bundle_satisfies_what_source_diagnosis_requires(self) -> None:
         """The two ends of the evidence contract are pinned to each other.
 

@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from typing import Iterable
 
 from llm4mtl.prompt_assembly.n8n_exports.node_names import (
     EXAMPLES_TEXT_NODE,
@@ -161,37 +162,56 @@ def transformation_system_message(language: str) -> str:
     )
 
 
-def transformation_request() -> str:
-    """The user turn, identical in every language.
+# The parts a strategy may add to a transformation request: the node that
+# extracts the part, its heading, the field holding its text, and the strategy
+# flag that selects it (as the workflows' strategy tables spell it).
+TRANSFORMATION_SECTIONS = (
+    (EXAMPLES_TEXT_NODE, "Here are some examples as guideline:", "examples", "Few_shot"),
+    (GRAMMAR_TEXT_NODE, "Here is the grammar of the Language:", "grammar", "Grammar"),
+    (
+        HELPER_METHODS_TEXT_NODE,
+        "Here are helper methods you can use:",
+        "helper_methods",
+        "Helper_methods",
+    ),
+)
 
-    The namespace URIs come from the task contract (``metamodel_uri_text``).
+
+def transformation_request() -> str:
+    """The user turn of a per-strategy workflow, identical in every language.
+
+    Such a workflow reads only the parts its strategy selects, so a part is
+    included when the node that extracts it ran. The namespace URIs come from
+    the task contract (``metamodel_uri_text``).
     """
+    return _transformation_request(
+        _template_section_if_ran(node, heading, field)
+        for node, heading, field, _ in TRANSFORMATION_SECTIONS
+    )
+
+
+def matrix_transformation_request() -> str:
+    """The user turn of the Reactions matrix, which serves every strategy.
+
+    The matrix reads every part once for all its items, so "the node ran" is
+    true for every strategy. A part is included by the strategy flag the item
+    itself carries, as the matrix did before it shared the per-strategy
+    template.
+    """
+    return _transformation_request(
+        _template_section_if_flag(flag, node, heading, field)
+        for node, heading, field, flag in TRANSFORMATION_SECTIONS
+    )
+
+
+def _transformation_request(sections: Iterable[str]) -> str:
     return (
         "={{ $json.prompt }}\n\n"
         "-- End of request.\n"
         "Here are the authoritative metamodel files:\n"
         "{{ $json.metamodel_text }}\n\n"
         "The metamodel namespace URIs for this task are:\n"
-        "{{ $json.metamodel_uri_text }}\n\n"
-        + "\n\n".join(
-            (
-                _template_section_if_ran(
-                    EXAMPLES_TEXT_NODE,
-                    "Here are some examples as guideline:",
-                    "examples",
-                ),
-                _template_section_if_ran(
-                    GRAMMAR_TEXT_NODE,
-                    "Here is the grammar of the Language:",
-                    "grammar",
-                ),
-                _template_section_if_ran(
-                    HELPER_METHODS_TEXT_NODE,
-                    "Here are helper methods you can use:",
-                    "helper_methods",
-                ),
-            )
-        )
+        "{{ $json.metamodel_uri_text }}\n\n" + "\n\n".join(sections)
     )
 
 
@@ -199,6 +219,19 @@ def _template_section_if_ran(node: str, heading: str, field: str) -> str:
     """A template part: ``heading`` and a field of ``node``, only if that node ran."""
     return (
         f"{{{{ $if($('{node}').isExecuted, "
+        f'"{heading}\\n" + '
+        f"$('{node}').item.json.{field}, \"\") }}}}"
+    )
+
+
+def _template_section_if_flag(flag: str, node: str, heading: str, field: str) -> str:
+    """A template part, only if the item's strategy ``flag`` is set.
+
+    The flag chooses the part. The ``isExecuted`` check guards the reference to
+    ``node``, as in every other workflow.
+    """
+    return (
+        f"{{{{ $if($json.{flag} === true && $('{node}').isExecuted, "
         f'"{heading}\\n" + '
         f"$('{node}').item.json.{field}, \"\") }}}}"
     )

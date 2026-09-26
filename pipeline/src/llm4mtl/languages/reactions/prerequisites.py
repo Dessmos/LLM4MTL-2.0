@@ -1,9 +1,14 @@
-"""Reactions a task presupposes, and how they join the file under test.
+"""How the file under test is prepared before the harness runs it.
 
-A reaction that retrieves a correspondence cannot act until another task's
-reaction has created it. The task contract names those prerequisite tasks, and
-their reference reactions are merged into the transformation under test before
-it runs.
+Two steps, both on a scratch copy; the generated artifact is never changed:
+
+* Its segment gets the task's name (``rendering.segment_name``). Other
+  languages place the transformation at a fixed file name; for Reactions the
+  segment name is what the test looks the transformation up by.
+* The reactions it presupposes join that segment. A reaction that retrieves a
+  correspondence cannot act until another task's reaction has created it. The
+  task contract names those prerequisite tasks, and their reference reactions
+  are merged in.
 """
 
 from __future__ import annotations
@@ -14,6 +19,7 @@ import re
 from llm4mtl.conventions import REACTIONS_CONFIG, default_task_contracts_root
 
 SEGMENT_START = re.compile(r"^reactions:", re.MULTILINE)
+SEGMENT_NAME = re.compile(r"^reactions:[ \t]*(\w+)", re.MULTILINE)
 HEADER_END = re.compile(r"^\s*execute\s+actions\s+in\b[^\n]*$", re.MULTILINE)
 METAMODEL_IMPORT = re.compile(r'^\s*import\s+"[^"]+"\s+as\s+\w+[^\n]*$', re.MULTILINE)
 ROUTINE_NAME = re.compile(r"^\s*routine\s+(\w+)", re.MULTILINE)
@@ -22,8 +28,8 @@ ROUTINE_NAME = re.compile(r"^\s*routine\s+(\w+)", re.MULTILINE)
 class UnmergeableTransformationError(Exception):
     """The transformation under test cannot share a segment with its prerequisites.
 
-    The cause is in the transformation itself: it has no reactions segment, or
-    it reuses a routine name of a prerequisite. So it is recorded as the
+    The cause is in the transformation itself: it has no named reactions
+    segment, or it reuses a routine name of a prerequisite. So it is recorded as the
     transformation failing to load, not as a broken harness.
     """
 
@@ -51,6 +57,21 @@ def prerequisite_tasks(task: str) -> tuple[str, ...]:
 
     walk(task, ())
     return tuple(ordered)
+
+
+def bind_segment(base: str, name: str) -> str:
+    """``base`` with its first reactions segment named ``name``.
+
+    Only the first segment is renamed: it is the one the test runs, and the one
+    prerequisites join. Raises :class:`UnmergeableTransformationError` when the
+    transformation declares no named segment.
+    """
+    declared = SEGMENT_NAME.search(base)
+    if declared is None:
+        raise UnmergeableTransformationError(
+            "transformation declares no reactions segment"
+        )
+    return base[: declared.start(1)] + name + base[declared.end(1) :]
 
 
 def merge_reactions(base: str, prerequisites: list[str]) -> str:

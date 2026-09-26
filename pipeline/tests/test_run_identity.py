@@ -10,29 +10,16 @@ from __future__ import annotations
 
 import tempfile
 import unittest
-import json
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from unittest.mock import patch
 
-from llm4mtl.stages.selection import fixed_selection
-from llm4mtl.experiment_runner.config import ConfigError, validate_config
-from llm4mtl.stages.models import PipelineConfig
-from llm4mtl.experiment_runner.orchestrator import (
-    ExperimentOrchestrator,
-    exactly_one,
-    reject_identity_drift,
-    run_identity,
-)
-from llm4mtl.paths import ArtifactRoots
 from llm4mtl.provenance import build_provenance
-from llm4mtl.run_store import (
-    ManifestExistsError,
-    create_batch,
-    create_run,
-    write_manifest,
-)
+from llm4mtl.run_store import ManifestExistsError, create_run, write_manifest
 from llm4mtl.run_store.identity import InvalidRunIdError
+from llm4mtl.stages.dispatch import prepare_workspace
+from llm4mtl.stages.models import ConfigError
+from llm4mtl.stages.selection import fixed_selection
 
 IDENTITY = {
     "language": "etl",
@@ -47,52 +34,10 @@ IDENTITY = {
 }
 
 
-def config(**overrides: object) -> PipelineConfig:
-    base = dict(
-        language="etl",
-        tasks=["Tree2Graph"],
-        test_models=["gpt-5"],
-        test_strategies=["few_shot"],
-        transformation_models=["gpt-5"],
-    )
-    base.update(overrides)
-    return PipelineConfig(**base)
-
-
-class IdentityAxisTests(unittest.TestCase):
-
-    def test_several_values_on_one_axis_are_refused(self) -> None:
-        with self.assertRaises(ConfigError):
-            exactly_one(
-                "test-generation model", ["gpt-5", "claude-sonnet-4"], required=False
-            )
-
-    def test_an_axis_no_stage_uses_is_recorded_as_not_applicable(self) -> None:
-        # Null means "not applicable to this run", never "any value".
-        identity = run_identity(config(transformation_models=[]), "hash")
-        self.assertIsNone(identity["transformation_model"])
-        self.assertEqual("gpt-5", identity["test_generation_model"])
-
-    def test_the_task_must_always_be_fixed(self) -> None:
-        with self.assertRaises(ConfigError):
-            run_identity(config(tasks=[]), "hash")
-
-    def test_all_tasks_must_be_expanded_before_a_run_is_created(self) -> None:
-        with self.assertRaises(ConfigError):
-            validate_config(config(tasks=[], all_tasks=True))
-
-    def test_test_and_transformation_strategies_are_distinct_identity_axes(
-        self,
-    ) -> None:
-        identity = run_identity(
-            config(transformation_strategies=["grammar"]),
-            "hash",
-        )
-        self.assertEqual("few_shot", identity["test_generation_strategy"])
-        self.assertEqual("grammar", identity["transformation_strategy"])
+class ProvenanceTests(unittest.TestCase):
 
     def test_provenance_names_the_inputs_the_run_depends_on(self) -> None:
-        provenance = run_identity(config(), "hash")["provenance"]
+        provenance = build_provenance("etl", "Tree2Graph")
         self.assertIn("git_commit", provenance)
         self.assertEqual("2.5.0", provenance["tool_versions"]["epsilon"])
         hashes = provenance["input_hashes"]
@@ -127,64 +72,19 @@ class ManifestImmutabilityTests(unittest.TestCase):
             with self.assertRaises(ManifestExistsError):
                 write_manifest(paths, {"run_id": "run_001", **IDENTITY})
 
-    def test_re_entering_a_run_under_another_identity_is_refused(self) -> None:
-        stored = {"run_id": "run_001", **IDENTITY}
-        with self.assertRaises(ConfigError) as raised:
-            reject_identity_drift(stored, {**IDENTITY, "task": "OO2DB"}, "run_001")
-        self.assertIn("task", str(raised.exception))
-
-    def test_the_same_identity_may_re_enter_its_run(self) -> None:
-        reject_identity_drift(
-            {"run_id": "run_001", **IDENTITY}, dict(IDENTITY), "run_001"
-        )
-
-    def test_rejected_resume_does_not_overwrite_the_resolved_config(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            runner = ExperimentOrchestrator()
-            runner.artifacts = ArtifactRoots(Path(temp_dir))
-            batch = create_batch(runner.artifacts.runs, {}, batch_id="batch_001")
-            original = config(
-                run_id="same", batch_id="batch_001", command="tests.extract"
-            )
-            paths = create_run(batch.root, "same", run_identity(original, "original"))
-            paths.root.joinpath("config.resolved.yaml").write_text(
-                json.dumps({"task": "original"}),
-                encoding="utf-8",
-            )
-
-            changed = config(
-                tasks=["OO2DB"],
-                run_id="same",
-                batch_id="batch_001",
-                command="tests.extract",
-                resume=True,
-            )
-            with self.assertRaises(ConfigError):
-                runner.run(changed)
-
-            self.assertEqual(
-                {"task": "original"},
-                json.loads(
-                    paths.root.joinpath("config.resolved.yaml").read_text(
-                        encoding="utf-8"
-                    )
-                ),
-            )
-
 
 class RunDirectoryContainmentTests(unittest.TestCase):
 
     def test_a_traversing_run_id_writes_nothing_before_it_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
-            orchestrator = ExperimentOrchestrator()
-            orchestrator.artifacts = ArtifactRoots(Path(temp_dir))
+            runs = Path(temp_dir) / "runs"
+            runs.mkdir()
 
             with self.assertRaises(InvalidRunIdError):
-                orchestrator.run(config(run_id="../escaped", command="tests.extract"))
+                create_run(runs, "../escaped", IDENTITY)
 
             self.assertFalse((Path(temp_dir) / "escaped").exists())
-            # Nor is a batch claimed for a run that could never be created.
-            self.assertFalse(orchestrator.artifacts.runs.exists())
+            self.assertEqual([], list(runs.iterdir()))
 
 
 class WorkspaceIsolationTests(unittest.TestCase):
@@ -197,7 +97,6 @@ class WorkspaceIsolationTests(unittest.TestCase):
             (source / "pom.xml").write_text("<project/>\n", encoding="utf-8")
             run_dir = root / "runs" / "run-001"
             run_dir.mkdir(parents=True)
-            orchestrator = ExperimentOrchestrator()
 
             with patch(
                 "llm4mtl.stages.dispatch.default_test_project_dir",
@@ -206,7 +105,7 @@ class WorkspaceIsolationTests(unittest.TestCase):
                 with ThreadPoolExecutor(max_workers=4) as pool:
                     destinations = list(
                         pool.map(
-                            lambda _: orchestrator.prepare_workspace(run_dir, "etl"),
+                            lambda _: prepare_workspace(run_dir, "etl"),
                             range(4),
                         )
                     )

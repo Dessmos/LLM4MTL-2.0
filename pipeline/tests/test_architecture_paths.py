@@ -101,31 +101,35 @@ class ActivePathTests(unittest.TestCase):
         )
 
 
-class LocalRunnerIsolationTests(unittest.TestCase):
-    """Only the local runner may depend on the local runner.
+class NoManualEntryPointTests(unittest.TestCase):
+    """The package is driven only through the stage service.
 
-    n8n drives the stages through the stage service; the runner in
-    ``experiment_runner/`` is a second, local entry point. Nothing the service
-    reaches may import it, or removing the runner would break n8n.
+    n8n calls the stages over HTTP, so a command-line entry point in the package
+    would be a second way to run them that the pipeline never uses. Only two
+    developer tools keep one: they regenerate files the repository stores.
     """
 
-    def test_no_module_outside_the_runner_imports_it(self) -> None:
-        runner = TARGET.package / "experiment_runner"
+    # Regenerates the n8n workflow exports and the benchmark task contracts.
+    DEVELOPER_TOOLS = {
+        "prompt_assembly/n8n_exports/__main__.py",
+        "prompt_assembly/n8n_exports/sync.py",
+        "task_contracts/build_language_task_contracts.py",
+    }
+
+    def test_only_the_developer_tools_parse_command_line_arguments(self) -> None:
         offenders = []
         for module in sorted(TARGET.package.rglob("*.py")):
-            if module.is_relative_to(runner):
+            relative = module.relative_to(TARGET.package).as_posix()
+            if relative in self.DEVELOPER_TOOLS:
                 continue
             tree = ast.parse(module.read_text(encoding="utf-8"))
-            for node in ast.walk(tree):
-                names = (
-                    [node.module or ""]
-                    if isinstance(node, ast.ImportFrom)
-                    else [alias.name for alias in node.names]
-                    if isinstance(node, ast.Import)
-                    else []
-                )
-                if any(name.startswith("llm4mtl.experiment_runner") for name in names):
-                    offenders.append(str(module.relative_to(TARGET.package)))
+            imports_argparse = any(
+                isinstance(node, ast.Import)
+                and any(alias.name == "argparse" for alias in node.names)
+                for node in ast.walk(tree)
+            )
+            if module.name == "__main__.py" or imports_argparse:
+                offenders.append(relative)
         self.assertEqual([], offenders)
 
 

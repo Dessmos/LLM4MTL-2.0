@@ -1,25 +1,18 @@
-"""How a stage attempt is recorded in the run store — one owner, two callers.
+"""How a stage attempt is recorded in the run store.
 
-Two entry points drive the same stages: the local runner
-(:mod:`llm4mtl.experiment_runner.orchestrator`) and the HTTP stage service
-(:mod:`llm4mtl.stage_service.app`, which n8n calls). A run directory is read
-without knowing which of them produced it, so both must record an attempt the
-same way: the canonical stage-result payload, the internal evidence beside it,
-a ``stage_finished`` event with the attempt number, and diagnosis preparation
-for the attempt just written. That policy lives here so the two cannot drift
-apart.
+Recording an attempt means writing the canonical stage-result payload, the
+internal evidence beside it, a ``stage_finished`` event with the attempt
+number, and preparing diagnosis evidence for the attempt just written.
 
-Two things differ between the callers and stay at the call sites:
+The stage service (:mod:`llm4mtl.stage_service.app`) calls these functions in
+two steps:
 
-* *When a stage is announced.* The service announces before it runs the work,
-  so a stage that dies mid-Maven leaves a ``stage_started`` with no
-  ``stage_finished``. The runner announces as it records, because it also
-  records planning errors, which never started any work. That is why
+* *It announces the stage before the work.* So a stage that dies mid-Maven
+  leaves a ``stage_started`` event with no ``stage_finished``. That is why
   :func:`announce_stage_start` is separate from :func:`record_stage_attempt`.
-* *Which artifact references a payload carries.* The service passes the
-  generation records of the iteration it judged as ``artifacts``, so they are
-  persisted. The diagnosis pointers it adds afterwards reach n8n only through
-  the HTTP response.
+* *It passes the generation records of the iteration it judged as
+  ``artifacts``,* so they are persisted. The diagnosis pointers it adds
+  afterwards reach n8n only through the HTTP response.
 """
 
 from __future__ import annotations
@@ -53,17 +46,12 @@ def announce_stage_start(paths: RunPaths, stage: str) -> None:
     """Record that ``stage`` began.
 
     Separate from :func:`record_stage_attempt` on purpose: see the module
-    docstring on why the two callers announce at different moments.
+    docstring.
     """
     append_event(paths, "stage_started", stage=stage)
 
 
-def infrastructure_error_result(
-    name: str,
-    error: BaseException,
-    *,
-    input_hash: str = "",
-) -> StageResult:
+def infrastructure_error_result(name: str, error: BaseException) -> StageResult:
     """The result for stage work that raised before it could judge anything.
 
     Infrastructure failure is orthogonal to domain failure: the stage observed
@@ -74,7 +62,6 @@ def infrastructure_error_result(
         "infrastructure_error",
         {"infrastructure_errors": 1},
         {"error": f"{type(error).__name__}: {error}"},
-        input_hash=input_hash,
         exit_code=1,
     )
 
@@ -89,7 +76,7 @@ def record_stage_attempt(
     """Persist one immutable attempt and everything that must accompany it.
 
     ``stage`` is the contract stage id, never an internal pipeline name. The
-    contract payload is what n8n reads; the runner's internal detail is kept
+    contract payload is what n8n reads; the stage's internal detail is kept
     beside it as evidence, which is explicitly not a contract.
     """
     payload = to_stage_payload(stage, result)

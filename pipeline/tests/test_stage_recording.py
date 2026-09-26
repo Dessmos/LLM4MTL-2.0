@@ -1,11 +1,9 @@
-"""Recording a stage attempt is one policy, and both entry points obey it.
+"""Recording a stage attempt: what is persisted, and how the service uses it.
 
-A run directory is read without knowing whether the local runner or the HTTP
-stage service produced it, so what an attempt records must not depend on which
-one ran. These tests pin that: the shared owner's own contract, the equivalence
-of the two callers over the same stage outcome, and the two differences that
-are deliberate — when a stage is announced, and which artifact references reach
-the persisted result rather than only the service's response.
+These tests pin the recording owner's own contract, what the HTTP stage service
+persists for one stage outcome, and two deliberate details: a stage is
+announced before its work, and caller-supplied artifact references reach the
+persisted result.
 """
 
 from __future__ import annotations
@@ -19,8 +17,7 @@ from fastapi.testclient import TestClient
 
 from llm4mtl import run_store
 from llm4mtl.paths import ArtifactRoots
-from llm4mtl.stages.models import PipelineConfig, StageResult
-from llm4mtl.experiment_runner.orchestrator import ExperimentOrchestrator
+from llm4mtl.stages.models import StageResult
 from llm4mtl.provenance import build_provenance
 from llm4mtl.serialization.json_io import read_json
 from llm4mtl.stage_recording import (
@@ -43,13 +40,13 @@ IDENTITY = {
     "provenance": build_provenance("etl", "Tree2Graph"),
 }
 
-# One extraction outcome, recorded through both entry points below.
+# One extraction outcome, recorded through the service below.
 EXTRACTION_COUNTS = {"selected": 2, "created": 2, "failed": 0}
 EXTRACTION_DETAILS = {"results_file": "artifacts/work/extraction.csv"}
 
 
 def extraction_result() -> StageResult:
-    """A fresh result per call: the runner plans and then runs the stage."""
+    """A fresh result per call, so no test sees another's mutation."""
     return StageResult(
         "extraction",
         "completed",
@@ -164,29 +161,17 @@ class InfrastructureErrorResultTests(unittest.TestCase):
         self.assertEqual(1, result.exit_code)
         self.assertEqual("", result.input_hash)
 
-    def test_the_planned_input_hash_is_kept_when_the_caller_knows_it(self) -> None:
-        result = infrastructure_error_result(
-            "extraction",
-            OSError("disk full"),
-            input_hash="abc123",
-        )
-        self.assertEqual("abc123", result.input_hash)
-
 
 BATCH = "batch_001"
 
 
-class CallerEquivalenceTests(unittest.TestCase):
-    """The same stage outcome records the same way through either entry point."""
+class ServiceRecordingTests(unittest.TestCase):
+    """What the stage service persists for one extraction outcome."""
 
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self._tmp.cleanup)
-        # Resolved: the run store resolves a run directory, and the runner
-        # reports it relative to the repository root patched in below.
         self.artifacts = ArtifactRoots(Path(self._tmp.name).resolve())
-        # One batch, shared by both entry points: the runner joins it by id, the
-        # service is asked for it by URL.
         self.batch = run_store.create_batch(self.artifacts.runs, {}, batch_id=BATCH)
         roots_patcher = patch(
             "llm4mtl.stage_service.app._artifact_roots", return_value=self.artifacts
@@ -194,41 +179,6 @@ class CallerEquivalenceTests(unittest.TestCase):
         roots_patcher.start()
         self.addCleanup(roots_patcher.stop)
         self.client = TestClient(app)
-
-    def _extraction_config(self, run_id: str) -> PipelineConfig:
-        return PipelineConfig(
-            language="etl",
-            tasks=["Tree2Graph"],
-            test_models=["gpt-5"],
-            test_strategies=["few_shot"],
-            transformation_models=["gpt-5"],
-            transformation_strategies=["grammar"],
-            run_id=run_id,
-            batch_id=BATCH,
-            command="tests.extract",
-        )
-
-    def _run_locally(self, config: PipelineConfig, extract):
-        """Drive the local runner with its runs root inside a temporary tree."""
-        orchestrator = ExperimentOrchestrator()
-        orchestrator.artifacts = self.artifacts
-        with (
-            # The runner reports its run directory relative to the repository
-            # root; the fixture's runs live outside it.
-            patch(
-                "llm4mtl.experiment_runner.orchestrator.REPO_ROOT",
-                self.artifacts.artifacts_work,
-            ),
-            patch.object(orchestrator.tests, "extract", side_effect=extract),
-        ):
-            return orchestrator.run(config)
-
-    def _record_through_runner(self, run_id: str) -> run_store.RunPaths:
-        self._run_locally(
-            self._extraction_config(run_id),
-            lambda *_: extraction_result(),
-        )
-        return run_store.open_run(self.batch.root, run_id)
 
     def _record_through_service(self, run_id: str) -> run_store.RunPaths:
         self.client.post(
@@ -251,66 +201,42 @@ class CallerEquivalenceTests(unittest.TestCase):
         self.assertEqual(200, response.status_code)
         return run_store.open_run(self.batch.root, run_id)
 
-    def test_both_entry_points_persist_the_same_stage_result(self) -> None:
-        runner = self._record_through_runner("equiv-runner")
-        service = self._record_through_service("equiv-service")
+    def test_the_persisted_result_is_the_contract_payload(self) -> None:
+        paths = self._record_through_service("result")
+
+        persisted = read_json(paths.stage_attempt_result("extract", 1))
+
+        self.assertEqual("extract", persisted["stage"])
+        self.assertEqual("passed", persisted["status"])
+        self.assertEqual("EXTRACTED", persisted["outcome_code"])
+        self.assertEqual(EXTRACTION_COUNTS, persisted["counts"])
+        self.assertEqual(1, persisted["attempt"])
+
+    def test_the_stage_is_announced_before_it_finishes(self) -> None:
+        paths = self._record_through_service("events")
 
         self.assertEqual(
-            read_json(runner.stage_attempt_result("extract", 1)),
-            read_json(service.stage_attempt_result("extract", 1)),
+            [
+                {"event": "stage_started", "stage": "extract"},
+                {
+                    "event": "stage_finished",
+                    "stage": "extract",
+                    "status": "passed",
+                    "outcome_code": "EXTRACTED",
+                    "attempt": 1,
+                },
+            ],
+            stage_events(paths),
         )
 
-    def test_both_entry_points_record_the_same_stage_events(self) -> None:
-        runner = self._record_through_runner("events-runner")
-        service = self._record_through_service("events-service")
+    def test_the_internal_evidence_is_the_stage_result(self) -> None:
+        paths = self._record_through_service("evidence")
 
-        expected = [
-            {"event": "stage_started", "stage": "extract"},
-            {
-                "event": "stage_finished",
-                "stage": "extract",
-                "status": "passed",
-                "outcome_code": "EXTRACTED",
-                "attempt": 1,
-            },
-        ]
-        self.assertEqual(expected, stage_events(runner))
-        self.assertEqual(expected, stage_events(service))
-
-    def test_both_entry_points_store_the_same_internal_evidence(self) -> None:
-        runner = self._record_through_runner("evidence-runner")
-        service = self._record_through_service("evidence-service")
-
-        runner_evidence = read_json(runner.stage_attempt_evidence("extract", 1))
-        service_evidence = read_json(service.stage_attempt_evidence("extract", 1))
-        for field in ("counts", "details", "status"):
-            self.assertEqual(runner_evidence[field], service_evidence[field])
-
-    def test_the_runner_records_a_raised_stage_as_an_infrastructure_error(self) -> None:
-        """The runner's exception path, like the service's, still records an attempt."""
-
-        def plan_then_raise(_config: PipelineConfig, dry_run: bool) -> StageResult:
-            if dry_run:
-                planned = extraction_result()
-                planned.input_hash = "planned-input-hash"
-                return planned
-            raise RuntimeError("adapter failed")
-
-        result = self._run_locally(
-            self._extraction_config("runner-raises"),
-            plan_then_raise,
-        )
-
-        self.assertEqual("failed", result.status)
-        paths = run_store.open_run(self.batch.root, "runner-raises")
-        persisted = read_json(paths.stage_attempt_result("extract", 1))
-        self.assertEqual("infrastructure_error", persisted["status"])
-        self.assertEqual("INFRASTRUCTURE_ERROR", persisted["outcome_code"])
         evidence = read_json(paths.stage_attempt_evidence("extract", 1))
-        self.assertEqual("RuntimeError: adapter failed", evidence["details"]["error"])
-        # The plan's input hash survives the failure, so a resume can still tell
-        # whether the inputs changed since the attempt that failed.
-        self.assertEqual("planned-input-hash", evidence["input_hash"])
+
+        self.assertEqual("completed", evidence["status"])
+        self.assertEqual(EXTRACTION_COUNTS, evidence["counts"])
+        self.assertEqual(EXTRACTION_DETAILS, evidence["details"])
 
 
 if __name__ == "__main__":

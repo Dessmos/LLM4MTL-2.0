@@ -5,7 +5,6 @@ import unittest
 from pathlib import Path
 
 from llm4mtl.stages.models import StageResult
-from llm4mtl.experiment_runner.orchestrator import run_status
 from llm4mtl.stage_contract import (
     CONTRACT_STAGES,
     outcome_code,
@@ -171,17 +170,6 @@ class SkipSemanticsTests(unittest.TestCase):
         )
         schema = json.loads(schema_path.read_text(encoding="utf-8"))
         self.assertIn(payload["status"], schema["properties"]["status"]["enum"])
-
-    def test_a_run_with_a_skipped_stage_is_not_completed(self) -> None:
-        results = [
-            result("extraction", "completed", selected=1, failed=0),
-            skipped(
-                "transformation_validation",
-                "SKIPPED_NO_PARSED_TRANSFORMATIONS",
-                skipped=1,
-            ),
-        ]
-        self.assertEqual("incomplete", run_status(results))
 
 
 class PayloadTests(unittest.TestCase):

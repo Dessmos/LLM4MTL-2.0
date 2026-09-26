@@ -1,9 +1,9 @@
-The Python stages. n8n starts them through stage_service, the local
-experiment_runner can start them too. Both look a stage up in dispatch.py.
+The Python stages. n8n starts them through stage_service, which looks a stage
+up in dispatch.py. There is no other way to start them.
 
 _init_.py                   - says what is inside this folder
 models.py                   - Data classes and contracts. Contains no logic
-                                PipelineConfig - all what one run describes
+                                PipelineConfig - what one stage call works on
                                 StageResult    - Result of one stage
                                 ConfigError    - the config breaks the run contract
 dispatch.py                 - which code runs which stage (extract, syntax-validation,

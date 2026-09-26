@@ -40,7 +40,6 @@ from llm4mtl.semantic_tests.suites.discovery import (
 )
 from llm4mtl.semantic_tests.validation import workspace_for
 from llm4mtl.serialization.hashing import file_sha256
-from llm4mtl.stage_contract import SKIPPED_NO_PARSED_TRANSFORMATIONS
 from llm4mtl.stages.models import (
     SUITE_TIMEOUT_SECONDS,
     TRANSFORMATION_VALIDATION_STAGE_NAME,
@@ -111,17 +110,12 @@ class TransformationValidationAdapter:
             / "responses"
         )
 
-    def semantic_validation(self, config: PipelineConfig, dry_run: bool) -> StageResult:
-        if config.transformation_selection_locked and not config.transformations:
-            # The parser passed nothing on: there is nothing to judge, and
-            # selecting suites for it would only invent work.
-            return _nothing_parsed_result()
-
-        suites = self.select_validated_suites(config, require_observation=not dry_run)
+    def semantic_validation(self, config: PipelineConfig) -> StageResult:
+        suites = self.select_validated_suites(config)
         transformations = self.select_transformations(config)
         pairs = _matching_execution_pairs(suites, transformations)
         input_hash = hash_paths(suites + transformations)
-        details = _selection_details(suites, transformations, dry_run)
+        details = _selection_details(suites, transformations)
         counts = {
             "selected_suites": len(suites),
             "selected_transformations": len(transformations),
@@ -130,8 +124,6 @@ class TransformationValidationAdapter:
         if not pairs:
             counts["failed"] = 1
             return _stage_result("error", counts, details, input_hash)
-        if dry_run:
-            return _stage_result("dry_run", counts, details, input_hash)
 
         observed_pairs = self._execute_pairs(config, pairs)
         counts.update(
@@ -162,19 +154,9 @@ class TransformationValidationAdapter:
             for suite_path, transformation in pairs
         ]
 
-    def select_validated_suites(
-        self,
-        config: PipelineConfig,
-        *,
-        require_observation: bool = True,
-    ) -> list[Path]:
+    def select_validated_suites(self, config: PipelineConfig) -> list[Path]:
         """Suites reference-validated by this run, never by a copied directory."""
         candidates = self._select_candidate_suites(config)
-        if not require_observation:
-            # A dry-run plans the candidates that can become eligible after the
-            # earlier reference stage; it does not claim they already passed.
-            return candidates
-
         adapter = language_adapter(config.language)
         observations_root = self._observations_root(config)
         validated: list[Path] = []
@@ -221,7 +203,7 @@ class TransformationValidationAdapter:
         return RunPaths(Path(config.run_dir).resolve()).observations_dir
 
     def select_transformations(self, config: PipelineConfig) -> list[Path]:
-        if config.transformations or config.transformation_selection_locked:
+        if config.transformations:
             return existing_files(config.transformations)
         models = fixed_selection("transformation model", config.transformation_models)
         strategies = fixed_selection("strategy", config.transformation_strategies)
@@ -299,33 +281,13 @@ class _PairExecutor:
         return observation, evidence_path
 
 
-def _nothing_parsed_result() -> StageResult:
-    return StageResult(
-        TRANSFORMATION_VALIDATION_STAGE_NAME,
-        "skipped",
-        {
-            "selected_suites": 0,
-            "selected_transformations": 0,
-            "execution_pairs": 0,
-            "skipped": 1,
-        },
-        {"skip_reason": SKIPPED_NO_PARSED_TRANSFORMATIONS},
-    )
-
-
 def _selection_details(
     suites: list[Path],
     transformations: list[Path],
-    dry_run: bool,
 ) -> dict[str, object]:
-    """What the stage selected. A dry run names its suites as still unvalidated."""
-    suite_detail_key = (
-        "suite_candidates_awaiting_reference_validation"
-        if dry_run
-        else "reference_validated_suites"
-    )
+    """What the stage selected."""
     return {
-        suite_detail_key: [str(path) for path in suites],
+        "reference_validated_suites": [str(path) for path in suites],
         "transformations": [str(path) for path in transformations],
     }
 

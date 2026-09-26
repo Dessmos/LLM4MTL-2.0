@@ -32,6 +32,8 @@ TEST_EXECUTION_MARKERS = (
 TRANSFORMATION_PARSE_MARKERS = (
     "ETL parse errors",
     "ParseProblem",
+    # Reactions: Xtext validates the transformation while the harness builds.
+    "Execution failed due to a severe validation error",
 )
 
 

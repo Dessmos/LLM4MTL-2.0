@@ -15,12 +15,16 @@ from __future__ import annotations
 
 import base64
 import json
+import re
 import shutil
 import subprocess
 import tempfile
 import unittest
 from pathlib import Path
 from typing import Any
+
+from llm4mtl.prompt_assembly.refinement import STRATEGY_ASSETS
+from llm4mtl.vocabulary import STRATEGIES
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
@@ -219,6 +223,27 @@ def _run_node(
     finally:
         Path(spec_path).unlink()
     return json.loads(completed.stdout)
+
+REACTIONS_MATRIX = (
+    REPOSITORY_ROOT
+    / "workflows"
+    / "n8n"
+    / "transformations"
+    / "workflows"
+    / "updated_reactions_workflow"
+    / "generate_reactions"
+    / "LLM4MTL_Generate_Reactions_for_all_Configurations.json"
+)
+# The heading each optional prompt part starts with, by the asset it carries.
+PART_HEADINGS = {
+    "examples": "Here are some examples as guideline:",
+    "grammar": "Here is the grammar of the Language:",
+    "helper_methods": "Here are helper methods you can use:",
+}
+# A prompt part the Reactions matrix includes only when the item's flag is set.
+FLAG_GATED_PART = re.compile(
+    r'\$if\(\$json\.(\w+) === true && \$\([^)]*\)\.isExecuted, "([^"\\]+)'
+)
 
 
 def _adapt(
@@ -2298,6 +2323,67 @@ class CustomTaskTests(unittest.TestCase):
             "={{ { language: 'etl', task: $json.baseName } }}",
             nodes["Resolve exact task inputs"]["parameters"]["jsonBody"],
         )
+
+
+class ReactionsMatrixStrategyTests(unittest.TestCase):
+    """The Reactions matrix sends each strategy its own parts, as every language does.
+
+    One matrix workflow serves all four strategies, so a part cannot depend on
+    whether its file was read: every file is read for every item. The master
+    narrows the matrix to the run's strategy; the parts that strategy's flags
+    then select must be the ones the refinement prompt uses for it too.
+    """
+
+    def test_each_strategy_gets_exactly_its_own_prompt_parts(self) -> None:
+        for strategy in STRATEGIES:
+            with self.subTest(strategy=strategy):
+                adapted = _adapt(
+                    REACTIONS_MATRIX,
+                    action="generate_transformations",
+                    current={
+                        "language": "reactions",
+                        "task": "FamiliesToPersons_CreatedFather",
+                        "run_id": "run-reactions-1",
+                        "n8n_run_dir": "/data/artifacts/runs/batch_001/run-reactions-1",
+                        "refinement_iteration": 0,
+                    },
+                    subworkflow_input={"refinement_iteration": 0, "strategy": strategy},
+                )
+                self.assertTrue(adapted["ok"], adapted.get("error"))
+                nodes = adapted["result"]["workflow_json"]["nodes"]
+                declared = next(
+                    json.loads(node["parameters"]["jsonOutput"])["strategies"]
+                    for node in nodes
+                    if node["name"] == "Define Strategies"
+                )
+                self.assertEqual([strategy], [entry["name"] for entry in declared])
+                expected = {PART_HEADINGS[asset] for asset in STRATEGY_ASSETS[strategy]}
+                prompts = [
+                    node["parameters"]["text"]
+                    for node in nodes
+                    if node["type"] == "@n8n/n8n-nodes-langchain.chainLlm"
+                ]
+                self.assertTrue(prompts)
+                for prompt in prompts:
+                    gated = FLAG_GATED_PART.findall(prompt)
+                    # Every optional part is chosen by a flag, none by "it ran".
+                    self.assertEqual(len(PART_HEADINGS), len(gated))
+                    included = {
+                        heading
+                        for flag, heading in gated
+                        if declared[0][flag] is True
+                    }
+                    self.assertEqual(expected, included)
+
+    def test_the_matrix_declares_the_four_shared_strategies_only(self) -> None:
+        nodes = json.loads(REACTIONS_MATRIX.read_text(encoding="utf-8"))["nodes"]
+        declared = next(
+            json.loads(node["parameters"]["jsonOutput"])["strategies"]
+            for node in nodes
+            if node["name"] == "Define Strategies"
+        )
+        self.assertEqual(list(STRATEGIES), [entry["name"] for entry in declared])
+        self.assertFalse(any(entry["Helper_methods"] for entry in declared))
 
 
 if __name__ == "__main__":

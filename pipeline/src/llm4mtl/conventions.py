@@ -154,7 +154,3 @@ def default_test_project_dir(config: LanguageConfig) -> Path:
     from llm4mtl.paths import TARGET
 
     return TARGET.engine_harness(config.language_key)
-
-
-def default_results_root(config: LanguageConfig) -> Path:
-    return test_generation_root() / "results" / config.generated_tests_dir

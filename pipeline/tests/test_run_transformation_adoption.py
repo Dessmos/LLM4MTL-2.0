@@ -285,7 +285,7 @@ class StageServiceAdoptionTests(unittest.TestCase):
         """Run one stage and return the config its adapter was handed."""
         seen: list[PipelineConfig] = []
 
-        def capture(config: PipelineConfig, dry_run: bool) -> StageResult:
+        def capture(config: PipelineConfig) -> StageResult:
             seen.append(config)
             return StageResult("transformation_parsing", "passed", {"selected": 1}, {})
 

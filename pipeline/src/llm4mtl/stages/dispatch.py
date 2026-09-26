@@ -1,7 +1,6 @@
 """Which implementation runs each contract stage.
 
-Both entry points -- the stage service n8n calls and the local runner -- look a
-stage up here, so neither needs the other to find the code behind a stage id.
+The stage service looks a stage up here to find the code behind a stage id.
 """
 
 from __future__ import annotations
@@ -24,7 +23,7 @@ from llm4mtl.vocabulary import (
 )
 from llm4mtl.workspace import materialize_engine
 
-StageCallable = Callable[[PipelineConfig, bool], StageResult]
+StageCallable = Callable[[PipelineConfig], StageResult]
 
 # Contract stages that execute Maven, and therefore need a run-local copy of
 # the language's engine before they start.
@@ -34,7 +33,7 @@ WORKSPACE_STAGES = frozenset(
 
 
 class StageImplementations:
-    """The stage implementations one entry point runs, keyed by contract stage id."""
+    """The stage implementations, keyed by contract stage id."""
 
     def __init__(self) -> None:
         self.tests = TestGenerationAdapter()

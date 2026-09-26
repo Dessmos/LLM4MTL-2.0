@@ -8,13 +8,10 @@ import shutil
 import tempfile
 import unittest
 from pathlib import Path
-from typing import Any
 
 from llm4mtl.artifact_schemas import validate_artifact
 from llm4mtl.conventions import language_config
 from llm4mtl.domain import ArtifactValidation, GeneratedSuite
-from llm4mtl.experiment_runner.config import load_mapping
-from llm4mtl.experiment_runner.matrix import expand_matrix
 from llm4mtl.languages import (
     REQUIRED_LANGUAGES,
     LanguageAdapter,
@@ -27,7 +24,6 @@ from llm4mtl.semantic_tests.suite_execution import (
     record_observation,
     snapshot_dir,
 )
-from llm4mtl.vocabulary import STRATEGIES
 from llm4mtl.serialization.hashing import file_sha256
 from llm4mtl.task_contracts.build_language_task_contracts import (
     BUILDERS,
@@ -53,11 +49,9 @@ class FourLanguageCoverageTests(unittest.TestCase):
                 self.assertIsInstance(adapter, LanguageAdapter)
                 self.assertEqual(language, adapter.language_id)
 
-    def test_every_matrix_task_is_data_complete(self) -> None:
+    def test_every_contracted_task_is_data_complete(self) -> None:
         for language in REQUIRED_LANGUAGES:
             with self.subTest(language=language):
-                matrix = _matrix(language)
-                tasks = set(matrix["tasks"])
                 config = language_config(language)
                 references = {
                     path.stem
@@ -74,16 +68,11 @@ class FourLanguageCoverageTests(unittest.TestCase):
                         TARGET.benchmark / "tasks" / language / "task_contracts"
                     ).glob("*.json")
                 }
-                self.assertEqual(
-                    list(STRATEGIES),
-                    matrix["transformation_strategies"],
-                    "the prompting axis must be spelled the same everywhere",
-                )
+                tasks = contracts
+                self.assertTrue(tasks)
                 self.assertTrue(tasks <= references)
-                self.assertTrue(tasks <= contracts)
                 if language != "etl":
                     self.assertEqual(tasks, references)
-                    self.assertEqual(tasks, contracts)
                 self.assertTrue(
                     (
                         TARGET.prompt_assets / f"tests/grammar/{language}/EBNF.txt"
@@ -95,20 +84,6 @@ class FourLanguageCoverageTests(unittest.TestCase):
                         / f"tests/few_shot/{config.language_key}/test_generation_examples.txt"
                     ).is_file()
                 )
-                for model in matrix["test_models"]:
-                    for strategy in matrix["test_strategies"]:
-                        workflow = (
-                            TARGET.workflows
-                            / "tests"
-                            / "workflows"
-                            / f"{language}_variants"
-                            / "test_generation"
-                            / (
-                                f"Prompting_tests_{config.workflow_language}_"
-                                f"{model}_{strategy}.json"
-                            )
-                        )
-                        self.assertTrue(workflow.is_file(), workflow)
                 for task in tasks:
                     contract_path = (
                         TARGET.benchmark
@@ -137,12 +112,6 @@ class FourLanguageCoverageTests(unittest.TestCase):
                         # read.
                         self.assertTrue(model["metamodelUri"], model["runtimeName"])
                         self.assertTrue(model["metamodelFile"], model["runtimeName"])
-                run_specs = expand_matrix(matrix)
-                self.assertTrue(run_specs)
-                self.assertEqual(
-                    len(run_specs), len({spec.run_id for spec in run_specs})
-                )
-                self.assertEqual({language}, {spec.language for spec in run_specs})
 
     def test_all_four_structured_fixtures_render_deterministically(self) -> None:
         for language, task in SKELETONS.items():
@@ -360,14 +329,6 @@ class RealEngineWalkingSkeletonTests(unittest.TestCase):
                         self.assertTrue(
                             any(snapshot_dir(generated_root, suite).rglob("*.xmi"))
                         )
-
-
-def _matrix(language: str) -> dict[str, Any]:
-    if language == "etl":
-        matrix = TARGET.experiments / "matrices/thesis-ablation.yaml"
-    else:
-        matrix = TARGET.experiments / f"matrices/thesis-{language}.yaml"
-    return load_mapping(matrix)
 
 
 def _fixture_files(language: str, task: str) -> dict[str, str]:

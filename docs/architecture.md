@@ -86,8 +86,7 @@ external_tools / workspace / serialization
 
 run_store                        stages
   ▲                                ▲
-  ├── experiment_runner ───────────┤   (local entry point; nothing imports it)
-  └── stage_service ───────────────┘   (n8n's entry point)
+  └── stage_service ───────────────┘   (n8n's entry point, the only one)
 ```
 
 `domain/` is pure: no filesystem, subprocess, engine, or orchestration imports.
@@ -130,28 +129,29 @@ a language is reachable without opening a stage.
   `semantic_tests/reference_validation/` — logical views over that observation.
 - `semantic_tests/diagnosis_preparation.py` and `semantic_tests/failure_report/`
   — build the failure reports that Source Diagnosis reads after an execution.
-- `semantic_tests/diagnosis_aggregation.py` — joins the recorded diagnosis
-  verdicts of one run into one result.
-- `stages/` — the shared stage implementations both entry points run
-  (extraction, technical and reference validation, syntax validation,
-  execution), `PipelineConfig`/`StageResult`, and `dispatch.py`, the one table
-  from contract stage id to implementation and to whether a stage needs a
-  run-local engine workspace.
-- `experiment_runner/` — local CLI orchestration and resume logic. It depends
-  on `stages/`; no other module imports it
-  (`test_architecture_paths.LocalRunnerIsolationTests`).
-- `stage_service/` — FastAPI transport for n8n.
-- `stage_recording.py` — how a stage attempt is recorded, for both entry points
-  above: the started/finished events, the canonical payload, the evidence
-  beside it, and the diagnosis assembler pinned to the attempt just written. A
-  run directory reads the same whichever entry point produced it.
+- `stages/` — the stage implementations the stage service runs (extraction,
+  technical and reference validation, syntax validation, execution),
+  `PipelineConfig`/`StageResult`, and `dispatch.py`, the one table from
+  contract stage id to implementation and to whether a stage needs a run-local
+  engine workspace.
+- `stage_service/` — FastAPI transport for n8n, and the only way the pipeline
+  runs. The package has no command-line runner; only two developer tools keep a
+  command line, `prompt_assembly/n8n_exports` and
+  `task_contracts/build_language_task_contracts.py`, because they regenerate
+  files the repository stores (`test_architecture_paths.NoManualEntryPointTests`).
+- `stage_recording.py` — how a stage attempt is recorded: the started/finished
+  events, the canonical payload, the evidence beside it, and the diagnosis
+  assembler pinned to the attempt just written.
 - `run_store/` — immutable run identity, append-only events, and atomic stage
   attempts.
-- `experiment_runner/matrix.py` and `evaluation/experiment_{aggregation,
-  significance}.py` are the RQ4 ablation scaffold. They are tested but not yet
-  called from any entry point, because the matrix axes are set by the
-  measurement spec, which is still settling. Today every run is created on its
-  own and is not joined into an experiment.
+- `evaluation/experiment_{aggregation,significance}.py` are the RQ4 ablation
+  scaffold. They are tested but not yet called from any entry point, because
+  the matrix axes are set by the measurement spec, which is still settling.
+  Today every run is created on its own and is not joined into an experiment.
+  `experiments/matrices/` describes the planned campaigns; no code reads it.
+- `evaluation/diagnosis_aggregation.py` — offline analysis: clusters one
+  execution attempt's diagnosis reports by the failure they describe and
+  reports how far the verdicts agreed.
 - `provenance.py` — code, tool, schema, renderer, and protected-input identity.
 - `paths.py` — the repository layout, and the one spelling of a recorded path:
   `repository_relative` keeps a path outside the repository absolute,
@@ -251,9 +251,7 @@ artifacts/work/runs/<batch-id>/
 └── <run-id>/
     ├── manifest.json
     ├── events.jsonl
-    ├── config.resolved.yaml
-    ├── summary.json
-    ├── runner.log
+    ├── result.json                written once when the run ends
     ├── observations/
     ├── workspaces/
     ├── responses/
@@ -268,8 +266,11 @@ artifacts/work/runs/<batch-id>/
                     └── evidence.json
 ```
 
-A batch is one launch: one press of the master's Start button, or one local
-`pipeline run`. Its number is claimed by creating the directory, the same way
+The run also keeps `transformation/` (the adopted transformations),
+`generations/` and `refinements/` (generation records and refinement prompts),
+and `diagnosis/` (the prepared failure reports).
+
+A batch is one launch: one press of the master's Start button. Its number is claimed by creating the directory, the same way
 stage attempts are, so two launches cannot share one. The batch owns nothing a
 run needs; it exists so the runs of one launch are found together and never
 interleave with another launch's.

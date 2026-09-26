@@ -35,7 +35,6 @@ from llm4mtl.stages.models import (
     StageResult,
 )
 from llm4mtl.stages.selection import (
-    dry_run_result,
     existing_files,
     fixed_selection,
     hash_paths,
@@ -63,7 +62,7 @@ class TestGenerationAdapter:
     def generated_tests_root(config: PipelineConfig) -> Path:
         return default_generated_tests_root(language_config(config.language))
 
-    def extract(self, config: PipelineConfig, dry_run: bool) -> StageResult:
+    def extract(self, config: PipelineConfig) -> StageResult:
         responses = self.select_responses(config)
         input_hash = hash_paths(responses)
         details: dict[str, object] = {"responses": [str(path) for path in responses]}
@@ -71,11 +70,7 @@ class TestGenerationAdapter:
             return nothing_selected_result(EXTRACTION_STAGE_NAME, details, input_hash)
         if config.suite_id and len(responses) != 1:
             raise ConfigError(
-                "--suite-id can only be used when exactly one response is selected."
-            )
-        if dry_run:
-            return dry_run_result(
-                EXTRACTION_STAGE_NAME, len(responses), details, input_hash
+                "suite_id can only be used when exactly one response is selected."
             )
 
         outcomes = self._extract_responses(config, responses)
@@ -119,27 +114,17 @@ class TestGenerationAdapter:
             )
         return outcomes
 
-    def technical_validation(
-        self,
-        config: PipelineConfig,
-        dry_run: bool,
-    ) -> StageResult:
+    def technical_validation(self, config: PipelineConfig) -> StageResult:
         return self._validate_suites(
             name=TECHNICAL_VALIDATION_STAGE_NAME,
             config=config,
-            dry_run=dry_run,
             judge_as_oracle=False,
         )
 
-    def reference_validation(
-        self,
-        config: PipelineConfig,
-        dry_run: bool,
-    ) -> StageResult:
+    def reference_validation(self, config: PipelineConfig) -> StageResult:
         return self._validate_suites(
             name=REFERENCE_VALIDATION_STAGE_NAME,
             config=config,
-            dry_run=dry_run,
             judge_as_oracle=True,
         )
 
@@ -147,22 +132,14 @@ class TestGenerationAdapter:
         self,
         name: str,
         config: PipelineConfig,
-        dry_run: bool,
         judge_as_oracle: bool,
     ) -> StageResult:
-        """Run a validation gate in-process and count its typed verdicts.
-
-        The verdicts come from the same functions the CLI uses, so the stage's
-        counts are the gate's own decisions rather than a second interpretation
-        of its printed output.
-        """
+        """Run a validation gate in-process and count its typed verdicts."""
         suite_paths = self.select_candidate_suites(config)
         input_hash = hash_paths(suite_paths)
         details: dict[str, object] = {"suites": [str(path) for path in suite_paths]}
         if not suite_paths:
             return nothing_selected_result(name, details, input_hash)
-        if dry_run:
-            return dry_run_result(name, len(suite_paths), details, input_hash)
 
         context = self.validation_context(config)
         verdicts = self._suite_verdicts(
@@ -214,8 +191,8 @@ class TestGenerationAdapter:
 
         Scoping them to the run lets reference validation reuse the technical
         stage's execution, while no result from an earlier run decides anything
-        about this one. Both entry points set ``config.run_dir`` through the run
-        store before they call a stage.
+        about this one. The stage service sets ``config.run_dir`` before it
+        calls a stage.
         """
         if not config.run_dir:
             raise ConfigError(

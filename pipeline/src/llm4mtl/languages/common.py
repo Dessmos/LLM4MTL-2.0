@@ -8,6 +8,7 @@ and mapping common execution failures.
 
 from __future__ import annotations
 
+import shutil
 import subprocess
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
@@ -199,10 +200,16 @@ def execute_maven_suite(
     Returns the observation and the raw evidence behind it, read while the
     workspace lock is still held: the next execution's ``mvn clean`` deletes the
     reports this one produced.
+
+    The reports of the previous execution are deleted first. ``mvn clean``
+    usually does that, but in a multi-module harness it cleans the test module
+    only when the build reaches it. A build that fails in an earlier module
+    would otherwise leave the previous run's reports to be read as this one's.
     """
     with execution_workspace_lock(workspace.engine_dir):
         injection = Injection()
         try:
+            _remove_previous_reports(harness.reports_root)
             _inject_suite(injection, suite, transformation, harness)
             command = _maven_command(harness, suite, workspace)
             result = run_maven(command, cwd=harness.maven_cwd, timeout=timeout)
@@ -213,6 +220,11 @@ def execute_maven_suite(
         finally:
             injection.restore()
     return classify_maven_run(result, reports), evidence
+
+
+def _remove_previous_reports(reports_root: Path) -> None:
+    if reports_root.exists():
+        shutil.rmtree(reports_root)
 
 
 def _inject_suite(

@@ -25,9 +25,11 @@ end-to-end flow.
     .venv/bin/pip install -e 'pipeline[dev]'
     .venv/bin/pytest -q pipeline/tests
 
-Run a non-mutating selection check:
+The pipeline runs only through n8n and the stage service; the package has no
+command-line runner. Regenerate the n8n workflow exports after changing a prompt
+asset:
 
-    PYTHONPATH=pipeline/src .venv/bin/python -m llm4mtl.experiment_runner pipeline run --config experiments/presets/etl/tree2graph_smoke.yaml --dry-run
+    PYTHONPATH=pipeline/src .venv/bin/python -m llm4mtl.prompt_assembly.n8n_exports --write
 
 Maven modules are built from their engine directories, for example:
 

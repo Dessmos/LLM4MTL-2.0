@@ -1,8 +1,7 @@
-"""Response discovery and path-to-suite metadata inference."""
+"""Response identity read from a response path and explicit overrides."""
 
 from __future__ import annotations
 
-import argparse
 from pathlib import Path
 
 from llm4mtl.semantic_tests.extraction.models import (
@@ -12,50 +11,6 @@ from llm4mtl.semantic_tests.extraction.models import (
 
 
 SMOKE_RESPONSE_SUFFIXES = (".qwen-smoke",)
-
-
-def discover_responses(args: argparse.Namespace) -> list[ResponseTarget]:
-    """Discover response files selected by extraction CLI arguments."""
-    if args.response:
-        return _explicit_response_targets(args)
-
-    root = args.responses_root.resolve()
-    pattern = f"*/**/{args.task}.md" if args.task else "*/*/*.md"
-    responses = sorted(
-        path
-        for path in root.glob(pattern)
-        if path.is_file() and not path.name.startswith(".")
-    )
-    return [
-        response_target_from_path(
-            response_path=path,
-            responses_root=root,
-            llm_override=None,
-            strategy_override=None,
-            task_override=args.task,
-        )
-        for path in responses
-    ]
-
-
-def _explicit_response_targets(
-    args: argparse.Namespace,
-) -> list[ResponseTarget]:
-    if args.suite_id and len(args.response) != 1:
-        raise ResponseSelectionError(
-            "--suite-id can only be used with a single --response"
-        )
-    responses_root = args.responses_root.resolve()
-    return [
-        response_target_from_path(
-            response_path=path.resolve(),
-            responses_root=responses_root,
-            llm_override=args.llm,
-            strategy_override=args.strategy,
-            task_override=args.task,
-        )
-        for path in args.response
-    ]
 
 
 def response_target_from_path(
@@ -86,8 +41,8 @@ def response_target_from_path(
 
     if not llm or not strategy:
         raise ResponseSelectionError(
-            "Could not infer llm/strategy from response path. Provide --llm and "
-            f"--strategy for {response_path}"
+            "Could not infer llm/strategy from response path, and none was "
+            f"given explicitly: {response_path}"
         )
 
     return ResponseTarget(

@@ -15,14 +15,7 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
-from llm4mtl.stages.models import (
-    EXTRACTION_STAGE_NAME,
-    REFERENCE_VALIDATION_STAGE_NAME,
-    TECHNICAL_VALIDATION_STAGE_NAME,
-    TRANSFORMATION_PARSING_STAGE_NAME,
-    TRANSFORMATION_VALIDATION_STAGE_NAME,
-    StageResult,
-)
+from llm4mtl.stages.models import StageResult
 from llm4mtl.vocabulary import (
     EXECUTION_STAGE_ID,
     EXTRACT_STAGE_ID,
@@ -33,17 +26,16 @@ from llm4mtl.vocabulary import (
 
 SCHEMA_VERSION = "2.0"
 
-# Internal pipeline stage name -> contract stage id. The local runner names its
-# stages after the code that runs them; persisted evidence always uses the
-# contract id, so a run directory reads the same whoever wrote it.
-CONTRACT_STAGE_IDS: dict[str, str] = {
-    EXTRACTION_STAGE_NAME: EXTRACT_STAGE_ID,
-    TRANSFORMATION_PARSING_STAGE_NAME: SYNTAX_VALIDATION_STAGE_ID,
-    TECHNICAL_VALIDATION_STAGE_NAME: TECHNICAL_VALIDATION_STAGE_ID,
-    REFERENCE_VALIDATION_STAGE_NAME: REFERENCE_VALIDATION_STAGE_ID,
-    TRANSFORMATION_VALIDATION_STAGE_NAME: EXECUTION_STAGE_ID,
-}
-CONTRACT_STAGES = frozenset(CONTRACT_STAGE_IDS.values())
+# Every stage id the contract defines.
+CONTRACT_STAGES = frozenset(
+    {
+        EXTRACT_STAGE_ID,
+        SYNTAX_VALIDATION_STAGE_ID,
+        TECHNICAL_VALIDATION_STAGE_ID,
+        REFERENCE_VALIDATION_STAGE_ID,
+        EXECUTION_STAGE_ID,
+    }
+)
 
 # Outcome codes, as docs/n8n-python-contract.md spells them.
 EXTRACTED = "EXTRACTED"
@@ -61,27 +53,12 @@ INFRASTRUCTURE_ERROR = "INFRASTRUCTURE_ERROR"
 SKIPPED = "SKIPPED"
 UNKNOWN = "UNKNOWN"
 
-# The execution stage had no parsed transformation to judge. The stage records
-# it as its own skip reason, and it is also the default for that stage.
-SKIPPED_NO_PARSED_TRANSFORMATIONS = "SKIPPED_NO_PARSED_TRANSFORMATIONS"
-
 # Outcome code for a stage that ran but observed nothing, when the stage itself
 # recorded no more specific ``skip_reason``.
 DEFAULT_SKIP_OUTCOME_CODES: dict[str, str] = {
     REFERENCE_VALIDATION_STAGE_ID: "SKIPPED_MISSING_TECHNICAL_VALIDATION",
-    EXECUTION_STAGE_ID: SKIPPED_NO_PARSED_TRANSFORMATIONS,
+    EXECUTION_STAGE_ID: "SKIPPED_NO_PARSED_TRANSFORMATIONS",
 }
-
-
-def contract_stage_id(internal_name: str) -> str:
-    """Translate an internal pipeline stage name into its contract stage id."""
-    try:
-        return CONTRACT_STAGE_IDS[internal_name]
-    except KeyError as exc:
-        known = ", ".join(sorted(CONTRACT_STAGE_IDS))
-        raise KeyError(
-            f"unknown pipeline stage '{internal_name}' (known: {known})"
-        ) from exc
 
 
 def is_skipped(stage: str, result: StageResult) -> bool:

@@ -14,4 +14,6 @@ by each language:
 adapter.py          - realization of all methods from the interface.
 rendering.py        - generation of the test for the specific language
 java/               - fixed Java text that rendering.py copies into the test
-reactions/prerequisites.py - reactions a Reactions task needs, merged into the file under test
+reactions/prerequisites.py - prepares the Reactions file before a run: gives its segment the
+                             task's name (the test finds the transformation by it, the way other
+                             languages find a fixed file name) and merges in the reactions it needs

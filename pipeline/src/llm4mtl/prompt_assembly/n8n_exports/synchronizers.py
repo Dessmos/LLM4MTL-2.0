@@ -67,6 +67,7 @@ from llm4mtl.prompt_assembly.n8n_exports.prompts import (
     OUTPUT_CONTRACT_FIELD,
     cloud_prompt_request,
     cloud_test_request,
+    matrix_transformation_request,
     prompt_generation_system_message,
     qwen_assembled_prompt,
     qwen_prompt_request,
@@ -659,7 +660,9 @@ def synchronize_transformation_generation(
 
     _read_frozen_prompts(nodes[READ_PROMPT_FILES_NODE], language)
     _scope_transformation_assets(nodes, language)
-    _install_transformation_request(nodes[GENERATE_CODE_NODE], language)
+    _install_transformation_request(
+        nodes[GENERATE_CODE_NODE], language, transformation_request()
+    )
     save_name = (
         SAVE_FILE_NAME_NODE if SAVE_FILE_NAME_NODE in nodes else SAVE_REACTION_NAME_NODE
     )
@@ -675,8 +678,9 @@ def synchronize_transformation_generation(
 def _install_transformation_request(
     generation: dict[str, Any],
     language: str,
+    request: str,
 ) -> None:
-    generation["parameters"]["text"] = transformation_request()
+    generation["parameters"]["text"] = request
     generation["parameters"].setdefault("messages", {})["messageValues"] = [
         {"message": transformation_system_message(language)}
     ]
@@ -716,9 +720,13 @@ def synchronize_reactions_matrix(
     _read_frozen_prompts(nodes[READ_PROMPT_FILES_NODE], MATRIX_LANGUAGE)
     _scope_transformation_assets(nodes, MATRIX_LANGUAGE)
     for generation_name, _merge, _converter in REACTIONS_RESPONSE_BRANCHES:
-        # Use the shared instruction, so the matrix gets the same rules
-        # (including the Reactions extra rule) as every other workflow.
-        _install_transformation_request(nodes[generation_name], MATRIX_LANGUAGE)
+        # The shared instruction gives the matrix the same rules (including the
+        # Reactions extra rule) as every other workflow. The request is the
+        # matrix's own: it serves every strategy, so each item's strategy flags
+        # choose the parts.
+        _install_transformation_request(
+            nodes[generation_name], MATRIX_LANGUAGE, matrix_transformation_request()
+        )
     _drop_concatenated_model(nodes[UPDATE_STRUCTURE_NODE])
     _replace_matrix_input_nodes(payload)
     _wire_matrix_static_files(payload["connections"], nodes)

@@ -1,7 +1,6 @@
 """Extract one generated semantic-test response into an immutable candidate suite.
 
-The library entry point of the ``extract`` stage. The stage and the standalone
-command line both call :func:`extract_one`; neither owns it.
+The library entry point of the ``extract`` stage.
 """
 
 from __future__ import annotations
@@ -46,14 +45,13 @@ def extract_one(
         )
 
     suite_dir, validation = write_suite(target, extracted, options, adapter)
-    action = "would write" if options.dry_run else "wrote"
     if not validation.valid:
         reason = "; ".join(validation.violations)
         return (
             False,
-            f"{action} {suite_dir} [INVALID: {validation.reason_code}] {reason}",
+            f"wrote {suite_dir} [INVALID: {validation.reason_code}] {reason}",
         )
-    return True, f"{action} {suite_dir}"
+    return True, f"wrote {suite_dir}"
 
 
 def _failed_candidate(
@@ -76,5 +74,4 @@ def _failed_candidate(
         reason_code=EXTRACTION_FAILED,
         violations=(reason,),
     )
-    action = "would record" if options.dry_run else "recorded"
-    return False, f"{action} {suite_dir} [INVALID: {validation.reason_code}] {reason}"
+    return False, f"recorded {suite_dir} [INVALID: {validation.reason_code}] {reason}"

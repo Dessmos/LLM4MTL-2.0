@@ -139,6 +139,24 @@ class ConsoleFallbackTests(unittest.TestCase):
         self.assertFalse(observation.assertions_evaluated)
         self.assertFalse(observation.is_technically_executable)
 
+    def test_a_reactions_build_that_xtext_refused_is_a_parse_failure(self) -> None:
+        # The Reactions harness validates the transformation while it builds.
+        # The build stops before the test module, so no test ran and no report
+        # exists: the engine refused the transformation, as ETL's parser does.
+        output = (
+            "[ERROR] ERROR:The type CreatedFatherReaction is already defined\n"
+            "[INFO] BUILD FAILURE\n"
+            "[ERROR] Failed to execute goal org.eclipse.xtext:xtext-maven-plugin:"
+            "2.39.0:generate (default) on project consistency: Execution failed "
+            "due to a severe validation error. -> [Help 1]\n"
+        )
+
+        observation = classify_maven_run(maven(output, exit_code=1))
+
+        self.assertEqual("transformation_parse", observation.failure_stage)
+        self.assertFalse(observation.assertions_passed)
+        self.assertFalse(observation.is_technically_executable)
+
     def test_the_last_summary_line_decides(self) -> None:
         output = (
             "[INFO] Tests run: 1, Failures: 1, Errors: 0\n"

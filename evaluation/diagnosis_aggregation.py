@@ -20,17 +20,28 @@ those apart.
 Grouping never changes a verdict. Each cluster lists the verdicts its reports
 received and how much they agree, which makes the consistency of Source
 Diagnosis measurable.
+
+It only reads recorded evidence and prints the result as JSON:
+
+    PYTHONPATH=pipeline/src .venv/bin/python -m evaluation.diagnosis_aggregation \
+      --batch batch_004 --run <run-id> [--attempt N]
 """
 
 from __future__ import annotations
 
+import argparse
 import hashlib
+import json
 import re
+import sys
 from collections import Counter
 from pathlib import Path
-from typing import Any
+from typing import Any, Sequence
 
 from llm4mtl.domain.diagnosis import aggregate_classifications
+from llm4mtl.paths import TARGET
+from llm4mtl.run_store.attempts import existing_attempts
+from llm4mtl.run_store.models import RunPaths
 from llm4mtl.run_store.responses import recorded_diagnoses
 from llm4mtl.semantic_tests.diagnosis_preparation import (
     DIAGNOSIS_DIRNAME,
@@ -39,6 +50,7 @@ from llm4mtl.semantic_tests.diagnosis_preparation import (
 )
 from llm4mtl.semantic_tests.failure_report import CASE_SCOPE
 from llm4mtl.serialization.json_io import read_json
+from llm4mtl.vocabulary import EXECUTION_STAGE_ID
 
 SCHEMA_VERSION = "1.0"
 UNKNOWN = "unknown"
@@ -301,3 +313,47 @@ def _top_frame(stack_traces: list[Any]) -> str:
         if match:
             return DIGITS.sub("#", match.group("frame"))
     return UNKNOWN
+
+
+def latest_execution_attempt(run_dir: Path) -> int:
+    """The highest execution attempt the run recorded."""
+    attempts_dir = RunPaths(Path(run_dir)).stage_attempts_dir(EXECUTION_STAGE_ID)
+    attempts = existing_attempts(attempts_dir)
+    if not attempts:
+        raise DiagnosisAggregationError(
+            f"run {Path(run_dir).name} recorded no execution attempt"
+        )
+    return max(attempts)
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--batch", required=True, help="batch id the run belongs to")
+    parser.add_argument("--run", required=True, help="run id")
+    parser.add_argument(
+        "--attempt",
+        type=int,
+        help="execution attempt to aggregate; defaults to the latest recorded one",
+    )
+    return parser
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
+    run_dir = TARGET.run_dir(args.batch, args.run)
+    try:
+        attempt = args.attempt
+        if attempt is None:
+            attempt = latest_execution_attempt(run_dir)
+        aggregated = aggregate_run_diagnoses(
+            run_dir, attempt, TARGET.run_diagnoses_dir(args.batch, args.run)
+        )
+    except DiagnosisAggregationError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    print(json.dumps(aggregated, ensure_ascii=False, indent=2))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

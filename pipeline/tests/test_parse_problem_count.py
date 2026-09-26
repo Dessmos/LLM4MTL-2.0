@@ -163,7 +163,7 @@ class SerializationTests(unittest.TestCase):
             ) as language,
         ):
             language.return_value.parse_transformations.return_value = observations
-            return adapter.parse(config, dry_run=False).details
+            return adapter.parse(config).details
 
     def test_a_missing_count_serializes_as_null_never_zero(self) -> None:
         measured, missing = Path("/tmp/measured.qvto"), Path("/tmp/missing.qvto")

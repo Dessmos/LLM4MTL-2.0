@@ -344,7 +344,7 @@ def _run_provenance(request: RunCreateRequest) -> dict[str, Any]:
 
 
 def _stage_config(
-    run_id: str, manifest: dict[str, Any], request: StageRunRequest
+    manifest: dict[str, Any], request: StageRunRequest
 ) -> PipelineConfig:
     """Build stage selection exclusively from the immutable manifest."""
     language = manifest.get("language")
@@ -363,10 +363,7 @@ def _stage_config(
         test_strategies=_selection(manifest.get("test_generation_strategy")),
         transformation_models=_selection(manifest.get("transformation_model")),
         transformation_strategies=_selection(manifest.get("transformation_strategy")),
-        seed=int(manifest.get("seed", 1) or 1),
-        pipeline_variant=str(manifest.get("pipeline_variant") or "full"),
         suite_id=request.suite_id,
-        run_id=run_id,
     )
 
 
@@ -479,7 +476,7 @@ def run_stage(
     if stage not in CONTRACT_STAGES:
         raise HTTPException(status_code=404, detail=f"unknown stage: {stage}")
     paths, manifest = _require_manifest(batch_id, run_id)
-    config = _stage_config(run_id, manifest, request)
+    config = _stage_config(manifest, request)
     config.run_dir = str(paths.root)
     _select_run_inputs(stage, paths, manifest, config, request)
     run = _stages.implementation(stage)
@@ -528,7 +525,7 @@ def _run_and_record(
     # started event with no finished one.
     announce_stage_start(paths, stage)
     try:
-        result = run(config, False)
+        result = run(config)
     except Exception as exc:
         result = infrastructure_error_result(stage, exc)
     # The generation records responsible for the iteration this stage judged

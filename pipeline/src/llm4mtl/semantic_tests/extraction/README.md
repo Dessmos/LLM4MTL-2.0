@@ -21,10 +21,9 @@ models/input.model
 metadata.json                           where did it come from
 
 extract.py                  - Every execution in every run, passes through - extract_one
-cli.py                      - command line only: reads flags and calls extract_one
-discovery.py                - decides which answers to work with
+discovery.py                - reads model, strategy and task of an answer from its path
 models.py                   - data structures for the suite
-                              ExtractionOptions - where to write the suite and if to write it
+                              ExtractionOptions - where to write the suite
 writer.py                   - saves files locally
 parser.py                   - cut .md file into different files / 
                               Finds triple-quoted blocks and extracts the filename 

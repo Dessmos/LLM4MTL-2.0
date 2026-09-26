@@ -579,7 +579,7 @@ class StageServiceTests(unittest.TestCase):
         self.client.post(f"/batches/{BATCH}/runs", json=run_payload(run_id="svc-response"))
         seen = []
 
-        def capture(config, dry_run):
+        def capture(config):
             seen.append(config)
             return StageResult(
                 "extraction",
@@ -669,7 +669,7 @@ class StageServiceTests(unittest.TestCase):
             response_path.parent.mkdir(parents=True, exist_ok=True)
             response_path.write_text(content, encoding="utf-8")
 
-        def capture(config, dry_run):
+        def capture(config):
             path = Path(config.responses[0])
             observed.append((path.parts[-5], path.read_text(encoding="utf-8")))
             return StageResult(

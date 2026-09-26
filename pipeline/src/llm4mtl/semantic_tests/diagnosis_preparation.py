@@ -60,7 +60,7 @@ from llm4mtl.semantic_tests.suite_execution import (
     OBSERVATION_FILENAME,
     SNAPSHOTS_DIRNAME,
 )
-from llm4mtl.semantic_tests.surefire import testcase_outcome
+from llm4mtl.semantic_tests.surefire import testcase_method_name, testcase_outcome
 from llm4mtl.serialization.json_io import read_json, write_json_once
 from llm4mtl.vocabulary import EXECUTION_STAGE_ID, SYNTAX_VALIDATION_STAGE_ID
 
@@ -137,8 +137,8 @@ def prepare_after_execution_stage(
 ) -> dict[str, Any] | None:
     """Assemble diagnosis evidence only when the execution stage failed.
 
-    Called through :func:`llm4mtl.stage_recording.record_stage_attempt`, which
-    both entry points use, right after the execution attempt is recorded. It
+    Called through :func:`llm4mtl.stage_recording.record_stage_attempt` right
+    after the execution attempt is recorded. It
     writes only diagnosis files and must never change the stage result, the run
     status, or the events. A failure to assemble evidence is not a stage
     failure: it is recorded in the index and the caller continues.
@@ -742,13 +742,14 @@ def _recorded_failure(case: ET.Element) -> SurefireFailure | None:
 
 def _match_test_case(semantic_cases: dict[str, Any], test_method: str) -> str:
     """The id of the one semantic case whose rendered method is ``test_method``."""
+    method_name = testcase_method_name(test_method)
     tests = semantic_cases.get("tests")
     if not isinstance(tests, list):
         raise FailureReportError(f"{SEMANTIC_CASES_FILE} has no tests array")
     matching = [
         case_id(test)
         for test in tests
-        if isinstance(test, dict) and rendered_method_name(test) == test_method
+        if isinstance(test, dict) and rendered_method_name(test) == method_name
     ]
     if len(matching) != 1:
         raise FailureReportError(

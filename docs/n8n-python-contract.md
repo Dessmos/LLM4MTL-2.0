@@ -318,9 +318,8 @@ exactly what Source Diagnosis is for. Such a report names no assertion
 (`assertion_id: null`), carries the exception and its stack trace as evidence,
 and leaves `expected`/`actual` null rather than reconstructing them.
 
-The same assembly is reproducible outside the stage call with
-`llm4mtl diagnosis prepare --batch <batch-id> --run <run-id> [--attempt N]`; the index is written
-once per attempt and re-reading it returns the same document.
+The index is written once per attempt, and re-reading it returns the same
+document.
 
 ## Diagnosis result
 
@@ -474,7 +473,8 @@ run.
 `diagnosis_records` counts the verdicts, not the defects: one broken
 transformation fails every test case that uses it, and each failing case gets its
 own report and its own verdict. Clustering those observations into distinct
-failures is evaluation's job — `llm4mtl diagnosis aggregate --batch <batch-id> --run <run-id>` —
+failures is evaluation's job —
+`python -m evaluation.diagnosis_aggregation --batch <batch-id> --run <run-id>` —
 and never the pipeline's.
 
 ## Retry and concurrency rules

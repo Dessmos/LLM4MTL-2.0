@@ -50,12 +50,9 @@ def build_provenance(
     *,
     custom_task_prompt: str | None = None,
     custom_task_metamodel: str | None = None,
-    **extra: Any,
 ) -> dict[str, Any]:
     """Collect the provenance block for a run manifest.
 
-    Extra keyword arguments are merged in, so a caller can record facts only it
-    knows (for example the resolved-config hash of a local runner invocation).
     ``custom_task_prompt`` is the user-authored prompt a run reads instead of
     the frozen benchmark prompt, and ``custom_task_metamodel`` the metamodel it
     reads instead of the ones a task contract names; each is hashed in place of
@@ -77,7 +74,6 @@ def build_provenance(
             custom_task_prompt=custom_task_prompt,
             custom_task_metamodel=custom_task_metamodel,
         ),
-        **extra,
     }
 
 

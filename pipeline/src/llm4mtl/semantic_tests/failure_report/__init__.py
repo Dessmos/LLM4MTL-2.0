@@ -11,13 +11,7 @@ compare models, classify the source of a failure, call an LLM, or choose a
 workflow route. In particular, ``actual_vs_expected`` must come from the
 comparator or harness that saw the mismatch; this package never invents it.
 
-Run it through the experiment CLI (``"test_case"`` reports only) with::
-
-    llm4mtl diagnosis report \
-      --request request.json --output artifacts/work/.../failure-report.json
-
-or locally with ``python -m llm4mtl.semantic_tests.failure_report``, which also
-takes ``--scope``. Both call the same builder.
+Diagnosis preparation calls it once per failure after every execution attempt.
 
 A ``"test_case"`` request is one JSON object with these fields. An
 ``"execution_pair"`` request is the same without ``test_case_id``,
@@ -98,10 +92,7 @@ from llm4mtl.semantic_tests.failure_report.pair_report import write_pair_failure
 from llm4mtl.semantic_tests.failure_report.report_document import (
     FAILURE_REPORT_SCHEMA,
 )
-from llm4mtl.semantic_tests.failure_report.request import (
-    read_request_payload,
-    request_type,
-)
+from llm4mtl.semantic_tests.failure_report.request import request_type
 from llm4mtl.semantic_tests.failure_report.semantic_cases import (
     assertion_id,
     case_id,
@@ -140,7 +131,6 @@ __all__ = [
     "RUNTIME_ERROR_KIND",
     "assertion_id",
     "case_id",
-    "read_request_payload",
     "rendered_method_name",
     "write_report",
 ]

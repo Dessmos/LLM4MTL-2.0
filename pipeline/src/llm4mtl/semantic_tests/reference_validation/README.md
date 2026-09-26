@@ -10,10 +10,7 @@ ARTIFACT_INVALID	        test files are not usable, so it was never run
 
 
 runner.py	        - entry point
-cli.py	            - manual run
 maven_status.py	    - reads specific lines in the Maven output
-models.py	        - CSV columns
-results.py	        - CSV by Task
 reference.py	    - decides where to put working oracle
 
 

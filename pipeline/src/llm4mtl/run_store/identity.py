@@ -1,9 +1,9 @@
 """Run identifiers and containment of the directories they name.
 
-A ``run_id`` reaches this package from an n8n workflow, a CLI flag, or an
-experiment matrix, so it is untrusted input that is turned directly into a
-filesystem path. Without the checks here ``../escape`` resolves outside the runs
-root and writes a run the aggregation layer can never see.
+A ``run_id`` reaches this package from an n8n workflow, so it is untrusted
+input that is turned directly into a filesystem path. Without the checks here
+``../escape`` resolves outside the runs root and writes a run the aggregation
+layer can never see.
 
 Ids are opaque: they are compared for equality and used as a directory name, and
 nothing downstream parses meaning out of them.

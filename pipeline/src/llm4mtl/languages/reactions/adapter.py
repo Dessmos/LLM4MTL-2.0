@@ -46,10 +46,11 @@ from llm4mtl.languages.common import (
 )
 from llm4mtl.languages.reactions.prerequisites import (
     UnmergeableTransformationError,
+    bind_segment,
     merge_reactions,
     prerequisite_tasks,
 )
-from llm4mtl.languages.reactions.rendering import render_reactions_test
+from llm4mtl.languages.reactions.rendering import render_reactions_test, segment_name
 from llm4mtl.paths import TARGET
 from llm4mtl.semantic_tests.extraction.semantic_cases import render_generated_suite
 from llm4mtl.semantic_tests.suites.generated_models import generated_models_dir
@@ -131,7 +132,7 @@ class ReactionsAdapter:
         _remove_unused_legacy_dependency(workspace.engine_dir / "consistency/pom.xml")
         with TemporaryDirectory() as scratch:
             try:
-                transformation = self._with_prerequisites(
+                transformation = self._prepared_for_harness(
                     suite.task,
                     transformation,
                     Path(scratch),
@@ -140,34 +141,42 @@ class ReactionsAdapter:
                 return _unmergeable_transformation(str(exc))
             return self._execute(suite, transformation, workspace, timeout)
 
-    def _with_prerequisites(
+    def _prepared_for_harness(
         self,
         task: str,
         transformation: Path,
         scratch: Path,
     ) -> Path:
-        """Merge the reactions this task presupposes into the file under test.
+        """A scratch copy of the file under test, in the shape the harness runs.
 
-        A virtual model accepts only one change propagation specification per
-        metamodel pair, and a prerequisite uses the same pair as its task. So
-        the prerequisite reference reactions join the same segment. They are
+        Its segment is named after the task, because the rendered test looks the
+        transformation up by that name; other languages place the file at a
+        fixed name instead. Without it, a generation that picks another name
+        never runs, and one that picks the name of the harness's own example
+        segment clashes with it.
+
+        The reactions this task presupposes then join that segment. A virtual
+        model accepts only one change propagation specification per metamodel
+        pair, and a prerequisite uses the same pair as its task. They are
         context, not the artifact under test: without them the task's reaction
         finds no correspondence and produces nothing.
         """
-        prerequisites = prerequisite_tasks(task)
-        if not prerequisites:
-            return transformation
-        merged = merge_reactions(
-            transformation.read_text(encoding="utf-8"),
-            [
-                (self._references_root / f"{name}.reactions").read_text(
-                    encoding="utf-8"
-                )
-                for name in prerequisites
-            ],
+        prepared = bind_segment(
+            transformation.read_text(encoding="utf-8"), segment_name(task)
         )
+        prerequisites = prerequisite_tasks(task)
+        if prerequisites:
+            prepared = merge_reactions(
+                prepared,
+                [
+                    (self._references_root / f"{name}.reactions").read_text(
+                        encoding="utf-8"
+                    )
+                    for name in prerequisites
+                ],
+            )
         destination = scratch / transformation.name
-        destination.write_text(merged, encoding="utf-8")
+        destination.write_text(prepared, encoding="utf-8")
         return destination
 
     def _execute(
