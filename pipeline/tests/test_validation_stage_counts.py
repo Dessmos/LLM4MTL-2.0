@@ -14,14 +14,14 @@ from pathlib import Path
 from unittest.mock import patch
 
 from llm4mtl.domain import GeneratedSuite, SuiteExecutionObservation
-from llm4mtl.experiment_runner.adapters.transformation_validation import (
+from llm4mtl.stages.transformation_validation import (
     TransformationValidationAdapter,
     execution_counts,
 )
-from llm4mtl.experiment_runner.adapters.test_generation import (
+from llm4mtl.stages.test_generation import (
     TestGenerationAdapter as GenerationAdapter,
 )
-from llm4mtl.experiment_runner.models import PipelineConfig, StageResult
+from llm4mtl.stages.models import PipelineConfig, StageResult
 from llm4mtl.languages.etl.adapter import EtlAdapter
 from llm4mtl.semantic_tests.validation import (
     ARTIFACT_INVALID,
@@ -161,15 +161,15 @@ class TestGenerationAdapterValidationTests(unittest.TestCase):
                         return_value=object(),
                     ):
                         with patch(
-                            "llm4mtl.experiment_runner.adapters.test_generation.suite_from_path",
+                            "llm4mtl.stages.test_generation.suite_from_path",
                             return_value=suite,
                         ):
                             with patch(
-                                "llm4mtl.experiment_runner.adapters.test_generation.validate_suite",
+                                "llm4mtl.stages.test_generation.validate_suite",
                                 return_value=verdict,
                             ) as validate:
                                 with patch(
-                                    "llm4mtl.experiment_runner.adapters.test_generation.check_suite",
+                                    "llm4mtl.stages.test_generation.check_suite",
                                     return_value=verdict,
                                 ) as check:
                                     result = adapter._validate_suites(
@@ -200,10 +200,10 @@ class TestGenerationAdapterValidationTests(unittest.TestCase):
 class ObservationScopeTests(unittest.TestCase):
 
     def test_observations_are_scoped_to_the_run(self) -> None:
-        from llm4mtl.experiment_runner.adapters.test_generation import (
+        from llm4mtl.stages.test_generation import (
             TestGenerationAdapter as GenerationAdapter,
         )
-        from llm4mtl.experiment_runner.models import PipelineConfig
+        from llm4mtl.stages.models import PipelineConfig
         from llm4mtl.paths import REPO_ROOT
 
         scoped = GenerationAdapter(REPO_ROOT).observations_root(
@@ -250,7 +250,7 @@ class ObservationScopeTests(unittest.TestCase):
 
             with (
                 patch(
-                    "llm4mtl.experiment_runner.adapters.transformation_validation.read_observation",
+                    "llm4mtl.stages.transformation_validation.read_observation",
                     return_value=observation,
                 ),
                 patch.object(
@@ -265,7 +265,7 @@ class ObservationScopeTests(unittest.TestCase):
 
             with (
                 patch(
-                    "llm4mtl.experiment_runner.adapters.transformation_validation.read_observation",
+                    "llm4mtl.stages.transformation_validation.read_observation",
                     return_value=None,
                 ),
                 patch.object(
@@ -297,7 +297,7 @@ class ObservationScopeTests(unittest.TestCase):
             adapter = TransformationValidationAdapter(Path(temp_dir))
 
             with patch(
-                "llm4mtl.experiment_runner.adapters.transformation_validation.read_observation"
+                "llm4mtl.stages.transformation_validation.read_observation"
             ) as read_observation_mock:
                 selected = adapter.select_validated_suites(
                     config,

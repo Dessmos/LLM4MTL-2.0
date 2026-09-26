@@ -7,6 +7,7 @@ from pathlib import Path
 
 from llm4mtl import run_store
 from llm4mtl.paths import REPO_ROOT
+from llm4mtl.prompt_assembly.refinement import RefinementRequest, prepare_refinement
 from llm4mtl.provenance import build_provenance
 from llm4mtl.stage_contract import SCHEMA_VERSION as STAGE_SCHEMA_VERSION
 
@@ -108,10 +109,10 @@ class AggregationTests(unittest.TestCase):
                 },
                 evidence={"details": {"parser_diagnostics": ["bad syntax"]}},
             )
-            run_store.prepare_refinement(
+            prepare_refinement(
                 paths,
                 manifest,
-                run_store.RefinementRequest(
+                RefinementRequest(
                     artifact_type="transformation",
                     iteration=1,
                     previous_iteration=0,

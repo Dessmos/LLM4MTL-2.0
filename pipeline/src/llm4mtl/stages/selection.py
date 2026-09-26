@@ -1,4 +1,4 @@
-"""Shared subprocess and selection helpers for adapters."""
+"""Input selection and input hashing shared by the stages."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import hashlib
 from collections.abc import Iterator
 from pathlib import Path
 
-from llm4mtl.experiment_runner.config import ConfigError
+from llm4mtl.stages.models import ConfigError
 
 
 def _path_hash_chunks(path: Path) -> Iterator[bytes]:

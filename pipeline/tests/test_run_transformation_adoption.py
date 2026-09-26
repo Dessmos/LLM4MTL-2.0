@@ -19,7 +19,7 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 from llm4mtl import run_store
-from llm4mtl.experiment_runner.models import PipelineConfig, StageResult
+from llm4mtl.stages.models import PipelineConfig, StageResult
 from llm4mtl.paths import ArtifactRoots
 from llm4mtl.provenance import build_provenance
 from llm4mtl.run_store.transformations import (
@@ -212,11 +212,11 @@ class StageServiceAdoptionTests(unittest.TestCase):
 
         with (
             patch(
-                "llm4mtl.stage_service.app._orchestrator.prepare_workspace",
+                "llm4mtl.stage_service.app.prepare_workspace",
                 return_value=self.root / "workspace",
             ),
             patch(
-                f"llm4mtl.stage_service.app._orchestrator.{adapter}.{method}",
+                f"llm4mtl.stage_service.app._stages.{adapter}.{method}",
                 side_effect=capture,
             ),
         ):

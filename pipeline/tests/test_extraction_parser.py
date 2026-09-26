@@ -8,7 +8,6 @@ answering RQ1 on the model's behalf.
 
 from __future__ import annotations
 
-import argparse
 import json
 import tempfile
 import unittest
@@ -17,8 +16,12 @@ from unittest.mock import patch
 
 from llm4mtl.domain import EXTRACTION_FAILED
 from llm4mtl.languages.etl.adapter import EtlAdapter
-from llm4mtl.semantic_tests.extraction.cli import extract_one
-from llm4mtl.semantic_tests.extraction.models import ExtractionError, ResponseTarget
+from llm4mtl.semantic_tests.extraction.extract import extract_one
+from llm4mtl.semantic_tests.extraction.models import (
+    ExtractionError,
+    ExtractionOptions,
+    ResponseTarget,
+)
 from llm4mtl.semantic_tests.extraction.parser import extract_files
 from llm4mtl.semantic_tests.suites.discovery import suite_from_path
 from llm4mtl.semantic_tests.validation import (
@@ -165,16 +168,11 @@ class ExtractionFailureStaysInTheFunnelTests(unittest.TestCase):
             strategy="only_prompt",
             task="Tree2Graph",
         )
-        self.args = argparse.Namespace(
-            generated_tests_root=self.generated_tests_root,
-            suite_id=None,
-            overwrite=False,
-            dry_run=False,
-        )
+        self.options = ExtractionOptions(generated_tests_root=self.generated_tests_root)
         self.adapter = EtlAdapter()
 
     def extract(self) -> tuple[bool, str]:
-        return extract_one(self.target, self.args, self.adapter)
+        return extract_one(self.target, self.options, self.adapter)
 
     def candidates(self) -> list[Path]:
         return sorted(self.generated_tests_root.glob("*/candidates/*/*/suite_*"))

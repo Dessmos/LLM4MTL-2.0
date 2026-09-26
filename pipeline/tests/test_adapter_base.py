@@ -6,7 +6,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from llm4mtl.experiment_runner.adapters.base import hash_paths
+from llm4mtl.stages.selection import hash_paths
 
 
 class HashPathsTests(unittest.TestCase):

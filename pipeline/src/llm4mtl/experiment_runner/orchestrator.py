@@ -5,28 +5,16 @@ from __future__ import annotations
 import hashlib
 import json
 from collections.abc import Collection
-from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from llm4mtl import run_store
-from llm4mtl.experiment_runner.adapters.test_generation import TestGenerationAdapter
-from llm4mtl.experiment_runner.adapters.transformation_parser import (
-    TransformationParserAdapter,
-)
-from llm4mtl.experiment_runner.adapters.transformation_validation import (
-    TransformationValidationAdapter,
-)
-from llm4mtl.experiment_runner.config import (
-    PIPELINE_STAGES,
-    ConfigError,
-    validate_config,
-)
-from llm4mtl.experiment_runner.models import PipelineConfig, RunResult, StageResult
+from llm4mtl.experiment_runner.config import PIPELINE_STAGES, validate_config
+from llm4mtl.experiment_runner.models import RunResult
 from llm4mtl.paths import REPO_ROOT, TARGET, ArtifactRoots
 from llm4mtl.provenance import build_provenance
 from llm4mtl.run_store.attempts import existing_attempts
-from llm4mtl.run_store.identity import validate_opaque_id
+from llm4mtl.run_store.identity import generate_run_id, validate_opaque_id
 from llm4mtl.semantic_tests.diagnosis_aggregation import aggregate_run_diagnoses
 from llm4mtl.semantic_tests.diagnosis_preparation import prepare_execution_diagnosis
 from llm4mtl.semantic_tests.failure_report import (
@@ -44,15 +32,15 @@ from llm4mtl.stage_recording import (
     infrastructure_error_result,
     record_stage_attempt,
 )
-from llm4mtl.workspace import materialize_engine
+from llm4mtl.stages.dispatch import (
+    WORKSPACE_STAGES,
+    StageCallable,
+    StageImplementations,
+    prepare_workspace,
+)
+from llm4mtl.stages.models import ConfigError, PipelineConfig, StageResult
 
 
-StageCallable = Callable[[PipelineConfig, bool], StageResult]
-WORKSPACE_STAGES = {
-    "technical_validation",
-    "reference_validation",
-    "transformation_validation",
-}
 _CONFIG_HASH_IGNORED_FIELDS = frozenset(
     {
         "resume",
@@ -69,7 +57,7 @@ _CONFIG_HASH_IGNORED_FIELDS = frozenset(
 
 
 def _stages_require_workspace(stages: list[tuple[str, StageCallable]]) -> bool:
-    return any(name in WORKSPACE_STAGES for name, _ in stages)
+    return any(contract_stage_id(name) in WORKSPACE_STAGES for name, _ in stages)
 
 
 class ExperimentOrchestrator:
@@ -82,9 +70,10 @@ class ExperimentOrchestrator:
         # The one statement of where runs, batches and diagnoses live. Tests
         # point it at a temporary tree.
         self.artifacts: ArtifactRoots = TARGET.artifact_roots
-        self.tests = TestGenerationAdapter(self.repo_root)
-        self.parser = TransformationParserAdapter(self.repo_root)
-        self.transformations = TransformationValidationAdapter(self.repo_root)
+        stages = StageImplementations(self.repo_root)
+        self.tests = stages.tests
+        self.parser = stages.parser
+        self.transformations = stages.transformations
 
     def assemble_failure_report(
         self,
@@ -186,7 +175,7 @@ class ExperimentOrchestrator:
 
     def run(self, config: PipelineConfig) -> RunResult:
         validate_config(config)
-        run_id = config.run_id or generate_run_id(config)
+        run_id = config.run_id or generate_run_id(config.language, config.tasks)
         config.run_id = run_id
         stages = self.stage_sequence(config)
         config_hash = stable_hash(
@@ -489,15 +478,7 @@ class ExperimentOrchestrator:
 
     def prepare_workspace(self, run_dir: Path, language: str) -> Path:
         """Atomically materialize a run-local copy of the language's engine."""
-        from llm4mtl.conventions import default_test_project_dir, language_config
-
-        config = language_config(language)
-        source = default_test_project_dir(config)
-        return materialize_engine(
-            source,
-            run_dir / "workspaces",
-            config.language_key,
-        )
+        return prepare_workspace(run_dir, language)
 
     def write_log(self, run_dir: Path, result: RunResult) -> None:
         """Write the human-readable runner log for a completed local run."""
@@ -616,14 +597,6 @@ def reject_identity_drift(
             f"run {run_id} was created with a different identity ({described}). "
             "Start a new run instead of re-labelling an existing one."
         )
-
-
-def generate_run_id(config: PipelineConfig) -> str:
-    task = config.tasks[0].lower() if len(config.tasks) == 1 else "all"
-    # Microseconds prevent two requests for the same task in one second from
-    # sharing a run directory. Explicit IDs are still protected by the store.
-    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S-%f")
-    return f"{config.language}-{task}-{timestamp}"
 
 
 def stable_hash(

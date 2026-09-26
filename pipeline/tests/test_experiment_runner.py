@@ -20,9 +20,10 @@ from llm4mtl.experiment_runner.config import (
     parse_simple_yaml,
     validate_config,
 )
-from llm4mtl.experiment_runner.models import PipelineConfig, RunResult, StageResult
+from llm4mtl.experiment_runner.models import RunResult
+from llm4mtl.stages.models import PipelineConfig, StageResult
 from llm4mtl.experiment_runner.orchestrator import ExperimentOrchestrator
-from llm4mtl.experiment_runner.adapters.transformation_validation import TransformationValidationAdapter
+from llm4mtl.stages.transformation_validation import TransformationValidationAdapter
 from llm4mtl.paths import REPO_ROOT, TARGET, ArtifactRoots
 from llm4mtl.semantic_tests.failure_report import DIFF_FIELDS, FailureReportError
 from llm4mtl.semantic_tests.failure_report.request import (

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import json
 import re
 import unittest
@@ -98,6 +99,34 @@ class ActivePathTests(unittest.TestCase):
             TARGET.diagnoses.is_relative_to(TARGET.runs),
             "a result consumers read must not sit inside the run's own state",
         )
+
+
+class LocalRunnerIsolationTests(unittest.TestCase):
+    """Only the local runner may depend on the local runner.
+
+    n8n drives the stages through the stage service; the runner in
+    ``experiment_runner/`` is a second, local entry point. Nothing the service
+    reaches may import it, or removing the runner would break n8n.
+    """
+
+    def test_no_module_outside_the_runner_imports_it(self) -> None:
+        runner = TARGET.package / "experiment_runner"
+        offenders = []
+        for module in sorted(TARGET.package.rglob("*.py")):
+            if module.is_relative_to(runner):
+                continue
+            tree = ast.parse(module.read_text(encoding="utf-8"))
+            for node in ast.walk(tree):
+                names = (
+                    [node.module or ""]
+                    if isinstance(node, ast.ImportFrom)
+                    else [alias.name for alias in node.names]
+                    if isinstance(node, ast.Import)
+                    else []
+                )
+                if any(name.startswith("llm4mtl.experiment_runner") for name in names):
+                    offenders.append(str(module.relative_to(TARGET.package)))
+        self.assertEqual([], offenders)
 
 
 class N8nWorkflowTests(unittest.TestCase):

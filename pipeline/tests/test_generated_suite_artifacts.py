@@ -7,7 +7,6 @@ must therefore never produce something a later stage would compile and run.
 
 from __future__ import annotations
 
-import argparse
 import json
 import tempfile
 import unittest
@@ -16,7 +15,7 @@ from pathlib import Path
 from llm4mtl.domain import INVALID_SEMANTIC_CASES
 from llm4mtl.languages.etl.adapter import EtlAdapter
 from llm4mtl.run_store.identity import InvalidRunIdError
-from llm4mtl.semantic_tests.extraction.models import ResponseTarget
+from llm4mtl.semantic_tests.extraction.models import ExtractionOptions, ResponseTarget
 from llm4mtl.semantic_tests.extraction.semantic_cases import MISSING_SEMANTIC_CASES
 from llm4mtl.semantic_tests.extraction.writer import write_suite
 from llm4mtl.semantic_tests.suites.metadata import artifact_invalid_reason
@@ -86,16 +85,13 @@ class ExtractionArtifactPolicyTests(unittest.TestCase):
         target = ResponseTarget(
             response_path=response, llm="gpt-5", strategy="few_shot", task=task
         )
-        args = argparse.Namespace(
-            generated_tests_root=root / "generated_tests",
-            suite_id=suite_id,
-            overwrite=True,
-            dry_run=False,
+        options = ExtractionOptions(
+            generated_tests_root=root / "generated_tests", suite_id=suite_id
         )
         return write_suite(
             target,
             {**self._extract(markdown)},
-            args,
+            options,
             EtlAdapter(),
         )
 

@@ -49,6 +49,19 @@ ROUTINE_NAME = re.compile(r"^\s*routine\s+(\w+)", re.MULTILINE)
 # issues; the number is the measured issue count.
 SYNTAX_ISSUES = re.compile(r"Syntax issues \((\d+)\):")
 
+# The exit code recorded for an execution refused before Maven was invoked.
+# A string, so it can never be mistaken for a code Maven returned.
+MAVEN_NOT_INVOKED = "not_invoked"
+
+
+class UnmergeableTransformationError(Exception):
+    """The transformation under test cannot share a segment with its prerequisites.
+
+    A property of the transformation itself -- it declares no reactions segment,
+    or reuses a routine name a prerequisite already defines -- so it is observed
+    as that transformation failing to load, never as a broken harness.
+    """
+
 
 class ReactionsAdapter:
     language_id = "reactions"
@@ -99,11 +112,14 @@ class ReactionsAdapter:
     ) -> tuple[SuiteExecutionObservation, RawExecutionEvidence]:
         _remove_unused_legacy_dependency(workspace.engine_dir / "consistency/pom.xml")
         with TemporaryDirectory() as scratch:
-            transformation = self._with_prerequisites(
-                suite.task,
-                transformation,
-                Path(scratch),
-            )
+            try:
+                transformation = self._with_prerequisites(
+                    suite.task,
+                    transformation,
+                    Path(scratch),
+                )
+            except UnmergeableTransformationError as exc:
+                return _unmergeable_transformation(str(exc))
             return self._execute(suite, transformation, workspace, timeout)
 
     def _with_prerequisites(
@@ -296,11 +312,50 @@ def _contains_only_unresolved_linkage_diagnostics(diagnostic: str) -> bool:
     )
 
 
+def _unmergeable_transformation(
+    diagnostic: str,
+) -> tuple[SuiteExecutionObservation, RawExecutionEvidence]:
+    """Observe a transformation the harness refused before running Maven.
+
+    The phase is ``transformation_parse``: the engine never accepted the
+    transformation, which is what that phase states. Nothing compiled and
+    nothing ran, so every progress flag is false, and the refusal is archived
+    as the harness's only diagnostic output.
+    """
+    observation = SuiteExecutionObservation(
+        compiled=False,
+        tests_discovered=False,
+        models_loaded=False,
+        engine_started=False,
+        assertions_evaluated=False,
+        assertions_passed=False,
+        timed_out=False,
+        maven_exit_code=MAVEN_NOT_INVOKED,
+        failure_stage="transformation_parse",
+        error_summary=diagnostic,
+    )
+    evidence = RawExecutionEvidence(
+        exit_code=MAVEN_NOT_INVOKED,
+        timed_out=False,
+        stdout="",
+        stderr=diagnostic,
+        reports_present=False,
+    )
+    return observation, evidence
+
+
 def _merge_reactions(base: str, prerequisites: list[str]) -> str:
-    """Put every prerequisite's reactions into the base file's one segment."""
+    """Put every prerequisite's reactions into the base file's one segment.
+
+    Raises :class:`UnmergeableTransformationError` for a defect of ``base``,
+    and ``ValueError`` for a prerequisite reference that is itself malformed:
+    the latter is a benchmark defect, not an observation about the artifact.
+    """
     start = SEGMENT_START.search(base)
     if start is None:
-        raise ValueError("transformation declares no reactions segment")
+        raise UnmergeableTransformationError(
+            "transformation declares no reactions segment"
+        )
     head, segment = base[: start.start()], base[start.start() :]
     imports = set(METAMODEL_IMPORT.findall(head))
     routines = set(ROUTINE_NAME.findall(base))
@@ -317,7 +372,7 @@ def _merge_reactions(base: str, prerequisites: list[str]) -> str:
         body = prerequisite[header.end() :]
         clashing = routines & set(ROUTINE_NAME.findall(body))
         if clashing:
-            raise ValueError(
+            raise UnmergeableTransformationError(
                 "prerequisite reuses routine names of the transformation under "
                 f"test: {', '.join(sorted(clashing))}"
             )

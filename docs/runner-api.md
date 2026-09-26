@@ -269,7 +269,12 @@ type, consecutive iterations, configured refinement provider/model, and the
 recorded failure reason. Semantic refinement also names the exact
 `execution_attempt` that produced the decision. Python resolves the previous
 artifact and only the parser, execution, failure-report, and diagnosis facts
-belonging to that evidence set. It writes a schema-validated `request.json` and exact `prompt.md` below
+belonging to that evidence set. The prompt restates the task inputs the
+repaired generation received: the task prompt, the contract's metamodels, the
+assets its prompting strategy selects, and — as the generation stated them —
+the metamodel namespace URIs of a transformation or the prerequisite task
+specifications of a Reactions semantic test. An unknown strategy is refused.
+It writes a schema-validated `request.json` and exact `prompt.md` below
 `refinements/<artifact-type>/iteration-NNN/`. The response names the prompt
 twice: `prompt_file`, relative to the run, and `prompt_path`, as the n8n
 container reaches it. n8n passes that prompt unchanged to its selected LLM.

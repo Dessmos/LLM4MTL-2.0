@@ -15,9 +15,9 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from unittest.mock import patch
 
-from llm4mtl.experiment_runner.adapters.base import fixed_selection
+from llm4mtl.stages.selection import fixed_selection
 from llm4mtl.experiment_runner.config import ConfigError, validate_config
-from llm4mtl.experiment_runner.models import PipelineConfig
+from llm4mtl.stages.models import PipelineConfig
 from llm4mtl.experiment_runner.orchestrator import (
     ExperimentOrchestrator,
     exactly_one,
@@ -200,7 +200,7 @@ class WorkspaceIsolationTests(unittest.TestCase):
             orchestrator = ExperimentOrchestrator()
 
             with patch(
-                "llm4mtl.conventions.default_test_project_dir",
+                "llm4mtl.stages.dispatch.default_test_project_dir",
                 return_value=source,
             ):
                 with ThreadPoolExecutor(max_workers=4) as pool:

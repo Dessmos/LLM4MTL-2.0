@@ -32,3 +32,16 @@ class ResponseTarget:
     llm: str
     strategy: str
     task: str
+
+
+@dataclass(frozen=True)
+class ExtractionOptions:
+    """Where extracted candidates are written, and whether anything is written.
+
+    ``suite_id`` names the candidate explicitly; ``None`` allocates the next
+    free ``suite_NNN`` below the response's strategy directory.
+    """
+
+    generated_tests_root: Path
+    suite_id: str | None = None
+    dry_run: bool = False

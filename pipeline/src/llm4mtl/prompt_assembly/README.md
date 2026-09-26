@@ -8,6 +8,12 @@ task_inputs.py      -   n8n asks via HTTP for a specific files.
                           →  resolve_custom_task_inputs(...)
                         which consults no contract and no reference.
 
+refinement.py       -   n8n asks via HTTP for the prompt of a retry after a failure.
+                        POST /batches/{batch}/runs/{run}/refinements  →  prepare_refinement(...)
+                        restates the task inputs the generation received, adds the
+                        previous artifact and the recorded feedback, and writes
+                        request.json + prompt.md into the run once.
+
 
 
 n8n_exports/

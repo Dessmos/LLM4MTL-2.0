@@ -9,14 +9,14 @@ from pathlib import Path
 from typing import Any
 
 from llm4mtl.experiment_runner.config import (
-    ConfigError,
     load_pipeline_config,
     load_resolved_config,
     validate_config,
 )
-from llm4mtl.experiment_runner.models import PipelineConfig, RunResult, StageResult
+from llm4mtl.experiment_runner.models import RunResult
 from llm4mtl.experiment_runner.orchestrator import ExperimentOrchestrator
 from llm4mtl.semantic_tests.failure_report import FailureReportError
+from llm4mtl.stages.models import ConfigError, PipelineConfig, StageResult
 
 PIPELINE_RUN_COMMAND = "pipeline.run"
 

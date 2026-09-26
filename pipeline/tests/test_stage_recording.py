@@ -20,7 +20,7 @@ from fastapi.testclient import TestClient
 
 from llm4mtl import run_store
 from llm4mtl.paths import ArtifactRoots
-from llm4mtl.experiment_runner.models import PipelineConfig, StageResult
+from llm4mtl.stages.models import PipelineConfig, StageResult
 from llm4mtl.experiment_runner.orchestrator import ExperimentOrchestrator
 from llm4mtl.provenance import build_provenance
 from llm4mtl.serialization.json_io import read_json
@@ -244,7 +244,7 @@ class CallerEquivalenceTests(unittest.TestCase):
             },
         )
         with patch(
-            "llm4mtl.stage_service.app._orchestrator.tests.extract",
+            "llm4mtl.stage_service.app._stages.tests.extract",
             side_effect=lambda *_: extraction_result(),
         ):
             response = self.client.post(f"/batches/{BATCH}/runs/{run_id}/stages/extract", json={})

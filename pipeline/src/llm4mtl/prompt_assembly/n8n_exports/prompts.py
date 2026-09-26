@@ -109,6 +109,12 @@ FEW_SHOT_SECTION_HEADER = (
     "\\n\\n## Few-shot examples (they illustrate the binding contract above; "
     "on any conflict the contract wins)\\n"
 )
+# Plain title text, with no escaping, because it is also restated by the
+# refinement prompt that Python renders outside any n8n expression.
+PREREQUISITES_SECTION_HEADER = (
+    "Reactions that run beside this one (their tasks, not yours to implement; "
+    "a test builds its pre-state through the changes they react to)"
+)
 
 
 def transformation_system_message(language: str) -> str:
@@ -252,9 +258,8 @@ def cloud_test_request(language: str) -> str:
         '"\\n\\n## Authoritative metamodel files\\n" + '
         '($json.metamodel_text || "") + '
         '$if(($json.prerequisite_prompt_text || "") != "", '
-        '"\\n\\n## Reactions that run beside this one (their tasks, not yours to '
-        "implement; a test builds its pre-state through the changes they react "
-        'to)\\n" + $json.prerequisite_prompt_text, "") + '
+        f'"\\n\\n## {PREREQUISITES_SECTION_HEADER}\\n" + '
+        '$json.prerequisite_prompt_text, "") + '
         f'"{CONTRACT_SECTION_HEADER}" + ($json.output_contract || "") + '
         '$if($("Extract text from examples file").isExecuted, '
         f'"{FEW_SHOT_SECTION_HEADER}" + '

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import argparse
 import json
 import re
 from datetime import datetime, timezone
@@ -17,7 +16,7 @@ from llm4mtl.domain import ArtifactValidation
 from llm4mtl.languages.base import LanguageAdapter
 from llm4mtl.paths import repository_relative
 from llm4mtl.run_store.identity import resolve_contained_dir
-from llm4mtl.semantic_tests.extraction.models import ResponseTarget
+from llm4mtl.semantic_tests.extraction.models import ExtractionOptions, ResponseTarget
 from llm4mtl.semantic_tests.extraction.parser import (
     java_files,
     model_files,
@@ -37,16 +36,16 @@ def next_suite_id(strategy_dir: Path) -> str:
     return f"suite_{max_seen + 1:03d}"
 
 
-def allocate_suite_dir(target: ResponseTarget, args: argparse.Namespace) -> Path:
+def allocate_suite_dir(target: ResponseTarget, options: ExtractionOptions) -> Path:
     """Claim the candidate directory for this response, without writing to it."""
     strategy_dir = (
-        args.generated_tests_root.resolve()
+        options.generated_tests_root.resolve()
         / target.task
         / "candidates"
         / target.llm
         / target.strategy
     )
-    suite_id = args.suite_id or next_suite_id(strategy_dir)
+    suite_id = options.suite_id or next_suite_id(strategy_dir)
     suite_dir = resolve_contained_dir(strategy_dir, suite_id, kind="suite")
 
     if suite_dir.exists():
@@ -59,7 +58,7 @@ def allocate_suite_dir(target: ResponseTarget, args: argparse.Namespace) -> Path
 
 def write_failed_candidate(
     target: ResponseTarget,
-    args: argparse.Namespace,
+    options: ExtractionOptions,
     adapter: LanguageAdapter,
     *,
     reason_code: str,
@@ -82,8 +81,8 @@ def write_failed_candidate(
         reason_code=reason_code,
         violations=violations,
     )
-    suite_dir = allocate_suite_dir(target, args)
-    if args.dry_run:
+    suite_dir = allocate_suite_dir(target, options)
+    if options.dry_run:
         return suite_dir, validation
 
     suite_dir.mkdir(parents=True, exist_ok=True)
@@ -98,15 +97,15 @@ def write_failed_candidate(
 def write_suite(
     target: ResponseTarget,
     extracted: dict[str, str],
-    args: argparse.Namespace,
+    options: ExtractionOptions,
     adapter: LanguageAdapter,
 ) -> tuple[Path, ArtifactValidation]:
     """Render and persist one immutable generated-suite candidate."""
     extracted, validation = adapter.render_suite_artifacts(target.task, extracted)
-    suite_dir = allocate_suite_dir(target, args)
+    suite_dir = allocate_suite_dir(target, options)
     suite_id = suite_dir.name
 
-    if args.dry_run:
+    if options.dry_run:
         return suite_dir, validation
 
     suite_dir.mkdir(parents=True, exist_ok=True)

@@ -11,6 +11,8 @@ http://stage-service:8129/batches/{id}/runs/{run}/stages/{stage}
 app.py - check output from n8n and send facts only back.
             creates: batch, run. stage, scheduler.
             Prompts:	POST /prompt-inputs/resolve
+            Refinements: POST .../runs/{run}/refinements  (built in ../prompt_assembly/refinement.py)
+            Stages:  the code of each stage is taken from ../stages/dispatch.py
             Health: 	GET /health
 
 

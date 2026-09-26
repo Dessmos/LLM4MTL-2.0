@@ -4,9 +4,15 @@ import json
 import unittest
 from pathlib import Path
 
-from llm4mtl.experiment_runner.models import StageResult
+from llm4mtl.stages.models import StageResult
 from llm4mtl.experiment_runner.orchestrator import run_status
-from llm4mtl.stage_contract import outcome_code, stage_status, to_stage_payload
+from llm4mtl.stage_contract import (
+    CONTRACT_STAGES,
+    outcome_code,
+    stage_status,
+    to_stage_payload,
+)
+from llm4mtl.stages.dispatch import WORKSPACE_STAGES, StageImplementations
 
 
 def result(name: str, status: str, **counts: int) -> StageResult:
@@ -257,6 +263,25 @@ class PayloadTests(unittest.TestCase):
         self.assertIn(payload["stage"], properties["stage"]["enum"])
         self.assertIn(payload["status"], properties["status"]["enum"])
         self.assertTrue(set(schema["required"]).issubset(payload))
+
+
+
+class StageDispatchTests(unittest.TestCase):
+
+    def test_every_contract_stage_has_exactly_one_implementation(self) -> None:
+        stages = StageImplementations()
+        for stage in sorted(CONTRACT_STAGES):
+            with self.subTest(stage=stage):
+                self.assertTrue(callable(stages.implementation(stage)))
+        with self.assertRaises(KeyError):
+            stages.implementation("unknown-stage")
+
+    def test_only_maven_stages_need_a_workspace(self) -> None:
+        self.assertEqual(
+            {"technical-validation", "reference-validation", "execution"},
+            set(WORKSPACE_STAGES),
+        )
+        self.assertTrue(WORKSPACE_STAGES <= CONTRACT_STAGES)
 
 
 if __name__ == "__main__":

@@ -84,10 +84,10 @@ external_tools / workspace / serialization
   ▲
   └── language adapters and stage use-cases
 
-run_store / experiment_store
-  ▲
-  ├── experiment_runner
-  └── stage_service
+run_store / experiment_store     stages
+  ▲                                ▲
+  ├── experiment_runner ───────────┤   (local entry point; nothing imports it)
+  └── stage_service ───────────────┘   (n8n's entry point)
 ```
 
 `domain/` is pure: no filesystem, subprocess, engine, or orchestration imports.
@@ -112,8 +112,10 @@ a language is reachable without opening a stage.
   evidence an adapter returns beside them.
 - `languages/` — `LanguageAdapter`, static registry, and concrete adapters.
 - `task_contracts/` — deterministic structural contracts and enforcement.
-- `prompt_assembly/` — exact task-input resolution and synchronization of the
-  prompt/transformation/test n8n exports. It resolves files but never authors
+- `prompt_assembly/` — exact task-input resolution, the refinement prompt
+  (`refinement.py`, which restates the inputs a generation received and adds the
+  recorded feedback), and synchronization of the prompt/transformation/test n8n
+  exports. It resolves files but never authors
   the natural-language task prompt. Inside `prompt_assembly/n8n_exports/`,
   `prompts.py` is the exact text every model receives and holds no n8n
   knowledge, `workflow_graph.py` is generic node/connection mechanics and holds
@@ -129,7 +131,14 @@ a language is reachable without opening a stage.
 - `transformation_execution/` — execution/reporting facade for generated
   transformations; candidate eligibility comes from the current run's
   reference-valid observation.
-- `experiment_runner/` — local CLI orchestration and resume logic.
+- `stages/` — the shared stage implementations both entry points run
+  (extraction, technical and reference validation, syntax validation,
+  execution), `PipelineConfig`/`StageResult`, and `dispatch.py`, the one table
+  from contract stage id to implementation and to whether a stage needs a
+  run-local engine workspace.
+- `experiment_runner/` — local CLI orchestration and resume logic. It depends
+  on `stages/`; no other module imports it
+  (`test_architecture_paths.LocalRunnerIsolationTests`).
 - `stage_service/` — FastAPI transport for n8n.
 - `stage_recording.py` — how a stage attempt is recorded, for both entry points
   above: the started/finished events, the canonical payload, the evidence

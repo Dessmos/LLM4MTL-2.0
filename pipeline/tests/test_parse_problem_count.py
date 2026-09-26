@@ -19,8 +19,8 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from llm4mtl.domain import ParseObservation
-from llm4mtl.experiment_runner.adapters.transformation_parser import TransformationParserAdapter
-from llm4mtl.experiment_runner.models import PipelineConfig
+from llm4mtl.stages.transformation_parser import TransformationParserAdapter
+from llm4mtl.stages.models import PipelineConfig
 from llm4mtl.languages.base import Workspace
 from llm4mtl.languages.qvto.adapter import QvtoAdapter
 from llm4mtl.paths import REPO_ROOT
@@ -159,7 +159,7 @@ class SerializationTests(unittest.TestCase):
                 adapter.selector, "select_transformations", return_value=paths
             ),
             patch(
-                "llm4mtl.experiment_runner.adapters.transformation_parser.language_adapter"
+                "llm4mtl.stages.transformation_parser.language_adapter"
             ) as language,
         ):
             language.return_value.parse_transformations.return_value = observations

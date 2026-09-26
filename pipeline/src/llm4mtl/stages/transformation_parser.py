@@ -4,14 +4,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from llm4mtl.experiment_runner.adapters.base import hash_paths
-from llm4mtl.experiment_runner.adapters.transformation_validation import (
-    TransformationValidationAdapter,
-)
-from llm4mtl.experiment_runner.config import ConfigError
-from llm4mtl.experiment_runner.models import PipelineConfig, StageResult
 from llm4mtl.languages import language_adapter
 from llm4mtl.semantic_tests.validation import workspace_for
+from llm4mtl.stages.models import ConfigError, PipelineConfig, StageResult
+from llm4mtl.stages.selection import hash_paths
+from llm4mtl.stages.transformation_validation import (
+    TransformationValidationAdapter,
+)
 
 
 class TransformationParserAdapter:

@@ -12,7 +12,8 @@ from itertools import product
 from pathlib import Path
 from typing import Any
 
-from llm4mtl.experiment_runner.config import ConfigError, load_mapping
+from llm4mtl.experiment_runner.config import load_mapping
+from llm4mtl.stages.models import ConfigError
 
 
 @dataclass(frozen=True)

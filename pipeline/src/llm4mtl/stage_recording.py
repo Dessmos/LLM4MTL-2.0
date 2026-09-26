@@ -30,12 +30,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Mapping
 
-from llm4mtl.experiment_runner.models import StageResult
 from llm4mtl.run_store.events import append_event
 from llm4mtl.run_store.models import RunPaths
 from llm4mtl.run_store.stages import record_attempt
 from llm4mtl.semantic_tests.diagnosis_preparation import prepare_after_execution_stage
 from llm4mtl.stage_contract import to_stage_payload
+from llm4mtl.stages.models import StageResult
 
 
 @dataclass(frozen=True)

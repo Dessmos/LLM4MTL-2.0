@@ -7,17 +7,20 @@ from typing import Any
 from fastapi import FastAPI, HTTPException
 
 from llm4mtl import run_store
-from llm4mtl.experiment_runner.models import PipelineConfig
-from llm4mtl.experiment_runner.orchestrator import ExperimentOrchestrator, generate_run_id
 from llm4mtl.languages import language_adapter
 from llm4mtl.paths import TARGET, ArtifactRoots, repository_relative
+from llm4mtl.prompt_assembly.refinement import (
+    RefinementPreparationError,
+    RefinementRequest,
+    prepare_refinement,
+)
 from llm4mtl.prompt_assembly.task_inputs import (
     TaskInputResolutionError,
     resolve_custom_task_inputs,
     resolve_task_inputs,
 )
 from llm4mtl.provenance import ProvenanceError, build_provenance
-from llm4mtl.run_store.identity import InvalidRunIdError
+from llm4mtl.run_store.identity import InvalidRunIdError, generate_run_id
 from llm4mtl.run_store.transformations import (
     TransformationAdoptionError,
     adopt_transformations,
@@ -29,7 +32,7 @@ from llm4mtl.semantic_tests.diagnosis_preparation import (
     diagnosis_artifact_references,
     read_diagnosis_queue,
 )
-from llm4mtl.stage_contract import STAGE_DISPATCH
+from llm4mtl.stage_contract import CONTRACT_STAGES
 from llm4mtl.stage_recording import (
     announce_stage_start,
     infrastructure_error_result,
@@ -48,9 +51,15 @@ from llm4mtl.stage_service.api_models import (
     RunResultRequest,
     StageRunRequest,
 )
+from llm4mtl.stages.dispatch import (
+    WORKSPACE_STAGES,
+    StageImplementations,
+    prepare_workspace,
+)
+from llm4mtl.stages.models import PipelineConfig
 
 app = FastAPI(title="LLM4MTL stage service", version="0.1.0")
-_orchestrator = ExperimentOrchestrator()
+_stages = StageImplementations()
 
 BAD_REQUEST_RESPONSE = {"description": "Malformed or escaping identifier"}
 NOT_FOUND_RESPONSE = {"description": "Requested run, stage, or result not found"}
@@ -238,10 +247,7 @@ def create_run(batch_id: str, request: RunCreateRequest) -> RunCreateResponse:
     # A custom task is its own identity axis: nothing about it is resolved
     # through another task, so its name is the task the manifest records.
     run_id = request.run_id or generate_run_id(
-        PipelineConfig(
-            language=request.language,
-            tasks=[custom.name if custom is not None else request.task],
-        )
+        request.language, [custom.name if custom is not None else request.task]
     )
     try:
         provenance = build_provenance(
@@ -426,7 +432,7 @@ def _add_generation_reference(
 def run_stage(
     batch_id: str, run_id: str, stage: str, request: StageRunRequest
 ) -> dict[str, Any]:
-    if stage not in STAGE_DISPATCH:
+    if stage not in CONTRACT_STAGES:
         raise HTTPException(status_code=404, detail=f"unknown stage: {stage}")
     paths, manifest = _require_manifest(batch_id, run_id)
     config = _stage_config(run_id, manifest, request)
@@ -455,18 +461,15 @@ def run_stage(
             # file the parser never saw.
             config.transformations = [str(path) for path in adopted.paths]
 
-    adapter_attr, method_name = STAGE_DISPATCH[stage]
-    adapter = getattr(_orchestrator, adapter_attr)
-    if stage in {"technical-validation", "reference-validation", "execution"}:
-        config.engine_dir = str(
-            _orchestrator.prepare_workspace(paths.root, config.language)
-        )
+    run = _stages.implementation(stage)
+    if stage in WORKSPACE_STAGES:
+        config.engine_dir = str(prepare_workspace(paths.root, config.language))
 
     # Announced before the work, so a stage that dies mid-execution leaves a
     # started event with no finished one.
     announce_stage_start(paths, stage)
     try:
-        result = getattr(adapter, method_name)(config, False)
+        result = run(config, False)
     except Exception as exc:
         result = infrastructure_error_result(stage, exc)
     # The generation records responsible for the iteration this stage judged
@@ -547,13 +550,13 @@ def prepare_run_refinement(
 ) -> dict[str, Any]:
     paths, manifest = _require_manifest(batch_id, run_id)
     try:
-        prepared = run_store.prepare_refinement(
+        prepared = prepare_refinement(
             paths,
             manifest,
-            run_store.RefinementRequest(**request.model_dump(mode="json")),
+            RefinementRequest(**request.model_dump(mode="json")),
             run_diagnoses=_run_diagnoses(batch_id, run_id),
         )
-    except run_store.RefinementPreparationError as exc:
+    except RefinementPreparationError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     # The store names the prompt within the run; where n8n reads it from is
     # this transport's knowledge.

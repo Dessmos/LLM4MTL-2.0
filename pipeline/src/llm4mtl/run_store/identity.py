@@ -12,11 +12,22 @@ nothing downstream parses meaning out of them.
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
+from datetime import datetime, timezone
 from pathlib import Path
 
 # Deliberately narrow: the characters used by ``generate_run_id`` and by
 # experiment-matrix run ids, and nothing that can traverse or escape a path.
 RUN_ID_PATTERN = re.compile(r"[A-Za-z0-9._-]+")
+
+
+def generate_run_id(language: str, tasks: Sequence[str]) -> str:
+    """A fresh run id naming the language and, when there is one, the task."""
+    task = tasks[0].lower() if len(tasks) == 1 else "all"
+    # Microseconds prevent two requests for the same task in one second from
+    # sharing a run directory. Explicit IDs are still protected by the store.
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S-%f")
+    return f"{language}-{task}-{timestamp}"
 
 
 class InvalidRunIdError(ValueError):

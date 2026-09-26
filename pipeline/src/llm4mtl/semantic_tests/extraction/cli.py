@@ -17,13 +17,10 @@ from llm4mtl.conventions import (
     default_responses_root,
     language_config,
 )
-from llm4mtl.domain import EXTRACTION_FAILED
 from llm4mtl.languages import REQUIRED_LANGUAGES, language_adapter
-from llm4mtl.languages.base import LanguageAdapter
 from llm4mtl.semantic_tests.extraction.discovery import discover_responses
-from llm4mtl.semantic_tests.extraction.models import ExtractionError, ResponseTarget
-from llm4mtl.semantic_tests.extraction.parser import extract_files
-from llm4mtl.semantic_tests.extraction.writer import write_failed_candidate, write_suite
+from llm4mtl.semantic_tests.extraction.extract import extract_one
+from llm4mtl.semantic_tests.extraction.models import ExtractionOptions
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -105,69 +102,6 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return args
 
 
-def extract_one(
-    target: ResponseTarget,
-    args: argparse.Namespace,
-    adapter: LanguageAdapter,
-) -> tuple[bool, str]:
-    """Extract one response. Returns whether it yielded a usable suite, and why not.
-
-    An artifact-invalid suite is still written: it is the evidence behind the
-    funnel's artifact-valid rate, and dropping it would quietly shrink that
-    denominator. It is reported as a failure because the response did not
-    produce a usable semantic-test specification.
-    """
-    if not target.response_path.exists():
-        return False, f"response not found: {target.response_path}"
-
-    markdown = target.response_path.read_text(encoding="utf-8")
-    try:
-        extracted = extract_files(markdown)
-    except ExtractionError as exc:
-        return _failed_candidate(target, args, adapter, str(exc))
-    if not extracted:
-        return _failed_candidate(
-            target,
-            args,
-            adapter,
-            f"no fenced file block found in {target.response_path.name}",
-        )
-
-    suite_dir, validation = write_suite(target, extracted, args, adapter)
-    action = "would write" if args.dry_run else "wrote"
-    if not validation.valid:
-        reason = "; ".join(validation.violations)
-        return (
-            False,
-            f"{action} {suite_dir} [INVALID: {validation.reason_code}] {reason}",
-        )
-    return True, f"{action} {suite_dir}"
-
-
-def _failed_candidate(
-    target: ResponseTarget,
-    args: argparse.Namespace,
-    adapter: LanguageAdapter,
-    reason: str,
-) -> tuple[bool, str]:
-    """Persist an unreadable response as an invalid candidate and keep going.
-
-    The response stays countable in every stage that follows: it is selected
-    like any other candidate, refused at artifact validation, and therefore
-    never executed. Dropping it instead would shrink the invalid-test rate's
-    denominator by exactly the responses that deserve to be in it.
-    """
-    suite_dir, validation = write_failed_candidate(
-        target,
-        args,
-        adapter,
-        reason_code=EXTRACTION_FAILED,
-        violations=(reason,),
-    )
-    action = "would record" if args.dry_run else "recorded"
-    return False, f"{action} {suite_dir} [INVALID: {validation.reason_code}] {reason}"
-
-
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     targets = discover_responses(args)
@@ -179,8 +113,13 @@ def main(argv: list[str] | None = None) -> int:
     ok_count = 0
     fail_count = 0
     adapter = language_adapter(args.language)
+    options = ExtractionOptions(
+        generated_tests_root=args.generated_tests_root,
+        suite_id=args.suite_id,
+        dry_run=args.dry_run,
+    )
     for target in targets:
-        ok, message = extract_one(target, args, adapter)
+        ok, message = extract_one(target, options, adapter)
         if ok:
             ok_count += 1
             print(f"OK: {message}")

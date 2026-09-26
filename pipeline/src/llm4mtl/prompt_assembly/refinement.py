@@ -1,4 +1,10 @@
-"""Prepare compact, immutable inputs for feedback-guided refinement."""
+"""Assemble the exact prompt, and its recorded request, for refinement iteration N.
+
+This is prompt assembly, not artifact storage: it reads the run's recorded facts
+through ``run_store`` and ``semantic_tests``, restates the task context the
+generation received, and renders the text the refinement model is sent. The run
+store only provides where those facts and this output live.
+"""
 
 from __future__ import annotations
 
@@ -12,6 +18,7 @@ from typing import Any
 from llm4mtl.artifact_schemas import validate_artifact
 from llm4mtl.conventions import default_generated_tests_root, language_config
 from llm4mtl.paths import REPO_ROOT, TARGET
+from llm4mtl.prompt_assembly.n8n_exports.prompts import PREREQUISITES_SECTION_HEADER
 from llm4mtl.prompt_assembly.task_inputs import (
     ResolvedTaskInputs,
     TaskInputResolutionError,
@@ -26,6 +33,9 @@ from llm4mtl.run_store.generations import (
 )
 from llm4mtl.run_store.models import RunPaths
 from llm4mtl.run_store.transformations import adopted_transformations
+from llm4mtl.semantic_tests.diagnosis_preparation import (
+    read_failure_reports_for_attempt,
+)
 from llm4mtl.serialization.json_io import read_json, write_json_once
 
 SCHEMA_VERSION = "1.0"
@@ -37,6 +47,17 @@ STAGE_FOR_REASON = {
     "TECH_EXEC_FAILED": "technical-validation",
     "REFERENCE_VALIDATION_FAILED": "reference-validation",
     "SYNTAX_INVALID": "syntax-validation",
+}
+
+# Which strategy-selected assets each prompting strategy's generation received,
+# as the master workflow's strategy table states them. Helper methods are part
+# of no strategy. An unknown strategy is refused rather than restated without
+# assets, which would silently hand the refinement a different treatment.
+STRATEGY_ASSETS = {
+    "only_prompt": frozenset(),
+    "grammar": frozenset({"grammar"}),
+    "few_shot": frozenset({"examples"}),
+    "few_shots_AND_grammar": frozenset({"examples", "grammar"}),
 }
 
 
@@ -100,6 +121,7 @@ def prepare_refinement(
         "supporting_files": _supporting_context(
             language, request.artifact_type, manifest, context.grammar.path
         ),
+        **_generation_only_context(request.artifact_type, context),
     }
     previous_files = _previous_artifact_files(
         paths, manifest, request.artifact_type, request.previous_iteration
@@ -292,6 +314,12 @@ def _supporting_context(
         else "test_generation_strategy"
     )
     strategy = str(manifest.get(strategy_field) or "")
+    assets = STRATEGY_ASSETS.get(strategy)
+    if assets is None:
+        raise RefinementPreparationError(
+            f"unknown {strategy_field} {strategy!r}: cannot restate which "
+            "assets the generation received"
+        )
     supporting: list[Path] = []
     if artifact_type == "semantic-test":
         supporting.append(
@@ -301,7 +329,7 @@ def _supporting_context(
             / language
             / "semantic_cases_contract.txt"
         )
-        if "few_shot" in strategy:
+        if "examples" in assets:
             supporting.append(
                 TARGET.prompt_assets
                 / "tests"
@@ -309,7 +337,7 @@ def _supporting_context(
                 / language
                 / "test_generation_examples.txt"
             )
-    elif "few_shot" in strategy:
+    elif "examples" in assets:
         supporting.append(
             TARGET.prompt_assets
             / "transformations"
@@ -317,7 +345,7 @@ def _supporting_context(
             / language
             / "Examples.txt"
         )
-    if "grammar" in strategy:
+    if "grammar" in assets:
         supporting.append(REPO_ROOT / grammar_path)
     missing = [path for path in supporting if not path.is_file()]
     if missing:
@@ -325,6 +353,28 @@ def _supporting_context(
             "refinement context is missing: " + ", ".join(str(path) for path in missing)
         )
     return [_text_artifact(path) for path in supporting]
+
+
+def _generation_only_context(
+    artifact_type: str, context: ResolvedTaskInputs
+) -> dict[str, Any]:
+    """The task inputs one generation kind states beside the prompt and metamodels.
+
+    A transformation request names the contract's metamodel namespace URIs; a
+    semantic-test request carries the specifications of the Reactions tasks
+    that run beside this one. Refinement restates exactly the same, and omits a
+    key the task has nothing for, so the request reads as the generation did.
+    """
+    if artifact_type == "transformation" and context.metamodel_uris:
+        return {"metamodel_uris": list(context.metamodel_uris)}
+    if artifact_type == "semantic-test" and context.prerequisite_prompts:
+        return {
+            "prerequisite_prompts": [
+                _text_artifact(REPO_ROOT / prompt.path)
+                for prompt in context.prerequisite_prompts
+            ]
+        }
+    return {}
 
 
 def _stage_facts(
@@ -372,12 +422,6 @@ def _stage_facts(
 def _failure_report_facts(
     paths: RunPaths, execution_attempt: int
 ) -> list[dict[str, Any]]:
-    # Deferred to keep the run-store facade from importing diagnosis preparation
-    # back through this module while diagnosis preparation imports run-store models.
-    from llm4mtl.semantic_tests.diagnosis_preparation import (
-        read_failure_reports_for_attempt,
-    )
-
     facts: list[dict[str, Any]] = []
     for indexed in read_failure_reports_for_attempt(paths.root, execution_attempt):
         report = indexed.payload
@@ -471,6 +515,8 @@ def _render_prompt(payload: dict[str, Any]) -> str:
                     f"## {entry['path']}\n{entry['content']}"
                     for entry in context["metamodels"] + context["supporting_files"]
                 ),
+                *_metamodel_uris_section(context),
+                *_prerequisites_section(context),
                 "# CURRENT ARTIFACT\n"
                 + "\n\n".join(
                     f"## {entry['path']}\n{entry['content']}" for entry in previous
@@ -483,6 +529,26 @@ def _render_prompt(payload: dict[str, Any]) -> str:
         )
         + "\n"
     )
+
+
+def _prerequisites_section(context: dict[str, Any]) -> list[str]:
+    prompts = context.get("prerequisite_prompts") or []
+    if not prompts:
+        return []
+    return [
+        f"# {PREREQUISITES_SECTION_HEADER}\n"
+        + "\n\n".join(f"## {entry['path']}\n{entry['content']}" for entry in prompts)
+    ]
+
+
+def _metamodel_uris_section(context: dict[str, Any]) -> list[str]:
+    uris = context.get("metamodel_uris") or []
+    if not uris:
+        return []
+    return [
+        "# Metamodel namespace URIs for this task\n"
+        + "\n".join(f"- {uri}" for uri in uris)
+    ]
 
 
 def _write_text_once(path: Path, content: str) -> None:

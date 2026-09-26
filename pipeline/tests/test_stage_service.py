@@ -9,7 +9,7 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
-from llm4mtl.experiment_runner.models import StageResult
+from llm4mtl.stages.models import StageResult
 from llm4mtl import run_store
 from llm4mtl.paths import ArtifactRoots
 from llm4mtl.provenance import build_provenance
@@ -498,7 +498,7 @@ class StageServiceTests(unittest.TestCase):
     def test_stage_returns_and_records_outcome_code(self) -> None:
         self.client.post(f"/batches/{BATCH}/runs", json=run_payload(run_id="svc-3"))
         with patch(
-            "llm4mtl.stage_service.app._orchestrator.tests.extract",
+            "llm4mtl.stage_service.app._stages.tests.extract",
             return_value=StageResult(
                 "extraction",
                 "infrastructure_error",
@@ -536,7 +536,7 @@ class StageServiceTests(unittest.TestCase):
             )
 
         with patch(
-            "llm4mtl.stage_service.app._orchestrator.tests.extract",
+            "llm4mtl.stage_service.app._stages.tests.extract",
             side_effect=capture,
         ):
             response = self.client.post(
@@ -576,7 +576,7 @@ class StageServiceTests(unittest.TestCase):
         )
 
         with patch(
-            "llm4mtl.stage_service.app._orchestrator.tests.extract",
+            "llm4mtl.stage_service.app._stages.tests.extract",
             return_value=StageResult(
                 "extraction",
                 "completed",
@@ -627,7 +627,7 @@ class StageServiceTests(unittest.TestCase):
             )
 
         with patch(
-            "llm4mtl.stage_service.app._orchestrator.tests.extract",
+            "llm4mtl.stage_service.app._stages.tests.extract",
             side_effect=capture,
         ):
             for run_id in ("svc-run-a", "svc-run-b"):
@@ -645,7 +645,7 @@ class StageServiceTests(unittest.TestCase):
     def test_stage_exception_is_recorded_as_infrastructure_error(self) -> None:
         self.client.post(f"/batches/{BATCH}/runs", json=run_payload(run_id="svc-4", task="Tree2Graph"))
         with patch(
-            "llm4mtl.stage_service.app._orchestrator.tests.extract",
+            "llm4mtl.stage_service.app._stages.tests.extract",
             side_effect=RuntimeError("adapter failed"),
         ):
             response = self.client.post(f"/batches/{BATCH}/runs/svc-4/stages/extract", json={})
@@ -703,11 +703,11 @@ class StageServiceTests(unittest.TestCase):
         self.client.post(f"/batches/{BATCH}/runs", json=run_payload(run_id=run_id))
         with (
             patch(
-                "llm4mtl.stage_service.app._orchestrator.prepare_workspace",
+                "llm4mtl.stage_service.app.prepare_workspace",
                 return_value=Path(self._tmp.name) / "workspace",
             ),
             patch(
-                "llm4mtl.stage_service.app._orchestrator.transformations.semantic_validation",
+                "llm4mtl.stage_service.app._stages.transformations.semantic_validation",
                 return_value=StageResult(
                     "transformation_validation",
                     "failed",

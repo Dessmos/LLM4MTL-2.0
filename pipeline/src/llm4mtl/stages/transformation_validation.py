@@ -24,9 +24,6 @@ from llm4mtl.domain import (
     SuiteExecutionObservation,
     TransformationOutcome,
 )
-from llm4mtl.experiment_runner.adapters.base import fixed_selection, hash_paths
-from llm4mtl.experiment_runner.config import ConfigError
-from llm4mtl.experiment_runner.models import PipelineConfig, StageResult
 from llm4mtl.languages import LanguageAdapter, language_adapter
 from llm4mtl.semantic_tests.suite_execution import (
     GENERATED_TRANSFORMATION_ROLE,
@@ -43,6 +40,8 @@ from llm4mtl.semantic_tests.suites.discovery import (
 )
 from llm4mtl.semantic_tests.validation import workspace_for
 from llm4mtl.serialization.hashing import file_sha256
+from llm4mtl.stages.models import ConfigError, PipelineConfig, StageResult
+from llm4mtl.stages.selection import fixed_selection, hash_paths
 
 DEFAULT_PAIR_TIMEOUT_SECONDS = 240
 

@@ -9,13 +9,20 @@ adding a language is adding an adapter rather than editing pipeline code.
 
 from __future__ import annotations
 
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from llm4mtl.conventions import ETL_CONFIG, REACTIONS_CONFIG, UnsupportedLanguageError, language_config
+from llm4mtl.conventions import (
+    ETL_CONFIG,
+    REACTIONS_CONFIG,
+    UnsupportedLanguageError,
+    default_references_root,
+    language_config,
+)
 from llm4mtl.domain import (
     ArtifactValidation,
     OutcomeStatus,
@@ -25,7 +32,7 @@ from llm4mtl.domain import (
 )
 from llm4mtl.external_tools.maven import CommandResult
 from llm4mtl.experiment_runner.config import validate_config
-from llm4mtl.experiment_runner.models import PipelineConfig
+from llm4mtl.stages.models import PipelineConfig
 from llm4mtl.languages import (
     REQUIRED_LANGUAGES,
     LanguageAdapter,
@@ -35,6 +42,7 @@ from llm4mtl.languages import (
 from llm4mtl.languages.common import validate_rendered_suite
 from llm4mtl.languages.etl.adapter import EtlAdapter
 from llm4mtl.languages.reactions.adapter import (
+    ReactionsAdapter,
     _contains_only_unresolved_linkage_diagnostics,
 )
 
@@ -370,6 +378,84 @@ class ReactionsParserNormalizationTests(unittest.TestCase):
                 "Syntax issues (1):\nno viable alternative at input ']' (ERROR)"
             )
         )
+
+
+class ReactionsPrerequisiteMergeTests(unittest.TestCase):
+    """A transformation that cannot join its prerequisites is observed, not raised.
+
+    `FamiliesToPersons_DeletedFamily` presupposes (through its prerequisite chain)
+    `FamiliesToPersons_InsertedDaughter`, whose reference defines the routine
+    `createOrFindFemale`.
+    """
+
+    TASK = "FamiliesToPersons_DeletedFamily"
+    CLASHING = (
+        'import "http://vitruv.tools/methodologisttemplate/families" as families\n'
+        "reactions: deletedFamily\n"
+        "in reaction to changes in families\n"
+        "execute actions in persons\n"
+        "routine createOrFindFemale(families::Member member) {\n}\n"
+    )
+
+    def test_an_unmergeable_transformation_is_a_parse_failure_of_that_pair(
+        self,
+    ) -> None:
+        cases = {
+            "no segment": ("routine orphan() {\n}\n", "no reactions segment"),
+            "routine clash": (self.CLASHING, "createOrFindFemale"),
+        }
+        for label, (source, diagnostic) in cases.items():
+            with self.subTest(label), tempfile.TemporaryDirectory() as tmp:
+                observation, evidence = self._execute(Path(tmp), source)
+
+                self.assertEqual("transformation_parse", observation.failure_stage)
+                self.assertFalse(observation.compiled)
+                self.assertFalse(observation.is_technically_executable)
+                self.assertIn(diagnostic, observation.error_summary)
+                self.assertEqual("not_invoked", evidence.exit_code)
+                self.assertIn(diagnostic, evidence.stderr)
+                self.assertEqual(
+                    OutcomeStatus.PARSE_FAILED,
+                    ReactionsAdapter()
+                    .normalize_transformation_failure(observation)
+                    .status,
+                )
+
+    def test_a_malformed_prerequisite_reference_still_raises(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            references = Path(tmp) / "references"
+            shutil.copytree(default_references_root(REACTIONS_CONFIG), references)
+            (references / "FamiliesToPersons_InsertedDaughter.reactions").write_text(
+                "reactions: noHeader\n", encoding="utf-8"
+            )
+            with self.assertRaisesRegex(ValueError, "prerequisite declares no"):
+                self._execute(
+                    Path(tmp), self.CLASHING, ReactionsAdapter(references_root=references)
+                )
+
+    def _execute(self, root: Path, source: str, adapter=None):
+        from llm4mtl.domain import GeneratedSuite
+        from llm4mtl.languages.base import Workspace
+
+        engine = root / "engine"
+        (engine / "consistency").mkdir(parents=True)
+        (engine / "consistency/pom.xml").write_text(
+            '<project xmlns="http://maven.apache.org/POM/4.0.0"/>', encoding="utf-8"
+        )
+        transformation = root / f"{self.TASK}.reactions"
+        transformation.write_text(source, encoding="utf-8")
+        suite = GeneratedSuite(
+            "reactions", root, self.TASK, "gpt-5", "few_shot", "suite_001"
+        )
+        with patch("llm4mtl.languages.reactions.adapter.execute_maven_suite") as maven:
+            result = (adapter or ReactionsAdapter()).execute_suite(
+                suite,
+                transformation,
+                Workspace(engine_dir=engine, observations_dir=root / "observations"),
+                60,
+            )
+        maven.assert_not_called()
+        return result
 
 
 def _suite(path: Path):

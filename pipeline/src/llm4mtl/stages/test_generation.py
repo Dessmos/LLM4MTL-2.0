@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import argparse
 from pathlib import Path
 
 from llm4mtl.conventions import (
@@ -10,12 +9,10 @@ from llm4mtl.conventions import (
     default_responses_root,
     language_config,
 )
-from llm4mtl.experiment_runner.adapters.base import fixed_selection, hash_paths
-from llm4mtl.experiment_runner.config import ConfigError
-from llm4mtl.experiment_runner.models import PipelineConfig, StageResult
 from llm4mtl.languages import language_adapter
-from llm4mtl.semantic_tests.extraction.cli import extract_one
 from llm4mtl.semantic_tests.extraction.discovery import response_target_from_path
+from llm4mtl.semantic_tests.extraction.extract import extract_one
+from llm4mtl.semantic_tests.extraction.models import ExtractionOptions
 from llm4mtl.semantic_tests.reference_validation.runner import validate_suite
 from llm4mtl.semantic_tests.suites.discovery import (
     candidate_identity,
@@ -31,6 +28,8 @@ from llm4mtl.semantic_tests.validation import (
     technical_counts,
     workspace_for,
 )
+from llm4mtl.stages.models import ConfigError, PipelineConfig, StageResult
+from llm4mtl.stages.selection import fixed_selection, hash_paths
 
 # Maven timeout for one suite execution. Matches the CLI default; the stage
 # service has no per-request timeout of its own.
@@ -90,11 +89,9 @@ class TestGenerationAdapter:
                 input_hash,
             )
 
-        extraction_args = argparse.Namespace(
+        extraction_options = ExtractionOptions(
             generated_tests_root=self.generated_tests_root(config),
             suite_id=config.suite_id,
-            overwrite=config.overwrite,
-            dry_run=False,
         )
         adapter = language_adapter(config.language)
         selected_model = _single_identity_value(
@@ -115,7 +112,7 @@ class TestGenerationAdapter:
                 strategy_override=selected_strategy,
                 task_override=selected_task,
             )
-            extracted, message = extract_one(target, extraction_args, adapter)
+            extracted, message = extract_one(target, extraction_options, adapter)
             extraction_outcomes.append(
                 {
                     "response": str(response),

@@ -3,8 +3,8 @@
 Python reports FACTS: a ``status`` (``passed`` | ``failed`` | ``skipped`` |
 ``infrastructure_error``) and a domain ``outcome_code``. Routing lives only in n8n
 (see ``docs/n8n-python-contract.md``). This module translates the pipeline's
-internal :class:`StageResult` into the standard stage-result payload and maps each
-contract stage id to the adapter method that implements it.
+internal :class:`StageResult` into the standard stage-result payload. Which code
+implements each stage id is :mod:`llm4mtl.stages.dispatch`'s concern.
 
 ``skipped`` is a first-class outcome: a stage that produced no observation at all
 is not a stage that passed, and folding the two together would let missing data
@@ -15,18 +15,9 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
-from llm4mtl.experiment_runner.models import StageResult
+from llm4mtl.stages.models import StageResult
 
 SCHEMA_VERSION = "2.0"
-
-# Contract stage id -> (orchestrator adapter attribute, method name).
-STAGE_DISPATCH: dict[str, tuple[str, str]] = {
-    "extract": ("tests", "extract"),
-    "syntax-validation": ("parser", "parse"),
-    "technical-validation": ("tests", "technical_validation"),
-    "reference-validation": ("tests", "reference_validation"),
-    "execution": ("transformations", "semantic_validation"),
-}
 
 # Internal pipeline stage name -> contract stage id. The local runner names its
 # stages after the code that runs them; persisted evidence always uses the
@@ -38,6 +29,7 @@ CONTRACT_STAGE_IDS: dict[str, str] = {
     "reference_validation": "reference-validation",
     "transformation_validation": "execution",
 }
+CONTRACT_STAGES = frozenset(CONTRACT_STAGE_IDS.values())
 
 # Outcome code for a stage that ran but observed nothing, when the stage itself
 # recorded no more specific ``skip_reason``.

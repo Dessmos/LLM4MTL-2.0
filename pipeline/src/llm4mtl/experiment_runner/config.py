@@ -7,8 +7,8 @@ from dataclasses import fields
 from pathlib import Path
 from typing import Any
 
-from llm4mtl.experiment_runner.models import PipelineConfig
 from llm4mtl.run_store.identity import RUN_ID_PATTERN
+from llm4mtl.stages.models import ConfigError, PipelineConfig
 from llm4mtl.vocabulary import EXPERIMENT_MODEL_FAMILIES, STRATEGIES
 
 
@@ -16,10 +16,6 @@ ALLOWED_MODELS = frozenset(EXPERIMENT_MODEL_FAMILIES)
 ALLOWED_STRATEGIES = frozenset(STRATEGIES)
 PIPELINE_STAGES = ("extract", "technical", "reference", "parsing", "semantic")
 _YamlLine = tuple[int, str]
-
-
-class ConfigError(ValueError):
-    """Raised when an experiment configuration violates the run contract."""
 
 
 def load_pipeline_config(path: Path) -> PipelineConfig:

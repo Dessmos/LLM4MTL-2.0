@@ -6,12 +6,19 @@ from pathlib import Path
 
 from llm4mtl import run_store
 from llm4mtl.artifact_schemas import ArtifactSchemaError
+from llm4mtl.prompt_assembly.refinement import (
+    STRATEGY_ASSETS,
+    RefinementPreparationError,
+    RefinementRequest,
+    prepare_refinement,
+)
 from llm4mtl.provenance import build_provenance
 from llm4mtl.semantic_tests.diagnosis_preparation import (
     DiagnosisPreparationError,
     read_diagnosis_queue,
 )
 from llm4mtl.serialization.json_io import read_json, write_json
+from llm4mtl.vocabulary import STRATEGIES
 
 
 IDENTITY = {
@@ -161,10 +168,10 @@ class RefinementGenerationContractTests(unittest.TestCase):
             },
         )
 
-        prepared = run_store.prepare_refinement(
+        prepared = prepare_refinement(
             self.paths,
             self.manifest,
-            run_store.RefinementRequest(
+            RefinementRequest(
                 artifact_type="transformation",
                 iteration=1,
                 previous_iteration=0,
@@ -244,10 +251,10 @@ class RefinementGenerationContractTests(unittest.TestCase):
             },
             evidence={"details": {"parser_diagnostics": ["line 1: unexpected token"]}},
         )
-        prepared = run_store.prepare_refinement(
+        prepared = prepare_refinement(
             paths,
             manifest,
-            run_store.RefinementRequest(
+            RefinementRequest(
                 artifact_type="transformation",
                 iteration=1,
                 previous_iteration=0,
@@ -339,10 +346,10 @@ class RefinementGenerationContractTests(unittest.TestCase):
                 evidence={"details": {"verdicts": []}},
             )
 
-        prepared = run_store.prepare_refinement(
+        prepared = prepare_refinement(
             self.paths,
             self.manifest,
-            run_store.RefinementRequest(
+            RefinementRequest(
                 artifact_type="semantic-test",
                 iteration=1,
                 previous_iteration=0,
@@ -394,10 +401,10 @@ class RefinementGenerationContractTests(unittest.TestCase):
             },
             evidence={"details": {"parser_diagnostics": ["bad syntax"]}},
         )
-        run_store.prepare_refinement(
+        prepare_refinement(
             self.paths,
             self.manifest,
-            run_store.RefinementRequest(
+            RefinementRequest(
                 artifact_type="transformation",
                 iteration=1,
                 previous_iteration=0,
@@ -457,13 +464,13 @@ class RefinementGenerationContractTests(unittest.TestCase):
         response_directory.write_text("blocks directory creation\n", encoding="utf-8")
 
         with self.assertRaisesRegex(
-            run_store.RefinementPreparationError,
+            RefinementPreparationError,
             "cannot prepare transformation generation directory",
         ):
-            run_store.prepare_refinement(
+            prepare_refinement(
                 self.paths,
                 self.manifest,
-                run_store.RefinementRequest(
+                RefinementRequest(
                     artifact_type="transformation",
                     iteration=1,
                     previous_iteration=0,
@@ -518,10 +525,10 @@ class RefinementGenerationContractTests(unittest.TestCase):
                 run_diagnoses,
             )
 
-        prepared = run_store.prepare_refinement(
+        prepared = prepare_refinement(
             self.paths,
             self.manifest,
-            run_store.RefinementRequest(
+            RefinementRequest(
                 artifact_type="semantic-test",
                 iteration=1,
                 previous_iteration=0,
@@ -647,10 +654,10 @@ class CustomTaskRefinementContextTests(unittest.TestCase):
             {"status": "failed", "outcome_code": "SYNTAX_INVALID", "counts": {}},
         )
 
-        prepared = run_store.prepare_refinement(
+        prepared = prepare_refinement(
             self.paths,
             self.manifest,
-            run_store.RefinementRequest(
+            RefinementRequest(
                 artifact_type="transformation",
                 iteration=1,
                 previous_iteration=0,
@@ -671,6 +678,129 @@ class CustomTaskRefinementContextTests(unittest.TestCase):
         prompt = (self.paths.root / prepared["prompt_file"]).read_text(encoding="utf-8")
         self.assertIn(self.METAMODEL.strip(), prompt)
         self.assertNotIn("Tree2Graph", prompt)
+
+
+class RefinementRestatesGenerationContextTests(unittest.TestCase):
+    """A refinement restates the task inputs the generation it repairs received."""
+
+    SYNTAX_FAILURE = {
+        "schema_version": "2.0",
+        "stage": "syntax-validation",
+        "status": "failed",
+        "outcome_code": "SYNTAX_INVALID",
+        "counts": {"failed": 1},
+        "artifacts": {},
+    }
+    TECHNICAL_FAILURE = {
+        "schema_version": "2.0",
+        "stage": "technical-validation",
+        "status": "failed",
+        "outcome_code": "TECH_COMPILE_FAILED",
+        "counts": {"failed": 1},
+        "artifacts": {},
+    }
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.root = Path(self._tmp.name)
+
+    def test_a_transformation_refinement_states_the_contract_namespace_uris(
+        self,
+    ) -> None:
+        paths, manifest = self._run("etl", "Tree2Graph", IDENTITY)
+        self._previous(paths, "transformation-generation", "Tree2Graph.etl")
+        run_store.record_attempt(paths, "syntax-validation", self.SYNTAX_FAILURE)
+
+        request, prompt = self._prepare(
+            paths, manifest, "transformation", "SYNTAX_INVALID"
+        )
+
+        self.assertEqual(
+            ["Graph", "Tree"], request["original_task_context"]["metamodel_uris"]
+        )
+        self.assertNotIn("prerequisite_prompts", request["original_task_context"])
+        self.assertIn("# Metamodel namespace URIs for this task\n- Graph\n- Tree", prompt)
+
+    def test_a_reactions_test_refinement_states_the_prerequisite_specifications(
+        self,
+    ) -> None:
+        task = "FamiliesToPersons_DeletedFamily"
+        paths, manifest = self._run(
+            "reactions", task, {**IDENTITY, "language": "reactions", "task": task}
+        )
+        self._previous(paths, "semantic-test-generation", f"{task}.md")
+        run_store.record_attempt(paths, "technical-validation", self.TECHNICAL_FAILURE)
+
+        request, prompt = self._prepare(
+            paths, manifest, "semantic-test", "TECH_COMPILE_FAILED"
+        )
+
+        self.assertEqual(
+            [
+                "prompt_assets/task_prompts/reactions/"
+                "FamiliesToPersons_InsertedFamilyRegister.txt",
+                "prompt_assets/task_prompts/reactions/"
+                "FamiliesToPersons_InsertedDaughter.txt",
+            ],
+            [
+                entry["path"]
+                for entry in request["original_task_context"]["prerequisite_prompts"]
+            ],
+        )
+        self.assertNotIn("metamodel_uris", request["original_task_context"])
+        self.assertIn("# Reactions that run beside this one", prompt)
+        self.assertIn("FamiliesToPersons_InsertedDaughter.txt", prompt)
+
+    def test_every_experiment_strategy_states_its_assets(self) -> None:
+        self.assertEqual(set(STRATEGIES), set(STRATEGY_ASSETS))
+
+    def test_an_unknown_strategy_is_refused_rather_than_restated_without_assets(
+        self,
+    ) -> None:
+        paths, manifest = self._run(
+            "etl",
+            "Tree2Graph",
+            {**IDENTITY, "transformation_strategy": "chain_of_thought"},
+        )
+        self._previous(paths, "transformation-generation", "Tree2Graph.etl")
+        run_store.record_attempt(paths, "syntax-validation", self.SYNTAX_FAILURE)
+
+        with self.assertRaisesRegex(RefinementPreparationError, "chain_of_thought"):
+            self._prepare(paths, manifest, "transformation", "SYNTAX_INVALID")
+
+    def _run(self, language: str, task: str, identity: dict) -> tuple:
+        paths = run_store.create_run(
+            self.root / "runs",
+            f"{language}-context",
+            {**identity, "provenance": build_provenance(language, task)},
+        )
+        manifest = run_store.read_manifest(paths)
+        assert manifest is not None
+        return paths, manifest
+
+    def _previous(self, paths, operation: str, filename: str) -> None:
+        previous = paths.generation_response(operation, 0, filename)
+        previous.parent.mkdir(parents=True, exist_ok=True)
+        previous.write_text("previous artifact\n", encoding="utf-8")
+
+    def _prepare(self, paths, manifest, artifact_type: str, reason: str) -> tuple:
+        prepared = prepare_refinement(
+            paths,
+            manifest,
+            RefinementRequest(
+                artifact_type=artifact_type,
+                iteration=1,
+                previous_iteration=0,
+                provider="openai",
+                model="gpt-5",
+                reason=reason,
+            ),
+            run_diagnoses=self.root / "diagnoses" / paths.root.name,
+        )
+        request = read_json(paths.root / prepared["request_path"])
+        prompt = (paths.root / request["prompt_file"]).read_text(encoding="utf-8")
+        return request, prompt
 
 
 if __name__ == "__main__":

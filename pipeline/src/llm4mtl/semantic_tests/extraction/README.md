@@ -20,9 +20,11 @@ GeneratedTree2GraphSemanticTest.java    harness
 models/input.model
 metadata.json                           where did it come from
 
-cli.py                      - Every execution in every run, passes through - extract_one
+extract.py                  - Every execution in every run, passes through - extract_one
+cli.py                      - command line only: reads flags and calls extract_one
 discovery.py                - decides which ansears to work witf
 models.py                   - data stracture fur the suite
+                              ExtractionOptions - where to write the suite and if to write it
 writer.py                   - saves files locally
 parser.py                   - cut .md file into different files / 
                               Finds triple-quoted blocks and extracts the filename 

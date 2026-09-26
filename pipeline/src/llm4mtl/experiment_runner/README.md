@@ -8,16 +8,17 @@ all Python stages that are als used in n8n workflow
 
 _init_.py               - import 3 models: PipelineConfig, RunResult, StageResult
 main.py and _main_.py   - points of entry (main.py is an old one)
-models.py               - Data classes and contracts. Contains no logic
-                                PipelineConfig - all what one run describes
-                                StageResult    - Result of one stage
-                                RunResult      - The whole run
+models.py               - RunResult - the whole run. Contains no logic
+                            (PipelineConfig and StageResult live in ../stages/models.py)
 config.py               - load and validation of configs
 orchestrator.py         - main file of the folder.controls the whole process
 cli.py                  - Command-line public contract (llm4mtl). Entry point for    
                             analyze command line for flags. And then gives it to orch.
 matrix.py               - expands a single YAML list of settings into a list of 
                             specific runs.
+
+The stages themselves live in ../stages/. This folder only orders them, resumes
+them and prints the summary. Nothing outside this folder imports it.
 
 
 
