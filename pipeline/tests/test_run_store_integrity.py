@@ -142,7 +142,7 @@ class AttemptAtomicityTests(unittest.TestCase):
                 results = list(
                     pool.map(
                         lambda _: run_store.record_diagnosis(
-                            paths, diagnosis, Path(temp_dir) / "diagnoses" / "run_001"
+                            diagnosis, Path(temp_dir) / "diagnoses" / "run_001"
                         ),
                         range(8),
                     )
@@ -192,10 +192,8 @@ class PersistedSchemaTests(unittest.TestCase):
 
     def test_schema_formats_are_enforced_not_only_documented(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
-            paths = run_store.create_run(Path(temp_dir), "run_001", IDENTITY)
             with self.assertRaises(ArtifactSchemaError):
                 run_store.record_diagnosis(
-                    paths,
                     {
                         "schema_version": "1.0",
                         "classification": "AMBIGUOUS",

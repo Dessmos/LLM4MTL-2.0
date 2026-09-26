@@ -649,7 +649,7 @@ def record_diagnosis(
 
     diagnosis = request.model_dump(mode="json", exclude_none=True)
     attempt, written = run_store.record_diagnosis(
-        paths, diagnosis, _run_diagnoses(batch_id, run_id)
+        diagnosis, _run_diagnoses(batch_id, run_id)
     )
     # Reported relative to the diagnoses area, so the caller sees the batch and
     # run it was filed under without knowing how that area is laid out.

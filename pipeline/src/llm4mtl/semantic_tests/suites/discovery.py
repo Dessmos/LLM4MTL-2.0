@@ -76,6 +76,10 @@ def candidate_suite_directories(generated_tests_root: Path) -> list[Path]:
     )
 
 
+class SuiteIdentityError(ValueError):
+    """A path does not name a candidate suite as ``<task>/candidates/<llm>/<strategy>/<suite>``."""
+
+
 def discover_suites(args: argparse.Namespace, language: str) -> list[GeneratedSuite]:
     """Discover candidate suites selected by validation CLI arguments."""
     root = args.generated_tests_root.resolve()
@@ -126,7 +130,7 @@ def suite_from_path(
     try:
         identity = candidate_identity(path)
     except ValueError as exc:
-        raise SystemExit(
+        raise SuiteIdentityError(
             f"Cannot infer task/llm/strategy/suite_id from {path}"
         ) from exc
     return GeneratedSuite(

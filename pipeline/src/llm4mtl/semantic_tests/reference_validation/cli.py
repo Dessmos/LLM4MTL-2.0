@@ -17,7 +17,8 @@ from llm4mtl.domain import GeneratedSuite
 from llm4mtl.languages import language_adapter
 from llm4mtl.semantic_tests.reference_validation.results import write_results
 from llm4mtl.semantic_tests.reference_validation.runner import reference_row, validate_suite
-from llm4mtl.semantic_tests.suites.discovery import discover_suites
+from llm4mtl.semantic_tests.suites.discovery import SuiteIdentityError, discover_suites
+from llm4mtl.semantic_tests.suites.java import JavaSourceError
 from llm4mtl.semantic_tests.validation import REFERENCE_INVALID, ValidationContext, workspace_for
 from llm4mtl.workspace import materialize_engine
 
@@ -92,6 +93,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
+    try:
+        return _run(args)
+    except (SuiteIdentityError, JavaSourceError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+
+def _run(args: argparse.Namespace) -> int:
     suites = discover_suites(args, "etl")
     if not suites:
         task = args.task or "*"

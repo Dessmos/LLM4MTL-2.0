@@ -112,7 +112,9 @@ def object_signatures(raw_objects: list[Any], features: list[str]) -> list[str]:
     signatures = []
     for raw_object in raw_objects:
         if not isinstance(raw_object, dict):
-            raise SystemExit("objects assertion expected entries must be objects")
+            # Parsing already rejects such a specification; reaching this is a
+            # renderer called on unvalidated input, not a generated-test defect.
+            raise ValueError("objects assertion expected entries must be objects")
         parts = [
             f"{feature}={java_value(raw_object.get(feature))}" for feature in features
         ]

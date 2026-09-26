@@ -11,7 +11,6 @@ the launch that created it (see ``run_store.batches``) — and is described by:
 * ``stages/<stage>/attempts/attempt-NNN/evidence.json`` — immutable internal
   detail behind that result (commands, stdout, selections). Never a contract.
 * ``responses/<operation>/iteration-NNN/`` — run-scoped raw generation output.
-* ``responses/<operation>/attempt-NNN/`` — immutable normalized LLM responses.
 * ``transformation/iteration-NNN/`` — the run's own copy of the transformations
   it judged, adopted from that run's raw response, with the ``metadata.json``
   that says where each came from.
@@ -63,14 +62,6 @@ class RunPaths:
         return self.root / "stages"
 
     @property
-    def logs_dir(self) -> Path:
-        return self.root / "logs"
-
-    @property
-    def metrics_dir(self) -> Path:
-        return self.root / "metrics"
-
-    @property
     def responses_dir(self) -> Path:
         return self.root / "responses"
 
@@ -91,9 +82,6 @@ class RunPaths:
 
     def response_operation_dir(self, operation: str) -> Path:
         return self.responses_dir / operation
-
-    def response_attempt_dir(self, operation: str, attempt: int) -> Path:
-        return self.response_operation_dir(operation) / f"attempt-{attempt:03d}"
 
     def generation_iteration_dir(self, operation: str, iteration: int) -> Path:
         """Run-scoped raw generation artifacts for one refinement iteration."""

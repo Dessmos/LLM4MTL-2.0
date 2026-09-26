@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -183,7 +184,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     if not args.write:
-        raise SystemExit("pass --write to update workflow exports")
+        print("pass --write to update workflow exports", file=sys.stderr)
+        return 1
     prompt_count, test_count, transformation_count = synchronize_exports()
     print(
         f"synchronized {prompt_count} prompt-generation and "

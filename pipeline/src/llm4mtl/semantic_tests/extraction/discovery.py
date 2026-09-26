@@ -5,7 +5,10 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from llm4mtl.semantic_tests.extraction.models import ResponseTarget
+from llm4mtl.semantic_tests.extraction.models import (
+    ResponseSelectionError,
+    ResponseTarget,
+)
 
 
 SMOKE_RESPONSE_SUFFIXES = (".qwen-smoke",)
@@ -39,7 +42,9 @@ def _explicit_response_targets(
     args: argparse.Namespace,
 ) -> list[ResponseTarget]:
     if args.suite_id and len(args.response) != 1:
-        raise SystemExit("--suite-id can only be used with a single --response")
+        raise ResponseSelectionError(
+            "--suite-id can only be used with a single --response"
+        )
     responses_root = args.responses_root.resolve()
     return [
         response_target_from_path(
@@ -63,7 +68,7 @@ def response_target_from_path(
     """Resolve response identity from its path and explicit overrides."""
     task = task_override or task_name_from_response(response_path)
     if task_override and task_name_from_response(response_path) != task_override:
-        raise SystemExit(
+        raise ResponseSelectionError(
             f"Expected response file named {task_override}.md: {response_path}"
         )
 
@@ -80,7 +85,7 @@ def response_target_from_path(
         strategy = strategy or rel.parts[1]
 
     if not llm or not strategy:
-        raise SystemExit(
+        raise ResponseSelectionError(
             "Could not infer llm/strategy from response path. Provide --llm and "
             f"--strategy for {response_path}"
         )

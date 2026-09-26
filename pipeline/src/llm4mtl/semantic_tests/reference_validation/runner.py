@@ -14,7 +14,6 @@ from __future__ import annotations
 
 from llm4mtl.domain import GeneratedSuite
 from llm4mtl.semantic_tests.validation import (
-    ARTIFACT_INVALID,
     VALIDATED,
     SuiteVerdict,
     ValidationContext,
@@ -49,7 +48,3 @@ def reference_row(verdict: SuiteVerdict) -> dict[str, str]:
         "failure_stage": verdict.failure_stage,
         "error_summary": verdict.error_summary,
     }
-
-
-def is_artifact_invalid(verdict: SuiteVerdict) -> bool:
-    return verdict.status == ARTIFACT_INVALID

@@ -16,7 +16,11 @@ from llm4mtl.domain import ArtifactValidation
 from llm4mtl.languages.base import LanguageAdapter
 from llm4mtl.paths import repository_relative
 from llm4mtl.run_store.identity import resolve_contained_dir
-from llm4mtl.semantic_tests.extraction.models import ExtractionOptions, ResponseTarget
+from llm4mtl.semantic_tests.extraction.models import (
+    ExtractionOptions,
+    ResponseTarget,
+    SuiteExistsError,
+)
 from llm4mtl.semantic_tests.extraction.parser import (
     java_files,
     model_files,
@@ -49,9 +53,9 @@ def allocate_suite_dir(target: ResponseTarget, options: ExtractionOptions) -> Pa
     suite_dir = resolve_contained_dir(strategy_dir, suite_id, kind="suite")
 
     if suite_dir.exists():
-        raise SystemExit(
+        raise SuiteExistsError(
             f"Target suite already exists and is immutable: {suite_dir}. "
-            "Choose a new --suite-id; --overwrite cannot replace scientific evidence."
+            "Choose a new suite id; an existing candidate is never replaced."
         )
     return suite_dir
 

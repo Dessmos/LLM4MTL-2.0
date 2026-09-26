@@ -33,8 +33,3 @@ class GeneratedSuite:
         for name, value in identity_values:
             if not value:
                 raise ValueError(f"a generated suite needs a non-empty {name}")
-
-    @property
-    def identity(self) -> tuple[str, str, str, str, str]:
-        """The grouping key metrics aggregate by."""
-        return (self.language, self.task, self.llm, self.strategy, self.suite_id)

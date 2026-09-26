@@ -6,6 +6,10 @@ import re
 from pathlib import Path
 
 
+class JavaSourceError(ValueError):
+    """A rendered Java source declares no class, so it cannot be selected or injected."""
+
+
 def java_destination(test_project_dir: Path, fqcn: str) -> Path:
     """Return the source path for a fully qualified Java class name."""
     parts = fqcn.split(".")
@@ -29,7 +33,7 @@ def infer_fqcn(java_path: Path) -> str:
         content,
     )
     if not class_match:
-        raise SystemExit(f"Cannot infer Java class name from {java_path}")
+        raise JavaSourceError(f"Cannot infer Java class name from {java_path}")
     class_name = class_match.group(1)
     if package_match:
         return f"{package_match.group(1)}.{class_name}"

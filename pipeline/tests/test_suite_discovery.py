@@ -7,7 +7,12 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from llm4mtl.semantic_tests.suites.discovery import discover_suites
+from llm4mtl.semantic_tests.suites.discovery import (
+    SuiteIdentityError,
+    discover_suites,
+    suite_from_path,
+)
+from llm4mtl.semantic_tests.suites.java import JavaSourceError, infer_fqcn
 
 
 class SuiteDiscoveryTests(unittest.TestCase):
@@ -65,6 +70,22 @@ class SuiteDiscoveryTests(unittest.TestCase):
             )
             self.assertEqual(["TaskB", "TaskA"], [suite.task for suite in suites])
             self.assertEqual(["qvto", "qvto"], [suite.language for suite in suites])
+
+
+
+class SuiteIdentityFailureTests(unittest.TestCase):
+    """Unreadable identities are domain errors a caller can catch, not process exits."""
+
+    def test_a_path_outside_the_candidate_layout_names_no_suite(self) -> None:
+        with self.assertRaisesRegex(SuiteIdentityError, "Cannot infer"):
+            suite_from_path(Path("/not/a/suite"), Path("/not"), "etl")
+
+    def test_a_java_source_without_a_class_names_no_test(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            java = Path(temp_dir) / "Empty.java"
+            java.write_text("package generated;\n", encoding="utf-8")
+            with self.assertRaisesRegex(JavaSourceError, "Empty.java"):
+                infer_fqcn(java)
 
 
 if __name__ == "__main__":

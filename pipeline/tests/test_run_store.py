@@ -142,10 +142,10 @@ class ResponseAttemptTests(unittest.TestCase):
             # to this run.
             run_diagnoses = Path(temp_dir) / "diagnoses" / "run_001"
             first, first_artifact = run_store.record_diagnosis(
-                paths, diagnosis, run_diagnoses
+                diagnosis, run_diagnoses
             )
             second, second_artifact = run_store.record_diagnosis(
-                paths, {**diagnosis, "classification": "TEST_DEFECT"}, run_diagnoses
+                {**diagnosis, "classification": "TEST_DEFECT"}, run_diagnoses
             )
 
             self.assertEqual((1, 2), (first, second))

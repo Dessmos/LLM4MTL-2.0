@@ -510,7 +510,6 @@ class RefinementGenerationContractTests(unittest.TestCase):
             (2, "TEST_DEFECT", "CURRENT_TEST_DIAGNOSIS"),
         ):
             run_store.record_diagnosis(
-                self.paths,
                 {
                     "schema_version": "1.0",
                     "classification": classification,

@@ -9,12 +9,13 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
-from llm4mtl.stages.models import StageResult
 from llm4mtl import run_store
 from llm4mtl.paths import ArtifactRoots
 from llm4mtl.provenance import build_provenance
 from llm4mtl.serialization.json_io import read_json, write_json
+from llm4mtl.semantic_tests.extraction.models import SuiteExistsError
 from llm4mtl.stage_service.app import app
+from llm4mtl.stages.models import StageResult
 
 # A run is exactly one combination, so creating one states every identity axis.
 IDENTITY = {
@@ -521,6 +522,40 @@ class StageServiceTests(unittest.TestCase):
         fetched = self.client.get(f"/batches/{BATCH}/runs/svc-3/stages/extract")
         self.assertEqual(200, fetched.status_code)
         self.assertEqual("INFRASTRUCTURE_ERROR", fetched.json()["outcome_code"])
+
+    def test_an_existing_candidate_is_recorded_as_a_stage_outcome(self) -> None:
+        """A refused extraction is an attempt n8n can read, never an HTTP 500.
+
+        n8n retrying an attempt with the same suite id finds the candidate
+        already written. That refusal used to be a ``SystemExit``, which no
+        ``except Exception`` catches, so the attempt was never recorded.
+        """
+        run_id = "svc-existing-suite"
+        self.client.post(f"/batches/{BATCH}/runs", json=run_payload(run_id=run_id))
+        response_file = (
+            self.batch_root
+            / run_id
+            / "responses"
+            / "semantic-test-generation"
+            / "iteration-000"
+            / "Tree2Graph.md"
+        )
+        response_file.parent.mkdir(parents=True, exist_ok=True)
+        response_file.write_text("```json file=semantic_cases.json\n{}\n```\n", encoding="utf-8")
+
+        with patch(
+            "llm4mtl.stages.test_generation.extract_one",
+            side_effect=SuiteExistsError("Target suite already exists and is immutable"),
+        ):
+            response = self.client.post(
+                f"/batches/{BATCH}/runs/{run_id}/stages/extract",
+                json={"suite_id": f"{run_id}_000"},
+            )
+
+        self.assertEqual(200, response.status_code, response.text)
+        self.assertEqual("infrastructure_error", response.json()["status"])
+        fetched = self.client.get(f"/batches/{BATCH}/runs/{run_id}/stages/extract")
+        self.assertEqual(1, fetched.json()["attempt"])
 
     def test_extract_consumes_the_run_scoped_generation_response(self) -> None:
         self.client.post(f"/batches/{BATCH}/runs", json=run_payload(run_id="svc-response"))

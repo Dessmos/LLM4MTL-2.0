@@ -7,14 +7,13 @@ from typing import Any
 
 from llm4mtl.artifact_schemas import validate_artifact
 from llm4mtl.run_store.attempts import claim_attempt
-from llm4mtl.run_store.models import RunPaths
 from llm4mtl.serialization.json_io import write_json
 
 DIAGNOSIS_FILENAME = "diagnosis.json"
 
 
 def record_diagnosis(
-    paths: RunPaths, diagnosis: dict[str, Any], run_diagnoses: Path
+    diagnosis: dict[str, Any], run_diagnoses: Path
 ) -> tuple[int, Path]:
     """Persist one immutable failure diagnosis outside the run that produced it.
 

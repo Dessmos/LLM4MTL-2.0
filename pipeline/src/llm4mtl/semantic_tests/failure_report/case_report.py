@@ -46,7 +46,6 @@ def build_failure_report(request: ReportRequest) -> dict[str, Any]:
     recorded = resolve_recorded_execution(request)
     manifest = recorded.manifest
     identity = recorded.identity
-    generated_execution = recorded.generated_execution
     suite_dir = recorded.suite_dir
     transformation_path = recorded.transformation_path
     execution_stage_evidence = recorded.stage_evidence

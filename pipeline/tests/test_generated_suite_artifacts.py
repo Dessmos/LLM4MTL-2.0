@@ -15,7 +15,11 @@ from pathlib import Path
 from llm4mtl.domain import INVALID_SEMANTIC_CASES
 from llm4mtl.languages.etl.adapter import EtlAdapter
 from llm4mtl.run_store.identity import InvalidRunIdError
-from llm4mtl.semantic_tests.extraction.models import ExtractionOptions, ResponseTarget
+from llm4mtl.semantic_tests.extraction.models import (
+    ExtractionOptions,
+    ResponseTarget,
+    SuiteExistsError,
+)
 from llm4mtl.semantic_tests.extraction.semantic_cases import MISSING_SEMANTIC_CASES
 from llm4mtl.semantic_tests.extraction.writer import write_suite
 from llm4mtl.semantic_tests.suites.metadata import artifact_invalid_reason
@@ -179,7 +183,7 @@ class ExtractionArtifactPolicyTests(unittest.TestCase):
             )
             original_metadata = (suite_dir / "metadata.json").read_bytes()
 
-            with self.assertRaises(SystemExit) as raised:
+            with self.assertRaises(SuiteExistsError) as raised:
                 self.write(
                     root,
                     response_markdown(with_spec=False, with_java=True),

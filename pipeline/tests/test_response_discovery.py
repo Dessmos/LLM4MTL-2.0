@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 import argparse
+import io
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
+from llm4mtl.semantic_tests.extraction.cli import main as extraction_main
 from llm4mtl.semantic_tests.extraction.discovery import discover_responses
+from llm4mtl.semantic_tests.extraction.models import ResponseSelectionError
 
 
 def _args(root: Path, **overrides: object) -> argparse.Namespace:
@@ -65,7 +69,7 @@ class ResponseDiscoveryTests(unittest.TestCase):
         self.assertEqual(["second", "first"], [item.task for item in targets])
 
     def test_suite_id_still_requires_one_explicit_response(self) -> None:
-        with self.assertRaisesRegex(SystemExit, "single --response"):
+        with self.assertRaisesRegex(ResponseSelectionError, "single --response"):
             discover_responses(
                 _args(
                     Path("responses"),
@@ -75,6 +79,29 @@ class ResponseDiscoveryTests(unittest.TestCase):
                     strategy="strategy",
                 )
             )
+
+
+    def test_the_command_line_reports_a_selection_error_as_exit_code_one(self) -> None:
+        with patch("sys.stderr", new_callable=io.StringIO) as stderr:
+            code = extraction_main(
+                [
+                    "--language",
+                    "etl",
+                    "--response",
+                    "one.md",
+                    "--response",
+                    "two.md",
+                    "--suite-id",
+                    "suite_001",
+                    "--llm",
+                    "model",
+                    "--strategy",
+                    "strategy",
+                ]
+            )
+
+        self.assertEqual(1, code)
+        self.assertIn("single --response", stderr.getvalue())
 
 
 if __name__ == "__main__":

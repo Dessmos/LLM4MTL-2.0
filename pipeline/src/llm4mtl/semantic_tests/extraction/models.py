@@ -19,6 +19,22 @@ class ExtractionError(ValueError):
     """
 
 
+class ResponseSelectionError(ValueError):
+    """A response cannot be attributed to exactly one task, model, and strategy.
+
+    Raised before anything is written: without an unambiguous identity the
+    candidate would be filed under a combination the response never belonged to.
+    """
+
+
+class SuiteExistsError(FileExistsError):
+    """The candidate directory a response would be written to already exists.
+
+    Candidates are immutable scientific evidence, so a second extraction into
+    the same suite id is refused rather than merged or overwritten.
+    """
+
+
 @dataclass(frozen=True)
 class Block:
     info: str

@@ -101,10 +101,6 @@ class TargetLayout:
         return self.root / "schemas"
 
     @property
-    def docs(self) -> Path:
-        return self.root / "docs"
-
-    @property
     def engines(self) -> Path:
         return self.root / "engines"
 
@@ -135,10 +131,6 @@ class TargetLayout:
     @property
     def experiments_presets(self) -> Path:
         return self.experiments / "presets"
-
-    @property
-    def experiments_variants(self) -> Path:
-        return self.experiments / "variants"
 
     @property
     def experiments_matrices(self) -> Path:
@@ -183,10 +175,6 @@ class TargetLayout:
 
     def engine_harness(self, language: str) -> Path:
         return self.engines / language / "harness"
-
-    # Inputs, uniform per language / task
-    def benchmark_task(self, language: str, task: str) -> Path:
-        return self.benchmark / "tasks" / language / task
 
 
 TARGET = TargetLayout()

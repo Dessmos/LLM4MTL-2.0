@@ -31,10 +31,3 @@ def inject_suite(
     for model_path in model_paths:
         relative = model_path.relative_to(suite.path / "models")
         injection.copy_file(model_path, task_resource_dir / relative)
-
-
-def suite_model_paths(suite_path: Path) -> list[Path]:
-    models_dir = suite_path / "models"
-    if not models_dir.exists():
-        return []
-    return sorted(path for path in models_dir.rglob("*") if path.is_file())

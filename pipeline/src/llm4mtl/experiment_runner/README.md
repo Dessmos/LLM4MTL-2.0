@@ -7,7 +7,7 @@ all Python stages that are als used in n8n workflow
 # files description
 
 _init_.py               - import 3 models: PipelineConfig, RunResult, StageResult
-main.py and _main_.py   - points of entry (main.py is an old one)
+_main_.py               - point of entry (python -m llm4mtl.experiment_runner)
 models.py               - RunResult - the whole run. Contains no logic
                             (PipelineConfig and StageResult live in ../stages/models.py)
 config.py               - load and validation of configs

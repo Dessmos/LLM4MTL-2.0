@@ -20,7 +20,11 @@ from llm4mtl.conventions import (
 from llm4mtl.languages import REQUIRED_LANGUAGES, language_adapter
 from llm4mtl.semantic_tests.extraction.discovery import discover_responses
 from llm4mtl.semantic_tests.extraction.extract import extract_one
-from llm4mtl.semantic_tests.extraction.models import ExtractionOptions
+from llm4mtl.semantic_tests.extraction.models import (
+    ExtractionOptions,
+    ResponseSelectionError,
+    SuiteExistsError,
+)
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -104,6 +108,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
+    try:
+        return _extract_all(args)
+    except (ResponseSelectionError, SuiteExistsError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+
+def _extract_all(args: argparse.Namespace) -> int:
     targets = discover_responses(args)
     if not targets:
         task = f"{args.task}.md" if args.task else "*.md"

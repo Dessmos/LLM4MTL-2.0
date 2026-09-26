@@ -43,7 +43,6 @@ DECLARED_PATH = re.compile(
     re.IGNORECASE,
 )
 
-MODEL_EXTENSIONS = {".model", ".xmi", ".xml"}
 MODELS_DIRECTORY = "models"
 
 
