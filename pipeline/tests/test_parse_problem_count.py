@@ -47,7 +47,7 @@ class QvtoProblemCountTests(unittest.TestCase):
                     return_value=root / "parser",
                 ),
                 patch(
-                    "llm4mtl.languages.qvto.adapter.subprocess.run",
+                    "llm4mtl.languages.common.subprocess.run",
                     return_value=completed,
                 ),
             ):
@@ -147,7 +147,7 @@ class SerializationTests(unittest.TestCase):
     def stage_details(
         self, observations: dict[Path, ParseObservation], paths: list[Path]
     ):
-        adapter = TransformationParserAdapter(REPO_ROOT)
+        adapter = TransformationParserAdapter()
         config = PipelineConfig(
             language="qvto",
             tasks=["Mappings"],
@@ -225,7 +225,7 @@ class ReactionsParseDiagnosticTests(unittest.TestCase):
                     return_value=root,
                 ),
                 patch(
-                    "llm4mtl.languages.reactions.adapter.subprocess.run",
+                    "llm4mtl.languages.common.subprocess.run",
                     side_effect=[build, probe],
                 ),
             ):

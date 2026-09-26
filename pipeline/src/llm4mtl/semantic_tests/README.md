@@ -30,3 +30,4 @@ surefire.py              - checks what cause the problem, failed or real compile
 suite_execution.py       - run one test against one transformation, report the facts
 execution_evidence.py    - save the evidence before the next run wipes it because of maven cleans it
 diagnosis_preparation.py - gather everything needed to ask "test or transformation fault"
+diagnosis_aggregation.py - join the diagnosis verdicts of one run into one result

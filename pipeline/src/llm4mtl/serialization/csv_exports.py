@@ -1,4 +1,4 @@
-"""CSV helpers for the generated-test workflow."""
+"""CSV output for the generated-test validation results."""
 
 from __future__ import annotations
 

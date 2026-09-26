@@ -1,9 +1,8 @@
 """CLI for extracting generated semantic-test suites from Markdown responses.
 
-The language is a required argument, not a default. It used to be hardcoded to
-ETL here while the roots came from ETL conventions, so pointing this command at
-an ATL, QVT-O, or Reactions response silently rendered an ETL harness and wrote
-it into the ETL tree.
+The language is a required argument, not a default. It picks the adapter that
+renders the harness and the default roots, so an ATL, QVT-O, or Reactions
+response is never rendered as ETL or written into the ETL tree.
 """
 
 from __future__ import annotations
@@ -34,6 +33,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             "for one language."
         )
     )
+    _add_response_arguments(parser)
+    _add_output_arguments(parser)
+    args = parser.parse_args(argv)
+    _apply_language_defaults(args)
+    return args
+
+
+def _add_response_arguments(parser: argparse.ArgumentParser) -> None:
+    """Add the options that choose the language and the responses to read."""
     parser.add_argument(
         "--language",
         choices=sorted(REQUIRED_LANGUAGES),
@@ -58,14 +66,6 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         ),
     )
     parser.add_argument(
-        "--generated-tests-root",
-        type=Path,
-        help=(
-            "Root where <task>/candidates suites are written. "
-            "Defaults to the selected language's generated-tests root."
-        ),
-    )
-    parser.add_argument(
         "--task",
         help=(
             "Only extract this task, e.g. Tree2Graph. If omitted, extracts all "
@@ -80,30 +80,36 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--strategy",
         help="Override strategy name when --response is outside the standard tree.",
     )
+
+
+def _add_output_arguments(parser: argparse.ArgumentParser) -> None:
+    """Add the options that control where and whether suites are written."""
+    parser.add_argument(
+        "--generated-tests-root",
+        type=Path,
+        help=(
+            "Root where <task>/candidates suites are written. "
+            "Defaults to the selected language's generated-tests root."
+        ),
+    )
     parser.add_argument(
         "--suite-id",
         help="Explicit suite id, e.g. suite_001. Allowed only with one response.",
-    )
-    parser.add_argument(
-        "--overwrite",
-        action="store_true",
-        help=(
-            "Deprecated compatibility flag. Existing candidate suites are immutable; "
-            "choose a new --suite-id instead."
-        ),
     )
     parser.add_argument(
         "--dry-run",
         action="store_true",
         help="Parse and report what would be written without creating files.",
     )
-    args = parser.parse_args(argv)
+
+
+def _apply_language_defaults(args: argparse.Namespace) -> None:
+    """Fill the roots the user did not give from the chosen language."""
     config = language_config(args.language)
     if args.responses_root is None:
         args.responses_root = default_responses_root(config)
     if args.generated_tests_root is None:
         args.generated_tests_root = default_generated_tests_root(config)
-    return args
 
 
 def main(argv: list[str] | None = None) -> int:

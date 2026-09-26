@@ -9,58 +9,29 @@ from llm4mtl.languages.java_assertions import (
     imports as assertion_imports,
     render_assertions,
 )
+from llm4mtl.languages.java_resources import java_lines
 from llm4mtl.semantic_tests.codegen.java_rendering import (
     escape_java,
-    sanitize_method_name,
+    rendered_method_name,
 )
 from llm4mtl.semantic_tests.semantic_spec import effective_models
-from llm4mtl.semantic_tests.suites.java import slug
+from llm4mtl.semantic_tests.suites.generated_models import generated_model_resource
+from llm4mtl.task_contracts.models import METAMODEL_FILE_SUFFIX
 
 
 def render_atl_test(class_name: str, spec: dict[str, Any], task: str) -> str:
+    """Render the JUnit class that runs every test case of ``spec`` with ATL."""
     methods = [_render_method(spec, test, task) for test in spec["tests"]]
     return "\n".join(
         [
             "package org.example.generated;",
             "",
             *assertion_imports(),
-            "import java.io.File;",
-            "import java.io.FileReader;",
-            "import java.io.Reader;",
-            "import java.net.URL;",
-            "import java.nio.file.Files;",
-            "import java.util.HashMap;",
-            "",
-            "import org.eclipse.emf.common.util.URI;",
-            "import org.eclipse.emf.ecore.EPackage;",
-            "import org.eclipse.emf.ecore.resource.Resource;",
-            "import org.eclipse.emf.ecore.resource.ResourceSet;",
-            "import org.eclipse.emf.ecore.resource.impl.ResourceSetImpl;",
-            "import org.eclipse.emf.ecore.xmi.impl.EcoreResourceFactoryImpl;",
-            "import org.eclipse.emf.ecore.xmi.impl.XMIResourceFactoryImpl;",
-            "import org.eclipse.m2m.atl.core.IExtractor;",
-            "import org.eclipse.m2m.atl.core.IInjector;",
-            "import org.eclipse.m2m.atl.core.IModel;",
-            "import org.eclipse.m2m.atl.core.IReferenceModel;",
-            "import org.eclipse.m2m.atl.core.ModelFactory;",
-            "import org.eclipse.m2m.atl.core.emf.EMFExtractor;",
-            "import org.eclipse.m2m.atl.core.emf.EMFInjector;",
-            "import org.eclipse.m2m.atl.core.emf.EMFModelFactory;",
-            "import org.eclipse.m2m.atl.engine.compiler.atl2006.Atl2006Compiler;",
-            "import org.eclipse.m2m.atl.engine.emfvm.launch.EMFVMLauncher;",
-            "import org.junit.jupiter.api.BeforeAll;",
-            "import org.junit.jupiter.api.Test;",
-            "",
+            *java_lines(__package__, "imports.java.txt"),
             f"public class {class_name} {{",
-            "    @BeforeAll",
-            "    static void registerFactories() {",
-            '        Resource.Factory.Registry.INSTANCE.getExtensionToFactoryMap().put("xmi", new XMIResourceFactoryImpl());',
-            '        Resource.Factory.Registry.INSTANCE.getExtensionToFactoryMap().put("model", new XMIResourceFactoryImpl());',
-            '        Resource.Factory.Registry.INSTANCE.getExtensionToFactoryMap().put("ecore", new EcoreResourceFactoryImpl());',
-            "    }",
-            "",
+            *java_lines(__package__, "register_factories.java.txt"),
             *methods,
-            *_atl_helpers(),
+            *java_lines(__package__, "helpers.java.txt"),
             *assertion_helpers(),
             "}",
             "",
@@ -73,40 +44,63 @@ def _render_method(
     test: dict[str, Any],
     task: str,
 ) -> str:
-    models = effective_models(spec, test)
-    sources = [model for model in models if model.get("role") == "source"]
-    targets = [model for model in models if model.get("role") == "target"]
-    if len(sources) != 1 or len(targets) != 1:
-        raise ValueError(
-            f"ATL scenario {test.get('name')!r} needs exactly one source and target model"
-        )
-    source, target = sources[0], targets[0]
-    source_path = _generated_model_path(task, str(source["path"]))
-    source_metamodel = _metamodel_name(source)
-    target_metamodel = _metamodel_name(target)
-    transformation = str(spec["transformation"]).split("/")[-1]
-    method_name = sanitize_method_name(str(test["name"]))
+    source, target = _source_and_target(spec, test)
+    execution = _render_execution(spec, task, source, target)
+    method_name = rendered_method_name(test)
     model_variables = {
         str(source["name"]): "sourceRoots",
         str(target["name"]): "targetRoots",
     }
+    snapshot = f"{escape_java(method_name)}/{escape_java(str(target['name']))}.xmi"
     return "\n".join(
         [
             "    @Test",
             f"    void {method_name}() throws Exception {{",
-            f'        Resource source = loadModel("{escape_java(source_path)}", '
-            f'"{escape_java(source_metamodel)}", "{escape_java(_metamodel_uri(source))}");',
-            "        List<EObject> sourceRoots = new ArrayList<>(source.getContents());",
-            f'        List<EObject> targetRoots = executeAtl("{escape_java(transformation)}", source, '
-            f'"{escape_java(source_metamodel)}", "{escape_java(target_metamodel)}", '
-            f'"{escape_java(_metamodel_alias(source))}", "{escape_java(_metamodel_alias(target))}", '
-            f'"{escape_java(_metamodel_uri(target))}");',
-            f'        writeSnapshot("{escape_java(method_name)}/{escape_java(str(target["name"]))}.xmi", targetRoots);',
+            *execution,
+            f'        writeSnapshot("{snapshot}", targetRoots);',
             *render_assertions(test["assertions"], model_variables),
             "    }",
             "",
         ]
     )
+
+
+def _source_and_target(
+    spec: dict[str, Any], test: dict[str, Any]
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """The one source and one target model an ATL test case must have."""
+    models = effective_models(spec, test)
+    sources = [model for model in models if model.get("role") == "source"]
+    targets = [model for model in models if model.get("role") == "target"]
+    if len(sources) != 1 or len(targets) != 1:
+        raise ValueError(
+            f"ATL scenario {test.get('name')!r} needs exactly one source and "
+            "target model"
+        )
+    return sources[0], targets[0]
+
+
+def _render_execution(
+    spec: dict[str, Any],
+    task: str,
+    source: dict[str, Any],
+    target: dict[str, Any],
+) -> list[str]:
+    """Load the source model, run the transformation, and keep the target roots."""
+    source_path = escape_java(generated_model_resource(task, str(source["path"])))
+    source_metamodel = escape_java(_metamodel_name(source))
+    target_metamodel = escape_java(_metamodel_name(target))
+    transformation = escape_java(str(spec["transformation"]).split("/")[-1])
+    return [
+        f'        Resource source = loadModel("{source_path}", '
+        f'"{source_metamodel}", "{escape_java(_metamodel_uri(source))}");',
+        "        List<EObject> sourceRoots = new ArrayList<>(source.getContents());",
+        f'        List<EObject> targetRoots = executeAtl("{transformation}", source, '
+        f'"{source_metamodel}", "{target_metamodel}", '
+        f'"{escape_java(_metamodel_alias(source))}", '
+        f'"{escape_java(_metamodel_alias(target))}", '
+        f'"{escape_java(_metamodel_uri(target))}");',
+    ]
 
 
 def _runtime_name(model: dict[str, Any]) -> str:
@@ -124,9 +118,9 @@ def _metamodel_alias(model: dict[str, Any]) -> str:
 def _metamodel_uri(model: dict[str, Any]) -> str:
     """The nsURI the harness must resolve this model against.
 
-    Several ATL .ecore files hold two root EPackages (an auxiliary
-    ``PrimitiveTypes`` first, the real metamodel second), so the package cannot
-    be picked positionally.  The contract's nsURI selects it.
+    Some ATL ``.ecore`` files hold two root EPackages (an extra
+    ``PrimitiveTypes`` first, the real metamodel second). The harness picks the
+    package by this nsURI, not by position.
     """
     return str(model.get("metamodelUri") or "")
 
@@ -134,88 +128,10 @@ def _metamodel_uri(model: dict[str, Any]) -> str:
 def _metamodel_name(model: dict[str, Any]) -> str:
     """The .ecore the harness loads this model against.
 
-    A task contract names the file for every benchmark task. A custom task has
-    no contract, so the model's own name stands in, the way the alias and the
-    nsURI above already fall back rather than refusing to render.
+    The task contract names the file for every benchmark task. A custom task
+    has no contract, so the model's runtime name is used instead of failing.
     """
     path = model.get("metamodelFile")
     if not path:
-        return f"{_runtime_name(model)}.ecore"
+        return f"{_runtime_name(model)}{METAMODEL_FILE_SUFFIX}"
     return str(path).replace("\\", "/").split("/")[-1]
-
-
-def _generated_model_path(task: str, path: str) -> str:
-    relative = path.replace("\\", "/")
-    if relative.startswith("models/"):
-        relative = relative[len("models/") :]
-    return f"generated-models/{slug(task)}/{relative}"
-
-
-def _atl_helpers() -> list[str]:
-    return [
-        "    private Resource loadModel(String resourcePath, String ecoreName, String nsUri) throws Exception {",
-        "        ResourceSet resourceSet = new ResourceSetImpl();",
-        "        loadMetamodel(resourceSet, ecoreName, nsUri);",
-        "        URL url = getClass().getClassLoader().getResource(resourcePath);",
-        '        if (url == null) throw new IllegalArgumentException("Resource not found: " + resourcePath);',
-        "        return resourceSet.getResource(URI.createURI(url.toString()), true);",
-        "    }",
-        "",
-        "    private EPackage loadMetamodel(ResourceSet resourceSet, String name, String nsUri) {",
-        '        URL url = getClass().getClassLoader().getResource("metamodels/" + name);',
-        '        if (url == null) throw new IllegalArgumentException("Resource not found: metamodels/" + name);',
-        "        Resource resource = resourceSet.getResource(URI.createURI(url.toString()), true);",
-        "        EPackage selected = null;",
-        "        for (EObject root : resource.getContents()) {",
-        "            if (!(root instanceof EPackage)) continue;",
-        "            EPackage candidate = (EPackage) root;",
-        "            resourceSet.getPackageRegistry().put(candidate.getNsURI(), candidate);",
-        "            if (selected == null || candidate.getNsURI().equals(nsUri)) selected = candidate;",
-        "        }",
-        '        if (selected == null) throw new IllegalStateException("No EPackage in metamodels/" + name);',
-        "        return selected;",
-        "    }",
-        "",
-        "    private File compileAtl(String transformation) throws Exception {",
-        '        File source = new File("src/main/atl", transformation);',
-        '        if (!source.isFile()) throw new IllegalArgumentException("Transformation not found: " + source);',
-        '        File asm = Files.createTempFile("llm4mtl-atl", ".asm").toFile();',
-        "        asm.deleteOnExit();",
-        "        try (Reader reader = new FileReader(source)) {",
-        "            new Atl2006Compiler().compile(reader, asm.getAbsolutePath());",
-        "        }",
-        '        if (asm.length() == 0) throw new IllegalStateException("ATL parse errors: empty compiled module");',
-        "        return asm;",
-        "    }",
-        "",
-        "    private List<EObject> executeAtl(String transformation, Resource sourceResource, String sourceEcore, String targetEcore, String sourceAlias, String targetAlias, String targetNsUri) throws Exception {",
-        "        ModelFactory factory = new EMFModelFactory();",
-        "        IInjector injector = new EMFInjector();",
-        "        IReferenceModel sourceMetamodel = factory.newReferenceModel();",
-        "        IReferenceModel targetMetamodel = factory.newReferenceModel();",
-        '        URL sourceMm = getClass().getClassLoader().getResource("metamodels/" + sourceEcore);',
-        '        URL targetMm = getClass().getClassLoader().getResource("metamodels/" + targetEcore);',
-        '        if (sourceMm == null || targetMm == null) throw new IllegalArgumentException("Resource not found: ATL metamodel");',
-        "        injector.inject(sourceMetamodel, sourceMm.toString());",
-        "        injector.inject(targetMetamodel, targetMm.toString());",
-        "        IModel source = factory.newModel(sourceMetamodel);",
-        "        injector.inject(source, sourceResource.getURI().toString());",
-        "        IModel target = factory.newModel(targetMetamodel);",
-        "        EMFVMLauncher launcher = new EMFVMLauncher();",
-        "        launcher.initialize(null);",
-        '        launcher.addInModel(source, "IN", sourceAlias);',
-        '        launcher.addOutModel(target, "OUT", targetAlias);',
-        "        try (java.io.InputStream stream = new java.io.FileInputStream(compileAtl(transformation))) {",
-        '            launcher.launch("run", null, new HashMap<>(), stream);',
-        "        }",
-        '        File output = Files.createTempFile("llm4mtl-atl-output", ".xmi").toFile();',
-        "        output.deleteOnExit();",
-        "        IExtractor extractor = new EMFExtractor();",
-        "        extractor.extract(target, URI.createFileURI(output.getAbsolutePath()).toString());",
-        "        ResourceSet resourceSet = new ResourceSetImpl();",
-        "        loadMetamodel(resourceSet, targetEcore, targetNsUri);",
-        "        Resource resource = resourceSet.getResource(URI.createFileURI(output.getAbsolutePath()), true);",
-        "        return new ArrayList<>(resource.getContents());",
-        "    }",
-        "",
-    ]

@@ -35,6 +35,63 @@ SUITE = GeneratedSuite(
 )
 
 
+class ValidationCliArgumentTests(unittest.TestCase):
+
+    def test_both_clis_parse_the_shared_options_alike(self) -> None:
+        argv = [
+            "--suite",
+            "a/suite",
+            "--task",
+            "Tree2Graph",
+            "--generated-tests-root",
+            "generated",
+            "--etl-test-dir",
+            "engine",
+            "--results-root",
+            "results",
+            "--observations-root",
+            "run/observations",
+            "--append",
+            "--dry-run",
+        ]
+        for module in (reference_cli, technical_cli):
+            with self.subTest(module=module.__name__):
+                args = module.parse_args(argv)
+
+                self.assertEqual([Path("a/suite")], args.suite)
+                self.assertEqual("Tree2Graph", args.task)
+                self.assertEqual(Path("generated"), args.generated_tests_root)
+                self.assertEqual(Path("engine"), args.etl_test_dir)
+                self.assertEqual(Path("results"), args.results_root)
+                self.assertEqual(Path("run/observations"), args.observations_root)
+                self.assertTrue(args.append)
+                self.assertTrue(args.dry_run)
+
+    def test_each_cli_keeps_its_own_default_timeout(self) -> None:
+        cases = ((reference_cli, 240), (technical_cli, 180))
+        for module, expected_seconds in cases:
+            with self.subTest(module=module.__name__):
+                args = module.parse_args(["--observations-root", "run/observations"])
+
+                self.assertEqual(expected_seconds, args.timeout)
+
+    def test_the_unused_references_root_option_is_gone(self) -> None:
+        for module in (reference_cli, technical_cli):
+            with self.subTest(module=module.__name__):
+                with redirect_stderr(StringIO()):
+                    with self.assertRaises(SystemExit) as raised:
+                        module.parse_args(
+                            [
+                                "--observations-root",
+                                "run/observations",
+                                "--references-root",
+                                "references",
+                            ]
+                        )
+
+                self.assertEqual(2, raised.exception.code)
+
+
 class ValidationCliSelectionTests(unittest.TestCase):
 
     def test_empty_selection_messages_and_exit_codes_are_preserved(self) -> None:

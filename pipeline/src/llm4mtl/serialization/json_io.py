@@ -4,6 +4,9 @@ Both writers stage the complete document in a temporary file beside the target
 and fsync it before it becomes visible, so a reader never sees a half-written
 document. They differ only in how the staged file becomes the target: an atomic
 replace, or an atomic create that refuses an existing document.
+
+:func:`write_json_once_or_match` builds on the atomic create for records that
+are written once but may be reported again by a retry.
 """
 
 from __future__ import annotations
@@ -12,7 +15,9 @@ import json
 import os
 import tempfile
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
+
+Document = dict[str, Any]
 
 
 def write_json(path: Path, payload: Any) -> None:
@@ -38,6 +43,50 @@ def write_json_once(path: Path, payload: Any) -> None:
         os.link(staged, path)
     finally:
         staged.unlink(missing_ok=True)
+
+
+class JsonDocumentConflictError(ValueError):
+    """Raised when a write-once document already holds different content.
+
+    ``stored`` is the document that was there first, so the caller can say
+    what the earlier writer recorded.
+    """
+
+    def __init__(self, path: Path, stored: Document) -> None:
+        super().__init__(f"a different document already exists: {path}")
+        self.path = path
+        self.stored = stored
+
+
+def write_json_once_or_match(
+    path: Path,
+    payload: Document,
+    *,
+    comparable: Callable[[Document], Document],
+    check_stored: Callable[[Document], None] | None = None,
+) -> Document:
+    """Create ``path`` once, or accept the same document written earlier.
+
+    Returns the stored document: ``payload`` when this call created the file,
+    or the earlier document when both are equal after ``comparable``. A retry
+    may legitimately move a timestamp, so ``comparable`` drops such fields.
+    ``check_stored`` validates the earlier document before the comparison.
+
+    The create is atomic, so of two concurrent writers exactly one wins and
+    the other compares against the winner. Raises
+    :class:`JsonDocumentConflictError` when the earlier document differs.
+    """
+    path = Path(path)
+    try:
+        write_json_once(path, payload)
+    except FileExistsError:
+        stored = read_json(path)
+        if check_stored is not None:
+            check_stored(stored)
+        if comparable(stored) != comparable(payload):
+            raise JsonDocumentConflictError(path, stored) from None
+        return stored
+    return payload
 
 
 def read_json(path: Path) -> Any:

@@ -1,30 +1,30 @@
-"""Prepare Source Diagnosis evidence, and only after the execution stage has failed.
+"""Prepare Source Diagnosis evidence, only after the execution stage has failed.
 
-The order matters more than anything else in this module. A generated test earns
-the right to say something about a generated transformation by first passing on
-the *reference* transformation; only then does it run against the generated one,
-and only a failure of that last run is a semantic failure worth diagnosing. So
-this module reads exactly one thing: an immutable ``execution`` stage attempt.
-It never looks at extraction, technical, or reference results to decide *whether*
-to build a report — those decide whether the pair was allowed to execute at all,
-and the execution stage already refuses pairs whose suite is not reference-valid.
+Order matters most here. A generated test may judge a generated transformation
+only after it passed on the *reference* transformation. Only a failure of the
+later run, against the generated transformation, is a semantic failure worth
+diagnosing. So this module reads exactly one thing: an immutable ``execution``
+stage attempt. It never reads extraction, technical, or reference results to
+decide *whether* to build a report. Those decided whether the pair could run at
+all, and the execution stage only runs reference-valid suites.
 
-What it assembles, per failing pair, is one report per recorded assertion
-failure, from six sources:
+For each failing pair it writes one report per recorded test-method failure (a
+lost assertion or a runtime throw), or one pair-level report when no test method
+was reached. The sources are:
 
 * the generated transformation and its hash — from the pair's observation;
 * the parser verdict for that transformation — from the syntax-validation
   attempt of the same run;
 * the generated test — from the immutable candidate directory the observation
-  names, narrowed to the one semantic case that failed;
-* the same test's reference history — from the reference observation of this run;
+  names, narrowed to the failing semantic case when it is known;
+* the same test's reference result — from this run's reference observation;
 * what failed on the generated transformation — from the pair's observation;
 * the raw failure — from the execution evidence archived beside it.
 
-Nothing here classifies a failure, calls an LLM, or writes a stage result. The
-mapping from a Surefire method back to a semantic case is the renderer's own
-name function run forwards over every case, so a report is attached to a case
-only when exactly one case could have produced that method.
+Nothing here classifies a failure, calls an LLM, or writes a stage result. A
+Surefire method is mapped back to a semantic case by rendering every case name
+the way the renderers do. A report names a case only when exactly one case could
+have produced that method.
 """
 
 from __future__ import annotations
@@ -32,31 +32,50 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any, Iterator
 from xml.etree import ElementTree as ET
 
 from llm4mtl.artifact_schemas import validate_artifact
+from llm4mtl.domain.observations import FailureStage
 from llm4mtl.paths import REPO_ROOT, repository_relative
-from llm4mtl.run_store.attempts import existing_attempts
+from llm4mtl.run_store.attempts import attempt_dir_name, existing_attempts
 from llm4mtl.run_store.models import RunPaths
-from llm4mtl.semantic_tests.codegen.java_rendering import (
-    assertion_message,
-    sanitize_method_name,
-)
+from llm4mtl.semantic_tests.codegen.java_rendering import assertion_message
 from llm4mtl.semantic_tests.execution_evidence import archived_execution_evidence
-from llm4mtl.semantic_tests.failure_report import FailureReportError, write_report
+from llm4mtl.semantic_tests.failure_report import (
+    ASSERTION_FAILURE_KIND,
+    CASE_SCOPE,
+    FAILURE_REPORT_SCHEMA,
+    PAIR_SCOPE,
+    RUNTIME_ERROR_KIND,
+    FailureReportError,
+    assertion_id,
+    case_id,
+    rendered_method_name,
+    write_report,
+)
+from llm4mtl.semantic_tests.semantic_spec import SEMANTIC_CASES_FILE
+from llm4mtl.semantic_tests.suite_execution import (
+    OBSERVATION_FILENAME,
+    SNAPSHOTS_DIRNAME,
+)
 from llm4mtl.semantic_tests.surefire import testcase_outcome
 from llm4mtl.serialization.json_io import read_json, write_json_once
+from llm4mtl.vocabulary import EXECUTION_STAGE_ID, SYNTAX_VALIDATION_STAGE_ID
 
 SCHEMA_VERSION = "1.0"
+DIAGNOSIS_INDEX_SCHEMA = "diagnosis-index"
+DIAGNOSIS_DIRNAME = "diagnosis"
 INDEX_FILENAME = "index.json"
 REPORTS_DIRNAME = "reports"
-RESPONSES_DIRNAME = "responses"
 SOURCE_DIAGNOSIS_DIRNAME = "source-diagnosis"
-EXECUTION_STAGE = "execution"
-SYNTAX_STAGE = "syntax-validation"
 SAFE_NAME = re.compile(r"[^A-Za-z0-9._-]+")
+# The ``status`` of one report entry in the index.
+REPORT_CREATED = "created"
+REPORT_REFUSED = "refused"
+# How many leading characters of the transformation hash a report file name uses.
+REPORT_NAME_HASH_CHARS = 12
 
 
 class DiagnosisPreparationError(RuntimeError):
@@ -81,11 +100,33 @@ class SurefireFailure:
     the first can name an assertion.
     """
 
-    report: Path
     kind: str
-    test_class: str
     test_method: str
     message: str
+
+
+@dataclass(frozen=True)
+class _PairEvidence:
+    """What one failed pair recorded, located once for all of its reports."""
+
+    paths: RunPaths
+    attempt: int
+    failure_stage: Any
+    execution: dict[str, Any]
+    observation_path: Path
+    suite_dir: Path
+    execution_evidence: Path
+    syntax_evidence: Path
+    reference_execution: Path | None
+    surefire_reports: tuple[Path, ...]
+
+
+class _PairSkipped(Exception):
+    """A failed pair that gets no report, and the recorded reason why."""
+
+    def __init__(self, reason: str, detail: str) -> None:
+        super().__init__(detail)
+        self.skip = {"reason": reason, "detail": detail}
 
 
 def prepare_after_execution_stage(
@@ -94,55 +135,47 @@ def prepare_after_execution_stage(
     payload: dict[str, Any],
     attempt: int,
 ) -> dict[str, Any] | None:
-    """Assemble diagnosis evidence when — and only when — the execution stage failed.
+    """Assemble diagnosis evidence only when the execution stage failed.
 
-    Called by both stage entry points right after the execution attempt has been
-    recorded. It reads that attempt and writes nothing else: preparation is
-    deterministic post-processing, so it must never change the stage result, the
-    run status, or the events timeline. A failure to assemble evidence is
-    likewise not a stage failure; it is recorded in the index and the caller
-    continues.
+    Called through :func:`llm4mtl.stage_recording.record_stage_attempt`, which
+    both entry points use, right after the execution attempt is recorded. It
+    writes only diagnosis files and must never change the stage result, the run
+    status, or the events. A failure to assemble evidence is not a stage
+    failure: it is recorded in the index and the caller continues.
+
+    Returns the diagnosis index, or ``None`` when there is nothing to diagnose
+    or even the error index could not be written.
     """
-    if stage != EXECUTION_STAGE:
+    if stage != EXECUTION_STAGE_ID:
         return None
-    # `failed` counts the pairs whose reference-validated suite lost on a
-    # generated transformation. Anything else — passed, skipped, an
-    # infrastructure error — is not a semantic failure to diagnose.
+    # `failed` counts the pairs whose reference-validated suite failed on a
+    # generated transformation. Passed, skipped, or infrastructure-error pairs
+    # are not semantic failures.
     if int(payload.get("counts", {}).get("failed", 0)) <= 0:
         return None
     try:
         return prepare_execution_diagnosis(Path(run_dir), attempt)
     except (DiagnosisPreparationError, OSError, ValueError) as exc:
-        # The stage keeps its verdict, but the run must still say that its
-        # evidence could not be assembled. A silently absent diagnosis directory
-        # is indistinguishable from a run that had nothing to diagnose.
+        # The stage keeps its verdict, but the run must record that its evidence
+        # could not be assembled. A missing index would look like a run with
+        # nothing to diagnose.
         return _record_preparation_error(Path(run_dir), attempt, exc)
 
 
 def diagnosis_artifact_references(
     run_dir: Path, index: dict[str, Any] | None
 ) -> dict[str, str]:
-    """Pointers into the prepared evidence, for the caller that must route on it.
+    """Pointers into the prepared evidence, for the caller that routes on it.
 
-    Preparation writes the reports; naming which one a diagnosis should read is
-    a separate question, and it is answered here rather than by the workflow
-    that consumes the stage result. Python already knows which report is
-    diagnosable, so making n8n re-derive that from the filesystem would put the
-    same rule in two places and let them disagree.
+    Python already knows which report is diagnosable, so it names that report
+    here. If n8n worked it out again from the filesystem, the same rule would
+    live in two places and could disagree.
 
-    ``failure_report_index`` always accompanies a prepared attempt, so a caller
-    that wants every report can read them all. ``failure_report_path`` is added
-    when a report was created and the report itself declares the pair
-    diagnosable. A missing key is a fact — there is nothing to diagnose — and is
-    deliberately not an empty string.
-
-    Eligibility already requires a syntactically valid transformation, a suite
-    that passed on the reference, and at least one observed fact about the
-    failure. It deliberately does not require the model-level comparator
-    difference: no comparator produces one yet, so demanding it here would
-    reject every real report and leave the observed evidence — the JUnit
-    expected/actual pair, the target-model snapshots, the recorded exception —
-    unused.
+    ``failure_report_index`` is always present for a prepared attempt, so a
+    caller can read every report. ``failure_report_path`` is added only when a
+    created report is marked diagnosable (see ``failure_report.eligibility``).
+    A missing key means there is nothing to diagnose; it is never an empty
+    string.
     """
     if not index:
         return {}
@@ -151,9 +184,7 @@ def diagnosis_artifact_references(
         return {}
     paths = RunPaths(root=Path(run_dir).resolve())
     references = {
-        "failure_report_index": repository_relative(
-            _diagnosis_dir(paths, attempt) / INDEX_FILENAME
-        )
+        "failure_report_index": repository_relative(_index_path(paths, attempt))
     }
     selected = _first_diagnosable_report(index)
     if selected is not None:
@@ -162,7 +193,11 @@ def diagnosis_artifact_references(
 
 
 def read_diagnosis_queue(run_dir: Path, attempt: int) -> dict[str, Any]:
-    """Read, validate, and normalize the diagnosable reports for resume/routing."""
+    """Read, validate, and list the diagnosable reports for resume/routing.
+
+    Raises :class:`DiagnosisPreparationError` when the index or a report is
+    missing, invalid, or belongs to another run or attempt.
+    """
     paths = RunPaths(root=Path(run_dir).resolve())
     index_path, index = _read_diagnosis_index(paths, attempt)
     eligible_reports: list[dict[str, Any]] = []
@@ -174,7 +209,7 @@ def read_diagnosis_queue(run_dir: Path, attempt: int) -> dict[str, Any]:
             eligible_reports.append(
                 {
                     "failure_report_path": report["report"],
-                    "scope": report.get("scope", "test_case"),
+                    "scope": report.get("scope", CASE_SCOPE),
                     "test_case_id": report.get("test_case_id"),
                     "assertion_id": report.get("assertion_id"),
                 }
@@ -197,20 +232,20 @@ def read_failure_reports_for_attempt(
     reports: list[IndexedFailureReport] = []
     for pair in index["pairs"]:
         for entry in pair["reports"]:
-            if not isinstance(entry, dict) or entry.get("status") != "created":
+            if not isinstance(entry, dict) or entry.get("status") != REPORT_CREATED:
                 continue
             reports.append(_read_indexed_failure_report(paths, attempt, entry))
     return reports
 
 
 def _read_diagnosis_index(paths: RunPaths, attempt: int) -> tuple[Path, dict[str, Any]]:
-    index_path = _diagnosis_dir(paths, attempt) / INDEX_FILENAME
+    index_path = _index_path(paths, attempt)
     if not index_path.is_file():
         raise DiagnosisPreparationError(
             f"no diagnosis index for execution attempt {attempt}"
         )
     index = read_json(index_path)
-    validate_artifact("diagnosis-index", index)
+    validate_artifact(DIAGNOSIS_INDEX_SCHEMA, index)
     if index.get("run_id") != paths.root.name or index.get("attempt") != attempt:
         raise DiagnosisPreparationError(
             "diagnosis index identity does not match request"
@@ -226,6 +261,14 @@ def _read_indexed_failure_report(
         raise DiagnosisPreparationError(
             "created diagnosis report has no file reference"
         )
+    resolved = _attempt_report_path(paths, attempt, reference)
+    report = _validated_report(resolved, reference)
+    _require_report_identity(report, paths, attempt, reference)
+    return IndexedFailureReport(reference=reference, payload=report)
+
+
+def _attempt_report_path(paths: RunPaths, attempt: int, reference: str) -> Path:
+    """The existing report file ``reference`` names, directly in the attempt."""
     candidate = Path(reference)
     if not candidate.is_absolute():
         candidate = REPO_ROOT / candidate
@@ -244,31 +287,37 @@ def _read_indexed_failure_report(
         )
     if not resolved.is_file():
         raise DiagnosisPreparationError(f"diagnosis report is missing: {reference}")
+    return resolved
+
+
+def _validated_report(resolved: Path, reference: str) -> dict[str, Any]:
     try:
         report = read_json(resolved)
-        validate_artifact("failure-report", report)
+        validate_artifact(FAILURE_REPORT_SCHEMA, report)
     except (OSError, ValueError) as exc:
         raise DiagnosisPreparationError(
             f"diagnosis report is invalid: {reference}: {exc}"
         ) from exc
-    identity = report.get("identity")
-    if not isinstance(identity, dict):
-        raise DiagnosisPreparationError(
-            f"diagnosis report has no identity: {reference}"
-        )
+    return report
+
+
+def _require_report_identity(
+    report: dict[str, Any], paths: RunPaths, attempt: int, reference: str
+) -> None:
+    # The report schema already requires ``identity`` to be an object.
+    identity = report["identity"]
     if identity.get("run_id") != paths.root.name or identity.get("attempt") != attempt:
         raise DiagnosisPreparationError(
             f"diagnosis report identity does not match run/attempt: {reference}"
         )
-    return IndexedFailureReport(reference=reference, payload=report)
 
 
 def _first_diagnosable_report(index: dict[str, Any]) -> str | None:
-    """The first report a diagnosis can actually be asked to read.
+    """The first report a diagnosis can be asked to read.
 
-    Order is the recorded one — pairs as the execution evidence listed them,
-    reports as Surefire reported the failures — so the same attempt always
-    selects the same report.
+    The order is the recorded one (pairs as the execution evidence lists them,
+    reports as Surefire listed the failures), so an attempt always selects the
+    same report.
     """
     pairs = index.get("pairs")
     if not isinstance(pairs, list):
@@ -300,7 +349,7 @@ def _is_diagnosable_report(report: object) -> bool:
     """Return whether an index entry names a created, eligible report."""
     return (
         isinstance(report, dict)
-        and report.get("status") == "created"
+        and report.get("status") == REPORT_CREATED
         and report.get("eligible") is True
     )
 
@@ -308,24 +357,17 @@ def _is_diagnosable_report(report: object) -> bool:
 def _record_preparation_error(
     run_dir: Path, attempt: int, error: Exception
 ) -> dict[str, Any] | None:
-    index = {
-        "schema_version": SCHEMA_VERSION,
-        "run_id": run_dir.name,
-        "stage": EXECUTION_STAGE,
-        "attempt": attempt,
-        "prepared_at": datetime.now(timezone.utc).isoformat(),
-        "execution_evidence": None,
-        "syntax_evidence": None,
-        "error": f"{type(error).__name__}: {error}",
-        "counts": _index_counts([]),
-        "pairs": [],
-    }
+    index = _index_document(
+        run_id=run_dir.name,
+        attempt=attempt,
+        execution_evidence=None,
+        syntax_evidence=None,
+        pairs=[],
+        error=f"{type(error).__name__}: {error}",
+    )
     try:
-        validate_artifact("diagnosis-index", index)
-        write_json_once(
-            _diagnosis_dir(RunPaths(root=run_dir.resolve()), attempt) / INDEX_FILENAME,
-            index,
-        )
+        validate_artifact(DIAGNOSIS_INDEX_SCHEMA, index)
+        write_json_once(_index_path(RunPaths(root=run_dir.resolve()), attempt), index)
     except OSError:
         return None
     return index
@@ -334,29 +376,38 @@ def _record_preparation_error(
 def prepare_execution_diagnosis(run_dir: Path, attempt: int) -> dict[str, Any]:
     """Build every failure report the given execution attempt justifies.
 
-    Returns the index, whether or not any report could be created. The index is
-    written once per attempt: a second call returns the existing one instead of
-    re-deriving evidence that is already immutable.
+    Returns the index, even when no report could be created. The index is
+    written once per attempt: a second call returns the existing one.
     """
     paths = RunPaths(root=Path(run_dir).resolve())
-    index_path = _diagnosis_dir(paths, attempt) / INDEX_FILENAME
+    index_path = _index_path(paths, attempt)
     if index_path.is_file():
-        existing = read_json(index_path)
-        validate_artifact("diagnosis-index", existing)
-        # Idempotent: a re-read must still leave the trace directory in place,
-        # so a run whose evidence was prepared before this existed can be
-        # diagnosed without re-deriving it.
-        _ensure_diagnosis_response_dir(paths, attempt, existing)
-        return existing
+        return _existing_index(paths, attempt, index_path)
+    index = _prepared_index(paths, attempt)
+    validate_artifact(DIAGNOSIS_INDEX_SCHEMA, index)
+    _ensure_diagnosis_response_dir(paths, attempt, index)
+    write_json_once(index_path, index)
+    return index
 
-    evidence_path = paths.stage_attempt_evidence(EXECUTION_STAGE, attempt)
+
+def _existing_index(paths: RunPaths, attempt: int, index_path: Path) -> dict[str, Any]:
+    existing = read_json(index_path)
+    validate_artifact(DIAGNOSIS_INDEX_SCHEMA, existing)
+    # Also create the trace directory on a re-read, so an index written
+    # without one can still be diagnosed without preparing it again.
+    _ensure_diagnosis_response_dir(paths, attempt, existing)
+    return existing
+
+
+def _prepared_index(paths: RunPaths, attempt: int) -> dict[str, Any]:
+    """Prepare every failed pair of the attempt and index what came of it."""
+    evidence_path = paths.stage_attempt_evidence(EXECUTION_STAGE_ID, attempt)
     if not evidence_path.is_file():
         raise DiagnosisPreparationError(
             f"no execution attempt {attempt} recorded under {paths.root}"
         )
     evidence = read_json(evidence_path)
     syntax_evidence = _latest_syntax_evidence(paths)
-
     pairs = [
         _prepare_pair(
             paths=paths,
@@ -367,44 +418,56 @@ def prepare_execution_diagnosis(run_dir: Path, attempt: int) -> dict[str, Any]:
         )
         for pair in _failed_pairs(evidence)
     ]
-
-    index = {
-        "schema_version": SCHEMA_VERSION,
-        "run_id": paths.root.name,
-        "stage": EXECUTION_STAGE,
-        "attempt": attempt,
-        "prepared_at": datetime.now(timezone.utc).isoformat(),
-        "execution_evidence": repository_relative(evidence_path),
-        "syntax_evidence": (
+    return _index_document(
+        run_id=paths.root.name,
+        attempt=attempt,
+        execution_evidence=repository_relative(evidence_path),
+        syntax_evidence=(
             repository_relative(syntax_evidence)
             if syntax_evidence is not None
             else None
         ),
-        "counts": _index_counts(pairs),
-        "pairs": pairs,
+        pairs=pairs,
+    )
+
+
+def _index_document(
+    *,
+    run_id: str,
+    attempt: int,
+    execution_evidence: str | None,
+    syntax_evidence: str | None,
+    pairs: list[dict[str, Any]],
+    error: str | None = None,
+) -> dict[str, Any]:
+    """The diagnosis index; ``error`` is set only when preparation failed."""
+    index: dict[str, Any] = {
+        "schema_version": SCHEMA_VERSION,
+        "run_id": run_id,
+        "stage": EXECUTION_STAGE_ID,
+        "attempt": attempt,
+        "prepared_at": datetime.now(timezone.utc).isoformat(),
+        "execution_evidence": execution_evidence,
+        "syntax_evidence": syntax_evidence,
     }
-    validate_artifact("diagnosis-index", index)
-    _ensure_diagnosis_response_dir(paths, attempt, index)
-    write_json_once(index_path, index)
+    if error is not None:
+        index["error"] = error
+    index["counts"] = _index_counts(pairs)
+    index["pairs"] = pairs
     return index
 
 
 def diagnosis_response_dir(run_dir: Path, attempt: int) -> Path:
     """Where a diagnosis of this execution attempt records what it was asked.
 
-    The trace a diagnosis leaves — the exact request, the raw answer, the
-    validated verdict — belongs to the attempt that produced the evidence, so it
-    is grouped by attempt and named by the n8n execution that wrote it. The
-    directory is prepared here rather than by the workflow because the node that
-    writes a file cannot create the path to it, and shelling out to `mkdir` ties
-    the workflow to a node that a default n8n container does not ship.
+    The diagnosis trace (the exact request, the raw answer, the validated
+    verdict) belongs to the attempt that produced the evidence, so it is grouped
+    by attempt; n8n names the files by its execution id. Python creates the
+    directory because the n8n node that writes a file cannot create its folder,
+    and running `mkdir` needs a node a default n8n container does not ship.
     """
-    return (
-        Path(run_dir)
-        / RESPONSES_DIRNAME
-        / SOURCE_DIAGNOSIS_DIRNAME
-        / f"execution-attempt-{attempt:03d}"
-    )
+    responses = RunPaths(Path(run_dir)).response_operation_dir(SOURCE_DIAGNOSIS_DIRNAME)
+    return responses / f"{EXECUTION_STAGE_ID}-{attempt_dir_name(attempt)}"
 
 
 def _ensure_diagnosis_response_dir(
@@ -429,9 +492,8 @@ def _ensure_diagnosis_response_dir(
 def _failed_pairs(evidence: dict[str, Any]) -> Iterator[dict[str, Any]]:
     """The recorded pairs whose assertions did not pass.
 
-    A pair that passed is not a failure, and a pair the stage could not run is
-    not one either — but the difference between "threw" and "disagreed" is a
-    fact of the observation, so both are yielded and separated per pair below.
+    A pair whose test threw and a pair whose assertion lost are both yielded.
+    Which of the two happened is read later, per pair, from its evidence.
     """
     pairs = evidence.get("details", {}).get("pairs")
     if not isinstance(pairs, list):
@@ -449,6 +511,7 @@ def _prepare_pair(
     execution_evidence: Path,
     syntax_evidence: Path | None,
 ) -> dict[str, Any]:
+    """The index entry of one failed pair: its reports, or why it has none."""
     entry: dict[str, Any] = {
         "suite": pair.get("suite"),
         "transformation": pair.get("transformation"),
@@ -457,255 +520,235 @@ def _prepare_pair(
         "reports": [],
         "skipped": [],
     }
-    observation_path = _optional_path(pair.get("evidence"))
-    if observation_path is None or not observation_path.is_file():
-        entry["skipped"].append(
-            _skip("no_recorded_observation", str(pair.get("evidence")))
+    try:
+        evidence = _pair_evidence(
+            paths, attempt, pair, execution_evidence, syntax_evidence
         )
-        return entry
-    if syntax_evidence is None:
-        entry["skipped"].append(
-            _skip(
-                "no_syntax_validation_attempt",
-                "the run recorded no syntax-validation attempt to read the parser "
-                "verdict for this transformation from",
-            )
-        )
-        return entry
-
-    execution = read_json(observation_path)
-    suite_dir = _optional_path(execution.get("inputs", {}).get("suite", {}).get("path"))
-    if suite_dir is None or not suite_dir.is_dir():
-        entry["skipped"].append(_skip("no_candidate_suite_directory", str(suite_dir)))
-        return entry
-
-    archived = archived_execution_evidence(observation_path)
-    if archived.directory is None:
-        entry["skipped"].append(
-            _skip(
-                "no_archived_execution_evidence",
-                "the execution kept no Maven output or Surefire report, so the "
-                "failure cannot be attributed to a concrete assertion",
-            )
-        )
-        return entry
-
-    reference_execution = _reference_observation(paths, execution)
-    failures = _recorded_failures(archived.surefire_reports)
-    if pair.get("failure_stage") != "assertion_failure":
-        failures = [replace(failure, kind="runtime_error") for failure in failures]
-    if not failures:
-        # No per-test entry at all: the run failed before Surefire could
-        # attribute anything to a test method (a transformation the engine
-        # refused, a harness that died during setup). The failure is no less
-        # real, and the evidence the run preserved still describes it — so the
-        # pair itself becomes the subject of the report, with no case and no
-        # assertion invented to fill the per-case shape.
-        entry["reports"].append(
-            _prepare_pair_report(
-                paths=paths,
-                attempt=attempt,
-                execution=execution,
-                observation_path=observation_path,
-                execution_evidence=execution_evidence,
-                syntax_evidence=syntax_evidence,
-                reference_execution=reference_execution,
-            )
-        )
-        return entry
-
-    semantic_cases = _read_semantic_cases(suite_dir)
-    if semantic_cases is None:
-        entry["skipped"].append(_skip("no_semantic_cases", str(suite_dir)))
-        return entry
-
-    for failure in failures:
-        entry["reports"].append(
-            _prepare_report(
-                paths=paths,
-                attempt=attempt,
-                failure=failure,
-                execution=execution,
-                observation_path=observation_path,
-                suite_dir=suite_dir,
-                semantic_cases=semantic_cases,
-                execution_evidence=execution_evidence,
-                syntax_evidence=syntax_evidence,
-                reference_execution=reference_execution,
-            )
-        )
+        entry["reports"].extend(_pair_reports(evidence))
+    except _PairSkipped as skipped:
+        entry["skipped"].append(skipped.skip)
     return entry
 
 
-def _prepare_report(
-    *,
+def _pair_evidence(
     paths: RunPaths,
     attempt: int,
-    failure: SurefireFailure,
-    execution: dict[str, Any],
-    observation_path: Path,
-    suite_dir: Path,
-    semantic_cases: dict[str, Any],
+    pair: dict[str, Any],
     execution_evidence: Path,
-    syntax_evidence: Path,
-    reference_execution: Path | None,
-) -> dict[str, Any]:
-    """One report for one recorded assertion failure, or why there is none."""
-    try:
-        test_case_id = _match_test_case(semantic_cases, failure.test_method)
-        # A throw lost no assertion, so none is named. Naming one would
-        # attribute the failure to a check that never ran.
-        assertion_id = (
-            _match_assertion(semantic_cases, test_case_id, failure.message)
-            if failure.kind == "assertion_failure"
-            else None
+    syntax_evidence: Path | None,
+) -> _PairEvidence:
+    """Locate what the pair recorded; raise :class:`_PairSkipped` when it cannot."""
+    observation_path = _optional_path(pair.get("evidence"))
+    if observation_path is None or not observation_path.is_file():
+        raise _PairSkipped("no_recorded_observation", str(pair.get("evidence")))
+    if syntax_evidence is None:
+        raise _PairSkipped(
+            "no_syntax_validation_attempt",
+            "the run recorded no syntax-validation attempt to read the parser "
+            "verdict for this transformation from",
         )
-    except FailureReportError as exc:
-        return {
-            "status": "refused",
-            "test_method": failure.test_method,
-            "detail": str(exc),
-        }
+    execution = read_json(observation_path)
+    suite_dir = _optional_path(execution.get("inputs", {}).get("suite", {}).get("path"))
+    if suite_dir is None or not suite_dir.is_dir():
+        raise _PairSkipped("no_candidate_suite_directory", str(suite_dir))
+    archived = archived_execution_evidence(observation_path)
+    if archived.directory is None:
+        raise _PairSkipped(
+            "no_archived_execution_evidence",
+            "the execution kept no Maven output or Surefire report, so the "
+            "failure cannot be attributed to a concrete assertion",
+        )
+    return _PairEvidence(
+        paths=paths,
+        attempt=attempt,
+        failure_stage=pair.get("failure_stage"),
+        execution=execution,
+        observation_path=observation_path,
+        suite_dir=suite_dir,
+        execution_evidence=execution_evidence,
+        syntax_evidence=syntax_evidence,
+        reference_execution=_reference_observation(paths, execution),
+        surefire_reports=archived.surefire_reports,
+    )
 
-    payload = {
-        "run_manifest": repository_relative(paths.manifest),
-        "syntax_evidence": repository_relative(syntax_evidence),
-        "execution_evidence": repository_relative(execution_evidence),
-        "generated_execution": repository_relative(observation_path),
-        "reference_execution": (
-            repository_relative(reference_execution)
-            if reference_execution is not None
-            else None
-        ),
-        "test_case_id": test_case_id,
-        "assertion_id": assertion_id,
-        "attempt": attempt,
-        "actual_target_models": [
-            repository_relative(path)
-            for path in _actual_target_models(observation_path, failure.test_method)
-        ],
-        # Surefire reports and the Maven log are resolved from the archive the
-        # execution wrote beside this observation. Naming the workspace copies
-        # would name files the next `mvn clean` has already deleted.
-        "actual_vs_expected": None,
-    }
-    output = _report_path(paths, attempt, execution, test_case_id, assertion_id)
+
+def _pair_reports(evidence: _PairEvidence) -> list[dict[str, Any]]:
+    """One index entry per recorded test-method failure, or one for the pair."""
+    failures = _recorded_failures(evidence.surefire_reports)
+    if evidence.failure_stage != FailureStage.ASSERTION_FAILURE:
+        failures = [replace(failure, kind=RUNTIME_ERROR_KIND) for failure in failures]
+    if not failures:
+        # The run failed before Surefire named any test method (the engine
+        # refused the transformation, or the harness died during setup). The
+        # failure is still real, so the pair itself is the report's subject.
+        # No case or assertion is invented.
+        return [_prepare_pair_report(evidence)]
+    semantic_cases = _read_semantic_cases(evidence.suite_dir)
+    if semantic_cases is None:
+        raise _PairSkipped("no_semantic_cases", str(evidence.suite_dir))
+    return [
+        _prepare_report(evidence, failure, semantic_cases) for failure in failures
+    ]
+
+
+def _prepare_report(
+    evidence: _PairEvidence,
+    failure: SurefireFailure,
+    semantic_cases: dict[str, Any],
+) -> dict[str, Any]:
+    """One report for one recorded test-method failure, or why there is none."""
     try:
-        report = write_report(payload, output, scope="test_case")
+        test_case_id, selected_assertion = _attributed_case(semantic_cases, failure)
     except FailureReportError as exc:
-        return {
-            "status": "refused",
-            "test_method": failure.test_method,
-            "test_case_id": test_case_id,
-            "assertion_id": assertion_id,
-            "detail": str(exc),
-        }
-    diagnosis = report["source_diagnosis"]
-    return {
-        "status": "created",
+        return _refused_entry({"test_method": failure.test_method}, exc)
+    attribution = {
         "test_method": failure.test_method,
         "test_case_id": test_case_id,
-        "assertion_id": assertion_id,
-        "report": repository_relative(output),
-        "eligible": diagnosis["eligible"],
-        "reason": diagnosis["reason"],
+        "assertion_id": selected_assertion,
     }
-
-
-def _prepare_pair_report(
-    *,
-    paths: RunPaths,
-    attempt: int,
-    execution: dict[str, Any],
-    observation_path: Path,
-    execution_evidence: Path,
-    syntax_evidence: Path,
-    reference_execution: Path | None,
-) -> dict[str, Any]:
-    """One report about the execution pair itself, or why there is none."""
     payload = {
-        "run_manifest": repository_relative(paths.manifest),
-        "syntax_evidence": repository_relative(syntax_evidence),
-        "execution_evidence": repository_relative(execution_evidence),
-        "generated_execution": repository_relative(observation_path),
-        "reference_execution": (
-            repository_relative(reference_execution)
-            if reference_execution is not None
-            else None
-        ),
-        "attempt": attempt,
+        **_request_paths(evidence),
+        "test_case_id": test_case_id,
+        "assertion_id": selected_assertion,
+        "attempt": evidence.attempt,
+        "actual_target_models": [
+            repository_relative(path)
+            for path in _actual_target_models(
+                evidence.observation_path, failure.test_method
+            )
+        ],
+        "actual_vs_expected": None,
     }
-    output = _pair_report_path(paths, attempt, execution)
-    try:
-        report = write_report(payload, output, scope="execution_pair")
-    except FailureReportError as exc:
-        return {
-            "status": "refused",
-            "scope": "execution_pair",
-            "detail": str(exc),
-        }
-    diagnosis = report["source_diagnosis"]
-    return {
-        "status": "created",
-        "scope": "execution_pair",
+    # A throw names no assertion, and the file name says so rather than
+    # borrowing an assertion id that was never reached.
+    output = _report_file(evidence, test_case_id, selected_assertion or "runtime-error")
+    return _written_report_entry(
+        payload, output, CASE_SCOPE, refused_as=attribution, created_as=attribution
+    )
+
+
+def _attributed_case(
+    semantic_cases: dict[str, Any], failure: SurefireFailure
+) -> tuple[str, str | None]:
+    """The case id and assertion id a recorded failure belongs to."""
+    test_case_id = _match_test_case(semantic_cases, failure.test_method)
+    if failure.kind != ASSERTION_FAILURE_KIND:
+        # A throw lost no assertion, so none is named. Naming one would
+        # attribute the failure to a check that never ran.
+        return test_case_id, None
+    return test_case_id, _match_assertion(semantic_cases, test_case_id, failure.message)
+
+
+def _prepare_pair_report(evidence: _PairEvidence) -> dict[str, Any]:
+    """One report about the execution pair itself, or why there is none."""
+    payload = {**_request_paths(evidence), "attempt": evidence.attempt}
+    output = _report_file(evidence, "execution-pair")
+    return _written_report_entry(
+        payload,
+        output,
+        PAIR_SCOPE,
+        refused_as={"scope": PAIR_SCOPE},
         # Explicitly null, so a reader of the index sees that this failure was
         # attributed to no case rather than that the fields went missing.
-        "test_case_id": None,
-        "assertion_id": None,
+        created_as={"scope": PAIR_SCOPE, "test_case_id": None, "assertion_id": None},
+    )
+
+
+def _request_paths(evidence: _PairEvidence) -> dict[str, Any]:
+    """The recorded paths every report request names.
+
+    Surefire reports and the Maven log are left out on purpose, so the report
+    reads them from the archive beside the observation. The workspace copies
+    are deleted by the next `mvn clean`.
+    """
+    return {
+        "run_manifest": repository_relative(evidence.paths.manifest),
+        "syntax_evidence": repository_relative(evidence.syntax_evidence),
+        "execution_evidence": repository_relative(evidence.execution_evidence),
+        "generated_execution": repository_relative(evidence.observation_path),
+        "reference_execution": (
+            repository_relative(evidence.reference_execution)
+            if evidence.reference_execution is not None
+            else None
+        ),
+    }
+
+
+def _written_report_entry(
+    payload: dict[str, Any],
+    output: Path,
+    scope: str,
+    *,
+    refused_as: dict[str, Any],
+    created_as: dict[str, Any],
+) -> dict[str, Any]:
+    """Write one report and return its index entry, created or refused.
+
+    ``refused_as`` and ``created_as`` are the fields that say which failure
+    the entry is about.
+    """
+    try:
+        report = write_report(payload, output, scope=scope)
+    except FailureReportError as exc:
+        return _refused_entry(refused_as, exc)
+    diagnosis = report["source_diagnosis"]
+    return {
+        "status": REPORT_CREATED,
+        **created_as,
         "report": repository_relative(output),
         "eligible": diagnosis["eligible"],
         "reason": diagnosis["reason"],
     }
+
+
+def _refused_entry(
+    attribution: dict[str, Any], error: FailureReportError
+) -> dict[str, Any]:
+    return {"status": REPORT_REFUSED, **attribution, "detail": str(error)}
 
 
 def _recorded_failures(reports: tuple[Path, ...]) -> list[SurefireFailure]:
-    """Every ``<failure>`` and ``<error>`` in the archived reports, in order.
+    """Every failed or erroring ``<testcase>`` in the archived reports, in order.
 
-    Errors are included because a validated test that throws on a generated
-    transformation has failed against it, and attributing that failure is what
-    Source Diagnosis is for. An error is checked first: a case that both threw
-    and lost an assertion never reached a trustworthy verdict, so the throw is
-    what the report is about.
+    Errors count too: a validated test that throws on a generated
+    transformation has failed against it. A case with both an error and a
+    failure counts as an error (see :func:`testcase_outcome`).
     """
     failures: list[SurefireFailure] = []
     for path in reports:
         try:
             root = ET.parse(path).getroot()
         except (ET.ParseError, OSError):
-            # A report that cannot be parsed is not evidence of a failure. The
-            # file itself stays archived; nothing is inferred from its absence.
+            # An unreadable report is not evidence of a failure. The file stays
+            # archived, and nothing is inferred from it.
             continue
         for case in root.iter("testcase"):
-            failure = _recorded_failure(path, case)
+            failure = _recorded_failure(case)
             if failure is not None:
                 failures.append(failure)
     return failures
 
 
-def _recorded_failure(path: Path, case: ET.Element) -> SurefireFailure | None:
+def _recorded_failure(case: ET.Element) -> SurefireFailure | None:
     status, node = testcase_outcome(case)
     if node is None:
         return None
     return SurefireFailure(
-        report=path,
-        kind="runtime_error" if status == "error" else "assertion_failure",
-        test_class=str(case.get("classname") or ""),
+        kind=RUNTIME_ERROR_KIND if status == "error" else ASSERTION_FAILURE_KIND,
         test_method=str(case.get("name") or ""),
         message=str(node.get("message") or ""),
     )
 
 
 def _match_test_case(semantic_cases: dict[str, Any], test_method: str) -> str:
-    """The one semantic case whose rendered method name is ``test_method``."""
+    """The id of the one semantic case whose rendered method is ``test_method``."""
     tests = semantic_cases.get("tests")
     if not isinstance(tests, list):
-        raise FailureReportError("semantic_cases.json has no tests array")
+        raise FailureReportError(f"{SEMANTIC_CASES_FILE} has no tests array")
     matching = [
-        identifier
+        case_id(test)
         for test in tests
-        if isinstance(test, dict)
-        for identifier in [str(test.get("id") or test.get("name") or "")]
-        if identifier and sanitize_method_name(identifier) == test_method
+        if isinstance(test, dict) and rendered_method_name(test) == test_method
     ]
     if len(matching) != 1:
         raise FailureReportError(
@@ -720,19 +763,17 @@ def _match_assertion(
 ) -> str:
     """The assertion id whose rendered message the failure message starts with.
 
-    The harness prints the assertion's own message and may append its own detail
-    (``... missing X``, ``... ==> expected: <1> but was: <0>``), so the recorded
-    message is matched as a prefix. Two assertions that render the same message
-    are indistinguishable in the report, and the failure is refused rather than
-    attributed to whichever came first.
+    The harness prints the assertion's message and may append detail
+    (``... missing X``, ``... ==> expected: <1> but was: <0>``), so the message
+    is matched as a prefix. When two assertions render the same message, the
+    failure is refused rather than given to the first one.
     """
     tests = semantic_cases.get("tests")
     test_case = next(
         (
             test
             for test in tests
-            if isinstance(test, dict)
-            and str(test.get("id") or test.get("name") or "") == test_case_id
+            if isinstance(test, dict) and case_id(test) == test_case_id
         ),
         None,
     )
@@ -754,28 +795,26 @@ def _match_assertion(
 def _matching_assertion_ids(assertions: list[Any], stripped_message: str) -> list[str]:
     """Return assertion IDs whose rendered messages match the recorded prefix."""
     matching: list[str] = []
-    for index, assertion in enumerate(assertions, start=1):
+    for position, assertion in enumerate(assertions, start=1):
         if not isinstance(assertion, dict):
             continue
-        # The renderer's own rule, run forwards: this reads a value back out of
-        # a Surefire report, so restating the rule here would let the two drift
-        # apart without failing anything.
+        # Use the renderer's own rule. A copy of the rule here could drift
+        # from it without any test failing.
         rendered = assertion_message(assertion)
         if rendered and stripped_message.startswith(rendered):
-            matching.append(str(assertion.get("id") or f"assertion-{index:03d}"))
+            matching.append(assertion_id(assertion, position))
     return matching
 
 
 def _actual_target_models(observation_path: Path, test_method: str) -> list[Path]:
     """The actual output models this execution wrote for this test case.
 
-    They live beside the observation, under ``snapshots/<test-method>/``, so a
-    snapshot is identified by the transformation, the suite, the case, and the
-    model slot together. Reading them from a directory shared by every suite of
-    one transformation is what would let a diagnosis cite another suite's
-    output as this failure's actual result.
+    They live beside the observation, under ``snapshots/<test-method>/``, so
+    they belong to this transformation, suite, and case only. A folder shared by
+    all suites of one transformation could make a diagnosis cite another
+    suite's output.
     """
-    directory = observation_path.parent / "snapshots" / test_method
+    directory = observation_path.parent / SNAPSHOTS_DIRNAME / test_method
     if not directory.is_dir():
         return []
     return sorted(path for path in directory.glob("*.xmi") if path.is_file())
@@ -785,13 +824,12 @@ def _reference_observation(paths: RunPaths, execution: dict[str, Any]) -> Path |
     """This run's reference observation for the same suite, when it recorded one."""
     try:
         candidate = (
-            paths.root
-            / "observations"
+            paths.observations_dir
             / str(execution["task"])
             / str(execution["llm"])
             / str(execution["strategy"])
             / str(execution["suite_id"])
-            / "suite_execution.json"
+            / OBSERVATION_FILENAME
         )
     except KeyError:
         return None
@@ -799,7 +837,7 @@ def _reference_observation(paths: RunPaths, execution: dict[str, Any]) -> Path |
 
 
 def _read_semantic_cases(suite_dir: Path) -> dict[str, Any] | None:
-    path = suite_dir / "semantic_cases.json"
+    path = suite_dir / SEMANTIC_CASES_FILE
     if not path.is_file():
         return None
     payload = read_json(path)
@@ -807,68 +845,72 @@ def _read_semantic_cases(suite_dir: Path) -> dict[str, Any] | None:
 
 
 def _latest_syntax_evidence(paths: RunPaths) -> Path | None:
-    attempts = paths.stage_attempts_dir(SYNTAX_STAGE)
+    attempts = paths.stage_attempts_dir(SYNTAX_VALIDATION_STAGE_ID)
     if not attempts.is_dir():
         return None
     for attempt in sorted(existing_attempts(attempts), reverse=True):
-        evidence = paths.stage_attempt_evidence(SYNTAX_STAGE, attempt)
+        evidence = paths.stage_attempt_evidence(SYNTAX_VALIDATION_STAGE_ID, attempt)
         if evidence.is_file():
             return evidence
     return None
 
 
+def diagnosis_reports_location(attempt: int) -> str:
+    """The folder of one execution attempt's failure reports, relative to the run.
+
+    A diagnosis names the report it judged by a run-relative path.
+    """
+    return (_attempt_location(attempt) / REPORTS_DIRNAME).as_posix()
+
+
+def _attempt_location(attempt: int) -> PurePosixPath:
+    return PurePosixPath(
+        DIAGNOSIS_DIRNAME, EXECUTION_STAGE_ID, attempt_dir_name(attempt)
+    )
+
+
 def _diagnosis_dir(paths: RunPaths, attempt: int) -> Path:
-    return paths.root / "diagnosis" / EXECUTION_STAGE / f"attempt-{attempt:03d}"
+    return paths.root / _attempt_location(attempt)
 
 
-def _pair_report_path(paths: RunPaths, attempt: int, execution: dict[str, Any]) -> Path:
+def _index_path(paths: RunPaths, attempt: int) -> Path:
+    return _diagnosis_dir(paths, attempt) / INDEX_FILENAME
+
+
+def diagnosis_index_path(run_dir: Path, attempt: int) -> Path:
+    """Where the diagnosis index of one execution attempt of a run lives."""
+    return _index_path(RunPaths(root=Path(run_dir).resolve()), attempt)
+
+
+def _report_file(evidence: _PairEvidence, *subject: str) -> Path:
+    """The report file for one failure of the pair; ``subject`` names the failure."""
+    # The transformation hash is part of the name because one attempt can pair
+    # the same suite with several generated transformations, and two reports
+    # about different transformations are different evidence.
+    execution = evidence.execution
+    transformation_hash = _transformation_hash(execution)
     name = "__".join(
         _safe(part)
         for part in (
-            _transformation_hash(execution)[:12] or "transformation",
+            transformation_hash[:REPORT_NAME_HASH_CHARS] or "transformation",
             str(execution.get("suite_id", "suite")),
-            "execution-pair",
+            *subject,
         )
     )
-    return _diagnosis_dir(paths, attempt) / REPORTS_DIRNAME / f"{name}.json"
+    reports_dir = _diagnosis_dir(evidence.paths, evidence.attempt) / REPORTS_DIRNAME
+    return reports_dir / f"{name}.json"
 
 
 def _transformation_hash(execution: dict[str, Any]) -> str:
     return str(execution.get("inputs", {}).get("transformation", {}).get("sha256", ""))
 
 
-def _report_path(
-    paths: RunPaths,
-    attempt: int,
-    execution: dict[str, Any],
-    test_case_id: str,
-    assertion_id: str,
-) -> Path:
-    # The transformation hash is part of the name because one attempt can pair
-    # the same suite with several generated transformations, and two reports
-    # about different transformations are different evidence.
-    transformation_hash = _transformation_hash(execution)
-    name = "__".join(
-        _safe(part)
-        for part in (
-            transformation_hash[:12] or "transformation",
-            str(execution.get("suite_id", "suite")),
-            test_case_id,
-            # A throw names no assertion, and the name says so rather than
-            # borrowing an assertion id that was never reached.
-            assertion_id or "runtime-error",
-        )
-    )
-    return _diagnosis_dir(paths, attempt) / REPORTS_DIRNAME / f"{name}.json"
-
-
 def _index_counts(pairs: list[dict[str, Any]]) -> dict[str, int]:
     """Counts about the prepared evidence only.
 
-    None of these is a metric about the experiment. The stage's own counts —
-    what passed, what failed, what was evaluated — were written before
-    preparation ran and are never touched by it, so a report that comes into
-    existence here cannot move a semantic result.
+    None of these is an experiment metric. The stage's own counts (passed,
+    failed, evaluated) were written before preparation and are never changed
+    by it, so a report created here cannot change a semantic result.
     """
     reports = [report for pair in pairs for report in pair["reports"]]
     report_counts = _prepared_report_counts(reports)
@@ -887,9 +929,9 @@ def _prepared_report_counts(reports: list[dict[str, Any]]) -> dict[str, int]:
     refused_count = 0
     eligible_count = 0
     for report in reports:
-        if report["status"] == "created":
+        if report["status"] == REPORT_CREATED:
             created.append(report)
-        elif report["status"] == "refused":
+        elif report["status"] == REPORT_REFUSED:
             refused_count += 1
         if report.get("eligible"):
             eligible_count += 1
@@ -898,14 +940,11 @@ def _prepared_report_counts(reports: list[dict[str, Any]]) -> dict[str, int]:
         "reports_created": len(created),
         "reports_refused": refused_count,
         "pair_level_reports": sum(
-            1 for report in created if report.get("scope") == "execution_pair"
+            1 for report in created if report.get("scope") == PAIR_SCOPE
         ),
         "diagnosis_eligible": eligible_count,
     }
 
-
-def _skip(reason: str, detail: str) -> dict[str, str]:
-    return {"reason": reason, "detail": detail}
 
 
 def _safe(value: str) -> str:

@@ -1,49 +1,67 @@
 """Generic n8n workflow-graph mechanics, shared by every export.
 
-Node and connection surgery that says nothing about what a workflow is for:
-removing the cosmetic drift that blocks byte comparison between two languages'
-exports, keeping only the provider node a workflow actually runs on, pinning
-provider model ids and credential references, and renaming or removing
-connection targets.
+Node and connection edits that work on any n8n payload: removing cosmetic
+differences between exports, keeping only the chat model node that is wired,
+pinning provider model ids and credential references, building nodes and
+connections, and renaming or removing nodes and edges.
 
-Nothing here knows what a model is asked — that is `prompts` — or which node
-any particular export owns — that is `synchronizers`. These functions operate
-on any n8n payload.
+What a model is asked lives in `prompts`; which nodes a given export has lives
+in `synchronizers`.
 """
 
 from __future__ import annotations
 
 import re
+from collections.abc import Collection
+from dataclasses import dataclass
 from typing import Any
 
 
 TRIGGER_NODE = "When clicking 'Execute workflow'"
+MANUAL_TRIGGER_TYPE = "n8n-nodes-base.manualTrigger"
+CHAT_MODEL_TYPE_PREFIX = "@n8n/n8n-nodes-langchain.lmChat"
+OPENAI_CHAT_MODEL_TYPE = CHAT_MODEL_TYPE_PREFIX + "OpenAi"
+ANTHROPIC_CHAT_MODEL_TYPE = CHAT_MODEL_TYPE_PREFIX + "Anthropic"
+GEMINI_CHAT_MODEL_TYPE = CHAT_MODEL_TYPE_PREFIX + "GoogleGemini"
 
-# Provider-side identifiers for the models the matrices name. Pinned here so a
-# language cannot run a different build of "the same" model: QVT-O's Gemini
-# exports asked for "models/gemini-2-5-pro", which is not a Google model id at
-# all — those four runs would have failed rather than produced QVT-O results.
+
+@dataclass(frozen=True)
+class NodeType:
+    """An n8n node type and the type version that new nodes of it get."""
+
+    name: str
+    version: int | float
+
+
+HTTP_REQUEST = NodeType("n8n-nodes-base.httpRequest", 4.2)
+MERGE = NodeType("n8n-nodes-base.merge", 3.2)
+READ_WRITE_FILE = NodeType("n8n-nodes-base.readWriteFile", 1)
+EXTRACT_FROM_FILE = NodeType("n8n-nodes-base.extractFromFile", 1)
+SET = NodeType("n8n-nodes-base.set", 3.4)
+CONVERT_TO_FILE = NodeType("n8n-nodes-base.convertToFile", 1.1)
+
+_NON_SLUG_CHARACTERS = re.compile(r"[^a-z0-9]+")
+
+# Provider-side model ids, pinned so every language runs the same model build.
+# A wrong id (for example "models/gemini-2-5-pro") makes the run fail.
 PROVIDER_MODEL_IDS = {
-    "@n8n/n8n-nodes-langchain.lmChatGoogleGemini": "models/gemini-2.5-pro",
+    GEMINI_CHAT_MODEL_TYPE: "models/gemini-2.5-pro",
 }
 
-# One credential per provider, the one every other export already references.
-# A chat model node carries the credential by id, and an id belongs to the n8n
-# instance that stored it: the Reactions matrix kept three ids from a different
-# instance, so its nodes failed with "Credential with ID ... does not exist" the
-# moment the workflow finally reached them. Pinning the reference here keeps a
-# node from pointing at a credential the pipeline's instance never had. Only the
-# reference is pinned; the secret itself stays in n8n.
+# One credential reference per provider. A chat model node names its credential
+# by id, and an id is valid only in the n8n instance that stored it; an id from
+# another instance fails with "Credential with ID ... does not exist". Only the
+# reference is pinned here; the secret stays in n8n.
 PROVIDER_CREDENTIALS = {
-    "@n8n/n8n-nodes-langchain.lmChatOpenAi": (
+    OPENAI_CHAT_MODEL_TYPE: (
         "openAiApi",
         {"id": "22X9yU5QaIUyA1Dx", "name": "OpenAi account"},
     ),
-    "@n8n/n8n-nodes-langchain.lmChatAnthropic": (
+    ANTHROPIC_CHAT_MODEL_TYPE: (
         "anthropicApi",
         {"id": "R9d6pMqZ8LzipdDW", "name": "Anthropic account"},
     ),
-    "@n8n/n8n-nodes-langchain.lmChatGoogleGemini": (
+    GEMINI_CHAT_MODEL_TYPE: (
         "googlePalmApi",
         {"id": "nUZ88X2Akoz1dXpt", "name": "Google Gemini(PaLM) Api account"},
     ),
@@ -69,20 +87,16 @@ def _pin_provider_credentials(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 def normalize_workflow_shape(payload: dict[str, Any]) -> dict[str, Any]:
-    """Remove per-workflow cosmetic drift that blocks byte comparison.
+    """Remove cosmetic differences, so two languages' exports diff cleanly.
 
-    Two things drifted per language rather than per purpose: the manual trigger
-    was labelled with curly quotes in the ATL and Reactions exports and straight
-    quotes elsewhere, and ATL's field assignments carried duplicate ids. Neither
-    changes behaviour, but while they differ no one can diff two languages'
-    workflows and see only the intended differences.
+    Gives the manual trigger one fixed name and renumbers assignment and
+    condition ids. Also drops unwired chat models and pins provider model ids
+    and credentials.
 
-    The top-level workflow id is dropped for the same reason and one more: the
-    master runs these exports as inline sub-workflows, and n8n files the
-    sub-execution under ``workflow.id``.  A hand-written id that no
-    ``workflow_entity`` row carries fails that insert on a foreign key, so the
-    sub-workflow never starts.  Only the QVT-O transformation exports carried
-    one, which is why QVT-O alone could not generate transformations.
+    The top-level workflow ``id`` is removed too. The master workflow runs these
+    exports as inline sub-workflows, and n8n stores each sub-execution under
+    ``workflow.id``. An id with no ``workflow_entity`` row fails that insert on
+    a foreign key, and the sub-workflow never starts.
     """
     payload.pop("id", None)
     for node in payload["nodes"]:
@@ -93,7 +107,7 @@ def normalize_workflow_shape(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 def _normalize_node_shape(payload: dict[str, Any], node: dict[str, Any]) -> None:
-    if node["type"] == "n8n-nodes-base.manualTrigger" and node["name"] != TRIGGER_NODE:
+    if node["type"] == MANUAL_TRIGGER_TYPE and node["name"] != TRIGGER_NODE:
         payload["connections"] = rename_connection_node(
             payload["connections"],
             node["name"],
@@ -104,10 +118,15 @@ def _normalize_node_shape(payload: dict[str, Any], node: dict[str, Any]) -> None
 
 
 def normalize_node_entry_ids(node: dict[str, Any]) -> None:
-    slug = re.sub(r"[^a-z0-9]+", "-", node["name"].lower()).strip("-")
+    slug = node_slug(node["name"])
     parameters = node.get("parameters", {})
     for holder in ("assignments", "conditions"):
         _normalize_parameter_entry_ids(parameters, holder, slug)
+
+
+def node_slug(name: str) -> str:
+    """A node name in lower case, with each run of other characters as one dash."""
+    return _NON_SLUG_CHARACTERS.sub("-", name.lower()).strip("-")
 
 
 def _normalize_parameter_entry_ids(
@@ -125,23 +144,26 @@ def _normalize_parameter_entry_ids(
 
 
 def drop_unwired_chat_models(payload: dict[str, Any]) -> dict[str, Any]:
-    """Keep only the provider node a workflow actually runs on.
+    """Remove chat model nodes that have no ``ai_languageModel`` connection.
 
-    Model/strategy exports are produced by copying a sibling, so the ETL and ATL
-    transformation workflows carried Anthropic and Gemini nodes with an empty
-    ``ai_languageModel`` connection alongside the provider they use. They cannot
-    execute, but they make a gpt-5 export look like it needs three credentials,
-    and they are the reason two languages' exports could not be diffed.
+    Exports copied from a sibling can keep other providers' chat model nodes.
+    They never run, but they make a workflow look like it needs more
+    credentials, and they add noise when diffing exports.
     """
-    connections = payload.get("connections", {})
-    wired = _wired_chat_models(connections)
+    wired = _wired_chat_models(payload.get("connections", {}))
     payload["nodes"] = [
         node for node in payload["nodes"] if _keep_workflow_node(node, wired)
     ]
+    drop_dangling_sources(payload)
+    return payload
+
+
+def drop_dangling_sources(payload: dict[str, Any]) -> None:
+    """Remove the outgoing connections of nodes that no longer exist."""
+    connections = payload.get("connections", {})
     live = {node["name"] for node in payload["nodes"]}
     for name in [name for name in connections if name not in live]:
         connections.pop(name)
-    return payload
 
 
 def _wired_chat_models(connections: dict[str, Any]) -> set[str]:
@@ -153,14 +175,60 @@ def _wired_chat_models(connections: dict[str, Any]) -> set[str]:
 
 
 def _keep_workflow_node(node: dict[str, Any], wired: set[str]) -> bool:
-    if not node["type"].startswith("@n8n/n8n-nodes-langchain.lmChat"):
+    if not node["type"].startswith(CHAT_MODEL_TYPE_PREFIX):
         return True
     return node["name"] in wired
 
 
+def new_node(
+    node_type: NodeType,
+    *,
+    name: str,
+    node_id: str,
+    position: tuple[int, int],
+    parameters: dict[str, Any],
+) -> dict[str, Any]:
+    """A node in the key order that n8n exports use."""
+    return {
+        "parameters": parameters,
+        "id": node_id,
+        "name": name,
+        "type": node_type.name,
+        "typeVersion": node_type.version,
+        "position": list(position),
+    }
+
+
+def main_edge(target: str, input_index: int = 0) -> dict[str, Any]:
+    """A "main" connection into input ``input_index`` of node ``target``."""
+    return {"node": target, "type": "main", "index": input_index}
+
+
+def main_output(*edges: dict[str, Any]) -> dict[str, Any]:
+    """The connections of a node with one "main" output that feeds ``edges``."""
+    return {"main": [list(edges)]}
+
+
+def connect_in_sequence(*names: str) -> dict[str, Any]:
+    """Connections that feed each named node into the next one."""
+    return {
+        source: main_output(main_edge(target))
+        for source, target in zip(names, names[1:])
+    }
+
+
+def remove_nodes(payload: dict[str, Any], names: Collection[str]) -> None:
+    """Delete the named nodes, their outgoing connections, and every edge into them."""
+    payload["nodes"] = [node for node in payload["nodes"] if node["name"] not in names]
+    connections = payload["connections"]
+    for name in names:
+        connections.pop(name, None)
+    remove_connection_targets(connections, names)
+
+
 def remove_connection_targets(
     value: Any,
-    target_names: set[str],
+    target_names: Collection[str],
 ) -> None:
     if isinstance(value, dict):
         for nested in value.values():

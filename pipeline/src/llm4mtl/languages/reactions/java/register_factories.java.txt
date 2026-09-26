@@ -1,0 +1,5 @@
+    @BeforeAll
+    static void registerFactories() {
+        Resource.Factory.Registry.INSTANCE.getExtensionToFactoryMap().put("*", new XMIResourceFactoryImpl());
+    }
+

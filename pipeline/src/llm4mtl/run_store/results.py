@@ -1,18 +1,15 @@
 """The terminal result of one run, written once when it ends.
 
-The orchestration knows one thing no artifact on disk states: where the run
-stopped and why — ``completed_with_failures`` because refinement was disabled,
-``incomplete`` because a diagnosis set never finished. Until now that decision
-lived only in the n8n execution, so reading a finished run meant reconstructing
-it from the event log, from which artifacts are absent, and from the routing
-rules themselves. That is acceptable while debugging one run and unacceptable as
-the input to a metrics module over hundreds.
+The orchestration knows one thing no other artifact states: where the run
+stopped and why, for example ``completed_with_failures`` because refinement was
+disabled, or ``incomplete`` because a diagnosis set never finished. Without this
+file, metrics would have to rebuild that decision from the event log and the
+n8n routing rules.
 
-So the terminal decision is reported here, and everything else in the file is
-derived from what the run itself recorded: stage statuses come from the latest
-attempt of each stage, and the diagnosis aggregate from the persisted diagnosis
-records. A caller can misreport where it stopped; it cannot misreport what the
-stages observed.
+Only the terminal decision comes from the caller. Everything else is derived
+from what the run recorded: stage statuses from the latest attempt of each
+stage, and the diagnosis aggregate from the stored diagnosis records. A caller
+can misreport where it stopped; it cannot misreport what the stages observed.
 
 The file is written once. A retry that reports the same terminal state reads the
 first record back; a retry that reports a different one is refused, because a run
@@ -28,23 +25,30 @@ from typing import Any
 from llm4mtl.artifact_schemas import validate_artifact
 from llm4mtl.domain.diagnosis import aggregate_classifications
 from llm4mtl.run_store import stages as stage_store
-from llm4mtl.run_store.attempts import existing_attempts
-from llm4mtl.run_store.models import RunPaths
-from llm4mtl.serialization.json_io import read_json, write_json
+from llm4mtl.run_store.models import RECORDED_AT, RunPaths, without_recorded_at
+from llm4mtl.run_store.responses import recorded_diagnoses
+from llm4mtl.serialization.json_io import (
+    JsonDocumentConflictError,
+    read_json,
+    write_json_once_or_match,
+)
+from llm4mtl.vocabulary import (
+    EXECUTION_STAGE_ID,
+    EXTRACT_STAGE_ID,
+    REFERENCE_VALIDATION_STAGE_ID,
+    SYNTAX_VALIDATION_STAGE_ID,
+    TECHNICAL_VALIDATION_STAGE_ID,
+)
 
 SCHEMA_VERSION = "1.0"
 RESULT_FILENAME = "result.json"
-DIAGNOSIS_FILENAME = "diagnosis.json"
 CONTRACT_STAGES = (
-    "extract",
-    "technical-validation",
-    "reference-validation",
-    "syntax-validation",
-    "execution",
+    EXTRACT_STAGE_ID,
+    TECHNICAL_VALIDATION_STAGE_ID,
+    REFERENCE_VALIDATION_STAGE_ID,
+    SYNTAX_VALIDATION_STAGE_ID,
+    EXECUTION_STAGE_ID,
 )
-# Which recorded stage answers which question about the run.
-SYNTAX_STAGE = "syntax-validation"
-EXECUTION_STAGE = "execution"
 NOT_RUN = "not_run"
 
 
@@ -54,11 +58,6 @@ class ResultConflictError(ValueError):
 
 def result_path(paths: RunPaths) -> Path:
     return paths.root / RESULT_FILENAME
-
-
-def read_result(paths: RunPaths) -> dict[str, Any] | None:
-    path = result_path(paths)
-    return read_json(path) if path.is_file() else None
 
 
 def record_result(
@@ -72,10 +71,31 @@ def record_result(
     string it ended on, the run mode, and the refinement budget it used out of
     the one it was given. ``run_diagnoses`` is where this run's verdicts were
     recorded, resolved by the caller through the artifact layout.
+
+    The result is written once, also when two calls race. Reporting the same
+    ending again returns the stored result; a different ending raises
+    :class:`ResultConflictError`.
     """
+    result = _assemble_result(paths, terminal, Path(run_diagnoses))
+    validate_artifact("run-result", result)
+    try:
+        return write_json_once_or_match(
+            result_path(paths), result, comparable=without_recorded_at
+        )
+    except JsonDocumentConflictError as exc:
+        stored = exc.stored
+        raise ResultConflictError(
+            f"run already ended as {stored['status']}:{stored['terminal_state']}"
+        ) from exc
+
+
+def _assemble_result(
+    paths: RunPaths, terminal: dict[str, Any], run_diagnoses: Path
+) -> dict[str, Any]:
+    """The terminal facts the caller reported, plus what the run recorded."""
     outcome_code, _, qualifier = str(terminal["terminal_state"]).partition(":")
-    classifications = _recorded_classifications(Path(run_diagnoses))
-    result = {
+    classifications = _recorded_classifications(run_diagnoses)
+    return {
         "schema_version": SCHEMA_VERSION,
         "run_id": paths.root.name,
         "status": terminal["status"],
@@ -90,35 +110,22 @@ def record_result(
         "last_completed_stage": terminal.get("last_completed_stage"),
         "test_iteration": terminal.get("test_iteration"),
         "transformation_iteration": terminal.get("transformation_iteration"),
-        "syntax_status": _stage_status(paths, SYNTAX_STAGE),
-        "semantic_status": _stage_status(paths, EXECUTION_STAGE),
+        "syntax_status": _stage_status(paths, SYNTAX_VALIDATION_STAGE_ID),
+        "semantic_status": _stage_status(paths, EXECUTION_STAGE_ID),
         "diagnosis": aggregate_classifications(classifications),
         "diagnosis_records": len(classifications),
         "diagnosis_classifications": classifications,
         "stages": _stage_summary(paths),
-        "recorded_at": datetime.now(timezone.utc).isoformat(),
+        RECORDED_AT: datetime.now(timezone.utc).isoformat(),
     }
-    validate_artifact("run-result", result)
-
-    existing = read_result(paths)
-    if existing is not None:
-        if _comparable(existing) != _comparable(result):
-            raise ResultConflictError(
-                f"run already ended as {existing['status']}:{existing['terminal_state']}"
-            )
-        return existing
-    write_json(result_path(paths), result)
-    return result
 
 
 def _recorded_classifications(run_diagnoses: Path) -> list[str]:
     """Every verdict this run persisted, in the order the attempts claimed."""
-    classifications: list[str] = []
-    for attempt in sorted(existing_attempts(run_diagnoses)):
-        path = run_diagnoses / f"attempt-{attempt:03d}" / DIAGNOSIS_FILENAME
-        if path.is_file():
-            classifications.append(str(read_json(path)["classification"]))
-    return classifications
+    return [
+        str(read_json(record)["classification"])
+        for record in recorded_diagnoses(run_diagnoses)
+    ]
 
 
 def _stage_status(paths: RunPaths, stage: str) -> str:
@@ -138,8 +145,3 @@ def _stage_summary(paths: RunPaths) -> dict[str, Any]:
             "attempt": latest.get("attempt"),
         }
     return summary
-
-
-def _comparable(result: dict[str, Any]) -> dict[str, Any]:
-    """The result without the wall-clock stamp, which a retry legitimately moves."""
-    return {key: value for key, value in result.items() if key != "recorded_at"}

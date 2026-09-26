@@ -1,19 +1,17 @@
 """What the shared pipeline needs from a language, and nothing more.
 
-The pipeline is one orchestration model for all four languages; everything that
-differs between them lives behind this boundary. The interface is deliberately
-narrow — it covers only capabilities the pipeline actually calls today, so it
-stays a real seam rather than a speculative framework.
+The pipeline runs all four languages the same way; everything that differs
+between them lives behind this interface. It holds only the methods the pipeline
+calls today.
 
-Explicitly NOT on this interface:
+Not on this interface:
 
-* generating transformations — that is n8n's job and predates this pipeline;
-* choosing providers, prompts, or routes — those belong to n8n;
-* storing artifacts or deriving metrics — the run store and evaluation layer own
-  those, and keeping them out is what lets metrics be reproduced from stored
-  observations without re-running any engine;
-* mutation operators and reference instrumentation — separate capabilities with
-  a different lifecycle, added when the mutation framework lands.
+* generating transformations, and choosing providers, prompts, or routes —
+  n8n owns those;
+* storing artifacts or computing metrics — the run store and evaluation layer
+  own those, so metrics can be recomputed from stored observations without
+  running an engine again;
+* mutation operators and reference instrumentation — not built yet.
 """
 
 from __future__ import annotations
@@ -72,11 +70,9 @@ class LanguageAdapter(Protocol):
     ) -> tuple[SuiteExecutionObservation, RawExecutionEvidence]:
         """Run ``suite`` against ``transformation`` and report the observed facts.
 
-        Returns the observation and the raw Maven/Surefire evidence it was
-        derived from. The evidence is part of this contract because it can only
-        be read inside the execution: the workspace it lives in is wiped by the
-        next execution's ``mvn clean``, so a caller that asked for it afterwards
-        would find it gone.
+        Returns the observation and the raw Maven/Surefire evidence behind it.
+        The evidence must be read during the execution: the next execution's
+        ``mvn clean`` wipes the workspace it lives in.
         """
 
     def normalize_transformation_failure(
@@ -85,9 +81,9 @@ class LanguageAdapter(Protocol):
     ) -> TransformationOutcome | None:
         """Normalize an attributable execution failure into the shared taxonomy.
 
-        ``None`` means the observation is suite/harness-side, or execution
-        reached assertions and therefore needs output snapshots rather than a
-        fabricated failure outcome.
+        Returns ``None`` when the failure is on the suite or harness side, or
+        when execution reached the assertions. Those cases are judged from the
+        output snapshots, not from an invented failure outcome.
         """
 
     def parse_transformations(

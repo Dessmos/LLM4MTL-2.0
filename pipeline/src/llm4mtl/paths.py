@@ -6,10 +6,6 @@ derived from this file's own location, :class:`TargetLayout` names the top-level
 areas of the repository, and :class:`ArtifactRoots` describes the writable
 artifact tree below ``artifacts/work`` together with the spelling under which
 the n8n container reaches it.
-
-Nothing else may derive one of these locations from another: a module that knows
-a run directory asks :class:`ArtifactRoots` where the run's diagnoses are rather
-than joining path segments of its own.
 """
 
 from __future__ import annotations
@@ -41,10 +37,10 @@ class ArtifactRoots:
         <artifacts_work>/diagnoses/<batch-id>/<run-id>/attempt-NNN/
 
     Nothing else may derive one of these locations from another: a module that
-    knows a run directory asks this class where the run's diagnoses are, rather
-    than reading the directory name back and joining it somewhere else. The stage
-    service and the local runner hold one instance each, which is also what the
-    tests redirect into a temporary tree.
+    knows a run directory asks this class where the run's diagnoses are. It
+    never reads the directory name back and joins it somewhere else. The stage
+    service and the local runner both get their instance from
+    ``TARGET.artifact_roots``; tests redirect it into a temporary tree.
     """
 
     artifacts_work: Path
@@ -57,12 +53,11 @@ class ArtifactRoots:
     def diagnoses(self) -> Path:
         """Failure diagnoses, kept out of the runs that produced them.
 
-        A run directory is working state — workspaces, locks, the build log, the
-        evidence a stage happened to record. A diagnosis is a result other work
-        consumes: refinement routes on it, reporting counts it, analysis reads it
-        across runs. Handing that to a consumer meant handing them the whole run
-        and telling them which parts to ignore, so it lives in its own area,
-        keyed by the batch and run that produced it.
+        A run directory is working state: workspaces, locks, build logs, stage
+        evidence. A diagnosis is a result that other work consumes: refinement
+        routes on it, reporting counts it, analysis reads it across runs. So it
+        lives in its own area, keyed by the batch and run that produced it, and
+        a consumer never has to read the whole run.
         """
         return self.artifacts_work / "diagnoses"
 
@@ -127,14 +122,6 @@ class TargetLayout:
     @property
     def experiments(self) -> Path:
         return self.root / "experiments"
-
-    @property
-    def experiments_presets(self) -> Path:
-        return self.experiments / "presets"
-
-    @property
-    def experiments_matrices(self) -> Path:
-        return self.experiments / "matrices"
 
     @property
     def artifacts(self) -> Path:

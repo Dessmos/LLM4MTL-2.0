@@ -10,10 +10,11 @@ comes from the attempts it recorded rather than from the caller.
 
 from __future__ import annotations
 
-import shutil
 import tempfile
+import threading
 import unittest
 from pathlib import Path
+from typing import Any, Callable
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
@@ -22,8 +23,11 @@ from llm4mtl import run_store
 from llm4mtl.paths import ArtifactRoots
 from llm4mtl.provenance import build_provenance
 from llm4mtl.domain import aggregate_classifications
+from llm4mtl.run_store.results import ResultConflictError
+from llm4mtl.serialization import json_io
 from llm4mtl.serialization.json_io import read_json, write_json
 from llm4mtl.stage_service.app import app
+from run_records import read_events, read_result
 
 IDENTITY = {
     "language": "etl",
@@ -148,7 +152,7 @@ class RunResultServiceTests(unittest.TestCase):
         self.assertEqual(result, stored)
         self.assertIn(
             "run_finished",
-            [event["event"] for event in run_store.read_events(self.paths)],
+            [event["event"] for event in read_events(self.paths)],
         )
 
     def test_a_stage_that_never_ran_is_not_run_rather_than_passing(self) -> None:
@@ -269,7 +273,87 @@ class RunResultWriterTests(unittest.TestCase):
             self.assertEqual("TEST_DEFECT", result["diagnosis"])
             self.assertIsNone(result["terminal_reason"])
             self.assertEqual(1, result["refinement_iterations_used"])
-            self.assertEqual(result, run_store.read_result(paths))
+            self.assertEqual(result, read_result(paths))
+
+
+def run_side_by_side(calls: list[Callable[[], Any]]) -> list[Any]:
+    """Run ``calls`` in threads that all publish their document at the same time.
+
+    Every writer stages its complete document before it becomes visible. A
+    barrier there holds each thread until all of them have staged theirs, so
+    no writer can see another's file before it decides how to publish its own.
+    Returns each call's result, or the exception it raised.
+    """
+    barrier = threading.Barrier(len(calls), timeout=10)
+    stage_document = json_io._stage_document
+
+    def staged_together(path: Path, payload: Any) -> Path:
+        staged = stage_document(path, payload)
+        barrier.wait()
+        return staged
+
+    outcomes: list[Any] = [None] * len(calls)
+
+    def run(index: int) -> None:
+        try:
+            outcomes[index] = calls[index]()
+        except Exception as exc:  # the outcome under test
+            outcomes[index] = exc
+
+    with patch.object(json_io, "_stage_document", staged_together):
+        threads = [threading.Thread(target=run, args=(i,)) for i in range(len(calls))]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+    return outcomes
+
+
+class ConcurrentRunResultTests(unittest.TestCase):
+    """Two calls that end the same run at the same moment."""
+
+    def test_of_two_concurrent_different_endings_exactly_one_is_recorded(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as name:
+            root = Path(name)
+            paths = run_store.create_run(
+                root / "runs",
+                "race-1",
+                {
+                    **IDENTITY,
+                    "seed": 1,
+                    "pipeline_variant": "full",
+                    "provenance": build_provenance(
+                        IDENTITY["language"], IDENTITY["task"]
+                    ),
+                },
+            )
+            endings = [
+                TERMINAL,
+                {**TERMINAL, "status": "completed", "terminal_state": "SEMANTIC_PASSED"},
+            ]
+
+            outcomes = run_side_by_side(
+                [
+                    lambda ending=ending: run_store.record_result(
+                        paths, ending, root / "diagnoses" / "race-1"
+                    )
+                    for ending in endings
+                ]
+            )
+
+            recorded = [outcome for outcome in outcomes if isinstance(outcome, dict)]
+            refused = [
+                outcome
+                for outcome in outcomes
+                if isinstance(outcome, ResultConflictError)
+            ]
+            self.assertEqual(1, len(recorded), outcomes)
+            self.assertEqual(1, len(refused), outcomes)
+            # The stored ending is the winner's, and the loser names it.
+            self.assertEqual(recorded[0], read_result(paths))
+            self.assertIn(recorded[0]["terminal_state"], str(refused[0]))
 
 
 if __name__ == "__main__":

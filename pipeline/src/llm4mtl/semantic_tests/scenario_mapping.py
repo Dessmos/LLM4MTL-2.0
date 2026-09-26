@@ -1,15 +1,14 @@
 """Express a generated suite in the shared scenario contract.
 
-Every generated suite must be representable in :mod:`llm4mtl.domain` before it
-is allowed to execute. This is what keeps the shared contract honest: if a suite
-a language's renderer accepts cannot be expressed, the contract is wrong and says
-so loudly, rather than the contract quietly describing only the parts of one
-language that happened to fit.
+Extraction maps every suite to :mod:`llm4mtl.domain` before the suite counts as
+valid, so a suite that cannot be expressed never runs. If a language's renderer
+accepts a suite that the contract cannot express, the contract is wrong. This
+makes that visible instead of letting the contract fit only one language.
 
-The engine-specific parts of a slot (model kind, load/store flags, the runtime
-model name) stay out of the shared types and remain in the spec the language
-renderer consumes. What the shared contract carries is what every language has:
-named model slots with roles and metamodels, and expectations over them.
+Engine-specific parts of a slot (model kind, load/store flags, the runtime model
+name) stay in the spec the language renderer reads. The shared contract holds
+only what every language has: named model slots with roles and metamodels, and
+expectations over them.
 """
 
 from __future__ import annotations

@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from llm4mtl.conventions import (
+    LanguageConfig,
     frozen_task_prompt,
     language_config,
     n8n_workflows_root,
@@ -26,6 +27,8 @@ from llm4mtl.semantic_tests.extraction.parser import (
     model_files,
     semantic_case_files,
 )
+from llm4mtl.semantic_tests.suites.discovery import CANDIDATES_DIRECTORY
+from llm4mtl.semantic_tests.suites.metadata import SUITE_METADATA_FILE
 
 
 def next_suite_id(strategy_dir: Path) -> str:
@@ -45,7 +48,7 @@ def allocate_suite_dir(target: ResponseTarget, options: ExtractionOptions) -> Pa
     strategy_dir = (
         options.generated_tests_root.resolve()
         / target.task
-        / "candidates"
+        / CANDIDATES_DIRECTORY
         / target.llm
         / target.strategy
     )
@@ -71,14 +74,14 @@ def write_failed_candidate(
     """Record a response whose artifacts could not be read, inventing nothing.
 
     A response that fails extraction is still a generated test the experiment
-    asked for, so it has to stay countable: without a candidate directory it
-    would vanish from every stage after `extract`, and the invalid-test rate
-    would be computed over a population the weakest models had silently left.
+    asked for, so it must stay countable. Without a candidate directory it would
+    vanish from every later stage, and the invalid-test rate would silently
+    ignore the weakest responses.
 
-    The directory holds metadata only. No ``semantic_cases.json``, no models, no
-    harness — there is nothing to write them from, and a placeholder would be a
-    fabricated artifact. Because the recorded verdict is invalid, validation
-    refuses the suite before Maven, so this can never become a runtime failure.
+    The directory holds metadata only: no ``semantic_cases.json``, no models, no
+    harness. There is nothing to write them from, and a placeholder would be a
+    made-up artifact. The recorded verdict is invalid, so validation refuses the
+    suite before Maven and it never becomes a runtime failure.
     """
     validation = ArtifactValidation(
         valid=False,
@@ -91,10 +94,7 @@ def write_failed_candidate(
 
     suite_dir.mkdir(parents=True, exist_ok=True)
     metadata = build_metadata(target, suite_dir.name, {}, validation, adapter)
-    (suite_dir / "metadata.json").write_text(
-        json.dumps(metadata, indent=2) + "\n",
-        encoding="utf-8",
-    )
+    _write_metadata(suite_dir, metadata)
     return suite_dir, validation
 
 
@@ -119,11 +119,15 @@ def write_suite(
         output_path.write_text(content, encoding="utf-8")
 
     metadata = build_metadata(target, suite_id, extracted, validation, adapter)
-    (suite_dir / "metadata.json").write_text(
+    _write_metadata(suite_dir, metadata)
+    return suite_dir, validation
+
+
+def _write_metadata(suite_dir: Path, metadata: dict[str, object]) -> None:
+    (suite_dir / SUITE_METADATA_FILE).write_text(
         json.dumps(metadata, indent=2) + "\n",
         encoding="utf-8",
     )
-    return suite_dir, validation
 
 
 def build_metadata(
@@ -135,18 +139,6 @@ def build_metadata(
 ) -> dict[str, object]:
     """Build provenance and artifact metadata for one candidate suite."""
     config = language_config(adapter.language_id)
-    # The reviewed, frozen prompt is the one both generators actually consumed.
-    # This used to name a pre-v5 per-model prompt directory that no longer
-    # exists, so every suite recorded prompt_file: null.
-    prompt_path = frozen_task_prompt(config, target.task)
-    workflow_path = (
-        n8n_workflows_root(config)
-        / "test_generation"
-        / (
-            f"Prompting_tests_{config.workflow_language}_"
-            f"{target.llm}_{target.strategy}.json"
-        )
-    )
     return {
         "language": adapter.language_id,
         "task": target.task,
@@ -154,19 +146,37 @@ def build_metadata(
         "strategy": target.strategy,
         "suite_id": suite_id,
         "generated_at": datetime.now(timezone.utc).isoformat(),
-        "prompt_file": (
-            repository_relative(prompt_path) if prompt_path.exists() else None
+        # The reviewed, frozen prompt is the one both generators actually consumed.
+        "prompt_file": _repository_path_if_present(
+            frozen_task_prompt(config, target.task)
         ),
-        "workflow_file": (
-            repository_relative(workflow_path) if workflow_path.exists() else None
+        "workflow_file": _repository_path_if_present(
+            _test_generation_workflow(config, target)
         ),
         "raw_output_file": repository_relative(target.response_path),
         "status": "candidate" if validation.valid else "invalid",
         "artifact_validation": validation.as_metadata(),
-        "extraction": {
-            "extracted_files": sorted(extracted),
-            "java_files": java_files(extracted),
-            "semantic_case_files": semantic_case_files(extracted),
-            "model_files": model_files(extracted),
-        },
+        "extraction": _extraction_summary(extracted),
+    }
+
+
+def _test_generation_workflow(config: LanguageConfig, target: ResponseTarget) -> Path:
+    """The exported n8n workflow that generates tests for this model and strategy."""
+    file_name = (
+        f"Prompting_tests_{config.workflow_language}_"
+        f"{target.llm}_{target.strategy}.json"
+    )
+    return n8n_workflows_root(config) / "test_generation" / file_name
+
+
+def _repository_path_if_present(path: Path) -> str | None:
+    return repository_relative(path) if path.exists() else None
+
+
+def _extraction_summary(extracted: dict[str, str]) -> dict[str, list[str]]:
+    return {
+        "extracted_files": sorted(extracted),
+        "java_files": java_files(extracted),
+        "semantic_case_files": semantic_case_files(extracted),
+        "model_files": model_files(extracted),
     }

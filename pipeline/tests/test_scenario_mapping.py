@@ -10,7 +10,6 @@ from __future__ import annotations
 import json
 import tempfile
 import unittest
-from pathlib import Path
 
 from llm4mtl.domain import ModelRole, ScenarioKind
 from llm4mtl.languages import language_adapter
@@ -51,8 +50,8 @@ class SpecToScenarioTests(unittest.TestCase):
         scenario = suite.scenarios[0]
         self.assertEqual(ScenarioKind.BATCH_TRANSFORMATION, scenario.kind)
         self.assertEqual((), scenario.changes)
-        self.assertEqual(ModelRole.INPUT, scenario.slot("Src").role)
-        self.assertEqual(ModelRole.OUTPUT, scenario.slot("Tgt").role)
+        self.assertEqual(ModelRole.INPUT, _slot(scenario, "Src").role)
+        self.assertEqual(ModelRole.OUTPUT, _slot(scenario, "Tgt").role)
 
     def test_assertions_map_onto_the_shared_expectation_vocabulary(self) -> None:
         scenario = suite_from_spec(
@@ -112,6 +111,11 @@ class ProductionGateTests(unittest.TestCase):
             {"semantic_cases.json": json.dumps(spec)},
         )
         self.assertFalse(validation.valid)
+
+
+def _slot(scenario, name: str):
+    """The scenario's model slot called ``name``."""
+    return next(slot for slot in scenario.slots if slot.name == name)
 
 
 if __name__ == "__main__":

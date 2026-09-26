@@ -1,7 +1,7 @@
 """Identity of one generated test suite.
 
-A suite keeps this identity through the whole funnel — extracted, executed,
-judged, promoted — so every observation stays attributable to the same
+A suite keeps this identity through the whole funnel (extracted, executed,
+judged), so every observation stays attributable to the same
 (language, task, generating model, strategy, suite) combination.
 """
 

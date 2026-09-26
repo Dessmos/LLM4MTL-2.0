@@ -5,7 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-ALLOWED_EXTENSIONS = {".java", ".json", ".model", ".xmi", ".xml"}
+from llm4mtl.task_contracts.models import MODEL_FILE_SUFFIXES
+
+ALLOWED_EXTENSIONS = {".java", ".json", *MODEL_FILE_SUFFIXES}
 
 
 class ExtractionError(ValueError):

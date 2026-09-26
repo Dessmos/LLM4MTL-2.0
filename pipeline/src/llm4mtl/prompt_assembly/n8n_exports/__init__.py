@@ -13,9 +13,12 @@ prompt or a synchronizer and re-run the command; never hand-edit the JSON::
 Read the module that answers your question:
 
 * :mod:`~llm4mtl.prompt_assembly.n8n_exports.prompts` — the exact text every
-  model receives, and the per-language facts it interpolates. No n8n knowledge.
+  model receives, and the per-language facts it interpolates. It builds no
+  nodes or connections.
 * :mod:`~llm4mtl.prompt_assembly.n8n_exports.workflow_graph` — generic n8n node
   and connection mechanics. No prompt knowledge.
+* :mod:`~llm4mtl.prompt_assembly.n8n_exports.node_names` — the names of the
+  nodes that the other modules read, rewrite, or wire.
 * :mod:`~llm4mtl.prompt_assembly.n8n_exports.synchronizers` — what each
   generation workflow is rewritten to do, and why.
 * :mod:`~llm4mtl.prompt_assembly.n8n_exports.sync` — which files on disk are

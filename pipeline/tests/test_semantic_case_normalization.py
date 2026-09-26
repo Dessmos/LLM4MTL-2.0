@@ -63,7 +63,7 @@ def spec_with(assertion: dict, *, models: list[dict] | None = None) -> str:
 
 
 def parse(raw: str) -> dict:
-    return parse_semantic_cases(raw, "Tree2Graph", transformation_extension=".etl")
+    return parse_semantic_cases(raw, transformation_extension=".etl")
 
 
 class NoAssertionKindRewritingTests(unittest.TestCase):

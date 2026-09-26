@@ -16,8 +16,8 @@ hand-authored parts, and changing them is how they are meant to be changed.
 The second test pins the package's layering. ``prompts`` is the module a
 reviewer opens to audit what a model is actually asked, and it is only worth
 opening if it cannot have acquired workflow plumbing; ``workflow_graph`` is
-only generic if it cannot have acquired prompt text. Both are leaves, and
-nothing but the facade may depend on more than one layer.
+only generic if it cannot have acquired prompt text. ``workflow_graph`` and
+``node_names`` are leaves; ``prompts`` may only read node names.
 """
 
 from __future__ import annotations
@@ -33,14 +33,15 @@ from llm4mtl.paths import TARGET, TargetLayout
 from llm4mtl.prompt_assembly.n8n_exports import synchronize_exports
 
 PACKAGE_DIR = Path(TARGET.package / "prompt_assembly" / "n8n_exports")
-# Which sibling modules each module of the package may import. prompts and
-# workflow_graph are leaves on purpose: that is what makes either of them
-# readable on its own.
+# Which sibling modules each module of the package may import. prompts,
+# workflow_graph, and node_names depend on nothing but a list of names: that is
+# what makes each of them readable on its own.
 ALLOWED_SIBLING_IMPORTS = {
-    "prompts.py": set(),
+    "node_names.py": set(),
+    "prompts.py": {"node_names"},
     "workflow_graph.py": set(),
-    "synchronizers.py": {"prompts", "workflow_graph"},
-    "sync.py": {"synchronizers"},
+    "synchronizers.py": {"node_names", "prompts", "workflow_graph"},
+    "sync.py": {"node_names", "synchronizers"},
     "__main__.py": {"sync"},
     "__init__.py": {"sync", "synchronizers"},
 }

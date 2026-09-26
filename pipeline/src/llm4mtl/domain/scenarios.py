@@ -49,10 +49,6 @@ class ModelRole(str, Enum):
     def is_readable(self) -> bool:
         return self is not ModelRole.OUTPUT
 
-    @property
-    def is_written(self) -> bool:
-        return self is not ModelRole.INPUT
-
 
 class ChangeKind(str, Enum):
     """The closed set of model changes a scenario may declare."""
@@ -202,12 +198,6 @@ class SemanticScenario:
                 f"scenario '{self.name}' is a batch transformation "
                 "and cannot declare changes"
             )
-
-    def slot(self, name: str) -> ModelSlot:
-        for slot in self.slots:
-            if slot.name == name:
-                return slot
-        raise KeyError(f"scenario '{self.name}' has no slot '{name}'")
 
 
 @dataclass(frozen=True)

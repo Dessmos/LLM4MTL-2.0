@@ -42,15 +42,11 @@ class CustomTaskSpec(BaseModel):
 class RunCreateRequest(BaseModel):
     """Identity of a new run. These fields become the immutable manifest.
 
-    A run is exactly one combination, so every axis a stage reads is required.
-    Leaving one out would let a stage select every value and attribute the results
-    to a run id that does not describe them.
-
-    The four generation axes are nullable because a run mode need not have both
-    branches: a semantic-tests-only run has no transformation model, and null on
-    that axis is what ``manifest.schema.json`` already means by "not applicable to
-    the stages this run executes". Null never means "any value" — a stage needing
-    an axis the run left null refuses instead of selecting every value.
+    A run is exactly one combination of its axes. The four generation axes may
+    be null, because a run mode need not have both branches: a tests-only run
+    has no transformation model. Null means "not applicable to this run", as in
+    ``manifest.schema.json``; it never means "any value". A stage that needs an
+    axis the run left null refuses instead of selecting every value.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -155,6 +151,8 @@ class StageRunRequest(BaseModel):
     # renames the suite - so the iteration cannot be read off the suite id
     # without making a transformation refinement look like the initial one.
     refinement_iteration: int | None = Field(default=None, ge=0)
+    # Sent by the n8n master and accepted so its requests stay valid. It has no
+    # effect: stages write the same evidence either way.
     verbose: bool = False
 
 

@@ -1,10 +1,10 @@
 """Deterministic task model contracts as enforced ground truth.
 
-The contract layer keeps infrastructure bindings (metamodel URIs, runtime model
-names, ``.ecore`` files, XML namespaces) out of the LLM's hands: the LLM only
-supplies semantics (input models and expected target-model facts), while this
-layer rewrites the bindings from the ``task_contracts/<task>.json`` source of
-truth and rejects assertions over types the metamodels do not define.
+Contracts keep infrastructure bindings (metamodel URIs, runtime model names,
+``.ecore`` files, XML namespaces) out of the LLM's hands. The LLM supplies only
+the semantics (input models and expected target-model facts). This package
+rewrites the bindings from ``benchmark/tasks/<language>/task_contracts/<task>.json``
+and rejects assertions on types the metamodels do not define.
 """
 
 from __future__ import annotations

@@ -2,15 +2,15 @@ from __future__ import annotations
 
 import unittest
 
-from llm4mtl.experiment_runner.config import ConfigError
-from llm4mtl.experiment_runner.matrix import expand_matrix, load_matrix
+from llm4mtl.experiment_runner.config import ConfigError, load_mapping
+from llm4mtl.experiment_runner.matrix import expand_matrix
 from llm4mtl.paths import TARGET
 
 
 class MatrixTests(unittest.TestCase):
 
     def test_thesis_ablation_expands_to_a_set_of_runs(self) -> None:
-        matrix = load_matrix(TARGET.experiments_matrices / "thesis-ablation.yaml")
+        matrix = load_mapping(TARGET.experiments / "matrices" / "thesis-ablation.yaml")
         specs = expand_matrix(matrix)
         # 2 tasks x 3 transformation models x 4 strategies x 1 test model x 1 test
         # strategy x 4 variants x 1 seed = 96 runs.

@@ -3,19 +3,12 @@
 This module may change how a specification is written. It may never change what
 the specification says.
 
-That line matters because RQ1 measures the quality of LLM-generated tests: are
-they executable, and do they pass reference validation? Every repair applied
-here would be measured as if the model had produced it, so a pipeline that
-quietly fixes a malformed assertion reports its own competence, not the model's.
-
-The prompt contract the models receive already states the consequence — "a
-response that deviates from it is rejected before anything is executed and is
-recorded as an invalid artifact, not as a failing test" (see
-``prompt_assets/tests/contract/<language>/semantic_cases_contract.txt``). This
-module used to contradict that promise: it rewrote one assertion kind into
-another, scavenged ``expected`` out of ``where``/``equals``/``match``, guessed
-missing ``model``/``type``/``feature`` fields, and invented target models the
-response never declared. Those repairs are gone.
+RQ1 measures the quality of LLM-generated tests: are they executable, and do
+they pass reference validation? Any repair made here would be scored as if the
+model had produced it, so quietly fixing a malformed assertion would measure the
+pipeline, not the model. The prompt contract
+(``prompt_assets/tests/contract/<language>/semantic_cases_contract.txt``) tells
+the models that a deviating response is rejected as an invalid artifact.
 
 Allowed here (representation):
 
@@ -41,12 +34,16 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from llm4mtl.task_contracts.models import METAMODEL_FILE_SUFFIX
+
+# A bare transformation file name is placed in this resource folder.
+TRANSFORMATIONS_DIRECTORY = "transformations"
+# A metamodel declared by name or URI resolves to a file in this folder.
+METAMODELS_DIRECTORY = "metamodels"
+
 
 def normalize_schema_variants(
-    spec: dict[str, Any],
-    target_task: str,
-    *,
-    transformation_extension: str = ".etl",
+    spec: dict[str, Any], *, transformation_extension: str
 ) -> dict[str, Any]:
     """Canonicalize how ``spec`` is written, leaving what it asserts untouched.
 
@@ -54,47 +51,48 @@ def normalize_schema_variants(
     what validation judges.
     """
     normalized = dict(spec)
-
     schema_version = normalized.pop(
-        "schema_version",
-        normalized.get("schemaVersion", 1),
+        "schema_version", normalized.get("schemaVersion", 1)
     )
-    if isinstance(schema_version, str) and schema_version in {"1", "1.0"}:
-        schema_version = 1
-    normalized["schemaVersion"] = schema_version
+    normalized["schemaVersion"] = _canonical_schema_version(schema_version)
 
     if "transformation" in normalized:
         normalized["transformation"] = normalize_transformation(
-            normalized["transformation"],
-            target_task,
-            transformation_extension,
+            normalized["transformation"], transformation_extension
         )
     if "metamodels" in normalized:
         normalized["metamodels"] = normalize_metamodels(normalized["metamodels"])
     if "models" in normalized:
         normalized["models"] = normalize_models(normalized["models"])
 
-    tests = []
-    for test in normalized.get("tests", []):
-        if not isinstance(test, dict):
-            # Left exactly as written; validation rejects it with a clear reason
-            # rather than this module quietly dropping it from the document.
-            tests.append(test)
-            continue
-        normalized_test = dict(test)
-        normalized_test["models"] = normalize_models(
-            test["models"] if "models" in test else normalized.get("models", [])
-        )
-        tests.append(normalized_test)
-    normalized["tests"] = tests
+    normalized["tests"] = [
+        _normalize_test(test, normalized.get("models", []))
+        for test in normalized.get("tests", [])
+    ]
     return normalized
 
 
-def normalize_transformation(
-    raw: Any,
-    target_task: str,
-    extension: str = ".etl",
-) -> Any:
+def _canonical_schema_version(raw: Any) -> Any:
+    """Write the version ``1`` as the number 1. Any other value is kept."""
+    if isinstance(raw, str) and raw in {"1", "1.0"}:
+        return 1
+    return raw
+
+
+def _normalize_test(test: Any, spec_models: Any) -> Any:
+    """Give a test its own copy of its models, or of the spec-level models."""
+    if not isinstance(test, dict):
+        # Left exactly as written; validation rejects it with a clear reason
+        # rather than this module quietly dropping it from the document.
+        return test
+    normalized_test = dict(test)
+    normalized_test["models"] = normalize_models(
+        test["models"] if "models" in test else spec_models
+    )
+    return normalized_test
+
+
+def normalize_transformation(raw: Any, extension: str) -> Any:
     """Canonicalize a transformation path. Anything else is passed through.
 
     A non-string is returned unchanged so validation can report the actual
@@ -103,15 +101,11 @@ def normalize_transformation(
     here would hide a response that never named it.
     """
     if isinstance(raw, str) and raw.strip():
-        return normalize_transformation_path(raw.strip(), target_task, extension)
+        return normalize_transformation_path(raw.strip(), extension)
     return raw
 
 
-def normalize_transformation_path(
-    path: str,
-    target_task: str,
-    extension: str = ".etl",
-) -> str:
+def normalize_transformation_path(path: str, extension: str) -> str:
     """Canonicalize a non-empty transformation path and its extension."""
     if not extension.startswith("."):
         extension = f".{extension}"
@@ -122,7 +116,7 @@ def normalize_transformation_path(
     elif suffix != extension:
         normalized = f"{Path(normalized).with_suffix('')}{extension}"
     if "/" not in normalized:
-        normalized = f"transformations/{normalized}"
+        normalized = f"{TRANSFORMATIONS_DIRECTORY}/{normalized}"
     return normalized
 
 
@@ -144,9 +138,9 @@ def _normalize_metamodel(item: Any) -> Any:
     if item.get("path"):
         return str(item["path"])
     if item.get("uri"):
-        return f"metamodels/{item['uri']}.ecore"
+        return f"{METAMODELS_DIRECTORY}/{item['uri']}{METAMODEL_FILE_SUFFIX}"
     if item.get("name"):
-        return f"metamodels/{item['name']}.ecore"
+        return f"{METAMODELS_DIRECTORY}/{item['name']}{METAMODEL_FILE_SUFFIX}"
     return item
 
 

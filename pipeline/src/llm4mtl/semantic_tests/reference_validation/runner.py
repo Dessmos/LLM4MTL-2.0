@@ -1,10 +1,10 @@
 """Reference validation: is a generated suite a reference-passing candidate oracle?
 
-This stage classifies the observation produced by executing the suite against the
-trusted reference transformation. It reuses the observation technical validation
-already recorded for exactly these inputs, and executes only when there is none —
-so the two stages report two facts about ONE execution rather than running the
-harness twice and risking two different answers.
+This stage classifies the observation of running the suite against the trusted
+reference transformation. It reuses the observation technical validation already
+recorded for exactly these inputs, and runs Maven only when there is none. So
+both stages report on ONE execution instead of running the harness twice and
+maybe getting two different answers.
 
 A suite that could not be executed is not a wrong oracle: it is a suite whose
 oracle has not been judged.
@@ -26,7 +26,7 @@ def validate_suite(
     suite: GeneratedSuite,
     context: ValidationContext,
 ) -> SuiteVerdict:
-    """Judge the immutable candidate; the run observation stores the decision."""
+    """Return the oracle verdict for ``suite``, reusing its recorded observation."""
     return judge_oracle(observe_suite(suite, context))
 
 

@@ -1,9 +1,9 @@
 """The raw evidence one suite execution produced, as pure data.
 
 ``execute_suite`` on :class:`~llm4mtl.languages.base.LanguageAdapter` returns
-this alongside its observation, so the types belong to the shared vocabulary
-rather than to the module that happens to persist them. Keeping them here is
-what lets ``languages/base.py`` state its contract without importing a stage.
+this alongside its observation, so the types belong to the shared vocabulary,
+not to the module that persists them. That lets ``languages/base.py`` state
+its contract without importing ``semantic_tests``.
 
 Nothing here interprets anything. Reading the evidence out of a workspace and
 archiving it is :mod:`llm4mtl.semantic_tests.execution_evidence`'s job; these

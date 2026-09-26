@@ -1,11 +1,11 @@
 """Enforce a deterministic task contract over a parsed semantic-case spec.
 
 Infrastructure bindings (which metamodels a task uses, their URIs, runtime model
-names, ``.ecore`` files, and the XML namespaces of generated input models) are
-deterministic facts owned by the contract, not by the LLM. This module rewrites
-those bindings from the contract and rejects assertions that reference types the
-target metamodels do not define, so mistakes surface as clear contract
-violations instead of cryptic Maven/EMF stack traces.
+names, ``.ecore`` files, and the XML namespaces of generated input models) come
+from the contract, not from the LLM. This module rewrites those bindings from
+the contract. It also rejects assertions on types the contract's metamodels do
+not define, so mistakes show up as clear violations instead of Maven/EMF stack
+traces.
 """
 
 from __future__ import annotations
@@ -14,7 +14,12 @@ import re
 from pathlib import Path
 from typing import Any
 
-from llm4mtl.task_contracts.models import ModelContract, TaskContract
+from llm4mtl.task_contracts.models import (
+    EMF_KIND,
+    MODEL_FILE_SUFFIXES,
+    ModelContract,
+    TaskContract,
+)
 
 
 # Namespaces that are part of the XMI serialization itself and must never be
@@ -24,8 +29,6 @@ STANDARD_NS_URIS = {
     "http://www.w3.org/2001/XMLSchema-instance",
     "http://www.w3.org/2001/XMLSchema",
 }
-
-MODEL_FILE_SUFFIXES = (".model", ".xmi", ".xml")
 
 
 def enforce_contract(
@@ -40,8 +43,7 @@ def enforce_contract(
     is invalid and should not be executed.
     """
     violations: list[str] = []
-    # Fail-fast: reject metamodels the LLM invented before we overwrite the
-    # declared bindings with the contract's own.
+    # Check the LLM's declared metamodels before they are overwritten below.
     _check_declared_metamodels(contract, spec, violations)
 
     spec["transformation"] = _transformation_path(contract)
@@ -228,7 +230,7 @@ def _apply_binding(
     if model.get("path") and _model_file_key(str(model["path"]), files) is not None:
         model["generated"] = True
 
-    if contract_model.kind == "emf" and contract_model.metamodel_uri:
+    if contract_model.kind == EMF_KIND and contract_model.metamodel_uri:
         model["metamodelUri"] = contract_model.metamodel_uri
         model["metamodelFile"] = contract_model.metamodel_file
         model["metamodelNsPrefix"] = contract_model.metamodel_ns_prefix
@@ -326,7 +328,7 @@ def _assertion_type_violation(
     if contract_model is None:
         # The model itself failed to map; that violation is already recorded.
         return None
-    if contract_model.kind != "emf":
+    if contract_model.kind != EMF_KIND:
         # plainXml assertions target XML element names, not metamodel types.
         return None
     if str(type_name) in contract_model.available_types:

@@ -13,6 +13,7 @@ from llm4mtl.run_store.identity import InvalidRunIdError
 from llm4mtl.stage_contract import SCHEMA_VERSION as STAGE_SCHEMA_VERSION
 
 from llm4mtl.provenance import build_provenance
+from run_records import read_events
 
 # A run is exactly one combination, so the fixture states every identity axis.
 IDENTITY = {
@@ -211,7 +212,7 @@ class PersistedSchemaTests(unittest.TestCase):
             run_store.record_attempt(paths, "extract", stage_result("EXTRACTED"))
 
             validate_artifact("manifest", run_store.read_manifest(paths))
-            for event in run_store.read_events(paths):
+            for event in read_events(paths):
                 validate_artifact("events", event)
             validate_artifact("stage-result", run_store.read_latest(paths, "extract"))
 

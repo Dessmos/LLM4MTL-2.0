@@ -1,4 +1,4 @@
-Its stage 2 folder
+This is the stage 2 folder.
 
 Checks if the suite can be started
 

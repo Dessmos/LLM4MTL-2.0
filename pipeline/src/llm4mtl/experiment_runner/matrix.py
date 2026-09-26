@@ -2,17 +2,15 @@
 
 A matrix is the cartesian product of its axes (tasks x transformation models x
 strategies x test models/strategies x variants x seeds); each combination is one
-run. Significance is computed at the experiment level over the resulting run set.
+run. Significance is computed later, over the whole set of runs.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from itertools import product
-from pathlib import Path
 from typing import Any
 
-from llm4mtl.experiment_runner.config import load_mapping
 from llm4mtl.stages.models import ConfigError
 
 
@@ -41,11 +39,6 @@ class RunSpec:
                 f"seed{self.seed}",
             ]
         )
-
-
-def load_matrix(path: Path) -> dict[str, Any]:
-    """Load one experiment-matrix mapping."""
-    return load_mapping(Path(path))
 
 
 def expand_matrix(matrix: dict[str, Any]) -> list[RunSpec]:

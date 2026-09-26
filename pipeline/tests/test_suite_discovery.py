@@ -8,7 +8,9 @@ import unittest
 from pathlib import Path
 
 from llm4mtl.semantic_tests.suites.discovery import (
+    CandidateIdentity,
     SuiteIdentityError,
+    candidate_identity,
     discover_suites,
     suite_from_path,
 )
@@ -73,12 +75,43 @@ class SuiteDiscoveryTests(unittest.TestCase):
 
 
 
+class CandidateIdentityTests(unittest.TestCase):
+
+    def test_the_identity_is_read_off_the_last_five_path_parts(self) -> None:
+        cases = (
+            Path("/root/Tree2Graph/candidates/gpt-5/few_shot/suite_001"),
+            Path("Tree2Graph/candidates/gpt-5/few_shot/suite_001"),
+        )
+        for path in cases:
+            with self.subTest(path=str(path)):
+                self.assertEqual(
+                    CandidateIdentity(
+                        task="Tree2Graph",
+                        llm="gpt-5",
+                        strategy="few_shot",
+                        suite_id="suite_001",
+                    ),
+                    candidate_identity(path),
+                )
+
+    def test_other_layouts_are_rejected(self) -> None:
+        cases = (
+            Path("candidates/gpt-5/few_shot/suite_001"),
+            Path("/root/Tree2Graph/validated/gpt-5/few_shot/suite_001"),
+            Path("/root/Tree2Graph/candidates/gpt-5/few_shot"),
+        )
+        for path in cases:
+            with self.subTest(path=str(path)):
+                with self.assertRaisesRegex(ValueError, "not a candidate suite"):
+                    candidate_identity(path)
+
+
 class SuiteIdentityFailureTests(unittest.TestCase):
     """Unreadable identities are domain errors a caller can catch, not process exits."""
 
     def test_a_path_outside_the_candidate_layout_names_no_suite(self) -> None:
         with self.assertRaisesRegex(SuiteIdentityError, "Cannot infer"):
-            suite_from_path(Path("/not/a/suite"), Path("/not"), "etl")
+            suite_from_path(Path("/not/a/suite"), "etl")
 
     def test_a_java_source_without_a_class_names_no_test(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

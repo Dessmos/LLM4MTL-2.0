@@ -17,11 +17,12 @@ refinement.py       -   n8n asks via HTTP for the prompt of a retry after a fail
 
 
 n8n_exports/
+            node_names.py - names of the n8n nodes the generator reads and writes
             prompts.py	- text that each model gets
             workflow_graph.py - operations above n8n
             synchronizers.py  - what is rewritten in each prompt
             sync.py	 - which files must be rewritten
-            main.py  - entry point for python -m sync
+            __main__.py - entry point for python -m llm4mtl.prompt_assembly.n8n_exports
 
 
 Called only by developer with 

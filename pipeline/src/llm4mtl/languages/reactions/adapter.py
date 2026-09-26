@@ -23,27 +23,54 @@ from llm4mtl.domain import (
     SuiteExecutionObservation,
     TransformationOutcome,
 )
+from llm4mtl.domain.observations import FailureStage
+from llm4mtl.external_tools.maven import (
+    MAVEN_TEST_JAVA_DIR,
+    MAVEN_TEST_RESOURCES_DIR,
+    POM_NAMESPACE,
+)
 from llm4mtl.languages.base import Workspace
 from llm4mtl.languages.common import (
+    ALLOW_MODULES_WITHOUT_SELECTED_TESTS,
+    DIAGNOSTIC_MAX_CHARS,
+    TEST_SELECTION_OPTION,
+    MavenHarness,
+    combined_output,
+    diagnostic_tail,
     execute_maven_suite,
+    failed_for_every_file,
     materialize_parser,
     normalize_failure,
+    run_parser_command,
     validate_rendered_suite,
 )
-from llm4mtl.languages.reactions.rendering import (
+from llm4mtl.languages.reactions.prerequisites import (
+    UnmergeableTransformationError,
+    merge_reactions,
     prerequisite_tasks,
-    render_reactions_test,
 )
+from llm4mtl.languages.reactions.rendering import render_reactions_test
 from llm4mtl.paths import TARGET
 from llm4mtl.semantic_tests.extraction.semantic_cases import render_generated_suite
-from llm4mtl.semantic_tests.suites.java import slug
+from llm4mtl.semantic_tests.suites.generated_models import generated_models_dir
+from llm4mtl.semantic_tests.surefire import SUREFIRE_REPORTS_DIR
 
+# Versions pinned by engines/reactions/harness/pom.xml: its vitruv.version
+# property and its junit-jupiter-api dependency.
+VITRUV_VERSION = "3.1.2"
+JUNIT_VERSION = "5.13.2"
+
+# Longer than the shared parser limit: the build packages a large jar.
 PARSER_TIMEOUT_SECONDS = 1200
+PARSER_BUILD_COMMAND = ("mvn", "-q", "-pl", "parser", "-am", "package", "-DskipTests")
+PARSER_JAR_GLOB = "*-all.jar"
 
-SEGMENT_START = re.compile(r"^reactions:", re.MULTILINE)
-HEADER_END = re.compile(r"^\s*execute\s+actions\s+in\b[^\n]*$", re.MULTILINE)
-METAMODEL_IMPORT = re.compile(r'^\s*import\s+"[^"]+"\s+as\s+\w+[^\n]*$', re.MULTILINE)
-ROUTINE_NAME = re.compile(r"^\s*routine\s+(\w+)", re.MULTILINE)
+# The harness module that holds and runs the generated tests.
+TEST_MODULE = "vsum"
+# Where the transformation under test goes in the consistency module.
+TRANSFORMATION_DIR = (
+    "consistency/src/main/reactions/tools/vitruv/methodologisttemplate/generated"
+)
 
 # `ReactionsCli` prints this exact line for a run in which the parser returned
 # issues; the number is the measured issue count.
@@ -52,15 +79,6 @@ SYNTAX_ISSUES = re.compile(r"Syntax issues \((\d+)\):")
 # The exit code recorded for an execution refused before Maven was invoked.
 # A string, so it can never be mistaken for a code Maven returned.
 MAVEN_NOT_INVOKED = "not_invoked"
-
-
-class UnmergeableTransformationError(Exception):
-    """The transformation under test cannot share a segment with its prerequisites.
-
-    A property of the transformation itself -- it declares no reactions segment,
-    or reuses a routine name a prerequisite already defines -- so it is observed
-    as that transformation failing to load, never as a broken harness.
-    """
 
 
 class ReactionsAdapter:
@@ -80,7 +98,7 @@ class ReactionsAdapter:
         )
 
     def runtime_tool_versions(self) -> dict[str, str]:
-        return {"vitruv": "3.1.2", "junit": "5.13.2"}
+        return {"vitruv": VITRUV_VERSION, "junit": JUNIT_VERSION}
 
     def render_suite_artifacts(
         self,
@@ -130,19 +148,16 @@ class ReactionsAdapter:
     ) -> Path:
         """Merge the reactions this task presupposes into the file under test.
 
-        A virtual model accepts one change propagation specification per pair
-        of metamodels, and a prerequisite works on the same pair as the task
-        that needs it, so they cannot be separate specifications. They can be
-        separate reactions of one segment -- that is how the template's own
-        consistency file holds five of them -- so the prerequisite references
-        are merged in here. They are context, not the artifact under test:
-        without them this task's reaction has no correspondence to retrieve and
-        produces nothing, however well it was written.
+        A virtual model accepts only one change propagation specification per
+        metamodel pair, and a prerequisite uses the same pair as its task. So
+        the prerequisite reference reactions join the same segment. They are
+        context, not the artifact under test: without them the task's reaction
+        finds no correspondence and produces nothing.
         """
         prerequisites = prerequisite_tasks(task)
         if not prerequisites:
             return transformation
-        merged = _merge_reactions(
+        merged = merge_reactions(
             transformation.read_text(encoding="utf-8"),
             [
                 (self._references_root / f"{name}.reactions").read_text(
@@ -162,35 +177,30 @@ class ReactionsAdapter:
         workspace: Workspace,
         timeout: int,
     ) -> tuple[SuiteExecutionObservation, RawExecutionEvidence]:
-        return execute_maven_suite(
-            suite,
-            transformation,
-            workspace,
-            timeout,
+        engine = workspace.engine_dir
+        module = engine / TEST_MODULE
+        harness = MavenHarness(
             transformation_destination=(
-                workspace.engine_dir
-                / "consistency/src/main/reactions/tools/vitruv/methodologisttemplate/generated"
-                / f"{suite.task}.reactions"
+                engine / TRANSFORMATION_DIR / f"{suite.task}.reactions"
             ),
-            java_root=workspace.engine_dir / "vsum/src/test/java",
+            java_root=module / MAVEN_TEST_JAVA_DIR,
             models_root=(
-                workspace.engine_dir
-                / "vsum/src/test/resources/generated-models"
-                / slug(suite.task)
+                module / MAVEN_TEST_RESOURCES_DIR / generated_models_dir(suite.task)
             ),
-            maven_cwd=workspace.engine_dir,
-            maven_command=[
+            maven_cwd=engine,
+            maven_command=(
                 "mvn",
                 "clean",
                 "test",
                 "-pl",
-                "vsum",
+                TEST_MODULE,
                 "-am",
-                "-Dsurefire.failIfNoSpecifiedTests=false",
-                "-Dtest={selectors}",
-            ],
-            reports_root=workspace.engine_dir / "vsum/target/surefire-reports",
+                ALLOW_MODULES_WITHOUT_SELECTED_TESTS,
+                TEST_SELECTION_OPTION,
+            ),
+            reports_root=module / SUREFIRE_REPORTS_DIR,
         )
+        return execute_maven_suite(suite, transformation, workspace, timeout, harness)
 
     def normalize_transformation_failure(
         self,
@@ -210,54 +220,51 @@ class ReactionsAdapter:
             workspace,
             self.language_id,
         )
-        build = subprocess.run(
-            ["mvn", "-q", "-pl", "parser", "-am", "package", "-DskipTests"],
-            cwd=parser_dir,
-            capture_output=True,
-            text=True,
-            timeout=PARSER_TIMEOUT_SECONDS,
+        build = run_parser_command(
+            PARSER_BUILD_COMMAND, parser_dir, PARSER_TIMEOUT_SECONDS
         )
-        jars = sorted((parser_dir / "parser/target").glob("*-all.jar"))
+        jars = sorted((parser_dir / "parser/target").glob(PARSER_JAR_GLOB))
         if build.returncode != 0 or not jars:
-            diagnostic = f"{build.stdout}\n{build.stderr}".strip()[-500:]
-            return {
-                path: ParseObservation(parsed=False, diagnostic=diagnostic)
-                for path in transformations
-            }
-        jar = jars[-1]
-        ecores = default_reactions_metamodels_root()
+            diagnostic = diagnostic_tail(combined_output(build))
+            return failed_for_every_file(transformations, diagnostic)
         workspace.observations_dir.mkdir(parents=True, exist_ok=True)
-        observations: dict[Path, ParseObservation] = {}
-        for index, transformation in enumerate(transformations):
-            output = workspace.observations_dir / f"reactions-{index:03d}.xmi"
-            completed = subprocess.run(
-                [
-                    "java",
-                    "-jar",
-                    str(jar),
-                    str(transformation.resolve()),
-                    str(output),
-                    str(ecores),
-                ],
-                cwd=parser_dir,
-                capture_output=True,
-                text=True,
-                timeout=PARSER_TIMEOUT_SECONDS,
+        return {
+            transformation: _parse_one(
+                parser_dir,
+                jars[-1],
+                transformation,
+                workspace.observations_dir / f"reactions-{index:03d}.xmi",
             )
-            diagnostic = f"{completed.stdout}\n{completed.stderr}".strip()
-            syntax_valid = (
-                completed.returncode == 0 and output.is_file()
-            ) or _contains_only_unresolved_linkage_diagnostics(diagnostic)
-            observations[transformation] = ParseObservation(
-                parsed=syntax_valid,
-                problem_count=_reported_issue_count(diagnostic, completed, output),
-                diagnostic=(
-                    ""
-                    if completed.returncode == 0 and output.is_file()
-                    else diagnostic[:500]
-                ),
-            )
-        return observations
+            for index, transformation in enumerate(transformations)
+        }
+
+
+def _parse_one(
+    parser_dir: Path,
+    jar: Path,
+    transformation: Path,
+    output: Path,
+) -> ParseObservation:
+    """Run the packaged ``ReactionsCli`` on one file, writing its XMI to ``output``."""
+    completed = run_parser_command(
+        [
+            "java",
+            "-jar",
+            str(jar),
+            str(transformation.resolve()),
+            str(output),
+            str(default_reactions_metamodels_root()),
+        ],
+        parser_dir,
+        PARSER_TIMEOUT_SECONDS,
+    )
+    diagnostic = combined_output(completed).strip()
+    succeeded = completed.returncode == 0 and output.is_file()
+    return ParseObservation(
+        parsed=succeeded or _contains_only_unresolved_linkage_diagnostics(diagnostic),
+        problem_count=_reported_issue_count(diagnostic, completed, output),
+        diagnostic="" if succeeded else diagnostic[:DIAGNOSTIC_MAX_CHARS],
+    )
 
 
 def _reported_issue_count(
@@ -267,16 +274,13 @@ def _reported_issue_count(
 ) -> int | None:
     """How many issues the Reactions parser reported, or ``None`` if it said nothing.
 
-    ``ReactionsCli`` prints ``Syntax issues (N):`` and exits non-zero whenever
-    the Xtext parser returns issues, and writes the XMI and exits 0 when it
-    returns none. Those are the only two states in which a count was measured;
-    a build failure, a crash, or a timeout produces neither, and reporting a
-    number for them would invent a measurement.
+    ``ReactionsCli`` prints ``Syntax issues (N):`` and exits non-zero when the
+    Xtext parser finds issues. It writes the XMI and exits 0 when there are
+    none. Only these two cases measure a count; a build failure, crash, or
+    timeout gives ``None``.
 
-    This is deliberately independent of the syntax verdict. A run whose issues
-    are all known false positives of the frozen standalone parser is still a run
-    in which the parser counted them, so the count is reported as measured while
-    ``parsed`` records the judgement.
+    The count does not depend on the ``parsed`` verdict. Issues that are known
+    false positives are still counted, while ``parsed`` may still be true.
     """
     reported = SYNTAX_ISSUES.search(diagnostic)
     if reported:
@@ -287,13 +291,13 @@ def _reported_issue_count(
 
 
 def _contains_only_unresolved_linkage_diagnostics(diagnostic: str) -> bool:
-    """Recognize false positives caused by the frozen standalone parser.
+    """Whether every reported issue is a known false positive of the parser.
 
-    The parser does not put the harness's generated EPackage classes on its
-    classpath, so valid benchmark references report ``unknown`` routine
-    parameter types. It also loads the requested resource twice and reports a
-    duplicate segment warning. These are not grammar errors; Maven compilation
-    in the run-local harness remains the semantic-link validation authority.
+    The frozen standalone parser does not have the harness's generated EPackage
+    classes on its classpath, so valid references report ``unknown`` parameter
+    types. It also loads the file twice and warns about a duplicate segment.
+    These are not grammar errors. Linking is checked later, when Maven compiles
+    the run-local harness.
     """
     lines = [
         line.strip()
@@ -315,12 +319,11 @@ def _contains_only_unresolved_linkage_diagnostics(diagnostic: str) -> bool:
 def _unmergeable_transformation(
     diagnostic: str,
 ) -> tuple[SuiteExecutionObservation, RawExecutionEvidence]:
-    """Observe a transformation the harness refused before running Maven.
+    """The observation for a transformation refused before Maven ran.
 
-    The phase is ``transformation_parse``: the engine never accepted the
-    transformation, which is what that phase states. Nothing compiled and
-    nothing ran, so every progress flag is false, and the refusal is archived
-    as the harness's only diagnostic output.
+    The phase is ``transformation_parse`` because the engine never accepted
+    the transformation. Nothing compiled or ran, so every progress flag is
+    false, and the refusal message is stored as the only stderr.
     """
     observation = SuiteExecutionObservation(
         compiled=False,
@@ -331,7 +334,7 @@ def _unmergeable_transformation(
         assertions_passed=False,
         timed_out=False,
         maven_exit_code=MAVEN_NOT_INVOKED,
-        failure_stage="transformation_parse",
+        failure_stage=FailureStage.TRANSFORMATION_PARSE,
         error_summary=diagnostic,
     )
     evidence = RawExecutionEvidence(
@@ -344,53 +347,15 @@ def _unmergeable_transformation(
     return observation, evidence
 
 
-def _merge_reactions(base: str, prerequisites: list[str]) -> str:
-    """Put every prerequisite's reactions into the base file's one segment.
-
-    Raises :class:`UnmergeableTransformationError` for a defect of ``base``,
-    and ``ValueError`` for a prerequisite reference that is itself malformed:
-    the latter is a benchmark defect, not an observation about the artifact.
-    """
-    start = SEGMENT_START.search(base)
-    if start is None:
-        raise UnmergeableTransformationError(
-            "transformation declares no reactions segment"
-        )
-    head, segment = base[: start.start()], base[start.start() :]
-    imports = set(METAMODEL_IMPORT.findall(head))
-    routines = set(ROUTINE_NAME.findall(base))
-
-    bodies = []
-    for prerequisite in prerequisites:
-        for statement in METAMODEL_IMPORT.findall(prerequisite):
-            if statement.strip() not in {value.strip() for value in imports}:
-                imports.add(statement)
-                head = head.rstrip("\n") + "\n" + statement.strip() + "\n"
-        header = HEADER_END.search(prerequisite)
-        if header is None:
-            raise ValueError("prerequisite declares no reactions segment header")
-        body = prerequisite[header.end() :]
-        clashing = routines & set(ROUTINE_NAME.findall(body))
-        if clashing:
-            raise UnmergeableTransformationError(
-                "prerequisite reuses routine names of the transformation under "
-                f"test: {', '.join(sorted(clashing))}"
-            )
-        routines |= set(ROUTINE_NAME.findall(body))
-        bodies.append(body.strip("\n"))
-
-    return "\n".join([head.rstrip("\n"), "", segment.rstrip("\n"), "", *bodies, ""])
-
-
 def _remove_unused_legacy_dependency(pom: Path) -> None:
-    """Remove an unavailable, unused demo artifact from the run-local copy.
+    """Remove an unused, unpublished demo dependency from the run-local pom.
 
-    The frozen harness declares the old SDQ families demo JAR although its
-    sources use the harness's own generated families metamodel. The artifact is
-    no longer published. Editing the template is forbidden, so the adapter
-    removes only that dependency from the isolated materialization.
+    The frozen harness declares the old SDQ families demo JAR, but its sources
+    use the harness's own families metamodel, and the JAR is no longer
+    published. The frozen template must not be edited, so only the run-local
+    copy is changed.
     """
-    namespace = "http://maven.apache.org/POM/4.0.0"
+    namespace = POM_NAMESPACE
     tree = ET.parse(pom)
     root = tree.getroot()
     dependencies = root.find(f"{{{namespace}}}dependencies")

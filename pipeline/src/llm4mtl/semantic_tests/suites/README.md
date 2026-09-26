@@ -5,4 +5,6 @@ General operations performed on the suite, treating it like a disk folder. These
 discovery.py - looks for suites and check who do they belong to
 injection.py - put suite into engine
 java.py      - decides where to put java files
-metadata.py  — checks if suite should be started
+metadata.py  - checks if suite should be started
+cli_options.py - command-line options that both validation commands share
+generated_models.py - where a suite's model files go inside the test project

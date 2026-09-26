@@ -12,24 +12,15 @@ from .errors import SemanticCasesError
 from .legacy_adapter import is_legacy_tree2graph_spec, normalize_legacy_tree2graph_spec
 from .normalization import normalize_schema_variants
 
-SUPPORTED_ASSERTION_KINDS = frozenset(
-    {
-        "collectionSize",
-        "count",
-        "featureValues",
-        "objects",
-        "pathValues",
-        "referencePairs",
-        "treePaths",
-    }
-)
-
 
 def parse_semantic_cases(
-    raw_json: str,
-    target_task: str,
-    transformation_extension: str = ".etl",
+    raw_json: str, *, transformation_extension: str
 ) -> dict[str, Any]:
+    """Parse, normalize and validate one ``semantic_cases.json`` document.
+
+    Raises :class:`SemanticCasesError` when the document is not a valid
+    specification.
+    """
     try:
         spec = json.loads(raw_json)
     except json.JSONDecodeError as exc:
@@ -40,11 +31,9 @@ def parse_semantic_cases(
     if is_legacy_tree2graph_spec(spec):
         spec = normalize_legacy_tree2graph_spec(spec)
     spec = normalize_schema_variants(
-        spec,
-        target_task,
-        transformation_extension=transformation_extension,
+        spec, transformation_extension=transformation_extension
     )
-    validate_semantic_cases(spec, target_task)
+    validate_semantic_cases(spec)
     try:
         validate_artifact("semantic-cases", spec)
     except ArtifactSchemaError as exc:
@@ -52,7 +41,7 @@ def parse_semantic_cases(
     return spec
 
 
-def validate_semantic_cases(spec: dict[str, Any], target_task: str) -> None:
+def validate_semantic_cases(spec: dict[str, Any]) -> None:
     tests = spec.get("tests")
     if not isinstance(tests, list) or not tests:
         raise SemanticCasesError(
@@ -162,24 +151,8 @@ def _validate_assertion(
         raise SemanticCasesError(
             f"test #{test_index} assertion #{assertion_index} is missing type"
         )
-    _validate_assertion_shape(assertion, str(kind), test_index, assertion_index)
-
-
-def _validate_assertion_shape(
-    assertion: dict[str, Any], kind: str, test_index: int, assertion_index: int
-) -> None:
-    if kind == "count":
-        _validate_count_assertion(assertion, test_index, assertion_index)
-    elif kind in {"featureValues", "pathValues"}:
-        _validate_path_assertion(assertion, kind, test_index, assertion_index)
-    elif kind == "treePaths":
-        _validate_tree_paths_assertion(assertion, test_index, assertion_index)
-    elif kind == "collectionSize":
-        _validate_collection_size_assertion(assertion, test_index, assertion_index)
-    elif kind == "objects":
-        _validate_objects_assertion(assertion, test_index, assertion_index)
-    elif kind == "referencePairs":
-        _validate_reference_pairs_assertion(assertion, test_index, assertion_index)
+    validate_shape = _SHAPE_VALIDATORS[kind]
+    validate_shape(assertion, test_index, assertion_index)
 
 
 def _validate_count_assertion(
@@ -193,8 +166,9 @@ def _validate_count_assertion(
 
 
 def _validate_path_assertion(
-    assertion: dict[str, Any], kind: str, test_index: int, assertion_index: int
+    assertion: dict[str, Any], test_index: int, assertion_index: int
 ) -> None:
+    kind = assertion["kind"]
     field = "feature" if kind == "featureValues" else "path"
     if not assertion.get(field) or not isinstance(assertion.get("expected"), list):
         raise SemanticCasesError(
@@ -246,6 +220,19 @@ def _validate_reference_pairs_assertion(
             "is incomplete"
         )
     validate_reference_pair_expectations(assertion, test_index, assertion_index)
+
+
+# The shape check for each supported assertion kind.
+_SHAPE_VALIDATORS = {
+    "count": _validate_count_assertion,
+    "featureValues": _validate_path_assertion,
+    "pathValues": _validate_path_assertion,
+    "treePaths": _validate_tree_paths_assertion,
+    "collectionSize": _validate_collection_size_assertion,
+    "objects": _validate_objects_assertion,
+    "referencePairs": _validate_reference_pairs_assertion,
+}
+SUPPORTED_ASSERTION_KINDS = frozenset(_SHAPE_VALIDATORS)
 
 
 def validate_reference_pair_expectations(

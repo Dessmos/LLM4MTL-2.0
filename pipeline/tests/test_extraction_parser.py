@@ -217,9 +217,7 @@ class ExtractionFailureStaysInTheFunnelTests(unittest.TestCase):
 
     def test_it_is_never_sent_to_execution_and_counts_as_invalid(self) -> None:
         self.extract()
-        suite = suite_from_path(
-            self.candidates()[0], self.generated_tests_root.resolve(), "etl"
-        )
+        suite = suite_from_path(self.candidates()[0], "etl")
         context = ValidationContext(adapter=self.adapter, workspace=None, timeout=1)
 
         def must_not_run(

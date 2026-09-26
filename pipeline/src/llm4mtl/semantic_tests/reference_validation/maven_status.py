@@ -1,4 +1,4 @@
-"""Interpret Maven output for reference validation result fields."""
+"""Read coarse facts from Maven console output: compiled, ran tests, parse error."""
 
 from __future__ import annotations
 

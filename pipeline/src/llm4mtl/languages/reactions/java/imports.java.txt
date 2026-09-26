@@ -1,0 +1,25 @@
+import java.net.URL;
+import java.nio.file.Path;
+import java.util.function.Consumer;
+
+import org.eclipse.emf.common.util.URI;
+import org.eclipse.emf.ecore.EClass;
+import org.eclipse.emf.ecore.EDataType;
+import org.eclipse.emf.ecore.EFactory;
+import org.eclipse.emf.ecore.EPackage;
+import org.eclipse.emf.ecore.resource.Resource;
+import org.eclipse.emf.ecore.resource.ResourceSet;
+import org.eclipse.emf.ecore.resource.impl.ResourceSetImpl;
+import org.eclipse.emf.ecore.util.EcoreUtil;
+import org.eclipse.emf.ecore.xmi.impl.XMIResourceFactoryImpl;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+import tools.vitruv.change.propagation.ChangePropagationSpecification;
+import tools.vitruv.change.propagation.ChangePropagationMode;
+import tools.vitruv.change.testutils.TestUserInteraction;
+import tools.vitruv.framework.views.CommittableView;
+import tools.vitruv.framework.views.View;
+import tools.vitruv.framework.views.ViewTypeFactory;
+import tools.vitruv.framework.vsum.VirtualModelBuilder;
+import tools.vitruv.framework.vsum.internal.InternalVirtualModel;

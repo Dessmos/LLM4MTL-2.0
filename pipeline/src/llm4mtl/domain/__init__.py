@@ -14,7 +14,6 @@ from __future__ import annotations
 from llm4mtl.domain.artifacts import ArtifactRef
 from llm4mtl.domain.diagnosis import (
     AMBIGUOUS,
-    DIAGNOSIS_CLASSIFICATIONS,
     TEST_DEFECT,
     TRANSFORMATION_DEFECT,
     aggregate_classifications,
@@ -29,7 +28,7 @@ from llm4mtl.domain.observations import (
     ParseObservation,
     SuiteExecutionObservation,
 )
-from llm4mtl.domain.outcomes import ModelSnapshot, OutcomeStatus, TransformationOutcome
+from llm4mtl.domain.outcomes import OutcomeStatus, TransformationOutcome
 from llm4mtl.domain.scenarios import (
     ChangeKind,
     ChangeOperation,
@@ -51,7 +50,6 @@ __all__ = [
     "ChangeKind",
     "ChangeOperation",
     "CONTRACT_VIOLATION",
-    "DIAGNOSIS_CLASSIFICATIONS",
     "EXTRACTION_FAILED",
     "ElementRef",
     "ElementSpec",
@@ -61,7 +59,6 @@ __all__ = [
     "MISSING_SEMANTIC_CASES",
     "ModelRole",
     "ModelSlot",
-    "ModelSnapshot",
     "OutcomeStatus",
     "ParseObservation",
     "RawExecutionEvidence",

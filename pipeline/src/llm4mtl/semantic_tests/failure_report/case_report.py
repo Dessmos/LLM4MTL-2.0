@@ -5,35 +5,67 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from llm4mtl.artifact_schemas import validate_artifact
 from llm4mtl.semantic_tests.codegen.java_rendering import assertion_message
 from llm4mtl.semantic_tests.failure_report.artifacts import (
     _cited,
-    _log_excerpt,
+    _optional_log_excerpt,
     _read_object,
     _relevant_log_lines,
-    _repository_path,
     _suite_artifact_path,
     _text_artifact,
 )
-from llm4mtl.semantic_tests.failure_report.eligibility import _diagnosis_reason
+from llm4mtl.semantic_tests.failure_report.eligibility import (
+    CASE_ELIGIBLE_REASON,
+    _diagnosis_reason,
+)
 from llm4mtl.semantic_tests.failure_report.errors import FailureReportError
 from llm4mtl.semantic_tests.failure_report.evidence import (
+    RecordedExecution,
+    ReportContext,
     resolve_recorded_execution,
     resolve_report_context,
 )
 from llm4mtl.semantic_tests.failure_report.models import (
+    ASSERTION_FAILURE_KIND,
     CASE_REPORT_TYPE,
     DIFF_FIELDS,
-    SCHEMA_VERSION,
+    JUNIT_MESSAGE_EXTRACTION,
+    RUNTIME_ERROR_KIND,
+)
+from llm4mtl.semantic_tests.failure_report.report_document import (
+    REQUIRED_RESULT_FIELDS,
+    bundle_head,
+    execution_section,
+    execution_summary,
+    persist_once,
+    recorded_error_summary,
+    reference_verdict,
+    report_document,
+    source_diagnosis_section,
+    versions_section,
 )
 from llm4mtl.semantic_tests.failure_report.request import ReportRequest, _output_path
+from llm4mtl.semantic_tests.failure_report.semantic_cases import (
+    assertion_id,
+    case_id,
+    rendered_method_name,
+)
 from llm4mtl.semantic_tests.failure_report.surefire_view import (
     _recorded_failure_view,
     _surefire_evidence,
 )
-from llm4mtl.serialization.hashing import directory_sha256, file_sha256
-from llm4mtl.serialization.json_io import write_json_once
+from llm4mtl.semantic_tests.semantic_spec import SEMANTIC_CASES_FILE
+
+# A per-case diagnosis must also name the case it is about.
+CASE_RESULT_FIELDS = (*REQUIRED_RESULT_FIELDS, "test_case_id")
+
+
+def write_failure_report(request: ReportRequest, output: Path) -> dict[str, Any]:
+    """Create one immutable report under ``artifacts/work`` and return it."""
+    resolved_output = _output_path(output)
+    report = build_failure_report(request)
+    persist_once(report, resolved_output)
+    return report
 
 
 def build_failure_report(request: ReportRequest) -> dict[str, Any]:
@@ -44,252 +76,216 @@ def build_failure_report(request: ReportRequest) -> dict[str, Any]:
     what evidence survived.  See :func:`_diagnosis_reason` for the conditions.
     """
     recorded = resolve_recorded_execution(request)
-    manifest = recorded.manifest
-    identity = recorded.identity
-    suite_dir = recorded.suite_dir
-    transformation_path = recorded.transformation_path
-    execution_stage_evidence = recorded.stage_evidence
-
-    semantic_cases_path = suite_dir / "semantic_cases.json"
-    semantic_cases = _read_object(semantic_cases_path, "semantic cases")
-    test_case = _select_test_case(semantic_cases, request.test_case_id)
-    assertion = _select_assertion(test_case, request.assertion_id)
-
+    test_case, assertion = _selected_case_and_assertion(request, recorded.suite_dir)
     context = resolve_report_context(request, recorded)
-    syntax_check = context.syntax_check
-    observation = context.observation
-    semantic_status = context.semantic_status
-    reference_result = context.reference_result
-    task_description = context.task_description
-    metamodels = context.metamodels
-    input_models = _input_models(test_case, suite_dir)
-    expected_target_models = _expected_target_models(test_case, suite_dir)
+    result = _test_case_result(request, recorded, context, test_case, assertion)
+    reason = _diagnosis_reason(
+        context.syntax_check,
+        context.observation,
+        context.reference_result,
+        input_models=result["input_model"]["models"],
+        observed_failure_evidence=result["observed_failure_evidence"],
+    )
+    is_eligible = reason == CASE_ELIGIBLE_REASON
+    if is_eligible and _claims_one_assertion(result):
+        _require_concrete_assertion_failure(result)
+    evidence_bundle = (
+        _evidence_bundle(context, recorded.transformation_path, result)
+        if is_eligible
+        else None
+    )
+    return report_document(
+        report_type=CASE_REPORT_TYPE,
+        recorded=recorded,
+        context=context,
+        body_key="test_case_result",
+        body=result,
+        source_diagnosis=source_diagnosis_section(
+            is_eligible=is_eligible,
+            reason=reason,
+            evidence_bundle=evidence_bundle,
+            required_result_fields=CASE_RESULT_FIELDS,
+        ),
+    )
 
-    actual_target_models = [
-        _text_artifact(path) for path in request.actual_target_models
-    ]
+
+def _selected_case_and_assertion(
+    request: ReportRequest, suite_dir: Path
+) -> tuple[dict[str, Any], dict[str, Any] | None]:
+    semantic_cases = _read_object(suite_dir / SEMANTIC_CASES_FILE, "semantic cases")
+    test_case = _select_test_case(semantic_cases, request.test_case_id)
+    return test_case, _select_assertion(test_case, request.assertion_id)
+
+
+def _test_case_result(
+    request: ReportRequest,
+    recorded: RecordedExecution,
+    context: ReportContext,
+    test_case: dict[str, Any],
+    assertion: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """The ``test_case_result`` body: the case, what the run observed, versions."""
+    models = _model_sections(request, test_case, assertion, recorded.suite_dir)
     surefire_evidence = _surefire_evidence(
-        request.surefire_reports, request.test_case_id
+        request.surefire_reports, rendered_method_name(test_case)
     )
     failure = _recorded_failure_view(surefire_evidence)
-    execution_error = {
-        "error_summary": str(observation.get("error_summary", "")),
-        "exceptions": surefire_evidence["exceptions"],
-        "stack_traces": surefire_evidence["stack_traces"],
-        "execution_log": (
-            _log_excerpt(request.execution_log)
-            if request.execution_log is not None
-            else None
-        ),
-        "surefire": surefire_evidence["test_cases"],
-    }
-
-    versions = {
-        "generated_transformation": {
-            "sha256": file_sha256(transformation_path),
-            "path": _repository_path(transformation_path),
-        },
-        "generated_test": {
-            "sha256": directory_sha256(suite_dir),
-            "path": _repository_path(suite_dir),
-            "renderer_version": manifest.get("provenance", {}).get("renderer_version"),
-        },
-    }
-
-    difference = (
-        {"available": True, **request.actual_vs_expected}
-        if request.actual_vs_expected is not None
-        else {"available": False, **{field: None for field in DIFF_FIELDS}}
-    )
-    # What the run observed about this failure, as separate facts. Diagnosis
-    # needs at least one of them: without any, the LLM would be asked what went
-    # wrong while being told nothing about what actually happened. An assertion
-    # failure and a runtime throw satisfy this differently and both count — a
-    # thrown exception with its stack trace is evidence, and refusing to
-    # diagnose it would drop exactly the failures a transformation defect most
-    # often produces.
-    observed_failure_evidence = {
-        "target_model_snapshots": len(actual_target_models),
-        "assertion_expected_actual": failure is not None
-        and failure["extraction"] == "junit_assertion_message",
-        "structured_difference": request.actual_vs_expected is not None,
-        "recorded_exception": bool(surefire_evidence["exceptions"]),
-    }
-    diagnosis_reason = _diagnosis_reason(
-        syntax_check,
-        observation,
-        reference_result,
-        input_models=input_models,
-        observed_failure_evidence=observed_failure_evidence,
-    )
-    is_diagnosis_eligible = diagnosis_reason == "parser_passed_and_semantic_test_failed"
-    if (
-        is_diagnosis_eligible
-        and assertion is not None
-        and failure is not None
-        and failure["kind"] == "assertion_failure"
-    ):
-        # Only an assertion failure claims to be about one assertion, so only it
-        # has to prove that the selected assertion is the one that lost.
-        _require_concrete_assertion_failure(test_case, assertion, surefire_evidence)
-
-    test_case_result = {
+    return {
         "test_case_id": request.test_case_id,
         "assertion_id": request.assertion_id,
-        "semantic_status": semantic_status,
-        "syntax_check": syntax_check,
+        "semantic_status": context.semantic_status,
+        "syntax_check": context.syntax_check,
         "test_case": test_case,
         "assertion": assertion,
+        **models,
+        "actual_vs_expected": _difference(request.actual_vs_expected),
+        "failure": failure,
+        "observed_failure_evidence": _observed_failure_evidence(
+            request, models["actual_target_model"], failure, surefire_evidence
+        ),
+        "execution": execution_section(
+            context,
+            recorded,
+            _execution_error(context.observation, surefire_evidence, request),
+        ),
+        "reference_transformation_result": context.reference_result,
+        "versions": versions_section(recorded),
+    }
+
+
+def _model_sections(
+    request: ReportRequest,
+    test_case: dict[str, Any],
+    assertion: dict[str, Any] | None,
+    suite_dir: Path,
+) -> dict[str, Any]:
+    """The input models, the expected output, and the actual target models."""
+    return {
         "input_model": {
-            "models": input_models,
+            "models": _input_models(test_case, suite_dir),
             "changes": test_case.get("changes", []),
         },
         "expected_output_or_properties": {
             "assertion": assertion,
-            "target_models": expected_target_models,
+            "target_models": _expected_target_models(test_case, suite_dir),
         },
-        "actual_target_model": actual_target_models,
-        "actual_vs_expected": difference,
-        "failure": failure,
-        "observed_failure_evidence": observed_failure_evidence,
-        "execution": {
-            "observation": observation,
-            "stage_evidence": execution_stage_evidence,
-            "error": execution_error,
-        },
-        "reference_transformation_result": reference_result,
-        "versions": versions,
+        "actual_target_model": [
+            _text_artifact(path) for path in request.actual_target_models
+        ],
     }
 
-    evidence_bundle = (
-        _evidence_bundle(
-            request=request,
-            task_description=task_description,
-            metamodels=metamodels,
-            transformation_path=transformation_path,
-            test_case=test_case,
-            assertion=assertion,
-            failure=failure,
-            syntax_check=syntax_check,
-            observation=observation,
-            reference_result=reference_result,
-            test_case_result=test_case_result,
-            actual_target_models=actual_target_models,
-            difference=difference,
-            surefire_evidence=surefire_evidence,
-        )
-        if is_diagnosis_eligible
-        else None
-    )
 
+def _difference(actual_vs_expected: dict[str, list[Any]] | None) -> dict[str, Any]:
+    """The comparator difference, or an explicit statement that there is none."""
+    if actual_vs_expected is None:
+        return {"available": False, **{field: None for field in DIFF_FIELDS}}
+    return {"available": True, **actual_vs_expected}
+
+
+def _observed_failure_evidence(
+    request: ReportRequest,
+    actual_target_models: list[dict[str, Any]],
+    failure: dict[str, Any] | None,
+    surefire_evidence: dict[str, Any],
+) -> dict[str, Any]:
+    """What the run observed about this failure, as separate facts.
+
+    Diagnosis needs at least one of them; without any, the LLM would know
+    nothing about what happened. A runtime throw counts too: an exception with
+    its stack trace is evidence, and it is what a transformation defect most
+    often produces.
+    """
     return {
-        "schema_version": SCHEMA_VERSION,
-        "report_type": CASE_REPORT_TYPE,
-        "identity": identity,
-        "task_context": {
-            "original_description": task_description,
-            "metamodel_constraints": metamodels,
-        },
-        "test_case_result": test_case_result,
-        "source_diagnosis": {
-            "eligible": is_diagnosis_eligible,
-            "reason": diagnosis_reason,
-            "evidence_bundle": evidence_bundle,
-            "allowed_classifications": [
-                "transformation_defect",
-                "test_defect",
-                "ambiguous",
-            ],
-            "required_result_fields": [
-                "classification",
-                "confidence",
-                "reasoning_summary",
-                "evidence",
-                "test_case_id",
-            ],
-        },
+        "target_model_snapshots": len(actual_target_models),
+        "assertion_expected_actual": failure is not None
+        and failure["extraction"] == JUNIT_MESSAGE_EXTRACTION,
+        "structured_difference": request.actual_vs_expected is not None,
+        "recorded_exception": bool(surefire_evidence["exceptions"]),
     }
+
+
+def _execution_error(
+    observation: dict[str, Any],
+    surefire_evidence: dict[str, Any],
+    request: ReportRequest,
+) -> dict[str, Any]:
+    return {
+        "error_summary": recorded_error_summary(observation),
+        "exceptions": surefire_evidence["exceptions"],
+        "stack_traces": surefire_evidence["stack_traces"],
+        "execution_log": _optional_log_excerpt(request.execution_log),
+        "surefire": surefire_evidence["test_cases"],
+    }
+
+
+def _claims_one_assertion(result: dict[str, Any]) -> bool:
+    """Only an assertion failure claims to be about one assertion.
+
+    So only such a report has to prove that the selected assertion is the one
+    that lost.
+    """
+    failure = result["failure"]
+    return (
+        result["assertion"] is not None
+        and failure is not None
+        and failure["kind"] == ASSERTION_FAILURE_KIND
+    )
 
 
 def _evidence_bundle(
-    *,
-    request: ReportRequest,
-    task_description: dict[str, Any],
-    metamodels: list[dict[str, Any]],
-    transformation_path: Path,
-    test_case: dict[str, Any],
-    assertion: dict[str, Any] | None,
-    failure: dict[str, Any] | None,
-    syntax_check: dict[str, Any],
-    observation: dict[str, Any],
-    reference_result: dict[str, Any],
-    test_case_result: dict[str, Any],
-    actual_target_models: list[dict[str, Any]],
-    difference: dict[str, Any],
-    surefire_evidence: dict[str, Any],
+    context: ReportContext, transformation_path: Path, result: dict[str, Any]
 ) -> dict[str, Any]:
-    """The prompt-shaped subset of the report, and only that.
+    """The part of the report a diagnosis prompt reads.
 
-    The stored report keeps everything the run recorded — hashes, the whole
-    stage-evidence document, every Surefire entry. The bundle is what a
-    diagnosis is actually asked to read, so it carries each fact once, in the
-    form a reader needs: contents without their hashes, the reference result as
-    a verdict rather than a nested document, the execution as a summary of what
-    failed, and the build log as a bounded excerpt. Sending the report verbatim
-    would spend most of the prompt on provenance the LLM cannot use and on the
-    same JSON document quoted twice.
+    The stored report keeps everything the run recorded. The bundle carries each
+    fact once, in the form a reader needs: contents without hashes, the
+    reference result as a verdict, a summary of what failed, and a short
+    build-log excerpt. The whole report would fill the prompt with provenance
+    the LLM cannot use.
     """
-    reference_observation = reference_result["observation"]
-    reference_assertions_passed = (
-        reference_observation["assertions_passed"]
-        if reference_observation is not None
-        else None
-    )
+    execution = result["execution"]
     failure_summary, runtime_stack_traces = _failure_evidence(
-        failure,
-        surefire_evidence["stack_traces"],
+        result["failure"], execution["error"]["stack_traces"]
     )
     return {
-        "original_task_description": task_description["content"],
-        "relevant_source_and_target_metamodel_constraints": [
-            _cited(metamodel) for metamodel in metamodels
-        ],
-        "generated_transformation": _cited(_text_artifact(transformation_path)),
-        "failing_test_case_or_assertion": {
-            "test_case_id": request.test_case_id,
-            "assertion_id": request.assertion_id,
-            "test_case": test_case,
-            "assertion": assertion,
-        },
-        "input_model": [
-            {"model": entry["model"], **_cited(entry["artifact"])}
-            for entry in test_case_result["input_model"]["models"]
-        ],
-        "changes": test_case_result["input_model"]["changes"],
-        "expected_output_or_properties": test_case_result[
-            "expected_output_or_properties"
-        ],
-        "syntax_status": syntax_check,
-        "reference_transformation_result": {
-            "status": reference_result["status"],
-            "assertions_passed": reference_assertions_passed,
-        },
+        **bundle_head(context, transformation_path),
+        "failing_test_case_or_assertion": _failing_case_and_assertion(result),
+        "input_model": _cited_input_models(result),
+        "changes": result["input_model"]["changes"],
+        "expected_output_or_properties": result["expected_output_or_properties"],
+        "syntax_status": result["syntax_check"],
+        "reference_transformation_result": reference_verdict(
+            result["reference_transformation_result"]
+        ),
         "generated_execution_summary": {
-            "failure_stage": observation.get("failure_stage"),
-            "assertions_evaluated": observation.get("assertions_evaluated"),
-            "assertions_passed": observation.get("assertions_passed"),
-            "error_summary": observation.get("error_summary"),
+            **execution_summary(execution["observation"]),
             **failure_summary,
         },
-        "actual_target_model": [_cited(model) for model in actual_target_models],
-        "structured_actual_vs_expected_difference": difference,
-        # A stack trace is what identifies where a throw came from, so a runtime
-        # failure keeps it. An assertion failure does not need it: its message
-        # already carries the mismatch, and the trace is harness plumbing.
+        "actual_target_model": [
+            _cited(model) for model in result["actual_target_model"]
+        ],
+        "structured_actual_vs_expected_difference": result["actual_vs_expected"],
+        # A runtime failure keeps its stack trace: it shows where the throw came
+        # from. An assertion failure drops it: the message already holds the
+        # mismatch, and the trace only shows harness code.
         "stack_traces": runtime_stack_traces,
-        "maven_log_excerpt": _relevant_log_lines(
-            test_case_result["execution"]["error"]["execution_log"]
-        ),
+        "maven_log_excerpt": _relevant_log_lines(execution["error"]["execution_log"]),
+    }
+
+
+def _cited_input_models(result: dict[str, Any]) -> list[dict[str, Any]]:
+    return [
+        {"model": entry["model"], **_cited(entry["artifact"])}
+        for entry in result["input_model"]["models"]
+    ]
+
+
+def _failing_case_and_assertion(result: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "test_case_id": result["test_case_id"],
+        "assertion_id": result["assertion_id"],
+        "test_case": result["test_case"],
+        "assertion": result["assertion"],
     }
 
 
@@ -312,22 +308,7 @@ def _failure_evidence(
         "expected": failure["expected"],
         "actual": failure["actual"],
     }
-    return summary, stack_traces if failure["kind"] == "runtime_error" else []
-
-
-def write_failure_report(request: ReportRequest, output: Path) -> dict[str, Any]:
-    """Create one immutable report under ``artifacts/work`` and return it."""
-    resolved_output = _output_path(output)
-    report = build_failure_report(request)
-    validate_artifact("failure-report", report)
-    try:
-        write_json_once(resolved_output, report)
-    except FileExistsError as exc:
-        repository_output = _repository_path(resolved_output)
-        raise FailureReportError(
-            f"report already exists and is immutable: {repository_output}"
-        ) from exc
-    return report
+    return summary, stack_traces if failure["kind"] == RUNTIME_ERROR_KIND else []
 
 
 def _select_test_case(
@@ -335,12 +316,11 @@ def _select_test_case(
 ) -> dict[str, Any]:
     tests = semantic_cases.get("tests")
     if not isinstance(tests, list):
-        raise FailureReportError("semantic_cases.json has no tests array")
+        raise FailureReportError(f"{SEMANTIC_CASES_FILE} has no tests array")
     matching = [
         test
         for test in tests
-        if isinstance(test, dict)
-        and str(test.get("id") or test.get("name") or "") == test_case_id
+        if isinstance(test, dict) and case_id(test) == test_case_id
     ]
     if len(matching) != 1:
         raise FailureReportError(
@@ -350,23 +330,23 @@ def _select_test_case(
 
 
 def _select_assertion(
-    test_case: dict[str, Any], assertion_id: str | None
+    test_case: dict[str, Any], selected_id: str | None
 ) -> dict[str, Any] | None:
-    if assertion_id is None:
+    if selected_id is None:
         return None
     assertions = test_case.get("assertions")
     if not isinstance(assertions, list):
         raise FailureReportError("selected test case has no assertions array")
     matching: list[dict[str, Any]] = []
-    for index, assertion in enumerate(assertions, start=1):
+    for position, assertion in enumerate(assertions, start=1):
         if not isinstance(assertion, dict):
             continue
-        recorded_id = str(assertion.get("id") or f"assertion-{index:03d}")
-        if recorded_id == assertion_id:
+        recorded_id = assertion_id(assertion, position)
+        if recorded_id == selected_id:
             matching.append({"id": recorded_id, **assertion})
     if len(matching) != 1:
         raise FailureReportError(
-            f"expected exactly one assertion {assertion_id!r}, found {len(matching)}"
+            f"expected exactly one assertion {selected_id!r}, found {len(matching)}"
         )
     return matching[0]
 
@@ -396,9 +376,8 @@ def _input_models(test_case: dict[str, Any], suite_dir: Path) -> list[dict[str, 
 def _expected_target_models(
     test_case: dict[str, Any], suite_dir: Path
 ) -> list[dict[str, Any]]:
+    """The expected target models; :func:`_input_models` checked ``models``."""
     models = test_case.get("models", [])
-    if not isinstance(models, list):
-        return []
     artifacts: list[dict[str, Any]] = []
     for model in models:
         if not isinstance(model, dict) or model.get("role") != "target":
@@ -417,23 +396,26 @@ def _expected_target_models(
     return artifacts
 
 
-def _require_concrete_assertion_failure(
-    test_case: dict[str, Any],
-    assertion: dict[str, Any],
-    surefire_evidence: dict[str, Any],
-) -> None:
-    """Prove that the selected case and assertion are the recorded failure."""
-    failed_cases = [
-        case
-        for case in surefire_evidence["test_cases"]
-        if case.get("status") == "failed"
-    ]
-    if len(failed_cases) != 1:
+def _require_concrete_assertion_failure(result: dict[str, Any]) -> None:
+    """Prove that the selected assertion is the one the recorded failure lost.
+
+    The failure view already holds exactly one failed test method for the
+    case, so what is left to prove is the assertion.
+    """
+    error = result["execution"]["error"]
+    selected_message = _unique_assertion_message(
+        result["test_case"], result["assertion"]
+    )
+    if selected_message not in _recorded_failure_text(error):
         raise FailureReportError(
-            "diagnosis-eligible report requires exactly one matching Surefire "
-            f"assertion failure, found {len(failed_cases)}"
+            "selected assertion_id does not match the Surefire failure message"
         )
 
+
+def _unique_assertion_message(
+    test_case: dict[str, Any], assertion: dict[str, Any]
+) -> str:
+    """The selected assertion's message, refused when another one prints it too."""
     selected_message = _assertion_message(assertion)
     assertion_messages = [
         _assertion_message(candidate)
@@ -444,29 +426,26 @@ def _require_concrete_assertion_failure(
         raise FailureReportError(
             "selected assertion message is not unique within the test case"
         )
-    recorded_failure = "\n".join(
+    return selected_message
+
+
+def _recorded_failure_text(error: dict[str, Any]) -> str:
+    """Every recorded exception message and stack trace, one per line."""
+    return "\n".join(
         [
-            *(
-                str(exception.get("message", ""))
-                for exception in surefire_evidence["exceptions"]
-            ),
-            *(str(trace) for trace in surefire_evidence["stack_traces"]),
+            *(str(exception.get("message", "")) for exception in error["exceptions"]),
+            *(str(trace) for trace in error["stack_traces"]),
         ]
     )
-    if selected_message not in recorded_failure:
-        raise FailureReportError(
-            "selected assertion_id does not match the Surefire failure message"
-        )
 
 
 def _assertion_message(assertion: dict[str, Any]) -> str:
     """The harness message for ``assertion``, refusing an unnameable one.
 
-    The rule is the renderer's own, so a report cannot look for a message the
-    harness would never have printed. What this adds is the refusal: an
-    assertion with neither a message nor kind/model/type identity yields no
-    message at all, and matching a recorded failure against nothing would
-    attribute it blindly.
+    The rule is the renderer's own, so a report never looks for a message the
+    harness could not have printed. This adds the refusal: an assertion with
+    neither a message nor kind/model/type has no message, and matching a
+    failure against nothing would be a blind guess.
     """
     message = assertion_message(assertion)
     if not message:

@@ -15,58 +15,81 @@ from llm4mtl.vocabulary import EXPERIMENT_MODEL_FAMILIES, STRATEGIES
 ALLOWED_MODELS = frozenset(EXPERIMENT_MODEL_FAMILIES)
 ALLOWED_STRATEGIES = frozenset(STRATEGIES)
 PIPELINE_STAGES = ("extract", "technical", "reference", "parsing", "semantic")
+FIRST_PIPELINE_STAGE = PIPELINE_STAGES[0]
+LAST_PIPELINE_STAGE = PIPELINE_STAGES[-1]
 _YamlLine = tuple[int, str]
 
 
 def load_pipeline_config(path: Path) -> PipelineConfig:
     """Load and validate a human-authored pipeline configuration."""
     payload = load_mapping(path)
-    language = payload.get("language")
-
-    if not isinstance(language, str) or not language.strip():
-        raise ConfigError("Experiment config must declare a non-empty language.")
-    
-    test_suites = mapping(payload.get("test_suites"))
-    extraction = mapping(test_suites.get("extraction"))
-
-    validation = mapping(test_suites.get("validation"))
-    transformations = mapping(payload.get("transformations"))
-
-    execution = mapping(payload.get("execution"))
-
     config = PipelineConfig(
-        language=language,
-        tasks=string_list(payload.get("tasks")),
-        all_tasks=bool(payload.get("all_tasks", False)),
-        test_models=string_list(test_suites.get("models")),
-        test_strategies=string_list(test_suites.get("strategies")),
-        transformation_models=string_list(transformations.get("models")),
-        transformation_strategies=string_list(transformations.get("strategies")),
-        overwrite=bool(extraction.get("overwrite", False)),
-        technical_validation=bool(validation.get("technical", True)),
-        reference_validation=bool(validation.get("reference", True)),
-        transformation_parsing=bool(transformations.get("parse", True)),
-        semantic_validation=bool(transformations.get("semantic_validation", True)),
-        start_stage=str(execution.get("start_stage", "extract")),
-        stop_after=str(execution.get("stop_after", "semantic")),
-        resume=bool(execution.get("resume", False)),
-        force=bool(execution.get("force", False)),
-        dry_run=bool(execution.get("dry_run", False)),
-        output_format=str(execution.get("output_format", "text")),
-        verbose=bool(execution.get("verbose", False)),
-        keep_workspace=bool(execution.get("keep_workspace", False)),
-        fail_fast=bool(execution.get("fail_fast", False)),
-        run_id=string_or_none(execution.get("run_id")),
-        batch_id=string_or_none(execution.get("batch_id")),
+        language=_declared_language(payload),
+        **_selection_settings(payload),
+        **_stage_switches(payload),
+        **_execution_settings(mapping(payload.get("execution"))),
     )
-
-    if extraction.get("enabled") is False and config.start_stage == "extract":
+    extraction = mapping(mapping(payload.get("test_suites")).get("extraction"))
+    if extraction.get("enabled") is False and config.start_stage == FIRST_PIPELINE_STAGE:
+        # With extraction switched off, the run starts at the next stage.
         config.start_stage = "technical"
     validate_config(config)
     return config
 
-    # Load a top-level mapping from a JSON or supported YAML file.
+
+def _declared_language(payload: dict[str, Any]) -> str:
+    language = payload.get("language")
+    if not isinstance(language, str) or not language.strip():
+        raise ConfigError("Experiment config must declare a non-empty language.")
+    return language
+
+
+def _selection_settings(payload: dict[str, Any]) -> dict[str, Any]:
+    """The tasks, models and strategies the config selects."""
+    test_suites = mapping(payload.get("test_suites"))
+    transformations = mapping(payload.get("transformations"))
+    return {
+        "tasks": string_list(payload.get("tasks")),
+        "all_tasks": bool(payload.get("all_tasks", False)),
+        "test_models": string_list(test_suites.get("models")),
+        "test_strategies": string_list(test_suites.get("strategies")),
+        "transformation_models": string_list(transformations.get("models")),
+        "transformation_strategies": string_list(transformations.get("strategies")),
+    }
+
+
+def _stage_switches(payload: dict[str, Any]) -> dict[str, bool]:
+    """Which stages the config turns on or off."""
+    test_suites = mapping(payload.get("test_suites"))
+    validation = mapping(test_suites.get("validation"))
+    transformations = mapping(payload.get("transformations"))
+    return {
+        "technical_validation": bool(validation.get("technical", True)),
+        "reference_validation": bool(validation.get("reference", True)),
+        "transformation_parsing": bool(transformations.get("parse", True)),
+        "semantic_validation": bool(
+            transformations.get("semantic_validation", True)
+        ),
+    }
+
+
+def _execution_settings(execution: dict[str, Any]) -> dict[str, Any]:
+    """The ``execution`` section: stage range and runtime controls."""
+    return {
+        "start_stage": str(execution.get("start_stage", FIRST_PIPELINE_STAGE)),
+        "stop_after": str(execution.get("stop_after", LAST_PIPELINE_STAGE)),
+        "resume": bool(execution.get("resume", False)),
+        "force": bool(execution.get("force", False)),
+        "dry_run": bool(execution.get("dry_run", False)),
+        "output_format": str(execution.get("output_format", "text")),
+        "fail_fast": bool(execution.get("fail_fast", False)),
+        "run_id": string_or_none(execution.get("run_id")),
+        "batch_id": string_or_none(execution.get("batch_id")),
+    }
+
+
 def load_mapping(path: Path) -> dict[str, Any]:
+    """Load a top-level mapping from a JSON or supported YAML file."""
     if not path.is_file():
         raise ConfigError(f"Experiment config not found: {path}")
     text = path.read_text(encoding="utf-8")
@@ -86,16 +109,19 @@ def load_mapping(path: Path) -> dict[str, Any]:
     return value
 
 
-#  Load the persisted fields understood by the current runner version.
 def load_resolved_config(path: Path) -> PipelineConfig:
+    """Load the persisted fields this runner version understands."""
     payload = load_mapping(path)
     allowed = {item.name for item in fields(PipelineConfig)}
     known_values = {key: value for key, value in payload.items() if key in allowed}
     return PipelineConfig(**known_values)
 
-#   Validate identity, selection, and stage-range constraints."""
-#   The language must have an adapter. 
-def validate_config(config: PipelineConfig, require_selection: bool = True) -> None:
+
+def validate_config(config: PipelineConfig) -> None:
+    """Check the run's identity, selections and stage range.
+
+    The language must have an adapter, and the run must fix exactly one task.
+    """
     from llm4mtl.languages import (
         REQUIRED_LANGUAGES,
         UnsupportedLanguageError,
@@ -104,7 +130,6 @@ def validate_config(config: PipelineConfig, require_selection: bool = True) -> N
 
     if not isinstance(config.language, str) or not config.language.strip():
         raise ConfigError("A run must declare a non-empty language.")
-    
     if config.suite_id and not RUN_ID_PATTERN.fullmatch(config.suite_id):
         raise ConfigError(
             f"Invalid suite id {config.suite_id!r}: expected a non-empty "
@@ -126,18 +151,16 @@ def validate_config(config: PipelineConfig, require_selection: bool = True) -> N
     _validate_stage_range(config)
 
 
-#  Validate model and strategy selections in their established order.
 def _validate_selections(config: PipelineConfig) -> None:
+    """Reject unknown models and strategies. Models are checked first."""
     unknown_models = (
         set(config.test_models) | set(config.transformation_models)
     ) - ALLOWED_MODELS
-
     if unknown_models:
         raise ConfigError(f"Unsupported model(s): {', '.join(sorted(unknown_models))}")
     unknown_strategies = (
         set(config.test_strategies) | set(config.transformation_strategies)
     ) - ALLOWED_STRATEGIES
-
     if unknown_strategies:
         raise ConfigError(
             "Unsupported strategy/strategies: "
@@ -145,22 +168,20 @@ def _validate_selections(config: PipelineConfig) -> None:
         )
 
 
-#   Validate the configured pipeline interval and its direction.
 def _validate_stage_range(config: PipelineConfig) -> None:
+    """Check that both ends of the stage range exist and are in order."""
     if config.start_stage not in PIPELINE_STAGES:
         raise ConfigError(f"Unknown start stage: {config.start_stage}")
-    
     if config.stop_after not in PIPELINE_STAGES:
         raise ConfigError(f"Unknown stop stage: {config.stop_after}")
-    
     start_index = PIPELINE_STAGES.index(config.start_stage)
     stop_index = PIPELINE_STAGES.index(config.stop_after)
     if start_index > stop_index:
         raise ConfigError("--start-stage must not come after --stop-after.")
 
 
-#   Parse the mapping/list/scalar YAML subset used by experiment configs."""
 def parse_simple_yaml(text: str) -> dict[str, Any]:
+    """Parse the mapping/list/scalar YAML subset used by experiment configs."""
     lines = _simple_yaml_lines(text)
     if not lines:
         return {}

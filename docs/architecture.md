@@ -42,7 +42,7 @@ shared Python stages
   deterministic extraction, rendering, validation, execution
   evidence collection, factual outcomes, artifact persistence
         │
-        ├── run_store / experiment_store
+        ├── run_store
         └── languages/<lang>/adapter
                     │
                     ▼
@@ -84,7 +84,7 @@ external_tools / workspace / serialization
   ▲
   └── language adapters and stage use-cases
 
-run_store / experiment_store     stages
+run_store                        stages
   ▲                                ▲
   ├── experiment_runner ───────────┤   (local entry point; nothing imports it)
   └── stage_service ───────────────┘   (n8n's entry point)
@@ -128,9 +128,10 @@ a language is reachable without opening a stage.
   multi-fact observation.
 - `semantic_tests/technical_validation/` and
   `semantic_tests/reference_validation/` — logical views over that observation.
-- `transformation_execution/` — execution/reporting facade for generated
-  transformations; candidate eligibility comes from the current run's
-  reference-valid observation.
+- `semantic_tests/diagnosis_preparation.py` and `semantic_tests/failure_report/`
+  — build the failure reports that Source Diagnosis reads after an execution.
+- `semantic_tests/diagnosis_aggregation.py` — joins the recorded diagnosis
+  verdicts of one run into one result.
 - `stages/` — the shared stage implementations both entry points run
   (extraction, technical and reference validation, syntax validation,
   execution), `PipelineConfig`/`StageResult`, and `dispatch.py`, the one table
@@ -146,12 +147,11 @@ a language is reachable without opening a stage.
   run directory reads the same whichever entry point produced it.
 - `run_store/` — immutable run identity, append-only events, and atomic stage
   attempts.
-- `experiment_store/` — immutable experiment identity and locked run membership.
-  With `experiment_runner/matrix.py` and `evaluation/experiment_{aggregation,
-  significance}.py` it forms the RQ4 ablation scaffold: written and tested, but
-  deliberately not yet reachable from any entry point, because the matrix axes
-  are fixed by the measurement spec and that is still settling. Runs today are
-  created one at a time and never joined into an experiment.
+- `experiment_runner/matrix.py` and `evaluation/experiment_{aggregation,
+  significance}.py` are the RQ4 ablation scaffold. They are tested but not yet
+  called from any entry point, because the matrix axes are set by the
+  measurement spec, which is still settling. Today every run is created on its
+  own and is not joined into an experiment.
 - `provenance.py` — code, tool, schema, renderer, and protected-input identity.
 - `paths.py` — the repository layout, and the one spelling of a recorded path:
   `repository_relative` keeps a path outside the repository absolute,
@@ -162,11 +162,10 @@ a language is reachable without opening a stage.
   shared by provenance, the run store, prompt assembly, execution, and
   reporting alike, and belongs to none of them.
 - `external_tools/` — structured subprocess boundaries.
-- `evaluation/` — current aggregation plus frozen legacy analysis zones.
-  `diagnosis_aggregation.py` and `experiment_*.py` are active;
-  `evaluation/{atl,etl,qvto,reactions}/` is a behaviour-locked historical
-  record of the analyses already run, kept reproducible rather than
-  refactored. Its triplicated statistics modules, directory names containing
+- `evaluation/` (repository root, outside the package) — offline metrics
+  over stored runs. `experiment_*.py`, `heldout/`, `mutation/` and `coverage/`
+  are active; `evaluation/legacy/{atl,etl,qvto,reactions}/` is a frozen record
+  of the analyses already run, kept reproducible rather than refactored. Its triplicated statistics modules, directory names containing
   spaces, and committed CSVs are intentional there and nowhere else; they are
   held in place by characterisation tests, not maintained.
 
@@ -243,7 +242,7 @@ it. `null` never means “select all”. Multi-task/model/strategy experiments m
 expand through a matrix before run creation.
 
 Stage requests cannot repeat or override identity. They carry only
-attempt-specific parameters such as `suite_id` and `verbose`.
+attempt-specific parameters such as `suite_id` and `refinement_iteration`.
 
 ```text
 artifacts/work/runs/<batch-id>/
@@ -331,8 +330,8 @@ serialize injection into that copy. The template never receives generated
 files, locks, Maven output, or parser results.
 
 Extracted candidate suites are immutable. Reusing a `suite_id` cannot overwrite
-the existing directory, even through the compatibility `--overwrite` flag.
-Choose a new suite id for a new artifact.
+the existing directory, and no option does. Choose a new suite id for a new
+artifact.
 
 Reference validation records a decision; it does not copy a candidate into
 `validated/`. CSV output is a derived human report only and cannot gate another

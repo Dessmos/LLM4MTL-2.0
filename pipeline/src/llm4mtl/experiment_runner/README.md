@@ -1,7 +1,7 @@
 # Experiment runner
 
-llm4mtl.experiment_runner is the local orchestration which can MANUALLY start 
-all Python stages that are als used in n8n workflow
+llm4mtl.experiment_runner is the local orchestration. It can start by hand
+the same Python stages that the n8n workflow uses.
 
 
 # files description
@@ -11,9 +11,9 @@ _main_.py               - point of entry (python -m llm4mtl.experiment_runner)
 models.py               - RunResult - the whole run. Contains no logic
                             (PipelineConfig and StageResult live in ../stages/models.py)
 config.py               - load and validation of configs
-orchestrator.py         - main file of the folder.controls the whole process
-cli.py                  - Command-line public contract (llm4mtl). Entry point for    
-                            analyze command line for flags. And then gives it to orch.
+orchestrator.py         - main file of the folder. Controls the whole run
+cli.py                  - the `llm4mtl` command. Reads the command-line flags
+                            and hands them to the orchestrator.
 matrix.py               - expands a single YAML list of settings into a list of 
                             specific runs.
 

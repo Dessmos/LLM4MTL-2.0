@@ -10,10 +10,11 @@ adopted copy.
 
 from __future__ import annotations
 
-import shutil
 import tempfile
+import threading
 import unittest
 from pathlib import Path
+from typing import Any, Callable
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
@@ -29,6 +30,7 @@ from llm4mtl.run_store.transformations import (
     iteration_from_suite_id,
     transformation_dir,
 )
+from llm4mtl.serialization import json_io
 from llm4mtl.serialization.json_io import read_json, write_json
 from llm4mtl.stage_service.app import app
 
@@ -55,6 +57,39 @@ class SuiteIterationTests(unittest.TestCase):
         # inventing a number would attribute a refinement that never happened.
         self.assertEqual(0, iteration_from_suite_id(None))
         self.assertEqual(0, iteration_from_suite_id("run-1"))
+
+
+def run_side_by_side(calls: list[Callable[[], Any]]) -> list[Any]:
+    """Run ``calls`` in threads that all publish their document at the same time.
+
+    Every writer stages its complete document before it becomes visible. A
+    barrier there holds each thread until all of them have staged theirs, so
+    no writer can see another's file before it decides how to publish its own.
+    Returns each call's result, or the exception it raised.
+    """
+    barrier = threading.Barrier(len(calls), timeout=10)
+    stage_document = json_io._stage_document
+
+    def staged_together(path: Path, payload: Any) -> Path:
+        staged = stage_document(path, payload)
+        barrier.wait()
+        return staged
+
+    outcomes: list[Any] = [None] * len(calls)
+
+    def run(index: int) -> None:
+        try:
+            outcomes[index] = calls[index]()
+        except Exception as exc:  # the outcome under test
+            outcomes[index] = exc
+
+    with patch.object(json_io, "_stage_document", staged_together):
+        threads = [threading.Thread(target=run, args=(i,)) for i in range(len(calls))]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+    return outcomes
 
 
 class TransformationAdoptionTests(unittest.TestCase):
@@ -151,6 +186,50 @@ class TransformationAdoptionTests(unittest.TestCase):
         initial = adopted_transformations(self.paths, 0)
         self.assertEqual(GENERATED, initial.paths[0].read_text(encoding="utf-8"))
         self.assertNotEqual(refined.directory, initial.directory)
+
+    def test_two_concurrent_adoptions_record_one_metadata(self) -> None:
+        """Two stages that adopt at the same moment cannot both record it.
+
+        The second stage here states another model for the same iteration. Its
+        metadata must not silently replace the first one's.
+        """
+        other_model = {**self.manifest, "transformation_model": "claude-sonnet-4"}
+
+        outcomes = run_side_by_side(
+            [
+                lambda manifest=manifest: adopt_transformations(
+                    self.paths, manifest, [self.shared]
+                )
+                for manifest in (self.manifest, other_model)
+            ]
+        )
+
+        adopted = [
+            outcome for outcome in outcomes if not isinstance(outcome, Exception)
+        ]
+        refused = [
+            outcome
+            for outcome in outcomes
+            if isinstance(outcome, TransformationAdoptionError)
+        ]
+        self.assertEqual(1, len(adopted), outcomes)
+        self.assertEqual(1, len(refused), outcomes)
+        self.assertEqual(adopted[0].paths, adopted_transformations(self.paths, 0).paths)
+
+    def test_concurrent_adoptions_of_the_same_file_both_succeed(self) -> None:
+        outcomes = run_side_by_side(
+            [
+                lambda: adopt_transformations(self.paths, self.manifest, [self.shared])
+                for _ in range(2)
+            ]
+        )
+
+        for outcome in outcomes:
+            with self.subTest(outcome=outcome):
+                self.assertNotIsInstance(outcome, Exception)
+                self.assertEqual(
+                    adopted_transformations(self.paths, 0).paths, outcome.paths
+                )
 
     def test_nothing_to_adopt_stays_nothing(self) -> None:
         """A run with no generated transformation adopts none and says so.

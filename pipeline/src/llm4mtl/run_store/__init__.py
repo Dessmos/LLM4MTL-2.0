@@ -1,9 +1,10 @@
 """Run-centric artifact store (public facade).
 
-A run directory (``artifacts/work/runs/<batch-id>/<run-id>/``) has three owners with distinct
-write invariants: an immutable ``manifest.json`` (write-once), an append-only
+A run directory (``artifacts/work/runs/<batch-id>/<run-id>/``) keeps its core
+records under three write rules: a write-once ``manifest.json``, an append-only
 ``events.jsonl`` timeline, and per-stage results stored as immutable
 ``attempts/attempt-NNN/``, with the latest result derived from them on read.
+``run_store.models`` lists the full layout.
 
 Run ids are untrusted input and are validated for containment before they become
 a path; attempt directories are claimed atomically so concurrent stage calls
@@ -28,8 +29,10 @@ from llm4mtl.run_store.batches import (
     read_batch_result,
     record_batch_result,
 )
-from llm4mtl.run_store.events import append_event, read_events
+from llm4mtl.run_store.events import append_event
 from llm4mtl.run_store.generations import (
+    SEMANTIC_TEST_ARTIFACT,
+    TRANSFORMATION_ARTIFACT,
     GenerationRecordError,
     prepare_generation_response_directory,
     record_generation,
@@ -41,7 +44,7 @@ from llm4mtl.run_store.identity import InvalidRunIdError, resolve_contained_dir
 from llm4mtl.run_store.manifest import ManifestExistsError, read_manifest, write_manifest
 from llm4mtl.run_store.models import SCHEMA_VERSION, RunPaths
 from llm4mtl.run_store.responses import record_diagnosis
-from llm4mtl.run_store.results import ResultConflictError, read_result, record_result
+from llm4mtl.run_store.results import ResultConflictError, record_result
 from llm4mtl.run_store.stages import list_stages, read_latest, record_attempt
 from llm4mtl.run_store.transformations import (
     TransformationAdoptionError,
@@ -84,11 +87,11 @@ def create_run(
         write_metamodel(paths, metamodel)
     if manifest.get("test_generation_model") is not None:
         prepare_generation_response_directory(
-            paths, artifact_type="semantic-test", iteration=0
+            paths, artifact_type=SEMANTIC_TEST_ARTIFACT, iteration=0
         )
     if manifest.get("transformation_model") is not None:
         prepare_generation_response_directory(
-            paths, artifact_type="transformation", iteration=0
+            paths, artifact_type=TRANSFORMATION_ARTIFACT, iteration=0
         )
     append_event(paths, "run_created")
     return paths
@@ -115,7 +118,6 @@ __all__ = [
     "write_manifest",
     "read_manifest",
     "append_event",
-    "read_events",
     "record_attempt",
     "read_latest",
     "list_stages",
@@ -127,7 +129,6 @@ __all__ = [
     "write_metamodel",
     "write_task_prompt",
     "ResultConflictError",
-    "read_result",
     "record_result",
     "TransformationAdoptionError",
     "adopt_transformations",

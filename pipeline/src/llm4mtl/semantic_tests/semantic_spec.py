@@ -12,6 +12,8 @@ from typing import Any
 
 SEMANTIC_CASES_FILE = "semantic_cases.json"
 CONTRACT_VIOLATIONS_FILE = "contract_violations.json"
+# The folder inside a suite that holds the generated model files.
+MODELS_DIRECTORY = "models"
 
 
 def effective_models(

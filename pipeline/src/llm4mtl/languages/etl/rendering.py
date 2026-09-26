@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from llm4mtl.languages.java_resources import java_lines
 from llm4mtl.semantic_tests.codegen.java_rendering import (
     assertion_message,
     escape_java,
@@ -13,60 +14,19 @@ from llm4mtl.semantic_tests.codegen.java_rendering import (
     java_value,
     object_signatures,
     safe_temp_prefix,
-    sanitize_method_name,
+    rendered_method_name,
 )
 from llm4mtl.semantic_tests.semantic_spec import default_transformation, effective_models
-from llm4mtl.semantic_tests.suites.java import slug
-
-ALL_OF_TYPE_LOOP = "        for (Object object : allOfType(model, typeName)) {"
+from llm4mtl.semantic_tests.suites.generated_models import generated_model_resource
 
 
 def render_semantic_test(class_name: str, spec: dict[str, Any], task: str) -> str:
+    """Render the JUnit class that runs every test case of ``spec`` with ETL."""
     methods = [render_test_method(spec, test, task) for test in spec["tests"]]
-    metamodels = metamodel_paths(spec.get("metamodels", []))
-
     return "\n".join(
         [
-            "package org.eclipse.epsilon.examples.etl.generated;",
-            "",
-            "import static org.junit.jupiter.api.Assertions.*;",
-            "",
-            "import java.io.File;",
-            "import java.util.ArrayList;",
-            "import java.util.Arrays;",
-            "import java.util.Collection;",
-            "import java.util.LinkedHashMap;",
-            "import java.util.List;",
-            "import java.util.Map;",
-            "",
-            "import org.eclipse.emf.ecore.EObject;",
-            "import org.eclipse.emf.ecore.EStructuralFeature;",
-            "import org.eclipse.emf.ecore.resource.Resource;",
-            "import org.eclipse.emf.ecore.resource.ResourceSet;",
-            "import org.eclipse.emf.ecore.resource.impl.ResourceSetImpl;",
-            "import org.eclipse.emf.ecore.util.EcoreUtil;",
-            "import org.eclipse.emf.ecore.xmi.impl.XMIResourceFactoryImpl;",
-            "import org.eclipse.epsilon.emc.emf.EmfModel;",
-            "import org.eclipse.epsilon.emc.plainxml.PlainXmlModel;",
-            "import org.eclipse.epsilon.eol.models.IModel;",
-            "import org.eclipse.epsilon.examples.etl.EtlTestBase;",
-            "import org.junit.jupiter.api.BeforeEach;",
-            "import org.junit.jupiter.api.Test;",
-            "import org.w3c.dom.Element;",
-            "import org.w3c.dom.Node;",
-            "import org.w3c.dom.NodeList;",
-            "",
-            f"public class {class_name} extends EtlTestBase {{",
-            f'    private static final String ETL = "{escape_java(str(spec.get("transformation") or default_transformation(task)))}";',
-            "",
-            "    @BeforeEach",
-            "    public void setUpGeneratedMetamodels() throws Exception {",
-            *[
-                f'        registerMetamodel("{escape_java(path)}");'
-                for path in metamodels
-            ],
-            "    }",
-            "",
+            *java_lines(__package__, "header.java.txt"),
+            *_render_class_opening(class_name, spec, task),
             *methods,
             *java_helpers(),
             "}",
@@ -75,8 +35,26 @@ def render_semantic_test(class_name: str, spec: dict[str, Any], task: str) -> st
     )
 
 
+def _render_class_opening(
+    class_name: str, spec: dict[str, Any], task: str
+) -> list[str]:
+    """The class line, the transformation constant, and metamodel setup."""
+    transformation = str(spec.get("transformation") or default_transformation(task))
+    metamodels = metamodel_paths(spec.get("metamodels", []))
+    return [
+        f"public class {class_name} extends EtlTestBase {{",
+        f'    private static final String ETL = "{escape_java(transformation)}";',
+        "",
+        "    @BeforeEach",
+        "    public void setUpGeneratedMetamodels() throws Exception {",
+        *[f'        registerMetamodel("{escape_java(path)}");' for path in metamodels],
+        "    }",
+        "",
+    ]
+
+
 def render_test_method(spec: dict[str, Any], test: dict[str, Any], task: str) -> str:
-    method_name = sanitize_method_name(str(test["name"]))
+    method_name = rendered_method_name(test)
     models = effective_models(spec, test)
     model_vars = {
         str(model["name"]): f"model{index}" for index, model in enumerate(models)
@@ -92,25 +70,30 @@ def render_test_method(spec: dict[str, Any], test: dict[str, Any], task: str) ->
         lines.append(f"        generatedModels.add(model{index});")
 
     lines.append("        runEtl(ETL, generatedModels.toArray(new IModel[0]));")
-    # Written before the assertions, so the actual output survives the first
-    # assertion that fails. Without it a structural failure — a missing edge, a
-    # wrong reference — reaches Source Diagnosis as "expected != actual" and
-    # nothing else, which is the one thing the diagnosis cannot work from.
-    for index, model in enumerate(models):
-        if model.get("role") != "target" or model.get("kind", "emf") != "emf":
-            continue
-        slot = escape_java(str(model["name"]))
-        lines.append(
-            f'        writeSnapshot("{escape_java(method_name)}/{slot}.xmi", model{index});'
-        )
+    # Write snapshots before the assertions, so the real output survives the
+    # first failing assertion. Source Diagnosis needs that output; "expected !=
+    # actual" alone does not show a missing edge or a wrong reference.
+    lines.extend(_render_snapshot_writes(models, method_name))
     for assertion in test["assertions"]:
         lines.extend(render_assertion(assertion, model_vars))
     lines.extend(["    }", ""])
     return "\n".join(lines)
 
 
+def _render_snapshot_writes(
+    models: list[dict[str, Any]], method_name: str
+) -> list[str]:
+    """One ``writeSnapshot`` call per EMF target model."""
+    lines = []
+    for index, model in enumerate(models):
+        if model.get("role") != "target" or model.get("kind", "emf") != "emf":
+            continue
+        snapshot = f"{escape_java(method_name)}/{escape_java(str(model['name']))}.xmi"
+        lines.append(f'        writeSnapshot("{snapshot}", model{index});')
+    return lines
+
+
 def render_model_creation(model: dict[str, Any], var_name: str, task: str) -> list[str]:
-    name = str(model["name"])
     kind = model.get("kind", "emf")
     role = model.get("role", "source" if model.get("path") else "target")
     if kind == "plainXml":
@@ -125,19 +108,19 @@ def render_emf_model(
     metamodel_uri = escape_java(str(model["metamodelUri"]))
     read_on_load = java_bool(model.get("readOnLoad", role == "source"))
     store_on_disposal = java_bool(model.get("storeOnDisposal", role == "target"))
+    flags = f"{read_on_load}, {store_on_disposal}"
     if role == "source":
-        path = model_resource_path(
-            str(model["path"]), task, bool(model.get("generated", True))
-        )
+        path = escape_java(_source_model_path(model, task))
         return [
-            f'        EmfModel {var_name} = createEmfModel("{name}", "{escape_java(path)}", "{metamodel_uri}", {read_on_load}, {store_on_disposal});'
+            f'        EmfModel {var_name} = createEmfModel("{name}", "{path}", '
+            f'"{metamodel_uri}", {flags});'
         ]
 
     extension = str(model.get("fileExtension") or ".model")
     return [
-        f'        File {var_name}File = File.createTempFile("{safe_temp_prefix(name)}_", "{escape_java(extension)}");',
-        f"        {var_name}File.deleteOnExit();",
-        f'        EmfModel {var_name} = createEmfModelFromFile("{name}", {var_name}File.getAbsolutePath(), "{metamodel_uri}", {read_on_load}, {store_on_disposal});',
+        *_render_temp_file(var_name, name, extension),
+        f'        EmfModel {var_name} = createEmfModelFromFile("{name}", '
+        f'{var_name}File.getAbsolutePath(), "{metamodel_uri}", {flags});',
     ]
 
 
@@ -152,21 +135,14 @@ def render_plain_xml_model(
         f'        {var_name}.setName("{name}");',
     ]
     if role == "source":
-        path = model_resource_path(
-            str(model["path"]), task, bool(model.get("generated", True))
-        )
+        path = escape_java(_source_model_path(model, task))
         lines.append(
-            f'        {var_name}.setFile(new File(getResourcePath("{escape_java(path)}")));'
+            f'        {var_name}.setFile(new File(getResourcePath("{path}")));'
         )
     else:
         extension = str(model.get("fileExtension") or ".xml")
-        lines.extend(
-            [
-                f'        File {var_name}File = File.createTempFile("{safe_temp_prefix(name)}_", "{escape_java(extension)}");',
-                f"        {var_name}File.deleteOnExit();",
-                f"        {var_name}.setFile({var_name}File);",
-            ]
-        )
+        lines.extend(_render_temp_file(var_name, name, extension))
+        lines.append(f"        {var_name}.setFile({var_name}File);")
     lines.extend(
         [
             f"        {var_name}.setReadOnLoad({read_on_load});",
@@ -175,6 +151,22 @@ def render_plain_xml_model(
         ]
     )
     return lines
+
+
+def _source_model_path(model: dict[str, Any], task: str) -> str:
+    return model_resource_path(
+        str(model["path"]), task, bool(model.get("generated", True))
+    )
+
+
+def _render_temp_file(var_name: str, name: str, extension: str) -> list[str]:
+    """Declare ``<var_name>File``, an empty temporary file for a target model."""
+    prefix = safe_temp_prefix(name)
+    return [
+        f"        File {var_name}File = "
+        f'File.createTempFile("{prefix}_", "{escape_java(extension)}");',
+        f"        {var_name}File.deleteOnExit();",
+    ]
 
 
 def runtime_model_name(model: dict[str, Any]) -> str:
@@ -195,95 +187,87 @@ def render_assertion(
     # The unescaped text is the shared rule; escaping it is this emitter's job.
     message = escape_java(assertion_message(assertion))
 
-    # The former set-membership dispatch raised TypeError for malformed,
-    # unhashable kinds. Keep that exception behavior even though validated
-    # semantic-case documents always provide a string.
-    if kind != "count":
-        hash(kind)
+    # Raise TypeError for an unhashable (malformed) kind, as callers expect.
+    # Validated semantic-case documents always give a string.
+    hash(kind)
 
     match kind:
         case "count":
-            return [
-                f'        assertEquals({int(assertion["expected"])}, allOfType({model_var}, "{type_name}").size(), "{message}");'
-            ]
+            return _render_count(assertion, model_var, type_name, message)
         case "featureValues" | "pathValues":
-            return _render_path_assertion(
-                assertion,
-                model_var,
-                kind,
-                type_name,
-                message,
-            )
-        case "treePaths" | "referencePairs":
-            return _render_relationship_assertion(
-                assertion, model_var, type_name, message
-            )
-        case "collectionSize" | "objects":
-            return _render_object_assertion(
-                assertion,
-                model_var,
-                kind,
-                type_name,
-                message,
-            )
+            return _render_path_assertion(assertion, model_var, type_name, message)
+        case "treePaths":
+            return _render_tree_paths(assertion, model_var, type_name, message)
+        case "referencePairs":
+            return _render_reference_pairs(assertion, model_var, type_name, message)
+        case "collectionSize":
+            return _render_collection_size(assertion, model_var, type_name, message)
+        case "objects":
+            return _render_objects(assertion, model_var, type_name, message)
         case _:
             raise AssertionError(f"Unsupported assertion kind: {kind}")
 
 
+def _render_count(
+    assertion: dict[str, Any], model_var: str, type_name: str, message: str
+) -> list[str]:
+    expected = int(assertion["expected"])
+    actual = f'allOfType({model_var}, "{type_name}").size()'
+    return [f'        assertEquals({expected}, {actual}, "{message}");']
+
+
 def _render_path_assertion(
-    assertion: dict[str, Any],
-    model_var: str,
-    kind: str,
-    type_name: str,
-    message: str,
+    assertion: dict[str, Any], model_var: str, type_name: str, message: str
 ) -> list[str]:
     expected = java_string_list([java_value(value) for value in assertion["expected"]])
-    path_key = "feature" if kind == "featureValues" else "path"
+    path_key = "feature" if assertion["kind"] == "featureValues" else "path"
     path = escape_java(str(assertion[path_key]))
     actual = f'pathValues({model_var}, "{type_name}", "{path}")'
     return render_count_assertion(expected, actual, assertion, message)
 
 
-def _render_object_assertion(
-    assertion: dict[str, Any],
-    model_var: str,
-    kind: str,
-    type_name: str,
-    message: str,
+def _render_collection_size(
+    assertion: dict[str, Any], model_var: str, type_name: str, message: str
 ) -> list[str]:
-    if kind == "collectionSize":
-        where = (
-            assertion.get("where") if isinstance(assertion.get("where"), dict) else {}
-        )
-        features = list(where) if where else []
-        expected_signature = object_signatures([where], features)[0] if features else ""
-        path = escape_java(str(assertion["path"]))
-        return [
-            f'        assertCollectionSize({model_var}, "{type_name}", {java_string_array(features)}, '
-            f'"{escape_java(expected_signature)}", "{path}", {int(assertion["expected"])}, "{message}");'
-        ]
+    where = assertion.get("where") if isinstance(assertion.get("where"), dict) else {}
+    features = list(where) if where else []
+    expected_signature = object_signatures([where], features)[0] if features else ""
+    path = escape_java(str(assertion["path"]))
+    return [
+        f'        assertCollectionSize({model_var}, "{type_name}", '
+        f"{java_string_array(features)}, "
+        f'"{escape_java(expected_signature)}", "{path}", '
+        f'{int(assertion["expected"])}, "{message}");'
+    ]
+
+
+def _render_objects(
+    assertion: dict[str, Any], model_var: str, type_name: str, message: str
+) -> list[str]:
     features = [str(feature) for feature in assertion["features"]]
     expected = object_signatures(assertion["expected"], features)
-    actual = (
-        f'signaturesOf({model_var}, "{type_name}", ' f"{java_string_array(features)})"
-    )
+    actual = f'signaturesOf({model_var}, "{type_name}", {java_string_array(features)})'
     return render_count_assertion(
         java_string_list(expected), actual, assertion, message
     )
 
 
-def _render_relationship_assertion(
+def _render_tree_paths(
     assertion: dict[str, Any], model_var: str, type_name: str, message: str
 ) -> list[str]:
-    if assertion["kind"] == "treePaths":
-        expected = java_string_list([java_value(value) for value in assertion["expected"]])
-        label_feature = escape_java(str(assertion.get("labelFeature") or "label"))
-        children_feature = escape_java(
-            str(assertion.get("childrenFeature") or "children")
-        )
-        actual = f'treePaths({model_var}, "{type_name}", "{label_feature}", "{children_feature}")'
-        return render_count_assertion(expected, actual, assertion, message)
+    expected = java_string_list([java_value(value) for value in assertion["expected"]])
+    label_feature = escape_java(str(assertion.get("labelFeature") or "label"))
+    children_feature = escape_java(str(assertion.get("childrenFeature") or "children"))
+    actual = (
+        f'treePaths({model_var}, "{type_name}", '
+        f'"{label_feature}", "{children_feature}")'
+    )
+    return render_count_assertion(expected, actual, assertion, message)
 
+
+def _render_reference_pairs(
+    assertion: dict[str, Any], model_var: str, type_name: str, message: str
+) -> list[str]:
     expected = [
         f"{java_value(pair['source'])}->{java_value(pair['target'])}"
         for pair in assertion["expected"]
@@ -305,242 +289,22 @@ def render_count_assertion(
 
 
 def java_helpers() -> list[str]:
-    return [
-        # The actual target model this execution produced, copied out of the
-        # live EMF resource. A blank property means no observation directory was
-        # configured, and then nothing is written — never a partial file.
-        "    private void writeSnapshot(String relativePath, EmfModel model) throws Exception {",
-        '        String configured = System.getProperty("llm4mtl.observations.dir", "");',
-        "        if (configured.isBlank()) return;",
-        "        java.nio.file.Path target = java.nio.file.Path.of(configured).resolve(relativePath);",
-        "        java.nio.file.Files.createDirectories(target.getParent());",
-        "        ResourceSet snapshotSet = new ResourceSetImpl();",
-        '        snapshotSet.getResourceFactoryRegistry().getExtensionToFactoryMap().put("xmi", new XMIResourceFactoryImpl());',
-        "        Resource snapshot = snapshotSet.createResource(",
-        "            org.eclipse.emf.common.util.URI.createFileURI(target.toString()));",
-        "        snapshot.getContents().addAll(EcoreUtil.copyAll(model.getResource().getContents()));",
-        "        snapshot.save(Map.of());",
-        "    }",
-        "",
-        "    private Collection<?> allOfType(IModel model, String typeName) throws Exception {",
-        "        return model.getAllOfType(typeName);",
-        "    }",
-        "",
-        # An unset terminal value is an observation ("null"), not an absence:
-        # a suite must be able to say that a created element has no name.
-        "    private List<String> pathValues(IModel model, String typeName, String path) throws Exception {",
-        "        List<String> values = new ArrayList<>();",
-        ALL_OF_TYPE_LOOP,
-        "            for (Object value : pathValuesFrom(object, path, true)) {",
-        "                values.add(stringValue(value));",
-        "            }",
-        "        }",
-        "        return values;",
-        "    }",
-        "",
-        "    private List<String> referencePairs(IModel model, String typeName, String sourcePath, String targetPath) throws Exception {",
-        "        List<String> pairs = new ArrayList<>();",
-        ALL_OF_TYPE_LOOP,
-        "            List<Object> sources = pathValuesFrom(object, sourcePath);",
-        "            List<Object> targets = pathValuesFrom(object, targetPath);",
-        "            for (Object source : sources) {",
-        "                for (Object target : targets) {",
-        '                    pairs.add(stringValue(source) + "->" + stringValue(target));',
-        "                }",
-        "            }",
-        "        }",
-        "        return pairs;",
-        "    }",
-        "",
-        "    private List<String> treePaths(IModel model, String typeName, String labelFeature, String childrenFeature) throws Exception {",
-        "        List<String> paths = new ArrayList<>();",
-        ALL_OF_TYPE_LOOP,
-        "            if (object instanceof EObject && ((EObject) object).eContainer() == null) {",
-        '                collectTreePaths(object, "", labelFeature, childrenFeature, paths);',
-        "            }",
-        "        }",
-        "        return paths;",
-        "    }",
-        "",
-        "    private void collectTreePaths(Object object, String prefix, String labelFeature, String childrenFeature, List<String> paths) {",
-        '        String currentPath = prefix + "/" + stringValue(pathValue(object, labelFeature));',
-        "        paths.add(currentPath);",
-        "        for (Object child : pathValuesFrom(object, childrenFeature)) {",
-        "            collectTreePaths(child, currentPath, labelFeature, childrenFeature, paths);",
-        "        }",
-        "    }",
-        "",
-        "    private List<String> signaturesOf(IModel model, String typeName, String[] features) throws Exception {",
-        "        List<String> signatures = new ArrayList<>();",
-        ALL_OF_TYPE_LOOP,
-        "            List<String> parts = new ArrayList<>();",
-        "            for (String feature : features) {",
-        '                parts.add(feature + "=" + stringValue(pathValue(object, feature)));',
-        "            }",
-        '            signatures.add(String.join("|", parts));',
-        "        }",
-        "        return signatures;",
-        "    }",
-        "",
-        "    private void assertCollectionSize(IModel model, String typeName, String[] features, String expectedSignature, String path, int expectedSize, String message) throws Exception {",
-        "        boolean matched = false;",
-        ALL_OF_TYPE_LOOP,
-        "            if (expectedSignature.equals(signatureOf(object, features))) {",
-        "                matched = true;",
-        "                assertEquals(expectedSize, pathValuesFrom(object, path).size(), message);",
-        "            }",
-        "        }",
-        '        assertTrue(matched, message + " missing object " + expectedSignature);',
-        "    }",
-        "",
-        "    private String signatureOf(Object object, String[] features) {",
-        "        List<String> parts = new ArrayList<>();",
-        "        for (String feature : features) {",
-        '            parts.add(feature + "=" + stringValue(pathValue(object, feature)));',
-        "        }",
-        '        return String.join("|", parts);',
-        "    }",
-        "",
-        "    private Object pathValue(Object object, String path) {",
-        "        Object current = object;",
-        '        for (String part : path.split("\\\\.")) {',
-        "            if (current instanceof Collection<?>) {",
-        "                List<Object> resolved = new ArrayList<>();",
-        "                for (Object element : (Collection<?>) current) {",
-        "                    addFlattened(resolved, featureValue(element, part));",
-        "                }",
-        "                current = resolved;",
-        "            } else {",
-        "                current = featureValue(current, part);",
-        "            }",
-        "            if (current == null) {",
-        "                return null;",
-        "            }",
-        "        }",
-        "        return current;",
-        "    }",
-        "",
-        "    private List<Object> pathValuesFrom(Object object, String path) {",
-        "        return pathValuesFrom(object, path, false);",
-        "    }",
-        "",
-        "    private List<Object> pathValuesFrom(Object object, String path, boolean keepTerminalNull) {",
-        "        List<Object> values = new ArrayList<>();",
-        "        if (path == null || path.isEmpty()) {",
-        "            addFlattened(values, object);",
-        "            return values;",
-        "        }",
-        "        int dot = path.indexOf('.');",
-        "        String first = dot >= 0 ? path.substring(0, dot) : path;",
-        '        String rest = dot >= 0 ? path.substring(dot + 1) : "";',
-        "        List<Object> currentValues = new ArrayList<>();",
-        "        addFlattened(currentValues, object);",
-        "        for (Object current : currentValues) {",
-        "            Object next = featureValue(current, first);",
-        "            if (!rest.isEmpty()) {",
-        "                values.addAll(pathValuesFrom(next, rest, keepTerminalNull));",
-        "            }",
-        "            else if (next == null && keepTerminalNull) {",
-        "                values.add(null);",
-        "            }",
-        "            else {",
-        "                addFlattened(values, next);",
-        "            }",
-        "        }",
-        "        return values;",
-        "    }",
-        "",
-        "    private void addFlattened(List<Object> values, Object value) {",
-        "        if (value instanceof Collection<?>) {",
-        "            values.addAll((Collection<?>) value);",
-        "        }",
-        "        else if (value != null) {",
-        "            values.add(value);",
-        "        }",
-        "    }",
-        "",
-        "    private Object featureValue(Object object, String featureName) {",
-        "        if (object instanceof EObject) {",
-        "            EObject eObject = (EObject) object;",
-        "            EStructuralFeature feature = eObject.eClass().getEStructuralFeature(featureName);",
-        '            assertNotNull(feature, "Missing feature " + featureName + " on " + eObject.eClass().getName());',
-        "            return eObject.eGet(feature);",
-        "        }",
-        "        if (object instanceof Element) return plainXmlFeatureValue((Element) object, featureName);",
-        '        fail("Feature assertions are only supported for EMF EObject and plain XML Element instances: " + object);',
-        "        return null;",
-        "    }",
-        "",
-        # The PlainXml driver's own property names, so a plainXml assertion
-        # reads the same names the transformation writes: `text`, `a_<attr>`,
-        # `e_<tag>` (first child element), `c_<tag>` (all child elements).
-        "    private Object plainXmlFeatureValue(Element element, String featureName) {",
-        '        if (featureName.equals("text")) return element.getTextContent();',
-        '        if (featureName.startsWith("a_")) {',
-        "            String attribute = featureName.substring(2);",
-        "            return element.hasAttribute(attribute) ? element.getAttribute(attribute) : null;",
-        "        }",
-        '        if (featureName.startsWith("e_") || featureName.startsWith("c_")) {',
-        "            String tag = featureName.substring(2);",
-        "            List<Object> children = new ArrayList<>();",
-        "            NodeList nodes = element.getChildNodes();",
-        "            for (int i = 0; i < nodes.getLength(); i++) {",
-        "                Node node = nodes.item(i);",
-        "                if (node instanceof Element && ((Element) node).getTagName().equals(tag)) children.add(node);",
-        "            }",
-        '            if (featureName.startsWith("c_")) return children;',
-        "            return children.isEmpty() ? null : children.get(0);",
-        "        }",
-        '        fail("Unknown plain XML feature " + featureName + "; use text, a_<attribute>, e_<tag>, or c_<tag>");',
-        "        return null;",
-        "    }",
-        "",
-        # Same rendering as the shared harness, so one contract describes both:
-        # an unset value reads "null" and a reference reads its identity.
-        "    private String stringValue(Object value) {",
-        '        if (value == null) {',
-        '            return "null";',
-        "        }",
-        "        if (value instanceof Collection<?>) {",
-        "            List<String> rendered = new ArrayList<>();",
-        "            for (Object element : (Collection<?>) value) {",
-        "                rendered.add(stringValue(element));",
-        "            }",
-        '            return String.join(",", rendered);',
-        "        }",
-        "        if (value instanceof EObject) {",
-        "            EObject object = (EObject) value;",
-        '            for (String candidate : new String[] {"name", "label", "id", "value"}) {',
-        "                EStructuralFeature feature = object.eClass().getEStructuralFeature(candidate);",
-        "                if (feature != null && object.eGet(feature) != null) {",
-        "                    return String.valueOf(object.eGet(feature));",
-        "                }",
-        "            }",
-        "        }",
-        "        if (value instanceof Element) return ((Element) value).getTextContent();",
-        "        return String.valueOf(value);",
-        "    }",
-        "",
-        "    private Map<String, Integer> counts(Collection<String> values) {",
-        "        Map<String, Integer> counts = new LinkedHashMap<>();",
-        "        for (String value : values) {",
-        "            counts.put(value, counts.getOrDefault(value, 0) + 1);",
-        "        }",
-        "        return counts;",
-        "    }",
-        "",
-        "    private void assertContainsCounts(Collection<String> expected, Collection<String> actual, String message) {",
-        "        Map<String, Integer> actualCounts = counts(actual);",
-        "        for (Map.Entry<String, Integer> expectedEntry : counts(expected).entrySet()) {",
-        '            assertTrue(actualCounts.getOrDefault(expectedEntry.getKey(), 0) >= expectedEntry.getValue(), message + " missing " + expectedEntry.getKey());',
-        "        }",
-        "    }",
-        "",
-        "    private List<String> list(String... values) {",
-        "        return Arrays.asList(values);",
-        "    }",
-        "",
-    ]
+    """Java helpers the ETL harness adds to every generated class.
+
+    Notes on the emitted Java:
+
+    * ``writeSnapshot`` copies the target model this run produced out of the
+      live EMF resource. A blank observations property means no folder was
+      configured; then nothing is written, never a partial file.
+    * ``pathValues`` keeps an unset last value as ``"null"``: a suite must be
+      able to say that a created element has no name.
+    * ``plainXmlFeatureValue`` reads the PlainXml driver's own property names,
+      the same names the transformation writes: ``text``, ``a_<attr>``,
+      ``e_<tag>`` (first child element), ``c_<tag>`` (all child elements).
+    * ``stringValue`` renders values like the shared harness does: an unset
+      value reads ``"null"`` and a reference reads its identity.
+    """
+    return java_lines(__package__, "helpers.java.txt")
 
 
 def metamodel_paths(raw: Any) -> list[str]:
@@ -554,10 +318,12 @@ def metamodel_paths(raw: Any) -> list[str]:
 
 
 def model_resource_path(path: str, task: str, generated: bool) -> str:
+    """The classpath resource of a source model.
+
+    A generated model lives in the suite's own folder on the classpath; any
+    other path is already a classpath resource of the harness.
+    """
     normalized = path.replace("\\", "/").lstrip("/")
     if not generated:
         return normalized
-    if normalized.startswith("models/"):
-        normalized = normalized[len("models/") :]
-    return f"generated-models/{slug(task)}/{normalized}"
-
+    return generated_model_resource(task, normalized)

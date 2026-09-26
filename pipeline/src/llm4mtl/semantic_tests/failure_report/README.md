@@ -14,12 +14,13 @@ eligibility.py  - checks if report should be created and why
 evidence.py     - collects facts for both variants of report
                     1. which execution do we describe
                     2. what do we know about the execution
-request.py	    - checks what routes were mentioned
+request.py	    - reads and checks the request: which run files the report uses
 case_report.py	- report about one test-case
 pair_report.py	- report about the pair
+report_document.py	- parts both reports share, and the write-once step
+semantic_cases.py	- how a case and an assertion are named
 surefire_view.py	- takes data from XML files
-artifacts.py	- read files from report
-eligibility.py	- should we give this failure to the diagnosis
+artifacts.py	- reads the files a report needs
 models.py	    - constants
 cli.py	        - local start
 

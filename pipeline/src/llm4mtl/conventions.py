@@ -1,10 +1,9 @@
 """Filesystem conventions of the generated-test workflow, per language.
 
-Every helper here takes the language explicitly. They used to default to ETL,
-which meant an ATL or Reactions caller silently received ETL paths and produced
-results attributed to a language that never ran. Requiring the argument turns
-every remaining ETL assumption into something visible at the call site, and an
-unimplemented language into a loud failure at :func:`language_config`.
+Every helper here takes the language explicitly. There is no ETL default: a
+default would silently give another language ETL paths and attribute the
+results to a language that never ran. An unknown language fails loudly in
+:func:`language_config`.
 """
 
 from __future__ import annotations
@@ -87,15 +86,13 @@ def language_config(language: str) -> LanguageConfig:
 
 
 def test_generation_root() -> Path:
-    # v5 final cleanup: generated test suites and their metrics are OUTPUT; they now
-    # live under artifacts/work/ (the old nested Test_Generation dir is retired).
+    # Generated suites and their metrics are output, so they live under artifacts/work/.
     from llm4mtl.paths import TARGET
 
     return TARGET.artifacts_work / "test_generation"
 
 
 def _n8n_tests_root() -> Path:
-    # v5 migration (Stage 3): the test-generation n8n tree moved to workflows/n8n/tests.
     from llm4mtl.paths import TARGET
 
     return TARGET.workflows / "tests"
@@ -119,17 +116,6 @@ def default_generated_tests_root(config: LanguageConfig) -> Path:
     return test_generation_root() / "generated_tests" / config.generated_tests_dir
 
 
-def task_prompt_candidates_root(config: LanguageConfig) -> Path:
-    """Where n8n writes unreviewed prompt candidates, one directory per model.
-
-    Replaces the pre-v5 ``<lang>/prompts/<model>/`` tree, which no writer has
-    targeted since prompt generation moved to n8n.
-    """
-    from llm4mtl.paths import TARGET
-
-    return TARGET.artifacts_work / "task_prompt_candidates" / config.language_key
-
-
 def frozen_task_prompt(config: LanguageConfig, task: str) -> Path:
     """The one reviewed prompt both generators consume for ``task``.
 
@@ -143,8 +129,7 @@ def frozen_task_prompt(config: LanguageConfig, task: str) -> Path:
 
 
 def _benchmark_tasks_root(config: LanguageConfig) -> Path:
-    # v5 migration (Stage 3): hand-authored task inputs (references, task contracts)
-    # moved out of the n8n tree into benchmark/tasks/<lang>/.
+    # Hand-authored task inputs: reference transformations and task contracts.
     from llm4mtl.paths import TARGET
 
     return TARGET.benchmark / "tasks" / config.language_key
@@ -166,7 +151,6 @@ def default_reactions_metamodels_root() -> Path:
 
 
 def default_test_project_dir(config: LanguageConfig) -> Path:
-    # v5 migration (Stage 2): the test-harness engine moved to engines/<lang>/harness.
     from llm4mtl.paths import TARGET
 
     return TARGET.engine_harness(config.language_key)

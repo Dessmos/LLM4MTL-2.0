@@ -11,6 +11,7 @@ from typing import Sequence
 from llm4mtl.semantic_tests.failure_report import write_report
 from llm4mtl.semantic_tests.failure_report.artifacts import _repository_path
 from llm4mtl.semantic_tests.failure_report.errors import FailureReportError
+from llm4mtl.semantic_tests.failure_report.models import CASE_SCOPE
 from llm4mtl.semantic_tests.failure_report.request import (
     REQUEST_TYPES,
     _output_path,
@@ -32,7 +33,7 @@ def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--scope",
         choices=sorted(REQUEST_TYPES),
-        default="test_case",
+        default=CASE_SCOPE,
         help="which kind of failure the request records",
     )
     return parser.parse_args(argv)

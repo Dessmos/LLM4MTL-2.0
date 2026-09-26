@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, HTTPException
@@ -20,6 +21,12 @@ from llm4mtl.prompt_assembly.task_inputs import (
     resolve_task_inputs,
 )
 from llm4mtl.provenance import ProvenanceError, build_provenance
+from llm4mtl.run_store.generations import (
+    SEMANTIC_TEST_ARTIFACT,
+    SEMANTIC_TEST_GENERATION,
+    TRANSFORMATION_ARTIFACT,
+    TRANSFORMATION_GENERATION,
+)
 from llm4mtl.run_store.identity import InvalidRunIdError, generate_run_id
 from llm4mtl.run_store.transformations import (
     TransformationAdoptionError,
@@ -34,6 +41,7 @@ from llm4mtl.semantic_tests.diagnosis_preparation import (
 )
 from llm4mtl.stage_contract import CONTRACT_STAGES
 from llm4mtl.stage_recording import (
+    RecordedStageAttempt,
     announce_stage_start,
     infrastructure_error_result,
     record_stage_attempt,
@@ -53,10 +61,18 @@ from llm4mtl.stage_service.api_models import (
 )
 from llm4mtl.stages.dispatch import (
     WORKSPACE_STAGES,
+    StageCallable,
     StageImplementations,
     prepare_workspace,
 )
 from llm4mtl.stages.models import PipelineConfig
+from llm4mtl.vocabulary import (
+    EXECUTION_STAGE_ID,
+    EXTRACT_STAGE_ID,
+    REFERENCE_VALIDATION_STAGE_ID,
+    SYNTAX_VALIDATION_STAGE_ID,
+    TECHNICAL_VALIDATION_STAGE_ID,
+)
 
 app = FastAPI(title="LLM4MTL stage service", version="0.1.0")
 _stages = StageImplementations()
@@ -67,7 +83,11 @@ CONFLICT_RESPONSE = {"description": "Run state conflicts with the request"}
 UNPROCESSABLE_RESPONSE = {"description": "Request violates a task or run contract"}
 # The stages that judge a generated transformation both read the immutable copy
 # adopted from this run's raw generation response.
-TRANSFORMATION_STAGES = frozenset({"syntax-validation", "execution"})
+TRANSFORMATION_STAGES = frozenset({SYNTAX_VALIDATION_STAGE_ID, EXECUTION_STAGE_ID})
+# The stages that judge the generated semantic tests of one iteration.
+SEMANTIC_TEST_STAGES = frozenset(
+    {EXTRACT_STAGE_ID, TECHNICAL_VALIDATION_STAGE_ID, REFERENCE_VALIDATION_STAGE_ID}
+)
 
 
 def _artifact_roots() -> ArtifactRoots:
@@ -110,12 +130,12 @@ def _require_manifest(
     return paths, manifest
 
 
-def _run_diagnoses(batch_id: str, run_id: str):
+def _run_diagnoses(batch_id: str, run_id: str) -> Path:
     """Where this run's verdicts live: asked of the layout, never derived."""
     return _artifact_roots().run_diagnoses_dir(batch_id, run_id)
 
 
-def _locations(directory) -> dict[str, str]:
+def _locations(directory: Path) -> dict[str, str]:
     """A directory as the repository names it and as n8n reaches it.
 
     n8n receives both spellings from here and builds no artifact path of its
@@ -243,42 +263,16 @@ def create_run(batch_id: str, request: RunCreateRequest) -> RunCreateResponse:
             detail="a run must fix one concrete task; expand all tasks through a matrix",
         )
     batch, _ = _require_batch(batch_id)
-    custom = request.custom_task
-    # A custom task is its own identity axis: nothing about it is resolved
-    # through another task, so its name is the task the manifest records.
     run_id = request.run_id or generate_run_id(
-        request.language, [custom.name if custom is not None else request.task]
+        request.language, [_identity_task(request)]
     )
     try:
-        provenance = build_provenance(
-            request.language,
-            request.task,
-            custom_task_prompt=custom.prompt if custom is not None else None,
-            custom_task_metamodel=custom.metamodel if custom is not None else None,
-        )
-        if custom is not None:
-            provenance["custom_task"] = {"name": custom.name}
-        manifest = {
-            "batch_id": batch.batch_id,
-            "language": request.language,
-            "task": request.task,
-            "transformation_model": request.transformation_model,
-            "test_generation_model": request.test_generation_model,
-            "transformation_strategy": request.transformation_strategy,
-            "test_generation_strategy": request.test_generation_strategy,
-            "seed": request.seed,
-            "pipeline_variant": request.pipeline_variant,
-            "preset": request.preset,
-            "provenance": provenance,
-        }
-        if request.experiment_config is not None:
-            manifest["experiment_config"] = request.experiment_config.model_dump()
         paths = run_store.create_run(
             batch.root,
             run_id,
-            manifest,
-            task_prompt=custom.prompt if custom is not None else None,
-            metamodel=custom.metamodel if custom is not None else None,
+            _run_manifest(batch.batch_id, request),
+            task_prompt=_custom_task_prompt(request),
+            metamodel=_custom_task_metamodel(request),
         )
     except run_store.ManifestExistsError as exc:
         raise HTTPException(
@@ -295,6 +289,58 @@ def create_run(batch_id: str, request: RunCreateRequest) -> RunCreateResponse:
         run_dir=locations["dir"],
         n8n_run_dir=locations["n8n_dir"],
     )
+
+
+def _identity_task(request: RunCreateRequest) -> str:
+    """The task the run id names.
+
+    A custom task is its own identity axis: nothing about it is resolved
+    through another task, so its name is the task the manifest records.
+    """
+    custom = request.custom_task
+    return custom.name if custom is not None else request.task
+
+
+def _custom_task_prompt(request: RunCreateRequest) -> str | None:
+    custom = request.custom_task
+    return custom.prompt if custom is not None else None
+
+
+def _custom_task_metamodel(request: RunCreateRequest) -> str | None:
+    custom = request.custom_task
+    return custom.metamodel if custom is not None else None
+
+
+def _run_manifest(batch_id: str, request: RunCreateRequest) -> dict[str, Any]:
+    """The immutable manifest of a new run. Raises ``ProvenanceError``."""
+    manifest: dict[str, Any] = {
+        "batch_id": batch_id,
+        "language": request.language,
+        "task": request.task,
+        "transformation_model": request.transformation_model,
+        "test_generation_model": request.test_generation_model,
+        "transformation_strategy": request.transformation_strategy,
+        "test_generation_strategy": request.test_generation_strategy,
+        "seed": request.seed,
+        "pipeline_variant": request.pipeline_variant,
+        "preset": request.preset,
+        "provenance": _run_provenance(request),
+    }
+    if request.experiment_config is not None:
+        manifest["experiment_config"] = request.experiment_config.model_dump()
+    return manifest
+
+
+def _run_provenance(request: RunCreateRequest) -> dict[str, Any]:
+    provenance = build_provenance(
+        request.language,
+        request.task,
+        custom_task_prompt=_custom_task_prompt(request),
+        custom_task_metamodel=_custom_task_metamodel(request),
+    )
+    if request.custom_task is not None:
+        provenance["custom_task"] = {"name": request.custom_task.name}
+    return provenance
 
 
 def _stage_config(
@@ -320,7 +366,6 @@ def _stage_config(
         seed=int(manifest.get("seed", 1) or 1),
         pipeline_variant=str(manifest.get("pipeline_variant") or "full"),
         suite_id=request.suite_id,
-        verbose=request.verbose,
         run_id=run_id,
     )
 
@@ -343,13 +388,7 @@ def _run_transformations(
     Adopted once from the run-scoped raw response by whichever stage of the
     artifact iteration runs first. Every later stage reads the copy back.
     """
-    # Stated by the caller when it knows it; otherwise read from the suite id,
-    # which encodes it for every run whose tests were the refined artefact.
-    iteration = (
-        request.refinement_iteration
-        if request.refinement_iteration is not None
-        else iteration_from_suite_id(request.suite_id)
-    )
+    iteration = _transformation_iteration(request)
     existing = adopted_transformations(paths, iteration)
     if existing is not None:
         return existing
@@ -359,7 +398,7 @@ def _run_transformations(
         .suffix
     )
     response = paths.generation_response(
-        "transformation-generation",
+        TRANSFORMATION_GENERATION,
         iteration,
         f"{config.tasks[0]}{extension}",
     )
@@ -371,39 +410,44 @@ def _run_transformations(
     return adopt_transformations(paths, manifest, sources, iteration=iteration)
 
 
+def _transformation_iteration(request: StageRunRequest) -> int:
+    """The transformation iteration a stage judges.
+
+    Stated by the caller when it knows it; otherwise read from the suite id,
+    which encodes it for every run whose tests were the refined artefact.
+    """
+    if request.refinement_iteration is not None:
+        return request.refinement_iteration
+    return iteration_from_suite_id(request.suite_id)
+
+
 def _generation_artifact_references(
     paths: run_store.RunPaths, stage: str, request: StageRunRequest
 ) -> dict[str, str]:
     """Generation records responsible for the artifact iteration this stage judged."""
     references: dict[str, str] = {}
-    if stage in {"extract", "technical-validation", "reference-validation"}:
-        test_iteration = request.refinement_iteration or 0
+    if stage in SEMANTIC_TEST_STAGES:
         _add_generation_reference(
             paths,
             references,
             "semantic_test_generation_record",
-            "semantic-test",
-            test_iteration,
+            SEMANTIC_TEST_ARTIFACT,
+            request.refinement_iteration or 0,
         )
-    if stage in {"syntax-validation", "execution"}:
-        transformation_iteration = (
-            request.refinement_iteration
-            if request.refinement_iteration is not None
-            else iteration_from_suite_id(request.suite_id)
-        )
+    if stage in TRANSFORMATION_STAGES:
         _add_generation_reference(
             paths,
             references,
             "transformation_generation_record",
-            "transformation",
-            transformation_iteration,
+            TRANSFORMATION_ARTIFACT,
+            _transformation_iteration(request),
         )
-    if stage == "execution":
+    if stage == EXECUTION_STAGE_ID:
         _add_generation_reference(
             paths,
             references,
             "semantic_test_generation_record",
-            "semantic-test",
+            SEMANTIC_TEST_ARTIFACT,
             iteration_from_suite_id(request.suite_id),
         )
     return references
@@ -437,19 +481,29 @@ def run_stage(
     paths, manifest = _require_manifest(batch_id, run_id)
     config = _stage_config(run_id, manifest, request)
     config.run_dir = str(paths.root)
+    _select_run_inputs(stage, paths, manifest, config, request)
+    run = _stages.implementation(stage)
+    if stage in WORKSPACE_STAGES:
+        config.engine_dir = str(prepare_workspace(paths.root, config.language))
+    recorded = _run_and_record(stage, run, config, paths, request)
+    return _response_payload(paths, recorded)
 
-    if stage == "extract":
-        iteration = request.refinement_iteration or 0
-        config.responses = [
-            str(
-                paths.generation_response(
-                    "semantic-test-generation",
-                    iteration,
-                    f"{config.tasks[0]}.md",
-                )
-            )
-        ]
 
+def _select_run_inputs(
+    stage: str,
+    paths: run_store.RunPaths,
+    manifest: dict[str, Any],
+    config: PipelineConfig,
+    request: StageRunRequest,
+) -> None:
+    """Point the stage at this run's own copy of what it judges."""
+    if stage == EXTRACT_STAGE_ID:
+        response = paths.generation_response(
+            SEMANTIC_TEST_GENERATION,
+            request.refinement_iteration or 0,
+            f"{config.tasks[0]}.md",
+        )
+        config.responses = [str(response)]
     if stage in TRANSFORMATION_STAGES:
         try:
             adopted = _run_transformations(paths, manifest, config, request)
@@ -461,10 +515,15 @@ def run_stage(
             # file the parser never saw.
             config.transformations = [str(path) for path in adopted.paths]
 
-    run = _stages.implementation(stage)
-    if stage in WORKSPACE_STAGES:
-        config.engine_dir = str(prepare_workspace(paths.root, config.language))
 
+def _run_and_record(
+    stage: str,
+    run: StageCallable,
+    config: PipelineConfig,
+    paths: run_store.RunPaths,
+    request: StageRunRequest,
+) -> RecordedStageAttempt:
+    """Run the stage and record the attempt, even when the stage raised."""
     # Announced before the work, so a stage that dies mid-execution leaves a
     # started event with no finished one.
     announce_stage_start(paths, stage)
@@ -474,18 +533,25 @@ def run_stage(
         result = infrastructure_error_result(stage, exc)
     # The generation records responsible for the iteration this stage judged
     # belong to the attempt itself, so they are recorded with it.
-    recorded = record_stage_attempt(
+    return record_stage_attempt(
         paths,
         stage,
         result,
         artifacts=_generation_artifact_references(paths, stage, request),
     )
+
+
+def _response_payload(
+    paths: run_store.RunPaths, recorded: RecordedStageAttempt
+) -> dict[str, Any]:
+    """The recorded payload plus where its prepared diagnosis evidence lives.
+
+    These references help orchestration; they are not observations. Preparation
+    runs only after the attempt has its number, so they reach the caller through
+    the response alone, and the stored result.json stays exactly as validated.
+    Both paths can be re-derived from the run directory.
+    """
     payload = recorded.payload
-    # Where the prepared evidence lives is orchestration, not an observation.
-    # Preparation can only run once the attempt has claimed its number, so these
-    # references reach the caller through the response while the recorded
-    # result.json keeps exactly the contract it was validated against. Nothing
-    # is lost: both paths are re-derivable from the run directory.
     references = diagnosis_artifact_references(paths.root, recorded.diagnosis_index)
     if references:
         payload["artifacts"] = {**payload["artifacts"], **references}
@@ -504,7 +570,7 @@ def get_stage(batch_id: str, run_id: str, stage: str) -> dict[str, Any]:
     latest = run_store.read_latest(paths, stage)
     if latest is None:
         raise HTTPException(status_code=404, detail=f"no result for stage {stage}")
-    if stage == "execution" and isinstance(latest.get("attempt"), int):
+    if stage == EXECUTION_STAGE_ID and isinstance(latest.get("attempt"), int):
         try:
             queue = read_diagnosis_queue(paths.root, latest["attempt"])
         except DiagnosisPreparationError:

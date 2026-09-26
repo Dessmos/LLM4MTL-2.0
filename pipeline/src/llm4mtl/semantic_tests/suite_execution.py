@@ -1,21 +1,21 @@
-"""One execution of a generated suite, observed as several independent facts.
+"""One execution of a generated suite, recorded as several separate facts.
 
-Running a generated suite answers two different questions at once, and the
-pipeline must not confuse them:
+Running a suite answers two different questions, and they must not be mixed:
 
 * *technical executability* — did the rendered harness compile, were the tests
-  discovered, did the models load, did the transformation engine run at all?
-* *oracle validity* — given that it ran against the trusted reference
-  transformation, do the generated assertions hold?
+  found, did the models load, did the transformation engine run at all?
+* *oracle validity* — run against the trusted reference transformation, do the
+  generated assertions hold?
 
-A suite whose assertions fail has answered the first question with yes and the
-second with no. Treating that as a technical failure silently removes wrong
-oracles from the reference-pass population and understates the executability
-rate, which corrupts every rate derived from the funnel.
+A suite whose assertions fail answered the first question with yes and the
+second with no. Counting it as a technical failure would drop wrong oracles from
+the reference-pass population and lower the executability rate, which breaks
+every rate derived from the funnel.
 
-Both questions therefore come from ONE Maven run against the reference
-transformation. The observation is recorded so a later stage can classify from
-it instead of executing again.
+So both answers come from ONE Maven run against the reference transformation.
+The observation is recorded, and a later stage reads it instead of running Maven
+again. The same code records runs of reference-valid suites against generated
+transformations.
 """
 
 from __future__ import annotations
@@ -34,21 +34,31 @@ from llm4mtl.domain import (
     RawExecutionEvidence,
     SuiteExecutionObservation,
 )
-from llm4mtl.external_tools.maven import CommandResult, run_maven, summarize_error
+from llm4mtl.domain.observations import FailureStage
+from llm4mtl.external_tools.maven import (
+    TEST_SELECTION_OPTION_PREFIX,
+    CommandResult,
+    run_maven,
+    summarize_error,
+)
 from llm4mtl.paths import repository_relative
 from llm4mtl.semantic_tests.reference_validation.maven_status import (
     compiles,
     executes,
     transformation_parse_failed,
 )
+from llm4mtl.semantic_tests.reference_validation.reference import (
+    transformation_destination,
+)
 from llm4mtl.semantic_tests.execution_evidence import (
     capture_execution_evidence,
     write_execution_evidence,
 )
 from llm4mtl.semantic_tests.suites.injection import inject_suite
-from llm4mtl.semantic_tests.suites.java import infer_fqcn
+from llm4mtl.semantic_tests.suites.java import JAVA_SOURCE_GLOB, infer_fqcn
+from llm4mtl.semantic_tests.semantic_spec import MODELS_DIRECTORY
 from llm4mtl.semantic_tests.surefire import (
-    UNCLASSIFIED_RUNTIME,
+    SUREFIRE_REPORTS_DIR,
     SurefireReport,
     read_surefire_reports,
 )
@@ -57,13 +67,33 @@ from llm4mtl.serialization.json_io import read_json, write_json
 from llm4mtl.workspace.injection import Injection
 
 SCHEMA_VERSION = "2.0"
+OBSERVATION_SCHEMA = "suite-execution"
 OBSERVATION_FILENAME = "suite_execution.json"
+# The harness system property that names the folder for actual output models.
+OBSERVATIONS_DIR_OPTION = "-Dllm4mtl.observations.dir="
+# The folder beside an observation that holds the actual output models.
+SNAPSHOTS_DIRNAME = "snapshots"
+GENERATED_SUITE_ROLE = "generated_suite"
 REFERENCE_TRANSFORMATION_ROLE = "reference_transformation"
 GENERATED_TRANSFORMATION_ROLE = "generated_transformation"
 TransformationRole = Literal[
     "reference_transformation",
     "generated_transformation",
 ]
+
+# The harness threw before it could judge the assertions.
+_STAGES_BEFORE_THE_ORACLE = frozenset(
+    {
+        FailureStage.MODEL_LOADING,
+        FailureStage.TRANSFORMATION_PARSE,
+        FailureStage.ENGINE_RUNTIME,
+        FailureStage.UNCLASSIFIED_RUNTIME,
+    }
+)
+# Of those, the stages that are only reached after the models loaded.
+_STAGES_WITH_MODELS_LOADED = frozenset(
+    {FailureStage.TRANSFORMATION_PARSE, FailureStage.ENGINE_RUNTIME}
+)
 
 
 @dataclass(frozen=True)
@@ -79,28 +109,28 @@ def classify_maven_run(
     result: CommandResult,
     reports: SurefireReport | None = None,
 ) -> SuiteExecutionObservation:
-    """Derive the independent observations from one Maven invocation.
+    """Derive the separate observations from one Maven run.
 
     Maven's console output cannot tell the harness phases apart: a model that
-    failed to load, an engine that threw, and an assertion that did not hold all
-    print as ``Tests run: N, Failures: F, Errors: E``. Treating them alike marks
-    a broken test as technically executable and its breakage as a disagreement
-    with the reference — inflating executability and corrupting the reference-pass
-    population. The Surefire reports do distinguish them, so they decide the
-    phases whenever they exist; the console is only a fallback for runs that
-    never produced reports (a compile failure, a timeout).
+    did not load, an engine that threw, and a failed assertion all print as
+    ``Tests run: N, Failures: F, Errors: E``. Treating them alike would count a
+    broken test as executable and its breakage as a disagreement with the
+    reference. The Surefire reports do tell them apart, so they decide whenever
+    they exist. A timeout or a compile failure is read from the command result
+    first; the console is only a fallback for a compiled run with no readable
+    report.
     """
     did_compile = compiles(result)
     if result.timed_out:
-        return _phase_failure(result, "timeout", compiled=did_compile)
+        return _phase_failure(result, FailureStage.TIMEOUT, compiled=did_compile)
     if not did_compile:
-        return _phase_failure(result, "java_compilation", compiled=False)
+        return _phase_failure(result, FailureStage.JAVA_COMPILATION, compiled=False)
 
     # Only the total absence of readable XML may fall back to the console. A
     # report that parsed and counted zero tests is evidence that nothing ran,
     # and `_classify_from_reports` turns it into a test-discovery failure.
     if reports is None:
-        return _classify_from_console(result, did_compile)
+        return _classify_from_console(result)
     return _classify_from_reports(result, reports)
 
 
@@ -108,44 +138,16 @@ def _classify_from_reports(
     result: CommandResult, reports: SurefireReport
 ) -> SuiteExecutionObservation:
     if reports.tests == 0:
-        return _phase_failure(result, "test_discovery", compiled=True)
+        return _phase_failure(result, FailureStage.TEST_DISCOVERY, compiled=True)
 
     failure_stage = reports.failure_stage()
-    if failure_stage in {
-        "model_loading",
-        "transformation_parse",
-        "engine_runtime",
-        UNCLASSIFIED_RUNTIME,
-    }:
-        # The harness never got far enough to judge the oracle.
-        return SuiteExecutionObservation(
-            compiled=True,
-            tests_discovered=True,
-            models_loaded=failure_stage in {"transformation_parse", "engine_runtime"},
-            engine_started=failure_stage == "engine_runtime",
-            assertions_evaluated=False,
-            assertions_passed=False,
-            timed_out=False,
-            maven_exit_code=result.exit_code,
-            failure_stage=failure_stage,
-            error_summary=(
-                reports.first_error
-                or reports.first_failure
-                or summarize_error(result.output)
-            ),
-        )
+    if failure_stage in _STAGES_BEFORE_THE_ORACLE:
+        return _harness_failure(result, reports, failure_stage)
 
     assertions_passed = reports.failures == 0 and reports.errors == 0
-    return SuiteExecutionObservation(
-        compiled=True,
-        tests_discovered=True,
-        models_loaded=True,
-        engine_started=True,
-        assertions_evaluated=True,
+    return _assertions_evaluated(
+        result,
         assertions_passed=assertions_passed,
-        timed_out=False,
-        maven_exit_code=result.exit_code,
-        failure_stage="" if assertions_passed else "assertion_failure",
         error_summary=(
             ""
             if assertions_passed
@@ -154,51 +156,70 @@ def _classify_from_reports(
     )
 
 
-def _classify_from_console(
-    result: CommandResult,
-    did_compile: bool,
+def _harness_failure(
+    result: CommandResult, reports: SurefireReport, failure_stage: str
 ) -> SuiteExecutionObservation:
-    """Fallback when no Surefire report exists: only coarse phases are knowable."""
-    if transformation_parse_failed(result.output):
-        return _phase_failure(result, "transformation_parse", compiled=True)
-    if not executes(result):
-        return _phase_failure(result, "test_discovery", compiled=did_compile)
-
-    counts = _console_test_counts(result.output)
-    if counts is None or counts.tests == 0:
-        # No XML, and no "Tests run: N" line saying a test ran. An exit code of
-        # 0 in that state is not evidence of a passing suite: it is what
-        # `-Dsurefire.failIfNoSpecifiedTests=false` produces when the selector
-        # matched nothing, and treating it as success would validate a suite
-        # that never executed.
-        return _phase_failure(result, "test_discovery", compiled=True)
-    if counts.errors > 0:
-        # Console summaries distinguish JUnit errors from assertion failures but
-        # do not identify which harness phase threw. Without XML, naming a phase
-        # would invent evidence.
-        return _phase_failure(
-            result, UNCLASSIFIED_RUNTIME, compiled=True, tests_discovered=True
-        )
-    if result.exit_code != 0 and counts.failures == 0:
-        return _phase_failure(
-            result, UNCLASSIFIED_RUNTIME, compiled=True, tests_discovered=True
-        )
-
-    assertions_passed = (
-        result.exit_code == 0 and counts.failures == 0 and counts.errors == 0
-    )
+    """The harness never got far enough to judge the oracle."""
     return SuiteExecutionObservation(
         compiled=True,
         tests_discovered=True,
-        models_loaded=True,
-        engine_started=True,
-        assertions_evaluated=True,
-        assertions_passed=assertions_passed,
+        models_loaded=failure_stage in _STAGES_WITH_MODELS_LOADED,
+        engine_started=failure_stage == FailureStage.ENGINE_RUNTIME,
+        assertions_evaluated=False,
+        assertions_passed=False,
         timed_out=False,
         maven_exit_code=result.exit_code,
-        failure_stage="" if assertions_passed else "assertion_failure",
+        failure_stage=failure_stage,
+        error_summary=(
+            reports.first_error
+            or reports.first_failure
+            or summarize_error(result.output)
+        ),
+    )
+
+
+def _classify_from_console(result: CommandResult) -> SuiteExecutionObservation:
+    """Fallback when no Surefire report exists: only coarse phases are knowable.
+
+    Only a compiled run reaches this fallback.
+    """
+    if transformation_parse_failed(result.output):
+        return _phase_failure(result, FailureStage.TRANSFORMATION_PARSE, compiled=True)
+
+    counts = _console_test_counts(result.output)
+    if not executes(result) or counts is None or counts.tests == 0:
+        # No XML, and nothing in the console shows that a test ran. An exit
+        # code of 0 in that state is not evidence of a passing suite: it is what
+        # `-Dsurefire.failIfNoSpecifiedTests=false` produces when the selector
+        # matched nothing, and treating it as success would validate a suite
+        # that never executed.
+        return _phase_failure(result, FailureStage.TEST_DISCOVERY, compiled=True)
+    if _console_shows_unexplained_error(result, counts):
+        return _phase_failure(
+            result,
+            FailureStage.UNCLASSIFIED_RUNTIME,
+            compiled=True,
+            tests_discovered=True,
+        )
+
+    assertions_passed = result.exit_code == 0 and counts.failures == 0
+    return _assertions_evaluated(
+        result,
+        assertions_passed=assertions_passed,
         error_summary="" if assertions_passed else summarize_error(result.output),
     )
+
+
+def _console_shows_unexplained_error(
+    result: CommandResult, counts: _ConsoleTestCounts
+) -> bool:
+    """Whether a test threw, or Maven failed with no failed assertion.
+
+    Console summaries distinguish JUnit errors from assertion failures but do
+    not identify which harness phase threw. Without XML, naming a phase would
+    invent evidence.
+    """
+    return counts.errors > 0 or (result.exit_code != 0 and counts.failures == 0)
 
 
 SUREFIRE_SUMMARY = re.compile(
@@ -219,6 +240,24 @@ def _console_test_counts(output: str) -> _ConsoleTestCounts | None:
     )
 
 
+def _assertions_evaluated(
+    result: CommandResult, *, assertions_passed: bool, error_summary: str
+) -> SuiteExecutionObservation:
+    """The harness ran every phase and judged the assertions."""
+    return SuiteExecutionObservation(
+        compiled=True,
+        tests_discovered=True,
+        models_loaded=True,
+        engine_started=True,
+        assertions_evaluated=True,
+        assertions_passed=assertions_passed,
+        timed_out=False,
+        maven_exit_code=result.exit_code,
+        failure_stage="" if assertions_passed else FailureStage.ASSERTION_FAILURE,
+        error_summary=error_summary,
+    )
+
+
 def _phase_failure(
     result: CommandResult,
     failure_stage: str,
@@ -233,7 +272,7 @@ def _phase_failure(
         engine_started=False,
         assertions_evaluated=False,
         assertions_passed=False,
-        timed_out=failure_stage == "timeout",
+        timed_out=failure_stage == FailureStage.TIMEOUT,
         maven_exit_code=result.exit_code,
         failure_stage=failure_stage,
         error_summary=summarize_error(result.output),
@@ -249,48 +288,60 @@ def execute_suite_against(
 ) -> tuple[SuiteExecutionObservation, RawExecutionEvidence]:
     """Run one rendered suite against ``transformation`` and observe the outcome.
 
-    The transformation is always injected explicitly: executability is only
-    meaningful relative to a known transformation, and the harness ships its own
-    copies that would otherwise be used silently.
+    The transformation is always copied in explicitly. Executability only means
+    something for a known transformation, and the harness ships its own copies
+    that would otherwise be used silently.
 
-    ``observations_root`` is where the harness writes the actual target models it
-    produced. Omitting it means this execution keeps no snapshot — which is a
-    caller's decision, never a silent default.
+    ``observations_root`` is where the harness writes the actual target models.
+    Passing ``None`` means this execution keeps no snapshot; that is the
+    caller's choice.
 
     Returns the observation and the raw evidence behind it. The evidence is read
     while the workspace lock is still held, because the next execution's
-    ``mvn clean`` deletes the reports this one produced.
+    ``mvn clean`` deletes these reports.
     """
     java_paths, model_paths = _suite_artifact_paths(suite)
 
-    # A run can receive concurrent stage requests. The run-local workspace keeps
-    # separate runs apart; this lock keeps two executions within the same run
-    # from injecting into that workspace at once.
+    # A run can receive concurrent stage requests. Each run has its own
+    # workspace; this lock stops two executions of the same run from copying
+    # files into it at the same time.
     with execution_workspace_lock(test_project_dir):
         injection = Injection()
         try:
             injection.copy_file(
                 transformation,
-                _transformation_destination(test_project_dir, suite.task),
+                transformation_destination(test_project_dir, suite.task),
             )
             inject_suite(suite, java_paths, model_paths, test_project_dir, injection)
-            command = _maven_command(java_paths, observations_root, suite)
-            result = run_maven(command, cwd=test_project_dir, timeout=timeout)
-            # `mvn clean` wipes target/ first, so these reports describe this run only.
-            reports_root = test_project_dir / "target" / "surefire-reports"
-            reports = read_surefire_reports(reports_root)
-            evidence = capture_execution_evidence(result, reports_root, reports)
+            return _run_and_observe(
+                suite, java_paths, test_project_dir, timeout, observations_root
+            )
         finally:
             injection.restore()
 
+
+def _run_and_observe(
+    suite: GeneratedSuite,
+    java_paths: list[Path],
+    test_project_dir: Path,
+    timeout: int,
+    observations_root: Path | None,
+) -> tuple[SuiteExecutionObservation, RawExecutionEvidence]:
+    """Run Maven once in the injected workspace and read what it left behind."""
+    command = _maven_command(java_paths, observations_root, suite)
+    result = run_maven(command, cwd=test_project_dir, timeout=timeout)
+    # `mvn clean` wipes target/ first, so these reports describe this run only.
+    reports_root = test_project_dir / SUREFIRE_REPORTS_DIR
+    reports = read_surefire_reports(reports_root)
+    evidence = capture_execution_evidence(result, reports_root, reports)
     return classify_maven_run(result, reports), evidence
 
 
 def _suite_artifact_paths(suite: GeneratedSuite) -> tuple[list[Path], list[Path]]:
     """Return deterministic Java and model input paths for ``suite``."""
-    java_paths = sorted(suite.path.glob("*.java"))
+    java_paths = sorted(suite.path.glob(JAVA_SOURCE_GLOB))
     model_paths = sorted(
-        path for path in (suite.path / "models").rglob("*") if path.is_file()
+        path for path in (suite.path / MODELS_DIRECTORY).rglob("*") if path.is_file()
     )
     return java_paths, model_paths
 
@@ -302,10 +353,10 @@ def _maven_command(
 ) -> list[str]:
     """Build the Maven command for one suite execution."""
     selector = ",".join(infer_fqcn(path) for path in java_paths)
-    command = ["mvn", "clean", "test", f"-Dtest={selector}"]
+    command = ["mvn", "clean", "test", f"{TEST_SELECTION_OPTION_PREFIX}{selector}"]
     if observations_root is not None:
         observations_dir = snapshot_dir(observations_root, suite)
-        command.append(f"-Dllm4mtl.observations.dir={observations_dir}")
+        command.append(f"{OBSERVATIONS_DIR_OPTION}{observations_dir}")
     return command
 
 
@@ -319,14 +370,6 @@ def execution_workspace_lock(test_project_dir: Path) -> Iterator[None]:
             yield
         finally:
             fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
-
-
-def _transformation_destination(test_project_dir: Path, task: str) -> Path:
-    from llm4mtl.semantic_tests.reference_validation.reference import (
-        transformation_destination,
-    )
-
-    return transformation_destination(test_project_dir, task)
 
 
 def observation_path(observations_root: Path, suite: GeneratedSuite) -> Path:
@@ -344,14 +387,14 @@ def observation_path(observations_root: Path, suite: GeneratedSuite) -> Path:
 def snapshot_dir(observations_root: Path, suite: GeneratedSuite) -> Path:
     """Where ``suite``'s actual output models are written, for one execution.
 
-    Scoped to the observation, not to the transformation. A snapshot's identity
-    is transformation + suite + test case + model slot, and the first three are
-    all in this path (the case is a directory the harness creates below it).
-    Sharing one directory per transformation let two suites with the same case
-    name overwrite each other's actual output — and a diagnosis assembled from
-    the survivor would describe a failure that never produced it.
+    The folder sits beside the observation, not beside the transformation. A
+    snapshot belongs to one transformation, suite, test case, and model slot;
+    the harness creates the test-case folder below this one. A folder shared by
+    all suites of one transformation would let two suites with the same case
+    name overwrite each other's output, and a diagnosis would then cite the
+    wrong output.
     """
-    return observation_path(observations_root, suite).parent / "snapshots"
+    return observation_path(observations_root, suite).parent / SNAPSHOTS_DIRNAME
 
 
 @contextmanager
@@ -382,30 +425,20 @@ def record_observation(
 ) -> Path:
     """Persist an observation together with the inputs it was derived from.
 
-    Validated on write: the funnel's denominators are derived from these records,
-    so a malformed one would corrupt a metric rather than fail a stage.
+    Validated on write: the funnel's denominators come from these records, so a
+    malformed one would silently corrupt a metric instead of failing a stage.
 
-    When ``evidence`` is supplied it is archived beside the observation in the
-    same call, so the run's permanent artifacts hold the complete Maven output
-    and Surefire reports this observation was derived from. That has to happen
-    here rather than at the end of the stage: the workspace those reports live
-    in is wiped by the next execution's ``mvn clean``.
+    When ``evidence`` is given, it is archived beside the observation in the
+    same call, so the run keeps the full Maven output and Surefire reports
+    behind this observation. This cannot wait until the end of the stage: the
+    next execution's ``mvn clean`` wipes those reports.
     """
     path = observation_path(observations_root, suite)
     identity = _suite_identity(suite)
     inputs = _input_identity(
-        suite,
-        transformation,
-        transformation_role=transformation_role,
+        suite, transformation, transformation_role=transformation_role
     )
-    payload = {
-        "schema_version": SCHEMA_VERSION,
-        **identity,
-        "inputs": inputs,
-        "observation": observation.to_dict(),
-    }
-    validate_artifact("suite-execution", payload)
-    write_json(path, payload)
+    _write_observation(path, identity, inputs, observation)
     if evidence is not None:
         write_execution_evidence(
             path,
@@ -418,6 +451,23 @@ def record_observation(
     return path
 
 
+def _write_observation(
+    path: Path,
+    identity: dict[str, str],
+    inputs: dict[str, dict[str, str]],
+    observation: SuiteExecutionObservation,
+) -> None:
+    """Validate the observation record against its schema, then write it."""
+    payload = {
+        "schema_version": SCHEMA_VERSION,
+        **identity,
+        "inputs": inputs,
+        "observation": observation.to_dict(),
+    }
+    validate_artifact(OBSERVATION_SCHEMA, payload)
+    write_json(path, payload)
+
+
 def read_observation(
     observations_root: Path,
     suite: GeneratedSuite,
@@ -427,15 +477,15 @@ def read_observation(
 ) -> SuiteExecutionObservation | None:
     """The recorded observation for exactly these inputs, or ``None``.
 
-    A record made from a different suite or a different transformation is not a
-    result about this execution, so it is ignored rather than reused: that is
-    what turns a stale artifact into a silent gate.
+    A record made from a different suite or transformation says nothing about
+    this execution, so it is ignored. Reusing it would let a stale file decide
+    the verdict without anyone noticing.
     """
     path = observation_path(observations_root, suite)
     if not path.is_file():
         return None
     payload = read_json(path)
-    validate_artifact("suite-execution", payload)
+    validate_artifact(OBSERVATION_SCHEMA, payload)
     expected_identity = _suite_identity(suite)
     if any(payload.get(name) != value for name, value in expected_identity.items()):
         return None
@@ -467,7 +517,7 @@ def _input_identity(
         "suite": ArtifactRef(
             path=repository_relative(suite.path),
             sha256=directory_sha256(suite.path),
-            role="generated_suite",
+            role=GENERATED_SUITE_ROLE,
         ).to_dict(),
         "transformation": ArtifactRef(
             path=repository_relative(transformation),

@@ -1,23 +1,21 @@
 """Validation of persisted artifacts against the canonical JSON Schemas.
 
 ``schemas/`` is the contract shared by n8n, Python, and the stored experiment
-evidence. Until now nothing enforced it, so schemas documented an intent the
-writers had drifted away from. Every store that persists a scientific artifact
-validates it here *before* writing, so a divergence fails loudly at the moment
-it is introduced instead of silently corrupting a run.
+evidence. Every store that persists a scientific artifact validates it here
+*before* writing, so a mismatch fails loudly when it is introduced instead of
+silently corrupting a run.
 
-Validation is deliberately strict: a schema violation is a defect in the writer
-or in the schema, never something to repair at runtime.
+Validation is strict: a schema violation is a defect in the writer or in the
+schema, never something to repair at runtime.
 
 Versioning policy
 -----------------
 Each persisted artifact pins its ``schema_version`` with ``const``. A change that
-alters the meaning of an existing field, removes one, or changes what a reader
-must accept is breaking: bump the version, and old artifacts then fail validation
-loudly instead of being silently reinterpreted. Runs are regenerable output under
-``artifacts/work/``, so the migration for a breaking change is to re-run rather
-than to rewrite stored evidence — rewriting it would make a past result
-unreproducible from the code that produced it.
+alters the meaning of a field, removes one, or changes what a reader must accept
+is breaking: bump the version, so old artifacts fail validation instead of being
+silently reinterpreted. Runs under ``artifacts/work/`` can be regenerated, so the
+migration is to re-run. Never rewrite stored evidence: the past result would no
+longer match the code that produced it.
 """
 
 from __future__ import annotations
@@ -43,10 +41,9 @@ FORMAT_CHECKER = FormatChecker()
 def _is_rfc3339_date_time(value: object) -> bool:
     """Validate the RFC 3339 subset emitted by this repository.
 
-    ``jsonschema`` only installs its date-time checker when an optional package
-    is present. Registering this small checker keeps format validation active in
-    the project's declared base dependency instead of silently accepting every
-    string on installations without that extra.
+    ``jsonschema`` installs its own date-time checker only when an optional
+    package is present. Without this checker, installations lacking that extra
+    would silently accept every string.
     """
     if not isinstance(value, str):
         return True

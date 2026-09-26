@@ -19,7 +19,6 @@ from llm4mtl.languages import (
     REQUIRED_LANGUAGES,
     LanguageAdapter,
     Workspace,
-    implemented_languages,
     language_adapter,
 )
 from llm4mtl.paths import TARGET
@@ -47,8 +46,7 @@ FIXTURES = TARGET.pipeline / "tests/fixtures/walking_skeletons"
 
 class FourLanguageCoverageTests(unittest.TestCase):
 
-    def test_registry_contains_exactly_the_four_required_adapters(self) -> None:
-        self.assertEqual(tuple(sorted(REQUIRED_LANGUAGES)), implemented_languages())
+    def test_every_required_language_resolves_to_its_adapter(self) -> None:
         for language in REQUIRED_LANGUAGES:
             with self.subTest(language=language):
                 adapter = language_adapter(language)

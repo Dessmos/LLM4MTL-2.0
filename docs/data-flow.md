@@ -132,7 +132,7 @@ artifacts/work/test_generation/generated_tests/<lang>/
 ```
 
 A candidate directory is immutable. A second artifact needs a new `suite-id`;
-the compatibility `--overwrite` flag cannot replace scientific evidence.
+there is no option that replaces an existing candidate.
 
 ## Syntax validation
 
@@ -226,10 +226,6 @@ current-run reference-valid candidate
   → typed execution observation / normalized failure
   → stage counts and evidence
 ```
-
-The standalone `transformation_execution` CLI follows the same eligibility rule:
-it requires `--observations-root` and does not discover historical
-`validated/` copies.
 
 All four languages render post-execution EMF snapshots of the actual target
 models. A snapshot's identity is transformation + suite + test case + model

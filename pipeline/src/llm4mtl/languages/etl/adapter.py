@@ -1,18 +1,16 @@
 """The ETL implementation of :class:`~llm4mtl.languages.base.LanguageAdapter`.
 
-Everything ETL-specific the pipeline depends on is reachable from here: where
-reference transformations live, how a rendered suite is executed against the
-Epsilon harness through Maven, and how the Epsilon parser is invoked.
+Everything ETL-specific the pipeline needs is reachable from here: where
+reference transformations live, how a suite runs in the Epsilon harness through
+Maven, and how the Epsilon parser is called.
 
-The parser is an external Java tool, so it stays a subprocess — but its JSON
-output is parsed as data rather than scraped from human-readable text, which is
-what lets the pipeline report typed observations instead of regex matches.
+The parser runs as a subprocess. Its driver prints a JSON report, which is read
+as data instead of matching text with regular expressions.
 """
 
 from __future__ import annotations
 
 import json
-import subprocess
 import sys
 from pathlib import Path
 from typing import Sequence
@@ -31,29 +29,27 @@ from llm4mtl.domain import (
     SuiteExecutionObservation,
     TransformationOutcome,
 )
+from llm4mtl.domain.observations import FailureStage
 from llm4mtl.languages.base import Workspace
 from llm4mtl.languages.common import (
+    combined_output,
+    diagnostic_tail,
+    failed_for_every_file,
     materialize_parser,
     pom_properties,
+    run_parser_command,
     validate_rendered_suite,
 )
-from llm4mtl.paths import TARGET
-from llm4mtl.semantic_tests.suite_execution import execute_suite_against
-from llm4mtl.semantic_tests.surefire import UNCLASSIFIED_RUNTIME
 from llm4mtl.languages.etl.rendering import render_semantic_test
+from llm4mtl.paths import TARGET
 from llm4mtl.semantic_tests.extraction.semantic_cases import render_generated_suite
+from llm4mtl.semantic_tests.suite_execution import execute_suite_against
 
-PARSER_TIMEOUT_SECONDS = 900
-
-
-def _failed_parse_observations(
-    transformations: Sequence[Path],
-    diagnostic: str,
-) -> dict[Path, ParseObservation]:
-    return {
-        path: ParseObservation(parsed=False, diagnostic=diagnostic)
-        for path in transformations
-    }
+PARSER_BUILD_COMMAND = ("mvn", "-q", "compile")
+PARSER_DRIVER = "validate_etl_syntax.py"
+# The driver also writes a per-file CSV; it is kept only as run evidence.
+PARSER_RESULTS_FILE = "generated_transformation_syntax.csv"
+DRIVER_COMPLETED = "completed"
 
 
 def _completed_parse_observations(
@@ -66,10 +62,9 @@ def _completed_parse_observations(
     all_selected_passed = len(transformations) == int(
         payload.get("selected") or 0
     ) and len(transformations) == int(payload.get("passed") or 0)
-    # The driver reports the Epsilon parse problems per file. Falling back to the
-    # whole report keeps an older driver readable, but that fallback only repeats
-    # the verdict: it is the report that says which files failed, and a model
-    # asked to repair a file it already knows was rejected learns nothing.
+    # Prefer the file's own Epsilon problems: a repair model learns nothing from
+    # being told again that its file was rejected. The whole report is only a
+    # fallback for a failed file the driver gave no problems for.
     reported = {
         Path(str(key)).resolve(): str(value)
         for key, value in (payload.get("diagnostics") or {}).items()
@@ -129,12 +124,7 @@ class EtlAdapter:
         )
 
     def validate_suite_artifacts(self, suite: GeneratedSuite) -> ArtifactValidation:
-        """Everything that disqualifies a suite without running Maven.
-
-        The checks are the shared ones. ETL used to reimplement them, which is
-        how it ended up the one language that accepted a suite with no task
-        contract behind it.
-        """
+        """Everything that disqualifies a suite without running Maven."""
         contract = self._contracts_root / f"{suite.task}.json"
         return validate_rendered_suite(suite, contract_exists=contract.is_file())
 
@@ -157,11 +147,11 @@ class EtlAdapter:
         self,
         observation: SuiteExecutionObservation,
     ) -> TransformationOutcome | None:
-        """Map ETL engine failures without inventing a semantic snapshot.
+        """Map ETL execution failures to a transformation outcome.
 
-        Same contract as :func:`llm4mtl.languages.common.normalize_failure`: the
-        suite is already reference-validated here, so an unrecognized throw is a
-        runtime failure of this pairing rather than an unusable observation.
+        Same as :func:`llm4mtl.languages.common.normalize_failure`, except that
+        there is no ``java_compilation`` row: a Java compile failure maps to
+        ``None``.
         """
         if observation.timed_out:
             return TransformationOutcome(
@@ -169,11 +159,11 @@ class EtlAdapter:
                 diagnostic=observation.error_summary,
             )
         status = {
-            "transformation_parse": OutcomeStatus.PARSE_FAILED,
-            "model_loading": OutcomeStatus.RUNTIME_FAILED,
-            "engine_runtime": OutcomeStatus.RUNTIME_FAILED,
-            UNCLASSIFIED_RUNTIME: OutcomeStatus.RUNTIME_FAILED,
-            "infrastructure": OutcomeStatus.INFRASTRUCTURE_FAILED,
+            FailureStage.TRANSFORMATION_PARSE: OutcomeStatus.PARSE_FAILED,
+            FailureStage.MODEL_LOADING: OutcomeStatus.RUNTIME_FAILED,
+            FailureStage.ENGINE_RUNTIME: OutcomeStatus.RUNTIME_FAILED,
+            FailureStage.UNCLASSIFIED_RUNTIME: OutcomeStatus.RUNTIME_FAILED,
+            FailureStage.INFRASTRUCTURE: OutcomeStatus.INFRASTRUCTURE_FAILED,
         }.get(observation.failure_stage)
         if status is None:
             return None
@@ -188,12 +178,10 @@ class EtlAdapter:
     ) -> dict[Path, ParseObservation]:
         """Run the Epsilon parser driver and read its JSON report.
 
-        Every observation leaves ``problem_count`` unset, which records it as
-        unmeasured rather than as zero. The driver does compute a per-file count
-        and writes it to its CSV, but its JSON report — the only thing read here
-        — carries pass/fail lists and totals, not per-file counts. Reporting 0
-        would state that Epsilon found no problems in files it may have rejected.
-        See ``engines/etl/parser/validate_etl_syntax.py``.
+        ``problem_count`` stays unset (not measured). The driver writes per-file
+        counts only to its CSV; the JSON report read here has pass/fail lists
+        and totals. Reporting 0 would claim Epsilon found no problems in a file
+        it may have rejected. See ``engines/etl/parser/validate_etl_syntax.py``.
         """
         if not transformations:
             return {}
@@ -203,49 +191,37 @@ class EtlAdapter:
             workspace,
             self.language_id,
         )
-        build = subprocess.run(
-            ["mvn", "-q", "compile"],
-            cwd=parser_dir,
-            capture_output=True,
-            text=True,
-            timeout=PARSER_TIMEOUT_SECONDS,
-        )
+        build = run_parser_command(PARSER_BUILD_COMMAND, parser_dir)
         if build.returncode != 0:
-            diagnostic = f"{build.stdout}\n{build.stderr}".strip()[-500:]
-            return _failed_parse_observations(transformations, diagnostic)
-        command = [sys.executable, str(parser_dir / "validate_etl_syntax.py")]
-        for transformation in transformations:
-            command.extend(("--transformation", str(transformation)))
-        workspace.observations_dir.mkdir(parents=True, exist_ok=True)
-        results_file = (
-            workspace.observations_dir / "generated_transformation_syntax.csv"
-        )
-        command.extend(
-            (
-                "--results-file",
-                str(results_file),
-                "--output-format",
-                "json",
-            )
-        )
-
-        completed = subprocess.run(
-            command,
-            cwd=parser_dir,
-            capture_output=True,
-            text=True,
-            timeout=PARSER_TIMEOUT_SECONDS,
+            diagnostic = diagnostic_tail(combined_output(build))
+            return failed_for_every_file(transformations, diagnostic)
+        completed = run_parser_command(
+            _driver_command(parser_dir, transformations, workspace), parser_dir
         )
         payload = _last_json_object(completed.stdout)
-        if payload.get("status") != "completed":
+        if payload.get("status") != DRIVER_COMPLETED:
             diagnostic = str(
                 payload.get("error")
                 or completed.stderr.strip()
                 or "parser driver failed"
             )
-            return _failed_parse_observations(transformations, diagnostic)
-
+            return failed_for_every_file(transformations, diagnostic)
         return _completed_parse_observations(transformations, payload)
+
+
+def _driver_command(
+    parser_dir: Path,
+    transformations: Sequence[Path],
+    workspace: Workspace,
+) -> list[str]:
+    """The parser driver call, with a JSON report and the CSV in run evidence."""
+    command = [sys.executable, str(parser_dir / PARSER_DRIVER)]
+    for transformation in transformations:
+        command.extend(("--transformation", str(transformation)))
+    workspace.observations_dir.mkdir(parents=True, exist_ok=True)
+    results_file = workspace.observations_dir / PARSER_RESULTS_FILE
+    command.extend(("--results-file", str(results_file), "--output-format", "json"))
+    return command
 
 
 def _last_json_object(stdout: str) -> dict[str, object]:

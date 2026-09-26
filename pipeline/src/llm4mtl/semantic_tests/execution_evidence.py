@@ -1,22 +1,16 @@
-"""Raw execution evidence, captured before the next ``mvn clean`` destroys it.
+"""Raw execution evidence, saved before the next ``mvn clean`` deletes it.
 
-Maven writes its Surefire XML into the engine workspace's ``target/`` directory,
-and every execution this pipeline performs begins with ``mvn clean``. The reports
-describing execution N therefore stop existing the moment execution N+1 starts in
-the same workspace, and the workspace is scratch space that no recorded result
-may depend on. Source Diagnosis runs after the whole stage has finished, so by
-the time it asks what actually happened, the authoritative evidence is already
-gone.
+Maven writes its Surefire XML into the workspace's ``target/`` folder, and every
+execution starts with ``mvn clean``. So the reports of execution N disappear
+when execution N+1 starts in the same workspace. Diagnosis preparation runs
+after the whole stage, when those reports are already gone.
 
-This module captures that evidence at the point of execution — while the
-workspace lock is still held — and writes it into the run's permanent artifact
-tree beside the observation it explains.
+This module reads the evidence right after execution, while the workspace lock
+is still held, and writes it into the run's permanent artifacts beside the
+observation it explains.
 
-Nothing here interprets anything. ``error_summary`` remains the short derived
-summary on the observation, the phase classification is unchanged, and a missing
-report is recorded as missing rather than filled in with zeros: a count of zero
-tests and an unknown number of tests are different facts, and only one of them
-can be read off an absent report.
+Nothing here interprets anything. A missing report is recorded as missing, not
+as zeros: zero tests and an unknown number of tests are different facts.
 """
 
 from __future__ import annotations
@@ -29,7 +23,7 @@ from typing import Any
 from llm4mtl.artifact_schemas import validate_artifact
 from llm4mtl.domain import RawExecutionEvidence, SurefireArtifact
 from llm4mtl.external_tools.maven import CommandResult
-from llm4mtl.semantic_tests.surefire import SurefireReport
+from llm4mtl.semantic_tests.surefire import REPORT_FILE_GLOB, SurefireReport
 from llm4mtl.serialization.json_io import write_json
 
 SCHEMA_VERSION = "1.0"
@@ -51,7 +45,7 @@ def capture_execution_evidence(
     Call this while the workspace lock is still held. Once the reports are read,
     no later ``mvn clean`` can affect what gets persisted.
     """
-    files = sorted(reports_dir.glob("TEST-*.xml")) if reports_dir.is_dir() else []
+    files = sorted(reports_dir.glob(REPORT_FILE_GLOB)) if reports_dir.is_dir() else []
     artifacts = tuple(
         SurefireArtifact(
             name=path.name,
@@ -145,7 +139,7 @@ def archived_execution_evidence(observation_path: Path) -> ArchivedEvidence:
     return ArchivedEvidence(
         directory=directory,
         surefire_reports=(
-            tuple(sorted(reports.glob("TEST-*.xml"))) if reports.is_dir() else ()
+            tuple(sorted(reports.glob(REPORT_FILE_GLOB))) if reports.is_dir() else ()
         ),
         execution_log=stdout if stdout.is_file() else None,
     )
@@ -162,9 +156,8 @@ def _manifest(
     return {
         "schema_version": SCHEMA_VERSION,
         **suite_identity,
-        # The same artifact refs the observation records, so evidence and
-        # observation name the same suite and the same transformation in the
-        # same role. `role` is what separates a reference execution from a
+        # The same artifact refs as the observation, so both name the same
+        # suite and transformation. `role` tells a reference execution from a
         # generated-transformation one.
         "inputs": inputs,
         "maven": {

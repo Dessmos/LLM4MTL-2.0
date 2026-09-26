@@ -1,4 +1,5 @@
-"""Adapter for generated-test extraction and validation tools."""
+"""The stages that extract generated suites and validate them technically and
+against the reference transformation."""
 
 from __future__ import annotations
 
@@ -10,16 +11,12 @@ from llm4mtl.conventions import (
     language_config,
 )
 from llm4mtl.languages import language_adapter
+from llm4mtl.run_store.models import RunPaths
 from llm4mtl.semantic_tests.extraction.discovery import response_target_from_path
 from llm4mtl.semantic_tests.extraction.extract import extract_one
 from llm4mtl.semantic_tests.extraction.models import ExtractionOptions
 from llm4mtl.semantic_tests.reference_validation.runner import validate_suite
-from llm4mtl.semantic_tests.suites.discovery import (
-    candidate_identity,
-    candidate_suite_directories,
-    matches_selection,
-    suite_from_path,
-)
+from llm4mtl.semantic_tests.suites.discovery import suite_from_path
 from llm4mtl.semantic_tests.technical_validation.suite import check_suite
 from llm4mtl.semantic_tests.validation import (
     ValidationContext,
@@ -28,21 +25,26 @@ from llm4mtl.semantic_tests.validation import (
     technical_counts,
     workspace_for,
 )
-from llm4mtl.stages.models import ConfigError, PipelineConfig, StageResult
-from llm4mtl.stages.selection import fixed_selection, hash_paths
+from llm4mtl.stages.models import (
+    EXTRACTION_STAGE_NAME,
+    REFERENCE_VALIDATION_STAGE_NAME,
+    SUITE_TIMEOUT_SECONDS,
+    TECHNICAL_VALIDATION_STAGE_NAME,
+    ConfigError,
+    PipelineConfig,
+    StageResult,
+)
+from llm4mtl.stages.selection import (
+    dry_run_result,
+    existing_files,
+    fixed_selection,
+    hash_paths,
+    nothing_selected_result,
+    select_candidate_suites,
+    select_generated_files,
+)
 
-# Maven timeout for one suite execution. Matches the CLI default; the stage
-# service has no per-request timeout of its own.
-DEFAULT_SUITE_TIMEOUT_SECONDS = 240
-
-
-def _single_identity_value(axis: str, values: list[str]) -> str:
-    selected = fixed_selection(axis, values)
-    if len(selected) != 1:
-        raise ConfigError(
-            f"extraction requires exactly one {axis}; selected {len(selected)}"
-        )
-    return next(iter(selected))
+RESPONSE_EXTENSION = "md"
 
 
 class TestGenerationAdapter:
@@ -52,9 +54,6 @@ class TestGenerationAdapter:
     language, so adding one means adding its conventions and adapter, not
     editing this class.
     """
-
-    def __init__(self, repo_root: Path) -> None:
-        self.repo_root = repo_root.resolve()
 
     @staticmethod
     def responses_root(config: PipelineConfig) -> Path:
@@ -67,64 +66,23 @@ class TestGenerationAdapter:
     def extract(self, config: PipelineConfig, dry_run: bool) -> StageResult:
         responses = self.select_responses(config)
         input_hash = hash_paths(responses)
-        details = {"responses": [str(path) for path in responses]}
+        details: dict[str, object] = {"responses": [str(path) for path in responses]}
         if not responses:
-            return StageResult(
-                "extraction",
-                "error",
-                {"selected": 0, "failed": 1},
-                details,
-                input_hash,
-            )
+            return nothing_selected_result(EXTRACTION_STAGE_NAME, details, input_hash)
         if config.suite_id and len(responses) != 1:
             raise ConfigError(
                 "--suite-id can only be used when exactly one response is selected."
             )
         if dry_run:
-            return StageResult(
-                "extraction",
-                "dry_run",
-                {"selected": len(responses)},
-                details,
-                input_hash,
+            return dry_run_result(
+                EXTRACTION_STAGE_NAME, len(responses), details, input_hash
             )
 
-        extraction_options = ExtractionOptions(
-            generated_tests_root=self.generated_tests_root(config),
-            suite_id=config.suite_id,
-        )
-        adapter = language_adapter(config.language)
-        selected_model = _single_identity_value(
-            "test-generation model", config.test_models
-        )
-        selected_strategy = _single_identity_value("strategy", config.test_strategies)
-        selected_task = _single_identity_value("task", config.tasks)
-        extraction_outcomes = []
-        for response in responses:
-            target = response_target_from_path(
-                response_path=response,
-                responses_root=self.responses_root(config),
-                # Stage-service generation responses are run-scoped rather than
-                # filed below the shared <model>/<strategy> convenience tree.
-                # Their identity comes from the immutable manifest, while the
-                # filename must still agree with its one task.
-                llm_override=selected_model,
-                strategy_override=selected_strategy,
-                task_override=selected_task,
-            )
-            extracted, message = extract_one(target, extraction_options, adapter)
-            extraction_outcomes.append(
-                {
-                    "response": str(response),
-                    "extracted": extracted,
-                    "detail": message,
-                }
-            )
-
-        created = sum(1 for outcome in extraction_outcomes if outcome["extracted"])
-        details["outcomes"] = extraction_outcomes
+        outcomes = self._extract_responses(config, responses)
+        created = sum(1 for outcome in outcomes if outcome["extracted"])
+        details["outcomes"] = outcomes
         return StageResult(
-            "extraction",
+            EXTRACTION_STAGE_NAME,
             "completed",
             {
                 "selected": len(responses),
@@ -135,13 +93,39 @@ class TestGenerationAdapter:
             input_hash,
         )
 
+    def _extract_responses(
+        self,
+        config: PipelineConfig,
+        responses: list[Path],
+    ) -> list[dict[str, object]]:
+        """Extract one candidate suite per response and report each outcome."""
+        options = ExtractionOptions(
+            generated_tests_root=self.generated_tests_root(config),
+            suite_id=config.suite_id,
+        )
+        adapter = language_adapter(config.language)
+        identity = _response_identity(config)
+        responses_root = self.responses_root(config)
+        outcomes: list[dict[str, object]] = []
+        for response in responses:
+            target = response_target_from_path(
+                response_path=response,
+                responses_root=responses_root,
+                **identity,
+            )
+            extracted, message = extract_one(target, options, adapter)
+            outcomes.append(
+                {"response": str(response), "extracted": extracted, "detail": message}
+            )
+        return outcomes
+
     def technical_validation(
         self,
         config: PipelineConfig,
         dry_run: bool,
     ) -> StageResult:
         return self._validate_suites(
-            name="technical_validation",
+            name=TECHNICAL_VALIDATION_STAGE_NAME,
             config=config,
             dry_run=dry_run,
             judge_as_oracle=False,
@@ -153,7 +137,7 @@ class TestGenerationAdapter:
         dry_run: bool,
     ) -> StageResult:
         return self._validate_suites(
-            name="reference_validation",
+            name=REFERENCE_VALIDATION_STAGE_NAME,
             config=config,
             dry_run=dry_run,
             judge_as_oracle=True,
@@ -176,21 +160,9 @@ class TestGenerationAdapter:
         input_hash = hash_paths(suite_paths)
         details: dict[str, object] = {"suites": [str(path) for path in suite_paths]}
         if not suite_paths:
-            return StageResult(
-                name,
-                "error",
-                {"selected": 0, "failed": 1},
-                details,
-                input_hash,
-            )
+            return nothing_selected_result(name, details, input_hash)
         if dry_run:
-            return StageResult(
-                name,
-                "dry_run",
-                {"selected": len(suite_paths)},
-                details,
-                input_hash,
-            )
+            return dry_run_result(name, len(suite_paths), details, input_hash)
 
         context = self.validation_context(config)
         verdicts = self._suite_verdicts(
@@ -199,21 +171,9 @@ class TestGenerationAdapter:
             context,
             judge_as_oracle,
         )
-
-        counts = (
-            reference_counts(verdicts, len(suite_paths))
-            if judge_as_oracle
-            else technical_counts(verdicts, len(suite_paths))
-        )
-        details["verdicts"] = [
-            {
-                "suite": str(verdict.suite.path),
-                "status": verdict.status,
-                "failure_stage": verdict.failure_stage,
-                "error_summary": verdict.error_summary,
-            }
-            for verdict in verdicts
-        ]
+        count = reference_counts if judge_as_oracle else technical_counts
+        counts = count(verdicts, len(suite_paths))
+        details["verdicts"] = [_verdict_detail(verdict) for verdict in verdicts]
         if counts.get("skipped"):
             details["skip_reason"] = (
                 "SKIPPED_NOT_EXECUTABLE"
@@ -231,10 +191,9 @@ class TestGenerationAdapter:
     ) -> list[SuiteVerdict]:
         """Run the selected validation gate over immutable suite candidates."""
         validate = validate_suite if judge_as_oracle else check_suite
-        generated_tests_root = self.generated_tests_root(config)
         return [
             validate(
-                suite_from_path(path, generated_tests_root, config.language),
+                suite_from_path(path, config.language),
                 context,
             )
             for path in suite_paths
@@ -247,61 +206,73 @@ class TestGenerationAdapter:
         return ValidationContext(
             adapter=language_adapter(config.language),
             workspace=workspace_for(engine_dir, self.observations_root(config)),
-            timeout=DEFAULT_SUITE_TIMEOUT_SECONDS,
+            timeout=SUITE_TIMEOUT_SECONDS,
         )
 
     def observations_root(self, config: PipelineConfig) -> Path:
         """Where this run records suite-execution observations.
 
-        Scoping them to the run is what lets reference validation reuse the
-        technical stage's execution without a result from an earlier run
-        deciding anything about this one. The orchestrator resolves this path
-        through the run store before invoking an adapter.
+        Scoping them to the run lets reference validation reuse the technical
+        stage's execution, while no result from an earlier run decides anything
+        about this one. Both entry points set ``config.run_dir`` through the run
+        store before they call a stage.
         """
         if not config.run_dir:
             raise ConfigError(
                 "a resolved run directory is required: suite-execution observations "
                 "must belong to the current run"
             )
-        return Path(config.run_dir).resolve() / "observations"
+        return RunPaths(Path(config.run_dir).resolve()).observations_dir
 
     def select_responses(self, config: PipelineConfig) -> list[Path]:
         if config.responses:
-            return sorted(
-                Path(path).resolve()
-                for path in config.responses
-                if Path(path).is_file()
-            )
-        tasks = set(config.tasks)
+            return existing_files(config.responses)
         models = fixed_selection("test-generation model", config.test_models)
         strategies = fixed_selection("strategy", config.test_strategies)
-        return sorted(
-            path.resolve()
-            for path in self.responses_root(config).glob("*/*/*.md")
-            if path.parent.parent.name in models
-            and path.parent.name in strategies
-            and (config.all_tasks or path.stem in tasks)
+        return select_generated_files(
+            self.responses_root(config),
+            RESPONSE_EXTENSION,
+            config,
+            models=models,
+            strategies=strategies,
         )
 
     def select_candidate_suites(self, config: PipelineConfig) -> list[Path]:
-        if config.suites:
-            return sorted(
-                Path(path).resolve()
-                for path in config.suites
-                if Path(path).is_dir() and "candidates" in Path(path).parts
-            )
-        tasks = set(config.tasks)
-        models = fixed_selection("test-generation model", config.test_models)
-        strategies = fixed_selection("strategy", config.test_strategies)
-        return sorted(
-            path
-            for path in candidate_suite_directories(self.generated_tests_root(config))
-            if matches_selection(
-                candidate_identity(path),
-                tasks=tasks,
-                models=models,
-                strategies=strategies,
-                all_tasks=config.all_tasks,
-                suite_id=config.suite_id,
-            )
+        return select_candidate_suites(config, self.generated_tests_root(config))
+
+
+def _single_identity_value(axis: str, values: list[str]) -> str:
+    selected = fixed_selection(axis, values)
+    if len(selected) != 1:
+        raise ConfigError(
+            f"extraction requires exactly one {axis}; selected {len(selected)}"
         )
+    return next(iter(selected))
+
+
+def _response_identity(config: PipelineConfig) -> dict[str, str]:
+    """The identity every selected response is extracted under.
+
+    Stage-service responses live in the run, not below the shared
+    <model>/<strategy> tree, so their path does not name the model or strategy.
+    The identity comes from the run's selections instead (the stage service
+    fills them from the manifest); the filename must still match the one task.
+    """
+    return {
+        "llm_override": _single_identity_value(
+            "test-generation model", config.test_models
+        ),
+        "strategy_override": _single_identity_value(
+            "strategy", config.test_strategies
+        ),
+        "task_override": _single_identity_value("task", config.tasks),
+    }
+
+
+def _verdict_detail(verdict: SuiteVerdict) -> dict[str, object]:
+    return {
+        "suite": str(verdict.suite.path),
+        "status": verdict.status,
+        "failure_stage": verdict.failure_stage,
+        "error_summary": verdict.error_summary,
+    }

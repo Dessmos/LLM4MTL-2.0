@@ -1,13 +1,11 @@
 """Human-readable rendering of a task contract.
 
 Every contract is written twice: the ``.json`` the pipeline enforces, and the
-``.txt`` rendered here for review. The table is deliberately language-neutral —
-it names the transformation's runtime slots, not any one language's concepts —
-so a reviewer reads ETL, ATL, QVT-O, and Reactions contracts the same way.
+``.txt`` table rendered here for human review. The table names runtime slots,
+not language-specific concepts, so contracts of all four languages read the
+same way.
 
-This is review material, not prompt material: the raw contract never reaches an
-LLM. The prompt-generation stage receives the reference, the exact metamodel
-files the contract selects, and the grammar.
+The ``.txt`` is for review only; no contract text is sent to an LLM.
 """
 
 from __future__ import annotations
@@ -16,7 +14,7 @@ from llm4mtl.task_contracts.models import TaskContract
 
 
 def contract_header_markdown(contract: TaskContract) -> str:
-    """Render the authoritative model-contract table and rules."""
+    """The contract as a Markdown table plus its rules."""
     lines = [
         "## Deterministic model contract (preflight)",
         "",

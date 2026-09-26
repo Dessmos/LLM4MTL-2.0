@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import re
 import subprocess
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Sequence
 
@@ -17,45 +18,51 @@ from llm4mtl.domain import (
     SuiteExecutionObservation,
     TransformationOutcome,
 )
+from llm4mtl.external_tools.maven import (
+    MAVEN_TEST_JAVA_DIR,
+    MAVEN_TEST_RESOURCES_DIR,
+    TEST_SELECTION_OPTION_PREFIX,
+)
 from llm4mtl.languages.base import Workspace
 from llm4mtl.languages.common import (
+    ALLOW_MODULES_WITHOUT_SELECTED_TESTS,
+    TEST_SELECTION_OPTION,
+    MavenHarness,
+    combined_output,
+    diagnostic_tail,
     execute_maven_suite,
     materialize_parser,
     normalize_failure,
+    run_parser_command,
     validate_rendered_suite,
 )
+from llm4mtl.languages.java_resources import java_text
 from llm4mtl.languages.qvto.rendering import render_qvto_test
 from llm4mtl.paths import TARGET
 from llm4mtl.semantic_tests.extraction.semantic_cases import render_generated_suite
-from llm4mtl.semantic_tests.suites.java import slug
+from llm4mtl.semantic_tests.suites.generated_models import generated_models_dir
+from llm4mtl.semantic_tests.surefire import SUREFIRE_REPORTS_DIR
 
-PARSER_TIMEOUT_SECONDS = 900
-PARSE_LINE = re.compile(r"LLM4MTL_PARSE\t(.+?)\t(\d+)")
-# The probe reports each ANTLR problem as well as their count: the count alone
-# tells a refinement loop only that the file was rejected.
-PROBLEM_LINE = re.compile(r"LLM4MTL_PROBLEM\t(.+?)\t(.+)")
-PARSER_PROBE = """\
-package org.qvto.parser;
+# Versions pinned by engines/qvto/harness/qvto-tests/pom.xml: the harness
+# project's own version and its junit.version property.
+QVTO_HARNESS_VERSION = "1.0.0"
+JUNIT_VERSION = "5.10.2"
 
-import java.nio.file.Path;
-import org.junit.jupiter.api.Test;
+# The harness project and the module inside it that runs the suites.
+HARNESS_PROJECT = "qvto-tests"
+HARNESS_MODULE = "actual"
 
-public class Llm4mtlParserProbeTest {
-    @Test
-    void parseRequestedFiles() throws Exception {
-        String raw = System.getProperty("llm4mtl.files", "");
-        for (String item : raw.split(java.io.File.pathSeparator)) {
-            if (item.isBlank()) continue;
-            QVTOParserFacade facade = new QVTOParserFacade();
-            facade.parseFile(Path.of(item));
-            System.out.println("LLM4MTL_PARSE\\t" + item + "\\t" + facade.getProblemCount());
-            for (String problem : facade.getProblems()) {
-                System.out.println("LLM4MTL_PROBLEM\\t" + item + "\\t" + problem);
-            }
-        }
-    }
-}
-"""
+# A JUnit test copied into the parser project. It parses the requested files
+# and prints one marker line per file, then one per problem found.
+PROBE_CLASS = "Llm4mtlParserProbeTest"
+PROBE_SOURCE = f"{PROBE_CLASS}.java.txt"
+PROBE_DESTINATION = f"{MAVEN_TEST_JAVA_DIR}/org/qvto/parser/{PROBE_CLASS}.java"
+PARSE_MARKER = "LLM4MTL_PARSE\t"
+PROBLEM_MARKER = "LLM4MTL_PROBLEM\t"
+PARSE_LINE = re.compile(PARSE_MARKER + r"(.+?)\t(\d+)")
+# The probe prints each problem, not only the count: the count alone tells a
+# refinement loop only that the file was rejected.
+PROBLEM_LINE = re.compile(PROBLEM_MARKER + r"(.+?)\t(.+)")
 
 
 class QvtoAdapter:
@@ -73,7 +80,7 @@ class QvtoAdapter:
         )
 
     def runtime_tool_versions(self) -> dict[str, str]:
-        return {"qvto-harness": "1.0.0", "junit": "5.10.2"}
+        return {"qvto-harness": QVTO_HARNESS_VERSION, "junit": JUNIT_VERSION}
 
     def render_suite_artifacts(
         self,
@@ -103,33 +110,30 @@ class QvtoAdapter:
         workspace: Workspace,
         timeout: int,
     ) -> tuple[SuiteExecutionObservation, RawExecutionEvidence]:
-        project = workspace.engine_dir / "qvto-tests"
-        actual = project / "actual"
-        return execute_maven_suite(
-            suite,
-            transformation,
-            workspace,
-            timeout,
+        project = workspace.engine_dir / HARNESS_PROJECT
+        actual = project / HARNESS_MODULE
+        harness = MavenHarness(
             transformation_destination=(
                 actual / "src/main/resources/transformations" / f"{suite.task}.qvto"
             ),
-            java_root=actual / "src/test/java",
+            java_root=actual / MAVEN_TEST_JAVA_DIR,
             models_root=(
-                actual / "src/test/resources/generated-models" / slug(suite.task)
+                actual / MAVEN_TEST_RESOURCES_DIR / generated_models_dir(suite.task)
             ),
             maven_cwd=project,
-            maven_command=[
+            maven_command=(
                 "mvn",
                 "clean",
                 "test",
                 "-pl",
-                "actual",
+                HARNESS_MODULE,
                 "-am",
-                "-Dsurefire.failIfNoSpecifiedTests=false",
-                "-Dtest={selectors}",
-            ],
-            reports_root=actual / "target/surefire-reports",
+                ALLOW_MODULES_WITHOUT_SELECTED_TESTS,
+                TEST_SELECTION_OPTION,
+            ),
+            reports_root=actual / SUREFIRE_REPORTS_DIR,
         )
+        return execute_maven_suite(suite, transformation, workspace, timeout, harness)
 
     def normalize_transformation_failure(
         self,
@@ -149,67 +153,85 @@ class QvtoAdapter:
             workspace,
             self.language_id,
         )
-        probe = parser_dir / "src/test/java/org/qvto/parser/Llm4mtlParserProbeTest.java"
-        probe.parent.mkdir(parents=True, exist_ok=True)
-        probe.write_text(PARSER_PROBE, encoding="utf-8")
-        requested = os.pathsep.join(str(path.resolve()) for path in transformations)
-        completed = subprocess.run(
-            [
-                "mvn",
-                "-q",
-                "-Dtest=Llm4mtlParserProbeTest",
-                f"-Dllm4mtl.files={requested}",
-                "test",
-            ],
-            cwd=parser_dir,
-            capture_output=True,
-            text=True,
-            timeout=PARSER_TIMEOUT_SECONDS,
-        )
-        combined = f"{completed.stdout}\n{completed.stderr}"
-        parsed = {
-            Path(path).resolve(): int(problems)
-            for path, problems in PARSE_LINE.findall(combined)
-        }
-        reported: dict[Path, list[str]] = {}
+        completed = _run_probe(parser_dir, transformations)
+        report = _ProbeReport.read(completed)
+        return {path: report.observation(path) for path in transformations}
+
+
+def _run_probe(
+    parser_dir: Path,
+    transformations: Sequence[Path],
+) -> subprocess.CompletedProcess[str]:
+    """Copy the probe test into the parser project and run it on every file."""
+    probe = parser_dir / PROBE_DESTINATION
+    probe.parent.mkdir(parents=True, exist_ok=True)
+    probe.write_text(java_text(__package__, PROBE_SOURCE), encoding="utf-8")
+    requested = os.pathsep.join(str(path.resolve()) for path in transformations)
+    return run_parser_command(
+        [
+            "mvn",
+            "-q",
+            f"{TEST_SELECTION_OPTION_PREFIX}{PROBE_CLASS}",
+            f"-Dllm4mtl.files={requested}",
+            "test",
+        ],
+        parser_dir,
+    )
+
+
+@dataclass(frozen=True)
+class _ProbeReport:
+    """What one probe run said about each requested file."""
+
+    succeeded: bool
+    problem_counts: dict[Path, int]
+    problems: dict[Path, list[str]]
+    # The output without any per-file marker lines.
+    driver_output: str
+
+    @classmethod
+    def read(cls, completed: subprocess.CompletedProcess[str]) -> _ProbeReport:
+        combined = combined_output(completed)
+        problems: dict[Path, list[str]] = {}
         for path, problem in PROBLEM_LINE.findall(combined):
-            reported.setdefault(Path(path).resolve(), []).append(problem)
-        # What is left once every per-file marker line is removed. A file the
-        # probe never reached has no problems of its own, and handing it the raw
-        # tail would describe some other transformation's syntax error as if it
-        # were this one's.
-        driver_output = "\n".join(
-            line
-            for line in combined.splitlines()
-            if not line.startswith(("LLM4MTL_PARSE\t", "LLM4MTL_PROBLEM\t"))
-        ).strip()
+            problems.setdefault(Path(path).resolve(), []).append(problem)
+        return cls(
+            succeeded=completed.returncode == 0,
+            problem_counts={
+                Path(path).resolve(): int(count)
+                for path, count in PARSE_LINE.findall(combined)
+            },
+            problems=problems,
+            driver_output="\n".join(
+                line
+                for line in combined.splitlines()
+                if not line.startswith((PARSE_MARKER, PROBLEM_MARKER))
+            ).strip(),
+        )
 
-        def diagnostic_for(path: Path) -> str:
-            """This file's parse problems, or the driver output that hid them.
+    def observation(self, path: Path) -> ParseObservation:
+        return ParseObservation(
+            parsed=self._is_parsed(path),
+            # No default: a file with no LLM4MTL_PARSE line was never parsed,
+            # so its count is unknown, not 0.
+            problem_count=self.problem_counts.get(path.resolve()),
+            diagnostic=self._diagnostic(path),
+        )
 
-            The driver output is what remains when the probe never reached the
-            file — a build or harness failure — and it describes that failure
-            rather than the transformation.
-            """
-            if completed.returncode == 0 and parsed.get(path.resolve()) == 0:
-                return ""
-            problems = reported.get(path.resolve())
-            if problems:
-                return "\n".join(problems)
-            # Nothing but marker lines means nothing was observed about this
-            # file. Saying so by staying silent beats quoting a neighbour's
-            # syntax error as though it belonged here.
-            return driver_output[-500:]
+    def _is_parsed(self, path: Path) -> bool:
+        return self.succeeded and self.problem_counts.get(path.resolve()) == 0
 
-        return {
-            path: ParseObservation(
-                parsed=completed.returncode == 0 and parsed.get(path.resolve()) == 0,
-                # No default: the probe prints one LLM4MTL_PARSE line per file it
-                # actually parsed, so a path missing from that output was never
-                # measured. Reporting 0 for it would claim the parser found no
-                # problems in a transformation it never reached.
-                problem_count=parsed.get(path.resolve()),
-                diagnostic=diagnostic_for(path),
-            )
-            for path in transformations
-        }
+    def _diagnostic(self, path: Path) -> str:
+        """This file's parse problems, or else the tail of the driver output.
+
+        The driver output never includes marker lines, so a file never quotes
+        another file's syntax error. When the probe did not reach the file (a
+        build or harness failure), the output describes that failure. When the
+        output held only marker lines, the diagnostic is empty.
+        """
+        if self._is_parsed(path):
+            return ""
+        problems = self.problems.get(path.resolve())
+        if problems:
+            return "\n".join(problems)
+        return diagnostic_tail(self.driver_output)

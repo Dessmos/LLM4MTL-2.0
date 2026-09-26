@@ -11,6 +11,7 @@ from llm4mtl.run_store import ManifestExistsError
 from llm4mtl.serialization.json_io import read_json
 
 from llm4mtl.provenance import build_provenance
+from run_records import read_events
 
 # A run is exactly one combination, so the fixture states every identity axis.
 IDENTITY = {
@@ -173,7 +174,7 @@ class EventLogTests(unittest.TestCase):
                 status="passed",
                 outcome_code="EXTRACTED",
             )
-            events = run_store.read_events(paths)
+            events = read_events(paths)
             self.assertEqual(3, len(events))
             self.assertEqual("run_created", events[0]["event"])
             self.assertEqual("EXTRACTED", events[-1]["outcome_code"])
@@ -194,7 +195,7 @@ class EventLogTests(unittest.TestCase):
                     )
                 )
 
-            events = run_store.read_events(paths)
+            events = read_events(paths)
             self.assertEqual(count + 1, len(events))
 
 

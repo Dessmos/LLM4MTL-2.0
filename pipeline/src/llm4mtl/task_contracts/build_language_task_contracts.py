@@ -1,21 +1,17 @@
 """Build deterministic task contracts for every supported language.
 
-Reference transformations declare runtime slots and metamodel aliases. Ecore
-files provide namespace and classifier facts. This command joins those two
-authoritative inputs; it does not infer behavioural expectations.
+Reference transformations give the runtime slots and metamodel aliases. Ecore
+files give the namespaces and classifiers. This command joins the two; it does
+not guess any expected behaviour.
 
-One builder covers all four languages on purpose. ETL used to have its own
-command emitting an older contract shape (no ``schemaVersion``/``language``/
-``sourceHash``, and ``typesUsedInEtL`` instead of ``typesUsedInTransformation``),
-which meant ETL contracts silently skipped the identity and staleness checks
-every other language got. Language-specific knowledge is confined to the
-``build_*_contract`` functions below; everything downstream sees one shape.
+One builder serves all four languages, so every contract has the same shape and
+gets the same identity and staleness checks. Language-specific code stays in
+the ``build_*_contract`` functions.
 """
 
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import re
 import xml.etree.ElementTree as ET
@@ -28,8 +24,15 @@ from llm4mtl.conventions import (
     default_task_contracts_root,
     language_config,
 )
-from llm4mtl.paths import REPO_ROOT, TARGET
+from llm4mtl.paths import TARGET, require_repository_relative
+from llm4mtl.serialization.hashing import file_sha256
 from llm4mtl.task_contracts import contract_from_mapping
+from llm4mtl.task_contracts.models import (
+    EMF_KIND,
+    INOUT_ROLE,
+    METAMODEL_FILE_SUFFIX,
+    PLAIN_XML_KIND,
+)
 from llm4mtl.task_contracts.render import contract_header_markdown
 
 ATL_SIGNATURE = re.compile(
@@ -58,8 +61,9 @@ ETL_TRANSFORM = re.compile(
 )
 ETL_TO = re.compile(r"\bto\b(?P<body>.*?)(?:\{|\n[^\S\r\n]*\r?\n)", re.DOTALL)
 ETL_DECLARED_TYPE = re.compile(r":\s*([A-Za-z_]\w*)!\s*`?([A-Za-z_][\w:-]*)`?")
-ECORE_GLOB = "*.ecore"
 ETL_NEW = re.compile(r"\bnew\s+([A-Za-z_]\w*)!\s*`?([A-Za-z_][\w:-]*)`?")
+ECORE_GLOB = f"*{METAMODEL_FILE_SUFFIX}"
+CONTRACT_SCHEMA_VERSION = "1.0"
 
 ATL_ECORE_OVERRIDES = {
     "ieee1471": "IEEE1471ConceptualModel.ecore",
@@ -103,17 +107,21 @@ def main(argv: list[str] | None = None) -> int:
 
     for reference in references:
         contract = BUILDERS[args.language](reference)
-        task = reference.stem
-        (contracts_root / f"{task}.json").write_text(
-            json.dumps(contract, indent=2, ensure_ascii=False) + "\n",
-            encoding="utf-8",
-        )
-        typed = contract_from_mapping(contract)
-        (contracts_root / f"{task}.txt").write_text(
-            contract_header_markdown(typed) + "\n",
-            encoding="utf-8",
-        )
+        _write_contract(contracts_root, reference.stem, contract)
     return 0
+
+
+def _write_contract(contracts_root: Path, task: str, contract: dict[str, Any]) -> None:
+    """Write the enforced ``.json`` contract and its ``.txt`` review table."""
+    (contracts_root / f"{task}.json").write_text(
+        json.dumps(contract, indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+    typed = contract_from_mapping(contract)
+    (contracts_root / f"{task}.txt").write_text(
+        contract_header_markdown(typed) + "\n",
+        encoding="utf-8",
+    )
 
 
 def build_atl_contract(reference: Path) -> dict[str, Any]:
@@ -155,7 +163,7 @@ def build_qvto_contract(reference: Path) -> dict[str, Any]:
 
     models = []
     for direction, runtime_name, alias in QVTO_PARAMETER.findall(signature.group(1)):
-        role = {"in": "source", "out": "target", "inout": "inout"}[direction.lower()]
+        role = {"in": "source", "out": "target", "inout": INOUT_ROLE}[direction.lower()]
         uri = modeltypes.get(alias)
         if not uri:
             raise ValueError(f"QVT-O alias {alias} has no modeltype in {reference}")
@@ -177,12 +185,11 @@ def build_qvto_contract(reference: Path) -> dict[str, Any]:
 
 
 def build_etl_contract(reference: Path) -> dict[str, Any]:
-    """Join ETL's ``Prefix!Type`` usage with the Ecore files under ETL_model.
+    """Join ETL's ``Prefix!Type`` usage with the Ecore files under ``ETL_model``.
 
-    ETL names a metamodel by the runtime prefix it binds, so that prefix is both
-    the runtime model name and the metamodel alias. A prefix that resolves to no
-    Ecore file is a plain-XML slot (rss2atom), which the contract records rather
-    than guessing a metamodel for.
+    In ETL the prefix is both the runtime model name and the metamodel alias. A
+    prefix with no matching Ecore file is recorded as a plain-XML slot (as in
+    rss2atom), instead of guessing a metamodel.
     """
     source = reference.read_text(encoding="utf-8")
     used: dict[str, set[str]] = {}
@@ -197,21 +204,9 @@ def build_etl_contract(reference: Path) -> dict[str, Any]:
         ecore = _resolve_etl_ecore(prefix, used_types, ecores)
         slot_roles = tuple(sorted(roles.get(prefix) or {"source"}))
         if ecore is None:
-            models.append(
-                {
-                    "runtimeName": prefix,
-                    "roles": list(slot_roles),
-                    "kind": "plainXml",
-                    "metamodelUri": None,
-                    "metamodelNsPrefix": None,
-                    "metamodelAlias": prefix,
-                    "metamodelFile": None,
-                    "typesUsedInTransformation": used_types,
-                    "availableTypes": used_types,
-                }
-            )
-            continue
-        models.append(model_mapping(prefix, slot_roles, prefix, ecore, used_types))
+            models.append(plain_xml_mapping(prefix, slot_roles, used_types))
+        else:
+            models.append(model_mapping(prefix, slot_roles, prefix, ecore, used_types))
     return contract_mapping("etl", reference, models)
 
 
@@ -228,7 +223,7 @@ def _etl_roles(source: str) -> dict[str, set[str]]:
 
 
 def _etl_ecores() -> list[EcoreInfo]:
-    root = TARGET.benchmark / "metamodels/additional_models/ETL_model"
+    root = _language_metamodels("ETL_model")
     return [load_ecore(path) for path in sorted(root.glob(ECORE_GLOB))]
 
 
@@ -255,11 +250,11 @@ def _resolve_etl_ecore(
     return sorted(fitting, key=lambda item: (len(item.classifiers), item.path.name))[0]
 
 
-# Which task's reactions have to have run before this task's reaction has a
-# correspondence to retrieve. Read off the `retrieve ... corresponding to`
-# statements in the references: the task that establishes the correspondence is
-# the prerequisite. Direct prerequisites only; the chain is walked where it is
-# used. A task that only requires the absence of a correspondence has none.
+# The tasks whose reactions must run first, so that this task's reaction finds
+# the correspondence it retrieves. Taken from the `retrieve ... corresponding
+# to` statements in the references. Direct prerequisites only; the Reactions
+# adapter follows the chain. A task that only needs a correspondence to be
+# absent has no prerequisites.
 REACTIONS_PREREQUISITES = {
     "AmaltheaToAscet_TaskCreated": ["AmaltheaToAscet_ComponentContainerInsertedAsRoot"],
     "AmaltheaToAscet_TaskDeleted": ["AmaltheaToAscet_TaskCreated"],
@@ -295,7 +290,7 @@ def build_reactions_contract(reference: Path) -> dict[str, Any]:
         models.append(
             model_mapping(
                 alias,
-                ("inout",),
+                (INOUT_ROLE,),
                 alias,
                 ecore,
                 sorted(used.get(alias.lower(), set())),
@@ -316,12 +311,12 @@ def contract_mapping(
     models: list[dict[str, Any]],
 ) -> dict[str, Any]:
     return {
-        "schemaVersion": "1.0",
+        "schemaVersion": CONTRACT_SCHEMA_VERSION,
         "task": reference.stem,
         "language": language,
         "transformation": reference.name,
-        "reference": relative(reference),
-        "sourceHash": sha256(reference),
+        "reference": require_repository_relative(reference),
+        "sourceHash": file_sha256(reference),
         "models": models,
         "rules": [
             "semantic_cases model slots must map to runtimeName exactly.",
@@ -343,18 +338,40 @@ def model_mapping(
     return {
         "runtimeName": runtime_name,
         "roles": list(roles),
-        "kind": "emf",
+        "kind": EMF_KIND,
         "metamodelUri": ecore.ns_uri,
         "metamodelNsPrefix": ecore.ns_prefix,
         "metamodelAlias": alias,
-        "metamodelFile": relative(ecore.path),
+        "metamodelFile": require_repository_relative(ecore.path),
         "typesUsedInTransformation": used_types,
         "availableTypes": list(ecore.classifiers),
     }
 
 
+def plain_xml_mapping(
+    runtime_name: str, roles: tuple[str, ...], used_types: list[str]
+) -> dict[str, Any]:
+    """A slot with no metamodel: its types are the XML elements it uses."""
+    return {
+        "runtimeName": runtime_name,
+        "roles": list(roles),
+        "kind": PLAIN_XML_KIND,
+        "metamodelUri": None,
+        "metamodelNsPrefix": None,
+        "metamodelAlias": runtime_name,
+        "metamodelFile": None,
+        "typesUsedInTransformation": used_types,
+        "availableTypes": used_types,
+    }
+
+
+def _language_metamodels(directory: str) -> Path:
+    """One language's folder under ``benchmark/metamodels/additional_models``."""
+    return TARGET.benchmark / "metamodels" / "additional_models" / directory
+
+
 def resolve_atl_ecore(alias: str) -> EcoreInfo:
-    root = TARGET.benchmark / "metamodels/additional_models/ATL_model"
+    root = _language_metamodels("ATL_model")
     override = ATL_ECORE_OVERRIDES.get(alias.lower())
     if override:
         return load_ecore(root / override, preferred_package=alias)
@@ -369,12 +386,11 @@ def resolve_atl_ecore(alias: str) -> EcoreInfo:
 def resolve_qvto_ecore(uri: str) -> EcoreInfo:
     """The Ecore file whose nsURI the ``modeltype`` declaration names.
 
-    QVT-O names its metamodel by URI rather than by file, so resolution goes
-    through nsURI. Every QVT-O task in the benchmark declares the Ecore
-    metamodel itself; supplying that file is what lets the QVT-O prompt carry
-    the same metamodel facts every other language's prompt carries.
+    QVT-O names its metamodel by URI, not by file, so the file is found by
+    nsURI. Recording the file gives QVT-O prompts the same metamodel facts as
+    the other languages.
     """
-    root = TARGET.benchmark / "metamodels/additional_models/QVT-O_model"
+    root = _language_metamodels("QVT-O_model")
     candidates = [
         ecore
         for ecore in (load_ecore(path) for path in sorted(root.glob(ECORE_GLOB)))
@@ -389,11 +405,8 @@ def resolve_qvto_ecore(uri: str) -> EcoreInfo:
 
 
 def resolve_reactions_ecore(alias: str) -> EcoreInfo:
-    path = (
-        TARGET.benchmark
-        / "metamodels/additional_models/Reaction_model"
-        / f"{alias.lower()}.ecore"
-    )
+    file_name = f"{alias.lower()}{METAMODEL_FILE_SUFFIX}"
+    path = _language_metamodels("Reaction_model") / file_name
     if not path.is_file():
         raise ValueError(f"cannot resolve Reactions alias {alias!r}: {path}")
     return load_ecore(path)
@@ -402,12 +415,11 @@ def resolve_reactions_ecore(alias: str) -> EcoreInfo:
 def load_ecore(path: Path, preferred_package: str | None = None) -> EcoreInfo:
     """Namespace and classifier facts for one metamodel file.
 
-    Several ATL metamodels are ``xmi:XMI`` documents holding a ``PrimitiveTypes``
-    package alongside the domain package. Reading the document root then yields
-    no nsURI at all, which is how seven ATL contracts came to record an empty
-    ``metamodelUri`` while every other language recorded a real one. Classifiers
-    are still collected across the whole document, because a transformation may
-    legitimately reference the primitive types declared beside the domain types.
+    Some ATL metamodels are ``xmi:XMI`` documents with a ``PrimitiveTypes``
+    package next to the domain package. The document root has no nsURI, so
+    the namespace is read from the domain package. Classifiers are collected
+    from the whole document, because a transformation may use the primitive
+    types too.
     """
     root = ET.parse(path).getroot()
     package = _domain_package(root, preferred_package or path.stem)
@@ -458,14 +470,6 @@ REFERENCE_EXTENSIONS = {
     "qvto": ".qvto",
     "reactions": ".reactions",
 }
-
-
-def sha256(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
-
-
-def relative(path: Path) -> str:
-    return str(path.resolve().relative_to(REPO_ROOT))
 
 
 if __name__ == "__main__":

@@ -2,15 +2,15 @@
 
 This stage asks a different question from reference validation. There the
 transformation is trusted, so anything the engine rejects is a broken test.
-Here the transformation is the artifact under test, so an engine that refuses it
-is evidence about the transformation — while a suite-side problem (nothing
-compiled, no model loaded) still means the transformation was never judged.
-Interpreting the same observation differently for the two roles is what keeps
-the populations from contaminating each other.
+Here the transformation is under test, so an engine that refuses it is
+evidence about the transformation. A suite-side problem (nothing compiled, no
+model loaded) still means the transformation was never judged. Reading the same
+observation differently per role keeps the two populations apart.
 """
 
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
@@ -20,11 +20,13 @@ from llm4mtl.conventions import (
     language_config,
 )
 from llm4mtl.domain import (
-    OutcomeStatus,
+    GeneratedSuite,
     SuiteExecutionObservation,
     TransformationOutcome,
 )
+from llm4mtl.domain.observations import FailureStage
 from llm4mtl.languages import LanguageAdapter, language_adapter
+from llm4mtl.run_store.models import RunPaths
 from llm4mtl.semantic_tests.suite_execution import (
     GENERATED_TRANSFORMATION_ROLE,
     observation_lock,
@@ -34,17 +36,25 @@ from llm4mtl.semantic_tests.suite_execution import (
 )
 from llm4mtl.semantic_tests.suites.discovery import (
     candidate_identity,
-    candidate_suite_directories,
-    matches_selection,
     suite_from_path,
 )
 from llm4mtl.semantic_tests.validation import workspace_for
 from llm4mtl.serialization.hashing import file_sha256
-from llm4mtl.stages.models import ConfigError, PipelineConfig, StageResult
-from llm4mtl.stages.selection import fixed_selection, hash_paths
-
-DEFAULT_PAIR_TIMEOUT_SECONDS = 240
-
+from llm4mtl.stage_contract import SKIPPED_NO_PARSED_TRANSFORMATIONS
+from llm4mtl.stages.models import (
+    SUITE_TIMEOUT_SECONDS,
+    TRANSFORMATION_VALIDATION_STAGE_NAME,
+    ConfigError,
+    PipelineConfig,
+    StageResult,
+)
+from llm4mtl.stages.selection import (
+    existing_files,
+    fixed_selection,
+    hash_paths,
+    select_candidate_suites,
+    select_generated_files,
+)
 
 def _matching_execution_pairs(
     suites: list[Path],
@@ -86,9 +96,6 @@ class _ObservedExecutionPair:
 class TransformationValidationAdapter:
     """Execute reference-valid suites against generated transformations."""
 
-    def __init__(self, repo_root: Path) -> None:
-        self.repo_root = repo_root.resolve()
-
     @staticmethod
     def validated_tests_root(config: PipelineConfig) -> Path:
         return default_generated_tests_root(language_config(config.language))
@@ -108,31 +115,13 @@ class TransformationValidationAdapter:
         if config.transformation_selection_locked and not config.transformations:
             # The parser passed nothing on: there is nothing to judge, and
             # selecting suites for it would only invent work.
-            return StageResult(
-                "transformation_validation",
-                "skipped",
-                {
-                    "selected_suites": 0,
-                    "selected_transformations": 0,
-                    "execution_pairs": 0,
-                    "skipped": 1,
-                },
-                {"skip_reason": "SKIPPED_NO_PARSED_TRANSFORMATIONS"},
-            )
+            return _nothing_parsed_result()
 
         suites = self.select_validated_suites(config, require_observation=not dry_run)
         transformations = self.select_transformations(config)
         pairs = _matching_execution_pairs(suites, transformations)
         input_hash = hash_paths(suites + transformations)
-        suite_detail_key = (
-            "suite_candidates_awaiting_reference_validation"
-            if dry_run
-            else "reference_validated_suites"
-        )
-        details: dict[str, object] = {
-            suite_detail_key: [str(path) for path in suites],
-            "transformations": [str(path) for path in transformations],
-        }
+        details = _selection_details(suites, transformations, dry_run)
         counts = {
             "selected_suites": len(suites),
             "selected_transformations": len(transformations),
@@ -140,21 +129,9 @@ class TransformationValidationAdapter:
         }
         if not pairs:
             counts["failed"] = 1
-            return StageResult(
-                "transformation_validation",
-                "error",
-                counts,
-                details,
-                input_hash,
-            )
+            return _stage_result("error", counts, details, input_hash)
         if dry_run:
-            return StageResult(
-                "transformation_validation",
-                "dry_run",
-                counts,
-                details,
-                input_hash,
-            )
+            return _stage_result("dry_run", counts, details, input_hash)
 
         observed_pairs = self._execute_pairs(config, pairs)
         counts.update(
@@ -163,13 +140,7 @@ class TransformationValidationAdapter:
             )
         )
         details["pairs"] = [pair.to_detail() for pair in observed_pairs]
-        return StageResult(
-            "transformation_validation",
-            "completed",
-            counts,
-            details,
-            input_hash,
-        )
+        return _stage_result("completed", counts, details, input_hash)
 
     def _execute_pairs(
         self,
@@ -180,61 +151,16 @@ class TransformationValidationAdapter:
             raise ConfigError(
                 "transformation execution requires a run-local engine workspace"
             )
-
-        adapter = language_adapter(config.language)
-        engine_dir = Path(config.engine_dir)
-        observations_root = self._observations_root(config)
-        observed_pairs: list[_ObservedExecutionPair] = []
-        for suite_path, transformation in pairs:
-            suite = suite_from_path(
-                suite_path,
-                self.validated_tests_root(config),
-                config.language,
-            )
-            pair_root = (
-                observations_root
-                / "generated_transformations"
-                / file_sha256(transformation)
-            )
-            with observation_lock(pair_root, suite):
-                observation = read_observation(
-                    pair_root,
-                    suite,
-                    transformation,
-                    transformation_role=GENERATED_TRANSFORMATION_ROLE,
-                )
-                if observation is None:
-                    workspace = workspace_for(engine_dir, pair_root)
-                    observation, raw_evidence = adapter.execute_suite(
-                        suite,
-                        transformation,
-                        workspace,
-                        DEFAULT_PAIR_TIMEOUT_SECONDS,
-                    )
-                    # Archived here, inside the per-pair lock: pair N+1 runs
-                    # `mvn clean` in the same workspace and deletes the reports
-                    # that explain pair N.
-                    evidence_path = record_observation(
-                        pair_root,
-                        suite,
-                        transformation,
-                        observation,
-                        transformation_role=GENERATED_TRANSFORMATION_ROLE,
-                        evidence=raw_evidence,
-                    )
-                else:
-                    evidence_path = observation_path(pair_root, suite)
-            failure_outcome = adapter.normalize_transformation_failure(observation)
-            observed_pairs.append(
-                _ObservedExecutionPair(
-                    suite_path=suite_path,
-                    transformation=transformation,
-                    observation=observation,
-                    failure_outcome=failure_outcome,
-                    evidence_path=evidence_path,
-                )
-            )
-        return observed_pairs
+        executor = _PairExecutor(
+            adapter=language_adapter(config.language),
+            language=config.language,
+            engine_dir=Path(config.engine_dir),
+            observations_root=self._observations_root(config),
+        )
+        return [
+            executor.observe(suite_path, transformation)
+            for suite_path, transformation in pairs
+        ]
 
     def select_validated_suites(
         self,
@@ -263,47 +189,7 @@ class TransformationValidationAdapter:
         return validated
 
     def _select_candidate_suites(self, config: PipelineConfig) -> list[Path]:
-        if config.suites:
-            candidates: list[Path] = []
-            for suite_path in config.suites:
-                path = Path(suite_path)
-                if path.is_dir() and "candidates" in path.parts:
-                    candidates.append(path.resolve())
-            return sorted(candidates)
-
-        tasks = set(config.tasks)
-        models = fixed_selection("test-generation model", config.test_models)
-        strategies = fixed_selection("strategy", config.test_strategies)
-        return sorted(
-            path
-            for path in candidate_suite_directories(self.validated_tests_root(config))
-            if self._matches_suite_selection(
-                path,
-                config,
-                tasks,
-                models,
-                strategies,
-            )
-        )
-
-    @staticmethod
-    def _matches_suite_selection(
-        path: Path,
-        config: PipelineConfig,
-        tasks: set[str],
-        models: set[str],
-        strategies: set[str],
-    ) -> bool:
-        if not path.is_dir():
-            return False
-        return matches_selection(
-            candidate_identity(path),
-            tasks=tasks,
-            models=models,
-            strategies=strategies,
-            all_tasks=config.all_tasks,
-            suite_id=config.suite_id,
-        )
+        return select_candidate_suites(config, self.validated_tests_root(config))
 
     def _has_valid_reference_observation(
         self,
@@ -312,11 +198,7 @@ class TransformationValidationAdapter:
         adapter: LanguageAdapter,
         observations_root: Path,
     ) -> bool:
-        suite = suite_from_path(
-            path,
-            self.validated_tests_root(config),
-            config.language,
-        )
+        suite = suite_from_path(path, config.language)
         reference = adapter.reference_transformation(suite.task)
         observation = read_observation(
             observations_root,
@@ -336,26 +218,127 @@ class TransformationValidationAdapter:
                 "a resolved run directory is required to select "
                 "reference-validated suites"
             )
-        return Path(config.run_dir).resolve() / "observations"
+        return RunPaths(Path(config.run_dir).resolve()).observations_dir
 
     def select_transformations(self, config: PipelineConfig) -> list[Path]:
         if config.transformations or config.transformation_selection_locked:
-            return sorted(
-                Path(path).resolve()
-                for path in config.transformations
-                if Path(path).is_file()
-            )
-        tasks = set(config.tasks)
+            return existing_files(config.transformations)
         models = fixed_selection("transformation model", config.transformation_models)
         strategies = fixed_selection("strategy", config.transformation_strategies)
-        extension = language_config(config.language).language_key
-        return sorted(
-            path.resolve()
-            for path in self.transformations_root(config).glob(f"*/*/*.{extension}")
-            if path.parent.parent.name in models
-            and path.parent.name in strategies
-            and (config.all_tasks or path.stem in tasks)
+        return select_generated_files(
+            self.transformations_root(config),
+            language_config(config.language).language_key,
+            config,
+            models=models,
+            strategies=strategies,
         )
+
+
+@dataclass(frozen=True)
+class _PairExecutor:
+    """Runs the suite/transformation pairs of one execution stage."""
+
+    adapter: LanguageAdapter
+    language: str
+    engine_dir: Path
+    observations_root: Path
+
+    def observe(self, suite_path: Path, transformation: Path) -> _ObservedExecutionPair:
+        """Observe one pair, reusing an observation this run already recorded."""
+        suite = suite_from_path(suite_path, self.language)
+        # Keyed by content, so the same bytes share one observation.
+        pair_root = (
+            self.observations_root
+            / "generated_transformations"
+            / file_sha256(transformation)
+        )
+        with observation_lock(pair_root, suite):
+            observation, evidence_path = self._read_or_execute(
+                suite, transformation, pair_root
+            )
+        return _ObservedExecutionPair(
+            suite_path=suite_path,
+            transformation=transformation,
+            observation=observation,
+            failure_outcome=self.adapter.normalize_transformation_failure(observation),
+            evidence_path=evidence_path,
+        )
+
+    def _read_or_execute(
+        self,
+        suite: GeneratedSuite,
+        transformation: Path,
+        pair_root: Path,
+    ) -> tuple[SuiteExecutionObservation, Path]:
+        """The pair's observation and evidence path. The caller holds the pair lock."""
+        observation = read_observation(
+            pair_root,
+            suite,
+            transformation,
+            transformation_role=GENERATED_TRANSFORMATION_ROLE,
+        )
+        if observation is not None:
+            return observation, observation_path(pair_root, suite)
+        workspace = workspace_for(self.engine_dir, pair_root)
+        observation, raw_evidence = self.adapter.execute_suite(
+            suite,
+            transformation,
+            workspace,
+            SUITE_TIMEOUT_SECONDS,
+        )
+        # Archived here, inside the per-pair lock: pair N+1 runs `mvn clean` in
+        # the same workspace and deletes the reports that explain pair N.
+        evidence_path = record_observation(
+            pair_root,
+            suite,
+            transformation,
+            observation,
+            transformation_role=GENERATED_TRANSFORMATION_ROLE,
+            evidence=raw_evidence,
+        )
+        return observation, evidence_path
+
+
+def _nothing_parsed_result() -> StageResult:
+    return StageResult(
+        TRANSFORMATION_VALIDATION_STAGE_NAME,
+        "skipped",
+        {
+            "selected_suites": 0,
+            "selected_transformations": 0,
+            "execution_pairs": 0,
+            "skipped": 1,
+        },
+        {"skip_reason": SKIPPED_NO_PARSED_TRANSFORMATIONS},
+    )
+
+
+def _selection_details(
+    suites: list[Path],
+    transformations: list[Path],
+    dry_run: bool,
+) -> dict[str, object]:
+    """What the stage selected. A dry run names its suites as still unvalidated."""
+    suite_detail_key = (
+        "suite_candidates_awaiting_reference_validation"
+        if dry_run
+        else "reference_validated_suites"
+    )
+    return {
+        suite_detail_key: [str(path) for path in suites],
+        "transformations": [str(path) for path in transformations],
+    }
+
+
+def _stage_result(
+    status: str,
+    counts: dict[str, int],
+    details: dict[str, object],
+    input_hash: str,
+) -> StageResult:
+    return StageResult(
+        TRANSFORMATION_VALIDATION_STAGE_NAME, status, counts, details, input_hash
+    )
 
 
 def execution_counts(
@@ -365,41 +348,49 @@ def execution_counts(
 ) -> dict[str, int]:
     """Count pairs by what the run established about the transformation.
 
-    Every pair counted here has a reference-validated suite: the selection gate
-    in :meth:`TransformationValidationAdapter.select_validated_suites` admits
-    only suites whose reference observation was technically executable and whose
-    assertions passed. So a failure at this point is a semantic execution
-    failure of the pairing, and it is counted as one — Source Diagnosis decides
-    afterwards whether the transformation, the test, or neither should change.
+    Every pair counted here has a reference-validated suite:
+    :meth:`TransformationValidationAdapter.select_validated_suites` admits only
+    suites whose reference observation was technically executable and whose
+    assertions passed. So a failure here is counted as a semantic execution
+    failure of the pair; Source Diagnosis decides later whether the
+    transformation, the test, or neither should change.
 
     ``evaluated`` (= ``passed`` + ``failed``) is the denominator of semantic
-    correctness. ``skipped`` stays outside it for the residual cases where the
-    harness could not run this pair at all, so an unobserved pair never becomes
-    either a pass or a fail.
+    correctness. ``skipped`` stays outside it: the harness could not run the
+    pair at all, so an unobserved pair never counts as a pass or a fail.
     """
-    passed = failed = skipped = infrastructure = 0
-    for observation, failure_outcome in observations:
-        if failure_outcome is not None and failure_outcome.status in {
-            OutcomeStatus.TIMED_OUT,
-            OutcomeStatus.INFRASTRUCTURE_FAILED,
-        }:
-            infrastructure += 1
-        elif observation.assertions_passed:
-            passed += 1
-        elif observation.failure_stage == "assertion_failure":
-            failed += 1
-        elif (
-            failure_outcome is not None
-            and failure_outcome.status.is_attributable_to_the_transformation
-        ):
-            failed += 1
-        else:
-            # The harness could not run this pair at all: nothing was judged.
-            skipped += 1
+    categories = Counter(
+        _execution_category(observation, failure_outcome)
+        for observation, failure_outcome in observations
+    )
+    passed = categories["passed"]
+    failed = categories["failed"]
     return {
         "evaluated": passed + failed,
         "passed": passed,
         "failed": failed,
-        "skipped": skipped,
-        "infrastructure_errors": infrastructure,
+        "skipped": categories["skipped"],
+        "infrastructure_errors": categories["infrastructure_errors"],
     }
+
+
+def _execution_category(
+    observation: SuiteExecutionObservation,
+    failure_outcome: TransformationOutcome | None,
+) -> str:
+    """The count one pair belongs to."""
+    if (
+        failure_outcome is not None
+        and not failure_outcome.status.is_attributable_to_the_transformation
+    ):
+        # A timeout or an infrastructure failure: the run could not observe it.
+        return "infrastructure_errors"
+    if observation.assertions_passed:
+        return "passed"
+    if observation.failure_stage == FailureStage.ASSERTION_FAILURE:
+        return "failed"
+    if failure_outcome is not None:
+        # Any other normalized failure is an observation of the transformation.
+        return "failed"
+    # The harness could not run this pair at all: nothing was judged.
+    return "skipped"

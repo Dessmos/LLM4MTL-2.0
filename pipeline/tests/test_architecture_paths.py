@@ -9,21 +9,22 @@ from copy import deepcopy
 from llm4mtl.conventions import (
     LANGUAGE_CONFIGS,
     n8n_workflows_root,
-    task_prompt_candidates_root,
 )
-from llm4mtl.experiment_runner.orchestrator import ExperimentOrchestrator
 from llm4mtl.paths import REPO_ROOT, TARGET
 from llm4mtl.prompt_assembly.n8n_exports import (
     synchronize_prompt_generation,
     synchronize_test_generation,
     synchronize_transformation_generation,
 )
+from llm4mtl.prompt_assembly.n8n_exports.node_names import PROMPT_INPUT_NODE
 from llm4mtl.prompt_assembly.n8n_exports.prompts import INPUTS
-from llm4mtl.prompt_assembly.n8n_exports.synchronizers import PROMPT_INPUT_NODE
 from llm4mtl.prompt_assembly.n8n_exports.workflow_graph import (
     PROVIDER_MODEL_IDS,
+    connect_in_sequence,
     drop_unwired_chat_models,
+    main_edge,
     normalize_node_entry_ids,
+    remove_nodes,
     rename_connection_node,
 )
 from llm4mtl.vocabulary import EXPERIMENT_MODEL_FAMILIES, MODEL_FAMILIES, STRATEGIES
@@ -71,7 +72,6 @@ def _nested_strings(value: object) -> list[str]:
 class ActivePathTests(unittest.TestCase):
 
     def test_active_runtime_uses_existing_repository_root(self) -> None:
-        self.assertEqual(REPO_ROOT, ExperimentOrchestrator().repo_root)
         self.assertTrue(REPO_ROOT.is_dir())
 
     def test_target_layout_names_the_repository_areas(self) -> None:
@@ -205,6 +205,38 @@ class N8nWorkflowTests(unittest.TestCase):
         self.assertEqual("New node", renamed["Unchanged"]["node"])
         self.assertIn("Old node", connections)
 
+    def test_removing_a_node_removes_its_edges_in_both_directions(self) -> None:
+        payload = {
+            "nodes": [{"name": "Before"}, {"name": "Gone"}, {"name": "After"}],
+            "connections": {
+                "Before": {"main": [[main_edge("Gone"), main_edge("After")]]},
+                "Gone": {"main": [[main_edge("After")]]},
+            },
+        }
+
+        remove_nodes(payload, {"Gone"})
+
+        self.assertEqual(
+            ["Before", "After"],
+            [node["name"] for node in payload["nodes"]],
+        )
+        self.assertEqual(
+            {"Before": {"main": [[main_edge("After")]]}},
+            payload["connections"],
+        )
+
+    def test_a_sequence_connects_each_node_to_the_next_one(self) -> None:
+        cases = {
+            ("A",): {},
+            ("A", "B", "C"): {
+                "A": {"main": [[{"node": "B", "type": "main", "index": 0}]]},
+                "B": {"main": [[{"node": "C", "type": "main", "index": 0}]]},
+            },
+        }
+        for names, expected in cases.items():
+            with self.subTest(names=names):
+                self.assertEqual(expected, connect_in_sequence(*names))
+
     def test_connections_reference_existing_nodes(self) -> None:
         for workflow in sorted(TARGET.workflows.rglob("*.json")):
             payload = json.loads(workflow.read_text(encoding="utf-8"))
@@ -270,11 +302,8 @@ class N8nWorkflowTests(unittest.TestCase):
                     if model == "qwen2-5-coder-7b"
                     else "Generate Prompt from Input"
                 )
-                candidates = task_prompt_candidates_root(config).relative_to(
-                    TARGET.artifacts_work
-                )
                 expected_output = (
-                    f"=/data/artifacts/{candidates.as_posix()}/{model}/"
+                    f"=/data/artifacts/task_prompt_candidates/{language}/{model}/"
                     f'{{{{ $node["Save reaction name"].json.baseName }}}}.txt'
                 )
                 if "Save reaction name" not in nodes:

@@ -1,4 +1,4 @@
-"""Temporary file injection and restoration helpers."""
+"""Temporarily write files into a workspace, then put the old files back."""
 
 from __future__ import annotations
 
@@ -8,7 +8,11 @@ from pathlib import Path
 
 
 class Injection:
-    """Temporary file injection with restore-on-exit semantics."""
+    """Records every file it writes so that ``restore`` can undo them all.
+
+    Call ``restore`` (normally in a ``finally`` block) to put back the original
+    files and delete the files that did not exist before.
+    """
 
     def __init__(self) -> None:
         self._backup_dir = Path(tempfile.mkdtemp(prefix="generated-suite-backup-"))

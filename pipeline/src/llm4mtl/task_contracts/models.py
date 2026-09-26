@@ -10,6 +10,15 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+# The contract ``kind`` of a model slot.
+EMF_KIND = "emf"
+PLAIN_XML_KIND = "plainXml"
+# A slot that is both read and written; it serves every role.
+INOUT_ROLE = "inout"
+# The file suffixes of a model instance, and of the metamodel it conforms to.
+MODEL_FILE_SUFFIXES = (".model", ".xmi", ".xml")
+METAMODEL_FILE_SUFFIX = ".ecore"
+
 
 @dataclass(frozen=True)
 class ModelContract:
@@ -26,13 +35,13 @@ class ModelContract:
     available_types: tuple[str, ...]
 
     def has_role(self, role: str) -> bool:
-        if role == "inout":
-            return "inout" in self.roles
-        return role in self.roles or "inout" in self.roles
+        if role == INOUT_ROLE:
+            return INOUT_ROLE in self.roles
+        return role in self.roles or INOUT_ROLE in self.roles
 
     @property
     def metamodel_resource(self) -> str | None:
-        """Classpath-relative ``.ecore`` path used by the ETL_Test harness."""
+        """Classpath path of the ``.ecore`` file, as the ETL harness registers it."""
         if not self.metamodel_file:
             return None
         return f"metamodels/{Path(self.metamodel_file).name}"
@@ -77,6 +86,6 @@ class TaskContract:
         resources: list[str] = []
         for model in self.models:
             resource = model.metamodel_resource
-            if model.kind == "emf" and resource and resource not in resources:
+            if model.kind == EMF_KIND and resource and resource not in resources:
                 resources.append(resource)
         return resources

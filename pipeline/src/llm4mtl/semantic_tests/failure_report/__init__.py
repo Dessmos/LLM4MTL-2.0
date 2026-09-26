@@ -1,31 +1,28 @@
 """Assemble one semantic-test failure report.
 
-``write_report(payload, output, scope=...)`` is the whole interface: a caller
-names the kind of failure it recorded — ``"test_case"`` for one test case and,
-for an assertion failure, one assertion, or ``"execution_pair"`` for a failure
-the run could not attribute to any test method — and hands over the paths it
-recorded it from. Which request boundary validates the payload and which
-assembler builds the document is this package's business.
+The whole interface is ``write_report(payload, output, scope=...)``. The caller
+names the kind of failure it recorded and passes the recorded paths:
+``"test_case"`` is one test case (and, for an assertion failure, one assertion);
+``"execution_pair"`` is a failure the run could not attribute to any test
+method. This package picks the request class and the builder.
 
-The package only aggregates facts that earlier stages recorded.  It does not
+The package only collects facts that earlier stages recorded. It does not
 compare models, classify the source of a failure, call an LLM, or choose a
-workflow route.  In particular, ``actual_vs_expected`` must come from the
-comparator or harness that observed the mismatch; this package refuses to
-invent that evidence.
+workflow route. In particular, ``actual_vs_expected`` must come from the
+comparator or harness that saw the mismatch; this package never invents it.
 
-Run it through the experiment orchestrator with::
+Run it through the experiment CLI (``"test_case"`` reports only) with::
 
     llm4mtl diagnosis report \
       --request request.json --output artifacts/work/.../failure-report.json
 
-The package also keeps a direct
-``python -m llm4mtl.semantic_tests.failure_report`` entry point for narrow
-local use; both paths call the same assembler.
+or locally with ``python -m llm4mtl.semantic_tests.failure_report``, which also
+takes ``--scope``. Both call the same builder.
 
-The ``"test_case"`` request is one JSON object with these fields (an
+A ``"test_case"`` request is one JSON object with these fields. An
 ``"execution_pair"`` request is the same without ``test_case_id``,
 ``assertion_id``, ``actual_target_models`` and ``actual_vs_expected``, because a
-failure that reached no test method has none of them)::
+failure that reached no test method has none of them::
 
     {
       "run_manifest": "artifacts/work/runs/<batch>/<run>/manifest.json",
@@ -48,43 +45,39 @@ failure that reached no test method has none of them)::
       }
     }
 
-``actual_vs_expected`` is the model-level comparator difference.  It is optional
-because no comparator produces it yet, and inventing one here is exactly what
-this module refuses to do.  What the report records without it is what the run
-observed: the actual target-model snapshots the harness wrote, the
-``expected``/``actual`` values JUnit printed read verbatim, and the recorded
-exception.  A diagnosis-eligible failure needs a syntactically valid
-transformation, a suite that passed on the reference, a real failure of the
-pairing, the transformed input, and at least one of those observed facts.
+``actual_vs_expected`` is the model-level comparator difference. It is optional
+because no comparator produces it yet. Without it, the report records what the
+run observed: the actual target-model snapshots, the ``expected``/``actual``
+values JUnit printed (copied as printed), and the recorded exception. When a
+failure may be diagnosed is decided in ``eligibility``.
 
-Both JUnit outcomes are real failures here.  An assertion that was evaluated and
-lost names the assertion it lost; a throw before any verdict names none, and
-``assertion_id`` is then ``null`` — the exception and its stack trace are the
-evidence, and ``expected``/``actual`` stay ``null`` rather than being
-reconstructed.  A timeout or an infrastructure failure is excluded instead,
-because neither says anything about the pairing.
+Both JUnit outcomes are real failures. A lost assertion names that assertion. A
+throw before any verdict names none: ``assertion_id`` is ``null``, the exception
+and stack trace are the evidence, and ``expected``/``actual`` stay ``null``. A
+timeout or an infrastructure failure is not diagnosable, because neither says
+anything about the pairing.
 
-``assertion_id`` is either an explicit assertion ``id`` from
-``semantic_cases.json``, the stable positional id ``assertion-NNN``, or ``null``
-for a runtime throw.  Input
-models, the generated transformation and suite, the reviewed task description,
-and exact metamodels are resolved from the recorded identities.  Every input
-path must stay inside the repository, and the output must stay under
-``artifacts/work``.  The output is created once and never overwritten.
+``assertion_id`` is the assertion's own ``id`` from ``semantic_cases.json``, the
+positional id ``assertion-NNN``, or ``null`` for a runtime throw. Input models,
+the generated transformation and suite, the task description, and the exact
+metamodels are found through the recorded identities. Every input path must be
+inside the repository, and the output must be under ``artifacts/work``. The
+output is created once and never overwritten.
 
-``surefire_reports`` and ``execution_log`` may be omitted, and normally should
-be: the run archives its own Maven output and Surefire XML beside each execution
-observation, and that archive is the only copy that still describes the
-execution once the next pair's ``mvn clean`` has run.  Omitting them reads the
-archive; naming them explicitly still works for evidence held elsewhere.  A
-request that omits them for an execution with no archive is refused rather than
-producing a report whose runtime evidence is silently empty.
+``surefire_reports`` and ``execution_log`` should normally be left out. The run
+archives its Maven output and Surefire XML beside each execution observation,
+and after the next ``mvn clean`` that archive is the only copy. Leaving them out
+reads the archive; naming them still works for evidence kept elsewhere. A
+``"test_case"`` request that leaves out ``surefire_reports`` for an execution
+with no archive is refused, so its runtime evidence is never silently empty.
 
 Package layout: ``request`` parses and bounds the request, ``evidence``
 resolves the facts both report types share from one recorded execution,
 ``surefire_view`` projects the archived reports, ``eligibility`` decides whether
-Source Diagnosis may be asked, and ``case_report`` / ``pair_report`` assemble
-the two documents. Import from this package, not from its submodules.
+Source Diagnosis may be asked, ``semantic_cases`` names cases and assertions,
+``report_document`` builds the parts both documents share, and
+``case_report`` / ``pair_report`` assemble the two documents. Import from this
+package, not from its submodules.
 """
 
 from __future__ import annotations
@@ -94,16 +87,30 @@ from typing import Any, Mapping
 
 from llm4mtl.semantic_tests.failure_report.case_report import write_failure_report
 from llm4mtl.semantic_tests.failure_report.errors import FailureReportError
-from llm4mtl.semantic_tests.failure_report.models import DIFF_FIELDS
+from llm4mtl.semantic_tests.failure_report.models import (
+    ASSERTION_FAILURE_KIND,
+    CASE_SCOPE,
+    DIFF_FIELDS,
+    PAIR_SCOPE,
+    RUNTIME_ERROR_KIND,
+)
 from llm4mtl.semantic_tests.failure_report.pair_report import write_pair_failure_report
+from llm4mtl.semantic_tests.failure_report.report_document import (
+    FAILURE_REPORT_SCHEMA,
+)
 from llm4mtl.semantic_tests.failure_report.request import (
     read_request_payload,
     request_type,
 )
+from llm4mtl.semantic_tests.failure_report.semantic_cases import (
+    assertion_id,
+    case_id,
+    rendered_method_name,
+)
 
 _WRITERS = {
-    "test_case": write_failure_report,
-    "execution_pair": write_pair_failure_report,
+    CASE_SCOPE: write_failure_report,
+    PAIR_SCOPE: write_pair_failure_report,
 }
 
 
@@ -113,14 +120,10 @@ def write_report(
     *,
     scope: str,
 ) -> dict[str, Any]:
-    """Assemble and persist the failure report of one ``scope``.
+    """Validate ``payload`` for ``scope``, then build and write the report.
 
-    The single entry point: a caller says which kind of failure it recorded and
-    hands over the paths it recorded it from. Which request class validates the
-    payload and which assembler builds the document is this package's business.
-
-    Raises :class:`FailureReportError` for an unknown scope, a payload that does
-    not satisfy the request boundary, or evidence that cannot form a
+    Returns the written report. Raises :class:`FailureReportError` for an
+    unknown scope, an invalid request, or evidence that cannot form a
     trustworthy report.
     """
     request = request_type(scope).from_payload(payload)
@@ -128,8 +131,16 @@ def write_report(
 
 
 __all__ = [
+    "ASSERTION_FAILURE_KIND",
+    "CASE_SCOPE",
     "DIFF_FIELDS",
+    "FAILURE_REPORT_SCHEMA",
     "FailureReportError",
+    "PAIR_SCOPE",
+    "RUNTIME_ERROR_KIND",
+    "assertion_id",
+    "case_id",
     "read_request_payload",
+    "rendered_method_name",
     "write_report",
 ]

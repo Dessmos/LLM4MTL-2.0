@@ -209,7 +209,6 @@ class TechnicalValidationTests(FunnelFixture):
         verdict = check_suite(self.suite, self.context())
 
         self.assertEqual("INFRASTRUCTURE_ERROR", verdict.status)
-        self.assertFalse(verdict.is_judged_as_oracle)
 
 
 class ReferenceValidationTests(FunnelFixture):
@@ -225,7 +224,6 @@ class ReferenceValidationTests(FunnelFixture):
 
         self.assertEqual("REFERENCE_INVALID", verdict.status)
         self.assertTrue(verdict.is_technically_executable)
-        self.assertTrue(verdict.is_judged_as_oracle)
 
     def test_a_passing_oracle_is_validated(self) -> None:
         with patch(
@@ -234,7 +232,6 @@ class ReferenceValidationTests(FunnelFixture):
             verdict = validate_suite(self.suite, self.context())
 
         self.assertEqual("VALIDATED", verdict.status)
-        self.assertTrue(verdict.is_judged_as_oracle)
         self.assertFalse(
             self.suite_dir.parents[3]
             .joinpath(
@@ -254,7 +251,6 @@ class ReferenceValidationTests(FunnelFixture):
             verdict = validate_suite(self.suite, self.context())
 
         self.assertEqual("NOT_EXECUTABLE", verdict.status)
-        self.assertFalse(verdict.is_judged_as_oracle)
 
 
 def _evidence() -> RawExecutionEvidence:

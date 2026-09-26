@@ -53,14 +53,3 @@ def append_event(
         os.fsync(handle.fileno())
     return record
 
-
-def read_events(paths: RunPaths) -> list[dict[str, Any]]:
-    if not paths.events.exists():
-        return []
-    with paths.events.open("r", encoding="utf-8") as handle:
-        fcntl.flock(handle.fileno(), fcntl.LOCK_SH)
-        content = handle.read()
-    records = [json.loads(line) for line in content.splitlines() if line.strip()]
-    for record in records:
-        validate_artifact("events", record)
-    return records

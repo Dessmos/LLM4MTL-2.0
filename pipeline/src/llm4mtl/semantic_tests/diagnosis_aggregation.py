@@ -1,31 +1,25 @@
-"""Cluster one execution attempt's diagnoses by the failure they are about.
+"""Group one execution attempt's diagnoses by the failure they are about.
 
-Preparation attaches one report to every failing test case, and the diagnosis
-subworkflow diagnoses each of them. That is right for the pipeline: each report
-is a separate observation, made from separate evidence, and dropping any of them
-would decide on part of the evidence. It is wrong for a sentence in a thesis. A
-run with one generated transformation, one execution and one broken model
-reference produces three reports and three verdicts — but it observed *one*
-defect affecting three test cases, and "Source Diagnosis detected three
-transformation defects" would count the same fault three times.
+Preparation writes one report per failing test case, and each report is
+diagnosed on its own. That is right for the pipeline: each report is separate
+evidence. But it over-counts faults. One broken model reference that fails three
+test cases gives three reports and three verdicts, yet it is *one* defect.
 
-So the raw records stay exactly as the pipeline wrote them, and the counting
-happens here, on read. Reports are grouped by a fingerprint over what actually
-identifies a failure:
+So the raw records stay as written, and the grouping happens here, on read.
+Reports are grouped by a fingerprint over what identifies a failure:
 
     failure_stage + exception type + normalized error summary
                   + top stack frame + transformation sha256
 
-Not the error summary alone. The same message legitimately arises from different
-places, and — in the other direction — the summary carries the test method that
-hit it first, so three cases failing on one broken type reference produce three
-different strings for one fault. Normalization strips that prefix and the line
-numbers; the stack frame and the transformation hash are what keep two textually
-equal messages from different places apart.
+The error summary alone is not enough. It starts with the name of the first
+failing test method, so one fault gives a different string per case;
+normalization removes that prefix and the line numbers. And equal messages can
+come from different places; the stack frame and the transformation hash keep
+those apart.
 
-Clustering never changes a verdict. Each cluster reports the classifications its
-reports received and how far they agreed, which is what makes the consistency of
-Source Diagnosis measurable instead of assumed.
+Grouping never changes a verdict. Each cluster lists the verdicts its reports
+received and how much they agree, which makes the consistency of Source
+Diagnosis measurable.
 """
 
 from __future__ import annotations
@@ -37,15 +31,29 @@ from pathlib import Path
 from typing import Any
 
 from llm4mtl.domain.diagnosis import aggregate_classifications
+from llm4mtl.run_store.responses import recorded_diagnoses
+from llm4mtl.semantic_tests.diagnosis_preparation import (
+    DIAGNOSIS_DIRNAME,
+    REPORT_CREATED,
+    diagnosis_index_path,
+)
+from llm4mtl.semantic_tests.failure_report import CASE_SCOPE
 from llm4mtl.serialization.json_io import read_json
 
 SCHEMA_VERSION = "1.0"
-DIAGNOSIS_FILENAME = "diagnosis.json"
-INDEX_FILENAME = "index.json"
 UNKNOWN = "unknown"
-# ``methodThatFailedFirst: the real message``. Surefire names the method that
-# reached the fault first, so the prefix varies per report while the fault does
-# not.
+# The facets that identify a failure, in the order they enter its fingerprint.
+FINGERPRINT_FACETS = (
+    "failure_stage",
+    "exception_type",
+    "normalized_error_summary",
+    "top_stack_frame",
+    "transformation_sha256",
+)
+# ``methodThatFailedFirst: the real message``. Surefire does not write this
+# prefix: ``surefire._describe`` adds it, and that text becomes the
+# observation's ``error_summary``. The method changes per report; the fault
+# does not.
 METHOD_PREFIX = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*:\s+")
 STACK_FRAME = re.compile(r"^\s*at\s+(?P<frame>\S+)", re.MULTILINE)
 LINE_NUMBER = re.compile(r":\d+\b")
@@ -66,9 +74,7 @@ def aggregate_run_diagnoses(
     the caller through the artifact layout.
     """
     run_dir = Path(run_dir).resolve()
-    index_path = (
-        run_dir / "diagnosis" / "execution" / f"attempt-{attempt:03d}" / INDEX_FILENAME
-    )
+    index_path = diagnosis_index_path(run_dir, attempt)
     if not index_path.is_file():
         raise DiagnosisAggregationError(
             f"run {run_dir.name} prepared no diagnosis evidence for attempt {attempt}"
@@ -99,58 +105,78 @@ def failure_fingerprint(report: dict[str, Any]) -> dict[str, Any]:
     re-opening the reports it was built from.
     """
     result = report.get("test_case_result") or report.get("pair_result") or {}
-    observation = (result.get("execution") or {}).get("observation") or {}
-    error = (result.get("execution") or {}).get("error") or {}
-    exceptions = error.get("exceptions") or []
+    facets = _failure_facets(result)
+    identity = "\n".join(f"{key}={facets[key]}" for key in FINGERPRINT_FACETS)
+    digest = hashlib.sha256(identity.encode("utf-8")).hexdigest()
+    return {"failure_fingerprint": digest, **facets}
+
+
+def _failure_facets(result: dict[str, Any]) -> dict[str, str]:
+    execution = result.get("execution") or {}
+    observation = execution.get("observation") or {}
+    error = execution.get("error") or {}
     failure = result.get("failure") or {}
-    facets = {
+    return {
         "failure_stage": str(observation.get("failure_stage") or UNKNOWN),
-        # Surefire's `type` attribute is not always a bare class name: the ETL
-        # harness writes the message and the head of the trace into it. The
-        # first line is what identifies the exception either way.
-        "exception_type": _first_line(
-            (exceptions[0].get("type") if exceptions else None)
-            or failure.get("failure_type")
-            or UNKNOWN
-        ),
+        "exception_type": _exception_type(error, failure),
         "normalized_error_summary": _normalize_summary(
             observation.get("error_summary") or failure.get("message") or ""
         ),
         "top_stack_frame": _top_frame(error.get("stack_traces") or []),
-        "transformation_sha256": str(
-            ((result.get("versions") or {}).get("generated_transformation") or {}).get(
-                "sha256"
-            )
-            or UNKNOWN
-        ),
+        "transformation_sha256": _transformation_sha256(result),
     }
-    digest = hashlib.sha256(
-        "\n".join(
-            f"{key}={facets[key]}"
-            for key in (
-                "failure_stage",
-                "exception_type",
-                "normalized_error_summary",
-                "top_stack_frame",
-                "transformation_sha256",
-            )
-        ).encode("utf-8")
-    ).hexdigest()
-    return {"failure_fingerprint": digest, **facets}
+
+
+def _exception_type(error: dict[str, Any], failure: dict[str, Any]) -> str:
+    """The first line of the first recorded exception type.
+
+    Surefire's `type` attribute is not always a bare class name: the ETL harness
+    writes the message and the head of the trace into it. The first line is
+    what identifies the exception either way.
+    """
+    exceptions = error.get("exceptions") or []
+    recorded_type = exceptions[0].get("type") if exceptions else None
+    return _first_line(recorded_type or failure.get("failure_type") or UNKNOWN)
+
+
+def _transformation_sha256(result: dict[str, Any]) -> str:
+    versions = result.get("versions") or {}
+    transformation = versions.get("generated_transformation") or {}
+    return str(transformation.get("sha256") or UNKNOWN)
 
 
 def _aggregate_pair(
     run_dir: Path, pair: dict[str, Any], verdicts: dict[str, str]
 ) -> dict[str, Any]:
-    clusters: dict[str, dict[str, Any]] = {}
     reports = [
         entry
         for entry in pair.get("reports", [])
-        if entry.get("status") == "created" and entry.get("report")
+        if entry.get("status") == REPORT_CREATED and entry.get("report")
     ]
+    clusters = _clusters(run_dir, reports, verdicts)
+    affected = {case for cluster in clusters for case in cluster["test_cases"]}
+    return {
+        "pair_id": _pair_id(pair),
+        "suite": pair.get("suite"),
+        "transformation": pair.get("transformation"),
+        "diagnosis_reports": len(reports),
+        "affected_test_cases": len(affected),
+        "unique_failure_clusters": len(clusters),
+        "clusters": clusters,
+        "aggregate_verdict": aggregate_classifications(
+            [cluster["verdict"] for cluster in clusters]
+        ),
+    }
+
+
+def _clusters(
+    run_dir: Path, reports: list[dict[str, Any]], verdicts: dict[str, str]
+) -> list[dict[str, Any]]:
+    """Group the pair's reports by fingerprint, in the order they first appear."""
+    clusters: dict[str, dict[str, Any]] = {}
     for entry in reports:
-        report = read_json(_report_path(run_dir, str(entry["report"])))
-        facets = failure_fingerprint(report)
+        reference = str(entry["report"])
+        facets = failure_fingerprint(read_json(_report_path(run_dir, reference)))
         cluster = clusters.setdefault(
             facets["failure_fingerprint"],
             {
@@ -161,43 +187,33 @@ def _aggregate_pair(
                 "classifications": [],
             },
         )
-        cluster["reports"] += 1
-        scope = str(entry.get("scope") or "test_case")
-        if scope not in cluster["scopes"]:
-            cluster["scopes"].append(scope)
-        case = entry.get("test_case_id")
-        if case is not None and case not in cluster["test_cases"]:
-            cluster["test_cases"].append(case)
-        verdict = verdicts.get(_evidence_key(str(entry["report"])))
-        if verdict is not None:
-            cluster["classifications"].append(verdict)
-
+        _add_report(cluster, entry, verdicts.get(_evidence_key(reference)))
     for cluster in clusters.values():
         cluster["diagnosed"] = len(cluster["classifications"])
         cluster["verdict"] = aggregate_classifications(cluster["classifications"])
         cluster["agreement"] = _agreement(cluster["classifications"])
+    return list(clusters.values())
 
-    ordered = list(clusters.values())
-    affected = {case for cluster in ordered for case in cluster["test_cases"]}
-    return {
-        "pair_id": _pair_id(pair),
-        "suite": pair.get("suite"),
-        "transformation": pair.get("transformation"),
-        "diagnosis_reports": len(reports),
-        "affected_test_cases": len(affected),
-        "unique_failure_clusters": len(ordered),
-        "clusters": ordered,
-        "aggregate_verdict": aggregate_classifications(
-            [cluster["verdict"] for cluster in ordered]
-        ),
-    }
+
+def _add_report(
+    cluster: dict[str, Any], entry: dict[str, Any], verdict: str | None
+) -> None:
+    cluster["reports"] += 1
+    scope = str(entry.get("scope") or CASE_SCOPE)
+    if scope not in cluster["scopes"]:
+        cluster["scopes"].append(scope)
+    case = entry.get("test_case_id")
+    if case is not None and case not in cluster["test_cases"]:
+        cluster["test_cases"].append(case)
+    if verdict is not None:
+        cluster["classifications"].append(verdict)
 
 
 def _totals(pairs: list[dict[str, Any]]) -> dict[str, Any]:
     clusters = [cluster for pair in pairs for cluster in pair["clusters"]]
     diagnosed = sum(cluster["diagnosed"] for cluster in clusters)
     agreeing = sum(
-        Counter(cluster["classifications"]).most_common(1)[0][1]
+        _majority_count(cluster["classifications"])
         for cluster in clusters
         if cluster["classifications"]
     )
@@ -207,9 +223,8 @@ def _totals(pairs: list[dict[str, Any]]) -> dict[str, Any]:
         "unique_failure_clusters": len(clusters),
         "affected_test_cases": sum(pair["affected_test_cases"] for pair in pairs),
         "diagnosed": diagnosed,
-        # How often the separate diagnoses of one failure agreed with each other.
-        # Null rather than 1.0 when nothing was diagnosed: unanimity among no
-        # verdicts is not perfect consistency.
+        # How often the separate diagnoses of one failure agreed. Null, not
+        # 1.0, when nothing was diagnosed: no verdicts is not perfect agreement.
         "agreement": round(agreeing / diagnosed, 4) if diagnosed else None,
     }
 
@@ -217,19 +232,18 @@ def _totals(pairs: list[dict[str, Any]]) -> dict[str, Any]:
 def _agreement(classifications: list[str]) -> float | None:
     if not classifications:
         return None
-    majority = Counter(classifications).most_common(1)[0][1]
-    return round(majority / len(classifications), 4)
+    return round(_majority_count(classifications) / len(classifications), 4)
+
+
+def _majority_count(classifications: list[str]) -> int:
+    """How many of the classifications agree with the most common one."""
+    return Counter(classifications).most_common(1)[0][1]
 
 
 def _recorded_verdicts(run_diagnoses: Path) -> dict[str, str]:
     """Every persisted verdict of this run, keyed by the report it diagnosed."""
     verdicts: dict[str, str] = {}
-    if not run_diagnoses.is_dir():
-        return verdicts
-    for attempt_dir in sorted(run_diagnoses.glob("attempt-*")):
-        record = attempt_dir / DIAGNOSIS_FILENAME
-        if not record.is_file():
-            continue
+    for record in recorded_diagnoses(run_diagnoses):
         diagnosis = read_json(record)
         reference = diagnosis.get("evidence_ref")
         if reference:
@@ -245,7 +259,7 @@ def _evidence_key(reference: str) -> str:
     either side having to know the other's base.
     """
     normalized = reference.replace("\\", "/")
-    marker = "/diagnosis/"
+    marker = f"/{DIAGNOSIS_DIRNAME}/"
     if marker in normalized:
         return normalized[normalized.index(marker) + 1 :]
     return normalized.lstrip("/")

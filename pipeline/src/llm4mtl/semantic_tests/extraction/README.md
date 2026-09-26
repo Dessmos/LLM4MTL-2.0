@@ -1,7 +1,7 @@
-Stage 1 of the determenistic pipeline lives here
+Stage 1 of the deterministic pipeline lives here
 
 
-LLM generate a file like this:
+The LLM writes an answer like this:
 -------------------------------
 Test for Tree2Graph:
 
@@ -22,8 +22,8 @@ metadata.json                           where did it come from
 
 extract.py                  - Every execution in every run, passes through - extract_one
 cli.py                      - command line only: reads flags and calls extract_one
-discovery.py                - decides which ansears to work witf
-models.py                   - data stracture fur the suite
+discovery.py                - decides which answers to work with
+models.py                   - data structures for the suite
                               ExtractionOptions - where to write the suite and if to write it
 writer.py                   - saves files locally
 parser.py                   - cut .md file into different files / 

@@ -39,7 +39,7 @@ class AtlProblemCountTests(unittest.TestCase):
                     return_value=root / "parser",
                 ),
                 patch(
-                    "llm4mtl.languages.atl.adapter.subprocess.run",
+                    "llm4mtl.languages.common.subprocess.run",
                     return_value=completed,
                 ),
             ):
@@ -111,7 +111,7 @@ class EtlParseDiagnosticTests(unittest.TestCase):
                     return_value=root / "parser",
                 ),
                 patch(
-                    "llm4mtl.languages.etl.adapter.subprocess.run",
+                    "llm4mtl.languages.common.subprocess.run",
                     side_effect=[build, driver],
                 ),
             ):
@@ -183,7 +183,7 @@ class ReactionsProblemCountTests(unittest.TestCase):
                     return_value=parser_dir,
                 ),
                 patch(
-                    "llm4mtl.languages.reactions.adapter.subprocess.run",
+                    "llm4mtl.languages.common.subprocess.run",
                     side_effect=fake_run,
                 ),
             ):
@@ -254,7 +254,7 @@ class ReactionsProblemCountTests(unittest.TestCase):
                     return_value=root / "parser",
                 ),
                 patch(
-                    "llm4mtl.languages.reactions.adapter.subprocess.run",
+                    "llm4mtl.languages.common.subprocess.run",
                     return_value=SimpleNamespace(
                         stdout="", stderr="boom", returncode=1
                     ),

@@ -1,4 +1,4 @@
-This folder works and describes with which data does the system works.
+This folder describes the data the whole system works with.
 
 _init_.py       - interface that collects all included in the folder
 scenarios.py    - describes the future check

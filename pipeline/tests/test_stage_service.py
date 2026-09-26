@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import hashlib
-import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -16,6 +15,7 @@ from llm4mtl.serialization.json_io import read_json, write_json
 from llm4mtl.semantic_tests.extraction.models import SuiteExistsError
 from llm4mtl.stage_service.app import app
 from llm4mtl.stages.models import StageResult
+from run_records import read_events
 
 # A run is exactly one combination, so creating one states every identity axis.
 IDENTITY = {
@@ -350,6 +350,24 @@ class StageServiceTests(unittest.TestCase):
         self.assertEqual(
             404, self.client.post(f"/batches/{BATCH}/runs/svc-2/stages/not-a-stage", json={}).status_code
         )
+
+    def test_an_unknown_stage_is_refused_before_anything_is_recorded(self) -> None:
+        self.client.post(f"/batches/{BATCH}/runs", json=run_payload(run_id="svc-unknown"))
+        paths = run_store.open_run(self.batch_root, "svc-unknown")
+        events_before = read_events(paths)
+
+        with patch("llm4mtl.stage_service.app.prepare_workspace") as prepare:
+            response = self.client.post(
+                f"/batches/{BATCH}/runs/svc-unknown/stages/transformation_validation",
+                json={},
+            )
+
+        self.assertEqual(404, response.status_code)
+        self.assertEqual(
+            "unknown stage: transformation_validation", response.json()["detail"]
+        )
+        self.assertEqual(events_before, read_events(paths))
+        prepare.assert_not_called()
 
     def test_malformed_or_escaping_run_ids_are_rejected(self) -> None:
         # A traversing id cannot arrive through the URL path (the router normalises

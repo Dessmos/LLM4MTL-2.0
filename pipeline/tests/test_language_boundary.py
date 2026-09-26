@@ -36,7 +36,6 @@ from llm4mtl.stages.models import PipelineConfig
 from llm4mtl.languages import (
     REQUIRED_LANGUAGES,
     LanguageAdapter,
-    implemented_languages,
     language_adapter,
 )
 from llm4mtl.languages.common import validate_rendered_suite
@@ -65,7 +64,6 @@ class RegistryTests(unittest.TestCase):
         adapter = language_adapter("etl")
         self.assertIsInstance(adapter, LanguageAdapter)
         self.assertEqual("etl", adapter.language_id)
-        self.assertEqual(tuple(sorted(REQUIRED_LANGUAGES)), implemented_languages())
 
 
 class PipelineLanguageResolutionTests(unittest.TestCase):
@@ -159,7 +157,7 @@ class EtlAdapterContractTests(unittest.TestCase):
             )
 
             with patch(
-                "llm4mtl.languages.etl.adapter.subprocess.run",
+                "llm4mtl.languages.common.subprocess.run",
                 return_value=completed,
             ) as run:
                 observation = self.adapter.parse_transformations(
@@ -190,7 +188,7 @@ class EtlAdapterContractTests(unittest.TestCase):
             return_value=Path("/parser"),
         ):
             with patch(
-                "llm4mtl.languages.etl.adapter.subprocess.run",
+                "llm4mtl.languages.common.subprocess.run",
                 return_value=build,
             ):
                 observations = self.adapter.parse_transformations(
@@ -223,7 +221,7 @@ class EtlAdapterContractTests(unittest.TestCase):
                 return_value=root / "parser",
             ):
                 with patch(
-                    "llm4mtl.languages.etl.adapter.subprocess.run",
+                    "llm4mtl.languages.common.subprocess.run",
                     side_effect=[build, completed],
                 ):
                     observations = self.adapter.parse_transformations(

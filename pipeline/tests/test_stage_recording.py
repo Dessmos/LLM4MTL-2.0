@@ -10,7 +10,6 @@ the persisted result rather than only the service's response.
 
 from __future__ import annotations
 
-import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -30,6 +29,7 @@ from llm4mtl.stage_recording import (
     record_stage_attempt,
 )
 from llm4mtl.stage_service.app import app
+from run_records import read_events
 
 IDENTITY = {
     "language": "etl",
@@ -66,7 +66,7 @@ def stage_events(paths: run_store.RunPaths) -> list[dict[str, object]]:
             for key, value in event.items()
             if key not in {"ts", "schema_version"}
         }
-        for event in run_store.read_events(paths)
+        for event in read_events(paths)
         if str(event["event"]).startswith("stage_")
     ]
 

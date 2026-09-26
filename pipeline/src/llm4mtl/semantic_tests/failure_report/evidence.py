@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from llm4mtl.paths import TARGET
+from llm4mtl.run_store.models import RunPaths
 from llm4mtl.semantic_tests.failure_report.artifacts import (
     _json_artifact,
     _read_object,
@@ -24,16 +25,21 @@ from llm4mtl.semantic_tests.failure_report.models import (
     RUN_ID_PATTERN,
 )
 from llm4mtl.semantic_tests.failure_report.request import _input_path
+from llm4mtl.semantic_tests.suite_execution import (
+    GENERATED_SUITE_ROLE,
+    GENERATED_TRANSFORMATION_ROLE,
+    REFERENCE_TRANSFORMATION_ROLE,
+)
 from llm4mtl.serialization.hashing import directory_sha256, file_sha256
+from llm4mtl.vocabulary import EXECUTION_STAGE_ID
 
 
 def _identity(manifest: dict[str, Any], attempt: int) -> dict[str, Any]:
-    # Only the axes the report itself resolves paths from are mandatory. A run
-    # may deliberately record a null model axis — that is what `exactly_one`
-    # writes when the run fixes no value for it, as an explicitly named
-    # transformation does — and refusing the report then would make a whole
-    # legitimate run undiagnosable over a provenance field the report only
-    # copies. The null is carried through as the null it is.
+    # Only the fields used to resolve paths are required. A run may record a
+    # null model field on purpose: `exactly_one` writes null when the run fixes
+    # no value, as with an explicitly named transformation. Refusing the report
+    # then would make a valid run undiagnosable over a field the report only
+    # copies, so the null is kept.
     required = ("run_id", "task", "language")
     missing = [field for field in required if not isinstance(manifest.get(field), str)]
     if missing:
@@ -79,13 +85,13 @@ def _generated_inputs(execution: dict[str, Any]) -> tuple[Path, Path]:
         raise FailureReportError("generated execution has no inputs object")
     suite = inputs.get("suite")
     transformation = inputs.get("transformation")
-    if not isinstance(suite, dict) or suite.get("role") != "generated_suite":
+    if not isinstance(suite, dict) or suite.get("role") != GENERATED_SUITE_ROLE:
         raise FailureReportError(
             "generated execution does not identify a generated suite"
         )
     if (
         not isinstance(transformation, dict)
-        or transformation.get("role") != "generated_transformation"
+        or transformation.get("role") != GENERATED_TRANSFORMATION_ROLE
     ):
         raise FailureReportError(
             "generated execution does not identify a generated transformation"
@@ -115,26 +121,32 @@ def _verify_recorded_hashes(
 
 
 def _execution_stage_evidence(
-    path: Path,
-    generated_execution_path: Path,
+    request: Any,
+    generated_execution: dict[str, Any],
     suite_dir: Path,
     transformation_path: Path,
-    attempt: int,
-    generated_execution: dict[str, Any],
 ) -> dict[str, Any]:
     """Pin the observation to the requested immutable execution attempt."""
-    expected_suffix = (
-        "stages",
-        "execution",
-        "attempts",
-        f"attempt-{attempt:03d}",
-        "evidence.json",
-    )
+    path = request.execution_evidence
+    _require_attempt_evidence_path(path, request.attempt)
+    pair = _recorded_pair(path, request.generated_execution)
+    _require_pair_agrees(pair, generated_execution, suite_dir, transformation_path)
+    return _json_artifact(path)
+
+
+def _require_attempt_evidence_path(path: Path, attempt: int) -> None:
+    # The run-relative evidence path of this attempt, as the run store lays it out.
+    expected_suffix = RunPaths(Path()).stage_attempt_evidence(
+        EXECUTION_STAGE_ID, attempt
+    ).parts
     if path.parts[-len(expected_suffix) :] != expected_suffix:
         raise FailureReportError(
             "execution_evidence path does not match the requested execution attempt"
         )
 
+
+def _recorded_pair(path: Path, generated_execution_path: Path) -> dict[str, Any]:
+    """The one pair of the stage evidence that cites the generated execution."""
     payload = _read_object(path, "execution stage evidence")
     pairs = payload.get("details", {}).get("pairs")
     if not isinstance(pairs, list):
@@ -144,8 +156,16 @@ def _execution_stage_evidence(
         raise FailureReportError(
             "execution attempt must reference the generated execution exactly once"
         )
+    return matching[0]
 
-    pair = matching[0]
+
+def _require_pair_agrees(
+    pair: dict[str, Any],
+    generated_execution: dict[str, Any],
+    suite_dir: Path,
+    transformation_path: Path,
+) -> None:
+    """The pair must name the same inputs and result as the observation."""
     pair_suite = _input_path(pair.get("suite"), "pair suite", require_file=False)
     pair_transformation = _input_path(pair.get("transformation"), "pair transformation")
     if pair_suite != suite_dir or pair_transformation != transformation_path:
@@ -159,7 +179,6 @@ def _execution_stage_evidence(
         raise FailureReportError(
             "execution pair assertion result disagrees with recorded observation"
         )
-    return _json_artifact(path)
 
 
 def _matching_execution_pairs(
@@ -255,7 +274,7 @@ def _reference_result(path: Path | None, identity: dict[str, Any]) -> dict[str, 
         return {"status": "not_run", "observation": None, "evidence": None}
     execution = _read_execution(path, identity, "reference execution")
     transformation = execution.get("inputs", {}).get("transformation", {})
-    if transformation.get("role") != "reference_transformation":
+    if transformation.get("role") != REFERENCE_TRANSFORMATION_ROLE:
         raise FailureReportError(
             "reference execution does not identify a reference transformation"
         )
@@ -314,11 +333,10 @@ def _resolved_path_set(value: object) -> set[Path]:
 
 @dataclass(frozen=True)
 class RecordedExecution:
-    """What one request resolves to before either report shape is chosen.
+    """What one request resolves to, before a report type is chosen.
 
-    Both report types start from the same six facts, in the same order, and a
-    difference between them here would mean the two documents describe
-    different executions. Resolving them once removes that possibility.
+    Both report types start from these same six facts. Resolving them once
+    means the two documents always describe the same execution.
     """
 
     manifest: dict[str, Any]
@@ -351,12 +369,7 @@ def resolve_recorded_execution(request: Any) -> RecordedExecution:
     suite_dir, transformation_path = _generated_inputs(generated_execution)
     _verify_recorded_hashes(generated_execution, suite_dir, transformation_path)
     stage_evidence = _execution_stage_evidence(
-        request.execution_evidence,
-        request.generated_execution,
-        suite_dir,
-        transformation_path,
-        request.attempt,
-        generated_execution,
+        request, generated_execution, suite_dir, transformation_path
     )
     return RecordedExecution(
         manifest=manifest,
@@ -371,10 +384,9 @@ def resolve_recorded_execution(request: Any) -> RecordedExecution:
 def resolve_report_context(request: Any, recorded: RecordedExecution) -> ReportContext:
     """Derive the parser verdict, the observation, and the task context.
 
-    Called at the point each builder needs them rather than eagerly with
-    :func:`resolve_recorded_execution`: the per-case builder selects its test
-    case first, and reading the syntax evidence earlier would change which
-    refusal a malformed request reports.
+    Called separately from :func:`resolve_recorded_execution` because the
+    per-case builder selects its test case first. Reading the syntax evidence
+    earlier would change which error a malformed request reports.
     """
     observation = _observation(recorded.generated_execution, GENERATED_EXECUTION_LABEL)
     return ReportContext(

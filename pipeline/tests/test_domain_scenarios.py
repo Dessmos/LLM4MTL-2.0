@@ -118,9 +118,9 @@ class ChangePropagationTests(unittest.TestCase):
         # source/target pair inherited from ETL could not express this.
         scenario = inserted_daughter_scenario()
         for name in ("families", "persons"):
-            slot = scenario.slot(name)
+            slot = _slot(scenario, name)
             self.assertTrue(slot.role.is_readable, name)
-            self.assertTrue(slot.role.is_written, name)
+            self.assertIs(ModelRole.INOUT, slot.role, name)
 
     def test_a_change_scenario_must_declare_a_change(self) -> None:
         with self.assertRaises(ValueError):
@@ -151,7 +151,7 @@ class BatchTransformationTests(unittest.TestCase):
 
         self.assertEqual(ScenarioKind.BATCH_TRANSFORMATION, scenario.kind)
         self.assertEqual((), scenario.changes)
-        self.assertFalse(scenario.slot("target").role.is_readable)
+        self.assertFalse(_slot(scenario, "target").role.is_readable)
 
     def test_a_batch_scenario_cannot_declare_changes(self) -> None:
         with self.assertRaises(ValueError):
@@ -203,6 +203,11 @@ class ScenarioIntegrityTests(unittest.TestCase):
             SemanticSuite(
                 suite_id="empty", language="etl", task="Tree2Graph", scenarios=()
             )
+
+
+def _slot(scenario, name: str):
+    """The scenario's model slot called ``name``."""
+    return next(slot for slot in scenario.slots if slot.name == name)
 
 
 if __name__ == "__main__":

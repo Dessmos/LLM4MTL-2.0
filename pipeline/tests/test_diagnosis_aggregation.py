@@ -103,6 +103,28 @@ class FailureFingerprintTests(unittest.TestCase):
             failure_fingerprint(other_transformation_report)["failure_fingerprint"],
         )
 
+    def test_missing_facts_fall_back_to_what_the_report_still_has(self) -> None:
+        pair_report = {
+            "pair_result": {
+                "failure": {
+                    "failure_type": "EolRuntimeException\n\tat Rule.java:12",
+                    "message": "boom",
+                },
+                "execution": {"observation": {}, "error": {}},
+            }
+        }
+
+        facets = failure_fingerprint(pair_report)
+        empty = failure_fingerprint({})
+
+        self.assertEqual("EolRuntimeException", facets["exception_type"])
+        self.assertEqual("boom", facets["normalized_error_summary"])
+        for facet in ("failure_stage", "top_stack_frame", "transformation_sha256"):
+            with self.subTest(facet=facet):
+                self.assertEqual("unknown", facets[facet])
+                self.assertEqual("unknown", empty[facet])
+        self.assertEqual("", empty["normalized_error_summary"])
+
 
 class RunAggregationTests(unittest.TestCase):
 

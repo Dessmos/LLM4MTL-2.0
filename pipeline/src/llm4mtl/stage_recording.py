@@ -3,26 +3,23 @@
 Two entry points drive the same stages: the local runner
 (:mod:`llm4mtl.experiment_runner.orchestrator`) and the HTTP stage service
 (:mod:`llm4mtl.stage_service.app`, which n8n calls). A run directory is read
-without knowing which of them produced it, so both must record an attempt
-identically: the same canonical stage-result payload, the same internal
-evidence beside it, a ``stage_finished`` event carrying the recorded attempt
-number, and the diagnosis assembler pinned to the attempt that was just
-written. That policy lives here so the two cannot drift apart.
+without knowing which of them produced it, so both must record an attempt the
+same way: the canonical stage-result payload, the internal evidence beside it,
+a ``stage_finished`` event with the attempt number, and diagnosis preparation
+for the attempt just written. That policy lives here so the two cannot drift
+apart.
 
-What legitimately differs between the callers stays at the call sites, because
-each difference is a decision only that caller can make:
+Two things differ between the callers and stay at the call sites:
 
-* *when a stage is announced.* The service announces before it runs the work,
+* *When a stage is announced.* The service announces before it runs the work,
   so a stage that dies mid-Maven leaves a ``stage_started`` with no
   ``stage_finished``. The runner announces as it records, because it also
-  records planning errors and resumed stages that never started work.
-  :func:`announce_stage_start` is therefore deliberately separate from
-  :func:`record_stage_attempt` rather than folded into it.
-* *which artifact references a payload carries.* The service names the
-  generation records responsible for the iteration it judged, and those belong
-  in the persisted result, so they are passed in as ``artifacts``. The
-  diagnosis pointers it adds afterwards reach n8n through the HTTP response
-  only, and stay the caller's own step on the returned payload.
+  records planning errors, which never started any work. That is why
+  :func:`announce_stage_start` is separate from :func:`record_stage_attempt`.
+* *Which artifact references a payload carries.* The service passes the
+  generation records of the iteration it judged as ``artifacts``, so they are
+  persisted. The diagnosis pointers it adds afterwards reach n8n only through
+  the HTTP response.
 """
 
 from __future__ import annotations
@@ -107,11 +104,9 @@ def record_stage_attempt(
         outcome_code=payload["outcome_code"],
         attempt=attempt,
     )
-    # Only now: the report assembler pins itself to the immutable attempt that
-    # was just written, so it cannot run before that evidence exists. It is
-    # deterministic post-processing and changes no stage fact — the counts,
-    # status, and outcome_code the attempt recorded stay exactly as validated,
-    # and routing remains a decision about status and outcome_code.
+    # Only after the write: diagnosis preparation reads the attempt just
+    # recorded. It is deterministic post-processing and changes no stage fact;
+    # the recorded counts, status and outcome_code stay as validated.
     diagnosis_index = prepare_after_execution_stage(paths.root, stage, payload, attempt)
     return RecordedStageAttempt(
         payload=payload,

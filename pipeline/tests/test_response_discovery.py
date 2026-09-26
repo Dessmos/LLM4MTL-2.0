@@ -104,5 +104,11 @@ class ResponseDiscoveryTests(unittest.TestCase):
         self.assertIn("single --response", stderr.getvalue())
 
 
+    def test_the_removed_overwrite_option_is_rejected(self) -> None:
+        with patch("sys.stderr", new_callable=io.StringIO):
+            with self.assertRaises(SystemExit):
+                extraction_main(["--language", "etl", "--overwrite"])
+
+
 if __name__ == "__main__":
     unittest.main()

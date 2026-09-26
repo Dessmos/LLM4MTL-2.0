@@ -22,6 +22,30 @@ EXTRACTION_FAILED = "EXTRACTION_FAILED"
 MISSING_SEMANTIC_CASES = "MISSING_SEMANTIC_CASES"
 INVALID_SEMANTIC_CASES = "INVALID_SEMANTIC_CASES"
 CONTRACT_VIOLATION = "CONTRACT_VIOLATION"
+# The reason code of a rendered suite that fails a static check. It is also the
+# fallback when a recorded invalid verdict names no reason.
+ARTIFACT_INVALID_REASON = "ARTIFACT_INVALID"
+
+
+class FailureStage:
+    """The values of ``SuiteExecutionObservation.failure_stage``.
+
+    Plain strings, not an enum, because they are persisted:
+    ``schemas/suite-execution.schema.json`` lists them. An empty string means no
+    phase failed.
+    """
+
+    ARTIFACT_VALIDATION = "artifact_validation"
+    JAVA_COMPILATION = "java_compilation"
+    TEST_DISCOVERY = "test_discovery"
+    MODEL_LOADING = "model_loading"
+    TRANSFORMATION_PARSE = "transformation_parse"
+    ENGINE_RUNTIME = "engine_runtime"
+    # The run threw, but nothing in the error names the phase. Never a phase claim.
+    UNCLASSIFIED_RUNTIME = "unclassified_runtime"
+    ASSERTION_FAILURE = "assertion_failure"
+    TIMEOUT = "timeout"
+    INFRASTRUCTURE = "infrastructure"
 
 
 @dataclass(frozen=True)
@@ -51,16 +75,14 @@ class ArtifactValidation:
 class ParseObservation:
     """Whether a transformation is syntactically accepted by its language parser.
 
-    ``problem_count`` is ``None`` when the parser reported no count for this
-    transformation, and an integer only when it actually measured one. The two
-    are different facts: a parser that returned nothing has not established that
-    the transformation has zero problems, and an errors-per-LOC figure computed
-    over a substituted zero would understate exactly the runs where the parser
-    failed to report. ``None`` is therefore the default — a producer that
-    measures a count states it.
+    ``problem_count`` is ``None`` when the parser reported no count, and an
+    integer only when it measured one. A missing count is not zero problems: an
+    errors-per-LOC figure that used zero would understate exactly the runs
+    where the parser failed to report. So ``None`` is the default, and a
+    producer that measures a count states it.
 
-    ``parsed`` is independent of it: a transformation with no reported count is
-    not parsed, whatever the count would have been.
+    ``parsed`` is a separate fact: a transformation can be parsed while its
+    count is still ``None``.
     """
 
     parsed: bool
@@ -87,10 +109,9 @@ class SuiteExecutionObservation:
     def is_technically_executable(self) -> bool:
         """The run reached a verdict about the assertions.
 
-        Reaching the verdict is the point: a suite whose engine threw before
-        judging anything is not executable in the sense the funnel needs, even
-        though earlier phases succeeded. Counting it as executable would put a
-        test that can never produce an oracle verdict into the numerator.
+        A suite whose engine threw before judging anything is not executable,
+        even when earlier phases succeeded. Counting it would put a test that
+        can never give an oracle verdict into the numerator.
         """
         return (
             self.compiled
@@ -110,9 +131,9 @@ class SuiteExecutionObservation:
     def is_infrastructure_failure(self) -> bool:
         """The run says nothing about the suite because the harness itself broke."""
         return self.failure_stage in {
-            "timeout",
-            "transformation_parse",
-            "infrastructure",
+            FailureStage.TIMEOUT,
+            FailureStage.TRANSFORMATION_PARSE,
+            FailureStage.INFRASTRUCTURE,
         }
 
     def to_dict(self) -> dict[str, Any]:

@@ -1,13 +1,10 @@
 """Which language adapters exist.
 
-Static and explicit on purpose. There are exactly four known languages and no
-third-party extension point, so discovery by import scanning or entry points
-would add indirection without a caller that needs it. Adding a language means
-adding one line here and one adapter module.
+The list is static on purpose: there are four known languages and no plug-in
+point. Adding a language means adding one line here and one adapter package.
 
-A language the pipeline does not recognize fails loudly at this seam. That is the
-point: silently falling back to ETL conventions would produce results attributed
-to a language that never ran.
+An unknown language fails loudly here. Falling back to ETL instead would record
+results for a language that never ran.
 """
 
 from __future__ import annotations
@@ -29,7 +26,7 @@ _ADAPTERS: dict[str, LanguageAdapter] = {
 
 
 class UnsupportedLanguageError(KeyError):
-    """Raised when no adapter implements the requested language yet."""
+    """Raised when no adapter implements the requested language."""
 
 
 def language_adapter(language: str) -> LanguageAdapter:
@@ -40,7 +37,3 @@ def language_adapter(language: str) -> LanguageAdapter:
     raise UnsupportedLanguageError(
         f"unknown language '{language}' (known: {', '.join(REQUIRED_LANGUAGES)})"
     )
-
-
-def implemented_languages() -> tuple[str, ...]:
-    return tuple(sorted(_ADAPTERS))

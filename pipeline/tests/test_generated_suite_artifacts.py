@@ -12,7 +12,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from llm4mtl.domain import INVALID_SEMANTIC_CASES
+from llm4mtl.domain import CONTRACT_VIOLATION, INVALID_SEMANTIC_CASES
 from llm4mtl.languages.etl.adapter import EtlAdapter
 from llm4mtl.run_store.identity import InvalidRunIdError
 from llm4mtl.semantic_tests.extraction.models import (
@@ -147,6 +147,30 @@ class ExtractionArtifactPolicyTests(unittest.TestCase):
                 MISSING_SEMANTIC_CASES, metadata["artifact_validation"]["reason_code"]
             )
             self.assertEqual("etl", metadata["language"])
+            # One whole sentence, not a list of single characters.
+            self.assertEqual(
+                [
+                    "no semantic_cases.json in the response: there is no "
+                    "specification to render an executable test from"
+                ],
+                metadata["artifact_validation"]["violations"],
+            )
+
+    def test_a_contract_violation_is_written_as_readable_json(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            suite_dir, validation = self.write(
+                Path(temp_dir),
+                response_markdown(with_spec=True, with_java=False),
+                task="Tree2Graph",
+            )
+            report = json.loads(
+                (suite_dir / "contract_violations.json").read_text(encoding="utf-8")
+            )
+
+            self.assertFalse(validation.valid)
+            self.assertEqual(CONTRACT_VIOLATION, validation.reason_code)
+            self.assertEqual("Tree2Graph", report["task"])
+            self.assertEqual(list(validation.violations), report["violations"])
 
     def test_malformed_semantic_cases_are_invalid_not_a_process_exit(self) -> None:
         malformed = (

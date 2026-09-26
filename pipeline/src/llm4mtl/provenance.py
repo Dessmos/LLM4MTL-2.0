@@ -3,8 +3,8 @@
 A derived metric is only reproducible if the run states which code, contracts,
 and tooling produced it. This module collects the facts that are known at run
 creation: the exact code state, renderer, runtime tools, and hand-authored input
-artifacts. Mutation operator and qualification-corpus versions are added by the
-batches that introduce those artifacts.
+artifacts. Mutation operator and qualification-corpus versions are not recorded
+yet.
 
 The git revision is mandatory: a run that cannot name the code that produced it
 is not reproducible, so run creation fails instead of recording an unknown.
@@ -20,11 +20,24 @@ from pathlib import Path
 from typing import Any
 
 from llm4mtl import run_store
+from llm4mtl.conventions import (
+    LanguageConfig,
+    default_references_root,
+    default_task_contracts_root,
+    frozen_task_prompt,
+    language_config,
+)
+from llm4mtl.languages import UnsupportedLanguageError, language_adapter
 from llm4mtl.paths import REPO_ROOT, TARGET
+from llm4mtl.prompt_assembly.task_inputs import CUSTOM_METAMODEL_PATH
+from llm4mtl.serialization.hashing import file_sha256
 from llm4mtl.stage_contract import SCHEMA_VERSION as STAGE_SCHEMA_VERSION
+from llm4mtl.task_contracts import TaskContract, load_task_contract
 
 GIT_COMMAND_TIMEOUT_SECONDS = 15
 TOOL_COMMAND_TIMEOUT_SECONDS = 15
+# Recorded when a run reads user-supplied text instead of a benchmark input.
+CUSTOM_SOURCE = "custom"
 
 
 class ProvenanceError(RuntimeError):
@@ -48,15 +61,7 @@ def build_provenance(
     reads instead of the ones a task contract names; each is hashed in place of
     the input it replaces.
     """
-    from llm4mtl.languages import UnsupportedLanguageError, language_adapter
-
-    try:
-        adapter = language_adapter(language)
-        renderer_version = adapter.renderer_version
-        language_tool_versions = adapter.runtime_tool_versions()
-    except UnsupportedLanguageError as exc:
-        raise ProvenanceError(str(exc)) from exc
-
+    renderer_version, language_tool_versions = _language_facts(language)
     return {
         "git_commit": git_commit(),
         "git_dirty": is_working_tree_dirty(),
@@ -65,13 +70,7 @@ def build_provenance(
             "run_store": run_store.SCHEMA_VERSION,
             "stage_contract": STAGE_SCHEMA_VERSION,
         },
-        "tool_versions": {
-            "python": platform.python_version(),
-            "platform": platform.platform(),
-            "java": required_tool_version("java", ("java", "-version")),
-            "maven": required_tool_version("Maven", ("mvn", "--version")),
-            **language_tool_versions,
-        },
+        "tool_versions": _tool_versions(language_tool_versions),
         "input_hashes": input_hashes(
             language,
             task,
@@ -80,6 +79,26 @@ def build_provenance(
         ),
         **extra,
     }
+
+
+def _tool_versions(language_tool_versions: dict[str, str]) -> dict[str, str]:
+    """The versions of the runtime and tools every language needs, plus its own."""
+    return {
+        "python": platform.python_version(),
+        "platform": platform.platform(),
+        "java": required_tool_version("java", ("java", "-version")),
+        "maven": required_tool_version("Maven", ("mvn", "--version")),
+        **language_tool_versions,
+    }
+
+
+def _language_facts(language: str) -> tuple[str, dict[str, str]]:
+    """The renderer version and runtime tool versions of one language."""
+    try:
+        adapter = language_adapter(language)
+        return adapter.renderer_version, adapter.runtime_tool_versions()
+    except UnsupportedLanguageError as exc:
+        raise ProvenanceError(str(exc)) from exc
 
 
 def input_hashes(
@@ -93,54 +112,61 @@ def input_hashes(
 
     The reference transformation is the behavioural oracle, the task contract
     fixes the model bindings, and the metamodels define what the assertions can
-    even refer to. A result that does not name them cannot be reproduced, and a
-    silent edit to any of them would change the experiment without changing any
-    recorded identity.
+    refer to. Without their hashes a silent edit to any of them would change the
+    experiment without changing any recorded identity.
 
-    These inputs are mandatory for a supported task. Missing one aborts run
-    creation: recording ``null`` would create evidence that cannot be tied to
-    the behavioural oracle and structural contract that produced it.
+    For a benchmark task these inputs are mandatory: a missing one raises
+    :class:`ProvenanceError` instead of recording ``null``.
 
     A custom task prompt replaces the frozen prompt, and a custom task metamodel
-    the contract-selected ones: ``task_prompt`` and ``metamodels`` then hash the
-    text the run was given, and the reference and contract it has none of are
-    recorded as null.
+    replaces the contract's metamodels. ``task_prompt`` and ``metamodels`` then
+    hash the text the run was given. A run with a custom metamodel has no
+    reference or contract, so those are recorded as null.
     """
-    from llm4mtl.conventions import (
-        default_references_root,
-        default_task_contracts_root,
-        frozen_task_prompt,
-        language_config,
-    )
-    from llm4mtl.task_contracts import load_task_contract
-    from llm4mtl.prompt_assembly.task_inputs import CUSTOM_METAMODEL_PATH
-    from llm4mtl.serialization.hashing import file_sha256
+    config = _language_config(language)
+    if custom_task_metamodel is not None:
+        return _custom_task_hashes(
+            language, task, custom_task_prompt, custom_task_metamodel
+        )
+    hashes = _benchmark_input_hashes(config, language, task)
+    if custom_task_prompt is not None:
+        return {
+            **hashes,
+            "task_prompt": _text_sha256(custom_task_prompt),
+            "task_prompt_source": CUSTOM_SOURCE,
+        }
+    return {**hashes, "task_prompt": _frozen_task_prompt_hash(config, task)}
 
+
+def _language_config(language: str) -> LanguageConfig:
     try:
-        config = language_config(language)
+        return language_config(language)
     except KeyError as exc:
         raise ProvenanceError(str(exc)) from exc
 
-    if custom_task_metamodel is not None:
-        if custom_task_prompt is None:
-            raise ProvenanceError(
-                f"custom task metamodel without a custom task prompt: {language}/{task}"
-            )
-        return {
-            "reference_transformation": None,
-            "task_contract": None,
-            "metamodels": {
-                CUSTOM_METAMODEL_PATH: hashlib.sha256(
-                    custom_task_metamodel.encode("utf-8")
-                ).hexdigest()
-            },
-            "task_prompt": hashlib.sha256(
-                custom_task_prompt.encode("utf-8")
-            ).hexdigest(),
-            "task_prompt_source": "custom",
-            "metamodel_source": "custom",
-        }
 
+def _custom_task_hashes(
+    language: str, task: str, prompt: str | None, metamodel: str
+) -> dict[str, Any]:
+    """Hashes of a task the user wrote: its prompt and metamodel, nothing else."""
+    if prompt is None:
+        raise ProvenanceError(
+            f"custom task metamodel without a custom task prompt: {language}/{task}"
+        )
+    return {
+        "reference_transformation": None,
+        "task_contract": None,
+        "metamodels": {CUSTOM_METAMODEL_PATH: _text_sha256(metamodel)},
+        "task_prompt": _text_sha256(prompt),
+        "task_prompt_source": CUSTOM_SOURCE,
+        "metamodel_source": CUSTOM_SOURCE,
+    }
+
+
+def _benchmark_input_hashes(
+    config: LanguageConfig, language: str, task: str
+) -> dict[str, Any]:
+    """Hashes of the task's reference, task contract, and contract metamodels."""
     reference = next(default_references_root(config).glob(f"{task}.*"), None)
     contract_path = default_task_contracts_root(config) / f"{task}.json"
     contract = load_task_contract(
@@ -152,32 +178,35 @@ def input_hashes(
         )
     if not contract_path.is_file() or contract is None:
         raise ProvenanceError(f"task contract not found for {language}/{task}")
+    return {
+        "reference_transformation": file_sha256(reference),
+        "task_contract": file_sha256(contract_path),
+        "metamodels": _metamodel_hashes(config, contract),
+    }
 
+
+def _metamodel_hashes(config: LanguageConfig, contract: TaskContract) -> dict[str, str]:
+    """Hash of each metamodel file the contract names, by repository path."""
     metamodels: dict[str, str] = {}
     for model in contract.models:
         if not model.metamodel_file:
             continue
         path = _metamodel_path(config.language_key, model.metamodel_file)
         metamodels[path.relative_to(REPO_ROOT).as_posix()] = file_sha256(path)
+    return metamodels
 
-    hashes = {
-        "reference_transformation": file_sha256(reference),
-        "task_contract": file_sha256(contract_path),
-        "metamodels": metamodels,
-    }
-    if custom_task_prompt is not None:
-        return {
-            **hashes,
-            "task_prompt": hashlib.sha256(custom_task_prompt.encode("utf-8")).hexdigest(),
-            "task_prompt_source": "custom",
-        }
 
+def _frozen_task_prompt_hash(config: LanguageConfig, task: str) -> str:
     task_prompt = frozen_task_prompt(config, task)
     if not task_prompt.is_file():
         raise ProvenanceError(
             f"frozen task prompt not found for {config.language_key}/{task}"
         )
-    return {**hashes, "task_prompt": file_sha256(task_prompt)}
+    return file_sha256(task_prompt)
+
+
+def _text_sha256(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 def _metamodel_path(language: str, recorded_path: str) -> Path:

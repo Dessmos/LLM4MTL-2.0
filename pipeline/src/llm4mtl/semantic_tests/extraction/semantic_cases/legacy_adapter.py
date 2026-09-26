@@ -6,6 +6,11 @@ from typing import Any
 
 from .errors import SemanticCasesError
 
+_SOURCE_MODEL = "Tree"
+_TARGET_MODEL = "Graph"
+# Joins the source and target node names of one expected edge.
+_EDGE_SEPARATOR = "->"
+
 
 def is_legacy_tree2graph_spec(spec: dict[str, Any]) -> bool:
     """Return whether ``spec`` uses the pre-contract Tree2Graph shape."""
@@ -20,67 +25,7 @@ def is_legacy_tree2graph_spec(spec: dict[str, Any]) -> bool:
 
 def normalize_legacy_tree2graph_spec(spec: dict[str, Any]) -> dict[str, Any]:
     """Convert a legacy Tree2Graph specification to the canonical shape."""
-    tests = []
-    for test in spec["tests"]:
-        nodes = expected_node_names(test["expectedNodes"])
-        edges = expected_edge_pairs(test["expectedEdges"])
-        tests.append(
-            {
-                "name": test["name"],
-                "models": [
-                    {
-                        "name": "Tree",
-                        "kind": "emf",
-                        "role": "source",
-                        "path": test["inputModel"],
-                        "generated": True,
-                        "metamodelUri": "Tree",
-                    },
-                    {
-                        "name": "Graph",
-                        "kind": "emf",
-                        "role": "target",
-                        "metamodelUri": "Graph",
-                    },
-                ],
-                "assertions": [
-                    {
-                        "kind": "count",
-                        "model": "Graph",
-                        "type": "Node",
-                        "expected": len(nodes),
-                    },
-                    {
-                        "kind": "count",
-                        "model": "Graph",
-                        "type": "Edge",
-                        "expected": len(edges),
-                    },
-                    {
-                        "kind": "featureValues",
-                        "model": "Graph",
-                        "type": "Node",
-                        "feature": "name",
-                        "expected": nodes,
-                    },
-                    {
-                        "kind": "referencePairs",
-                        "model": "Graph",
-                        "type": "Edge",
-                        "source": "source.name",
-                        "target": "target.name",
-                        "expected": [
-                            {
-                                "source": edge.split("->", 1)[0],
-                                "target": edge.split("->", 1)[1],
-                            }
-                            for edge in edges
-                        ],
-                    },
-                ],
-            }
-        )
-
+    tests = [_canonical_test(test) for test in spec["tests"]]
     return {
         "schemaVersion": 1,
         "testClass": spec.get("testClass") or "GeneratedTree2GraphSemanticTest",
@@ -88,6 +33,73 @@ def normalize_legacy_tree2graph_spec(spec: dict[str, Any]) -> dict[str, Any]:
         "metamodels": ["metamodels/Tree.ecore", "metamodels/Graph.ecore"],
         "tests": tests,
     }
+
+
+def _canonical_test(test: dict[str, Any]) -> dict[str, Any]:
+    """One legacy test as a canonical test over a Tree source and a Graph target."""
+    nodes = expected_node_names(test["expectedNodes"])
+    edges = expected_edge_pairs(test["expectedEdges"])
+    return {
+        "name": test["name"],
+        "models": _tree2graph_models(test["inputModel"]),
+        "assertions": _graph_assertions(nodes, edges),
+    }
+
+
+def _tree2graph_models(input_model: Any) -> list[dict[str, Any]]:
+    return [
+        {
+            "name": _SOURCE_MODEL,
+            "kind": "emf",
+            "role": "source",
+            "path": input_model,
+            "generated": True,
+            "metamodelUri": _SOURCE_MODEL,
+        },
+        {
+            "name": _TARGET_MODEL,
+            "kind": "emf",
+            "role": "target",
+            "metamodelUri": _TARGET_MODEL,
+        },
+    ]
+
+
+def _graph_assertions(nodes: list[str], edges: list[str]) -> list[dict[str, Any]]:
+    """Assert the node and edge counts, the node names and the edge pairs."""
+    return [
+        _graph_count("Node", len(nodes)),
+        _graph_count("Edge", len(edges)),
+        {
+            "kind": "featureValues",
+            "model": _TARGET_MODEL,
+            "type": "Node",
+            "feature": "name",
+            "expected": nodes,
+        },
+        {
+            "kind": "referencePairs",
+            "model": _TARGET_MODEL,
+            "type": "Edge",
+            "source": "source.name",
+            "target": "target.name",
+            "expected": [_edge_endpoints(edge) for edge in edges],
+        },
+    ]
+
+
+def _graph_count(type_name: str, expected: int) -> dict[str, Any]:
+    return {
+        "kind": "count",
+        "model": _TARGET_MODEL,
+        "type": type_name,
+        "expected": expected,
+    }
+
+
+def _edge_endpoints(edge: str) -> dict[str, str]:
+    source, target = edge.split(_EDGE_SEPARATOR, 1)
+    return {"source": source, "target": target}
 
 
 def expected_node_names(raw_nodes: Any) -> list[str]:
@@ -121,5 +133,5 @@ def expected_edge_pairs(raw_edges: Any) -> list[str]:
             raise SemanticCasesError(
                 "expectedEdges entries must contain source and target"
             )
-        pairs.append(f"{edge['source']}->{edge['target']}")
+        pairs.append(f"{edge['source']}{_EDGE_SEPARATOR}{edge['target']}")
     return pairs

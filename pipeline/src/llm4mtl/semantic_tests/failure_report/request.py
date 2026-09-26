@@ -15,11 +15,16 @@ from typing import Any
 
 from llm4mtl.paths import REPO_ROOT, TARGET
 from llm4mtl.semantic_tests.failure_report.errors import FailureReportError
-from llm4mtl.semantic_tests.execution_evidence import archived_execution_evidence
+from llm4mtl.semantic_tests.execution_evidence import (
+    ArchivedEvidence,
+    archived_execution_evidence,
+)
 from llm4mtl.semantic_tests.failure_report.models import (
     CASE_REQUEST_FIELDS,
+    CASE_SCOPE,
     DIFF_FIELDS,
     PAIR_REQUEST_FIELDS,
+    PAIR_SCOPE,
 )
 from llm4mtl.serialization.json_io import read_json
 
@@ -45,71 +50,27 @@ class ReportRequest:
     def from_payload(cls, payload: object) -> ReportRequest:
         """Validate the request boundary and resolve every supplied path."""
         request_payload = _request_payload(payload, CASE_REQUEST_FIELDS)
-
         test_case_id = _required_string(request_payload, "test_case_id")
-        # Null is the honest value for a runtime throw: the harness never
-        # reached an assertion, so naming one would attribute the failure to a
-        # check that did not run.
-        assertion_id = (
-            None
-            if request_payload.get("assertion_id") is None
-            else _required_string(request_payload, "assertion_id")
-        )
+        assertion_id = _optional_assertion_id(request_payload)
         attempt = _positive_attempt(request_payload)
-
         actual_vs_expected = _validate_difference(
             request_payload.get("actual_vs_expected")
         )
-        generated_execution = _input_path(
-            request_payload.get("generated_execution"), "generated_execution"
-        )
-        # The workspace those reports were produced in is wiped by the next
-        # `mvn clean`, so a request that named them there would break as soon as
-        # the run continued. Omitting them therefore means "read the run's own
-        # archive", which is the only copy that still describes this execution.
-        #
-        # Nothing is inferred either way: an archive that recorded no Surefire
-        # report yields no report, and a request that names neither an explicit
-        # path nor an archived execution is refused rather than producing a
-        # report whose runtime evidence is silently empty.
+        generated_execution = _generated_execution(request_payload)
         archived = archived_execution_evidence(generated_execution)
-        if "surefire_reports" not in request_payload and archived.directory is None:
-            raise FailureReportError(
-                "surefire_reports must be an array of paths, or the generated "
-                "execution must have archived execution evidence beside it"
-            )
+        _require_runtime_evidence(request_payload, archived)
+        # Keyword arguments run left to right, so the paths are checked in the
+        # order the fields are listed here.
         return cls(
-            run_manifest=_input_path(
-                request_payload.get("run_manifest"), "run_manifest"
-            ),
-            syntax_evidence=_input_path(
-                request_payload.get("syntax_evidence"), "syntax_evidence"
-            ),
-            execution_evidence=_input_path(
-                request_payload.get("execution_evidence"), "execution_evidence"
-            ),
+            **_recorded_input_paths(request_payload),
             generated_execution=generated_execution,
-            reference_execution=_optional_input_path(
-                request_payload.get("reference_execution"), "reference_execution"
-            ),
             test_case_id=test_case_id,
             assertion_id=assertion_id,
             attempt=attempt,
             actual_target_models=_input_paths(
                 request_payload.get("actual_target_models"), "actual_target_models"
             ),
-            surefire_reports=(
-                _input_paths(request_payload["surefire_reports"], "surefire_reports")
-                if "surefire_reports" in request_payload
-                else archived.surefire_reports
-            ),
-            execution_log=(
-                _optional_input_path(
-                    request_payload.get("execution_log"), "execution_log"
-                )
-                if "execution_log" in request_payload
-                else archived.execution_log
-            ),
+            **_runtime_evidence_paths(request_payload, archived),
             actual_vs_expected=actual_vs_expected,
         )
 
@@ -139,42 +100,20 @@ class PairReportRequest:
         """Validate the pair-level request and resolve every supplied path."""
         request_payload = _request_payload(payload, PAIR_REQUEST_FIELDS)
         attempt = _positive_attempt(request_payload)
-
-        generated_execution = _input_path(
-            request_payload.get("generated_execution"), "generated_execution"
-        )
+        generated_execution = _generated_execution(request_payload)
         archived = archived_execution_evidence(generated_execution)
         return cls(
-            run_manifest=_input_path(
-                request_payload.get("run_manifest"), "run_manifest"
-            ),
-            syntax_evidence=_input_path(
-                request_payload.get("syntax_evidence"), "syntax_evidence"
-            ),
-            execution_evidence=_input_path(
-                request_payload.get("execution_evidence"), "execution_evidence"
-            ),
+            **_recorded_input_paths(request_payload),
             generated_execution=generated_execution,
-            reference_execution=_optional_input_path(
-                request_payload.get("reference_execution"), "reference_execution"
-            ),
             attempt=attempt,
-            surefire_reports=(
-                _input_paths(request_payload["surefire_reports"], "surefire_reports")
-                if "surefire_reports" in request_payload
-                else archived.surefire_reports
-            ),
-            execution_log=(
-                _optional_input_path(
-                    request_payload.get("execution_log"), "execution_log"
-                )
-                if "execution_log" in request_payload
-                else archived.execution_log
-            ),
+            **_runtime_evidence_paths(request_payload, archived),
         )
 
 
-REQUEST_TYPES: dict[str, type] = {}
+REQUEST_TYPES: dict[str, type] = {
+    CASE_SCOPE: ReportRequest,
+    PAIR_SCOPE: PairReportRequest,
+}
 
 
 def request_type(scope: str) -> type:
@@ -222,6 +161,77 @@ def _request_payload(
             f"request contains unknown fields: {', '.join(unknown_fields)}"
         )
     return payload
+
+
+def _optional_assertion_id(payload: dict[str, Any]) -> str | None:
+    """The assertion the failure lost, or ``None`` for a runtime throw.
+
+    Null is the honest value for a throw: the harness never reached an
+    assertion, so naming one would blame a check that did not run.
+    """
+    if payload.get("assertion_id") is None:
+        return None
+    return _required_string(payload, "assertion_id")
+
+
+def _generated_execution(payload: dict[str, Any]) -> Path:
+    return _input_path(payload.get("generated_execution"), "generated_execution")
+
+
+def _recorded_input_paths(payload: dict[str, Any]) -> dict[str, Path | None]:
+    """The run manifest and the recorded stage evidence the request names."""
+    return {
+        "run_manifest": _input_path(payload.get("run_manifest"), "run_manifest"),
+        "syntax_evidence": _input_path(
+            payload.get("syntax_evidence"), "syntax_evidence"
+        ),
+        "execution_evidence": _input_path(
+            payload.get("execution_evidence"), "execution_evidence"
+        ),
+        "reference_execution": _optional_input_path(
+            payload.get("reference_execution"), "reference_execution"
+        ),
+    }
+
+
+def _require_runtime_evidence(
+    payload: dict[str, Any], archived: ArchivedEvidence
+) -> None:
+    """Refuse a request with no Surefire source at all.
+
+    Such a request names no reports and its execution has no archive, so its
+    report would have silently empty runtime evidence.
+    """
+    if "surefire_reports" not in payload and archived.directory is None:
+        raise FailureReportError(
+            "surefire_reports must be an array of paths, or the generated "
+            "execution must have archived execution evidence beside it"
+        )
+
+
+def _runtime_evidence_paths(
+    payload: dict[str, Any], archived: ArchivedEvidence
+) -> dict[str, Any]:
+    """The Surefire reports and Maven log: named in the request, or archived.
+
+    The workspace those reports were produced in is wiped by the next
+    `mvn clean`, so a request that named them there would break as soon as the
+    run continued. Omitting them therefore means "read the run's own archive",
+    which is the only copy that still describes this execution. An archive that
+    recorded no Surefire report yields no report; nothing is inferred.
+    """
+    return {
+        "surefire_reports": (
+            _input_paths(payload["surefire_reports"], "surefire_reports")
+            if "surefire_reports" in payload
+            else archived.surefire_reports
+        ),
+        "execution_log": (
+            _optional_input_path(payload.get("execution_log"), "execution_log")
+            if "execution_log" in payload
+            else archived.execution_log
+        ),
+    }
 
 
 def _positive_attempt(payload: dict[str, Any]) -> int:
@@ -316,5 +326,3 @@ def _output_path(value: Path) -> Path:
         raise FailureReportError("output must stay under artifacts/work") from exc
     return resolved
 
-
-REQUEST_TYPES.update({"test_case": ReportRequest, "execution_pair": PairReportRequest})

@@ -768,10 +768,130 @@ class RefinementRestatesGenerationContextTests(unittest.TestCase):
         with self.assertRaisesRegex(RefinementPreparationError, "chain_of_thought"):
             self._prepare(paths, manifest, "transformation", "SYNTAX_INVALID")
 
-    def _run(self, language: str, task: str, identity: dict) -> tuple:
+    def test_each_outcome_code_restates_the_stages_it_came_from(self) -> None:
+        technical = ("technical", ["extract", "technical-validation"])
+        expected = {
+            "SYNTAX_INVALID": ("syntax", ["syntax-validation"]),
+            "REFERENCE_VALIDATION_FAILED": (
+                "reference",
+                ["technical-validation", "reference-validation"],
+            ),
+            "TEST_SPEC_INVALID": technical,
+            "TECH_COMPILE_FAILED": technical,
+            "TECH_EXEC_FAILED": technical,
+            # A code this module does not know is technical feedback.
+            "SOME_NEW_OUTCOME": technical,
+        }
+        for reason, (source, stages) in expected.items():
+            with self.subTest(reason=reason):
+                paths, manifest = self._run(
+                    "etl", "Tree2Graph", IDENTITY, run_id=f"source-{reason.lower()}"
+                )
+                self._previous(paths, "transformation-generation", "Tree2Graph.etl")
+                for stage in (
+                    "extract",
+                    "syntax-validation",
+                    "technical-validation",
+                    "reference-validation",
+                ):
+                    run_store.record_attempt(
+                        paths, stage, {**self.SYNTAX_FAILURE, "stage": stage}
+                    )
+
+                request, _ = self._prepare(paths, manifest, "transformation", reason)
+
+                self.assertEqual(source, request["feedback"]["source"])
+                self.assertEqual(
+                    stages,
+                    [fact["stage"] for fact in request["feedback"]["stage_facts"]],
+                )
+
+    def test_a_request_must_name_the_next_iteration_of_a_known_artifact(
+        self,
+    ) -> None:
+        paths, manifest = self._run("etl", "Tree2Graph", IDENTITY)
+        cases = [
+            ("transformation", 0, -1, "exactly previous_iteration"),
+            ("transformation", 2, 0, "exactly previous_iteration"),
+            ("grammar", 1, 0, "unsupported artifact type: grammar"),
+        ]
+        for artifact_type, iteration, previous_iteration, message in cases:
+            with self.subTest(artifact_type=artifact_type, iteration=iteration):
+                with self.assertRaisesRegex(RefinementPreparationError, message):
+                    prepare_refinement(
+                        paths,
+                        manifest,
+                        RefinementRequest(
+                            artifact_type=artifact_type,
+                            iteration=iteration,
+                            previous_iteration=previous_iteration,
+                            provider="openai",
+                            model="gpt-5",
+                            reason="SYNTAX_INVALID",
+                        ),
+                        run_diagnoses=self.root / "diagnoses" / paths.root.name,
+                    )
+
+    def test_only_a_semantic_refinement_names_an_execution_attempt(self) -> None:
+        paths, manifest = self._run("etl", "Tree2Graph", IDENTITY)
+        self._previous(paths, "transformation-generation", "Tree2Graph.etl")
+        cases = [
+            ("SEMANTIC_EXECUTION_FAILED", None, "requires the execution attempt"),
+            ("DIAGNOSED_TRANSFORMATION_DEFECT", None, "requires the execution attempt"),
+            ("SYNTAX_INVALID", 1, "syntax refinement must not name"),
+        ]
+        for reason, execution_attempt, message in cases:
+            with self.subTest(reason=reason):
+                with self.assertRaisesRegex(RefinementPreparationError, message):
+                    prepare_refinement(
+                        paths,
+                        manifest,
+                        RefinementRequest(
+                            artifact_type="transformation",
+                            iteration=1,
+                            previous_iteration=0,
+                            provider="openai",
+                            model="gpt-5",
+                            reason=reason,
+                            execution_attempt=execution_attempt,
+                        ),
+                        run_diagnoses=self.root / "diagnoses" / paths.root.name,
+                    )
+
+    def test_a_retry_gets_the_same_request_and_a_different_one_is_refused(
+        self,
+    ) -> None:
+        paths, manifest = self._run("etl", "Tree2Graph", IDENTITY)
+        self._previous(paths, "transformation-generation", "Tree2Graph.etl")
+        run_store.record_attempt(paths, "syntax-validation", self.SYNTAX_FAILURE)
+
+        first, _ = self._prepare(paths, manifest, "transformation", "SYNTAX_INVALID")
+        again, _ = self._prepare(paths, manifest, "transformation", "SYNTAX_INVALID")
+        self.assertEqual(first, again)
+
+        with self.assertRaisesRegex(
+            RefinementPreparationError, "already exists with different content"
+        ):
+            prepare_refinement(
+                paths,
+                manifest,
+                RefinementRequest(
+                    artifact_type="transformation",
+                    iteration=1,
+                    previous_iteration=0,
+                    provider="anthropic",
+                    model="claude-sonnet-4",
+                    reason="SYNTAX_INVALID",
+                ),
+                run_diagnoses=self.root / "diagnoses" / paths.root.name,
+            )
+
+    def _run(
+        self, language: str, task: str, identity: dict, *, run_id: str | None = None
+    ) -> tuple:
         paths = run_store.create_run(
             self.root / "runs",
-            f"{language}-context",
+            run_id or f"{language}-context",
             {**identity, "provenance": build_provenance(language, task)},
         )
         manifest = run_store.read_manifest(paths)

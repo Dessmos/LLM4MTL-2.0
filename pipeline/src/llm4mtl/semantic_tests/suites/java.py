@@ -5,6 +5,11 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from llm4mtl.external_tools.maven import MAVEN_TEST_JAVA_DIR
+
+# The file name pattern of the Java sources of a rendered suite.
+JAVA_SOURCE_GLOB = "*.java"
+
 
 class JavaSourceError(ValueError):
     """A rendered Java source declares no class, so it cannot be selected or injected."""
@@ -15,9 +20,7 @@ def java_destination(test_project_dir: Path, fqcn: str) -> Path:
     parts = fqcn.split(".")
     class_name = parts[-1] + ".java"
     package_parts = parts[:-1]
-    return (
-        test_project_dir / "src" / "test" / "java" / Path(*package_parts) / class_name
-    )
+    return test_project_dir / MAVEN_TEST_JAVA_DIR / Path(*package_parts) / class_name
 
 
 def infer_fqcn(java_path: Path) -> str:

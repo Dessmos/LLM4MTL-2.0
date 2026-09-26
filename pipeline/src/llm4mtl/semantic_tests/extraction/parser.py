@@ -1,29 +1,22 @@
 """Resolve a response's fenced blocks to the artifacts it actually declared.
 
-Extraction reads what the response says. It does not work out what the response
+Extraction reads what the response says. It does not guess what the response
 probably meant.
 
-That distinction is an RQ1 measurement boundary. The extract stage is the first
-gate of the validation funnel, so a parser that recovers a file name from
-surrounding prose, keeps the first of two blocks claiming the same file, or
-files an unrecognized artifact under ``models/`` is answering the research
-question on the model's behalf. The prompt contract asks for named file blocks
-and nothing else:
-
-    The generated response must contain semantic test artifacts only:
-    - one semantic_cases.json file block,
-    - one or more generated source model file blocks,
-    - no Java, no JUnit, no Maven files, and no prose outside file blocks.
-
-So every block must name its own file, in its own info string:
+This is an RQ1 measurement boundary. Extraction is the first gate of the
+validation funnel. A parser that took a file name from nearby prose, kept the
+first of two blocks with the same file, or filed an unknown artifact under
+``models/`` would be doing the model's work and inflate its score. The prompt
+contract (``prompt_assets/tests/contract/<language>/semantic_cases_contract.txt``)
+asks for named file blocks only, so every block must name its own file in its
+own info string:
 
     ```json file=semantic_cases.json
     ```xml file=models/input.model
 
 Anything else raises :class:`ExtractionError`. The extract stage records the
-response as a failed extraction and keeps going — the workflow survives, the
-candidate stays in the denominator, and the failure is attributed to the
-response that caused it.
+response as a failed extraction and continues: the candidate stays in the
+denominator, and the failure is blamed on the response that caused it.
 """
 
 from __future__ import annotations
@@ -36,14 +29,14 @@ from llm4mtl.semantic_tests.extraction.models import (
     Block,
     ExtractionError,
 )
+from llm4mtl.semantic_tests.semantic_spec import MODELS_DIRECTORY, SEMANTIC_CASES_FILE
+from llm4mtl.task_contracts.models import MODEL_FILE_SUFFIXES
 
 # `file=`, `filename=`, or `path=` inside the fence's info string.
 DECLARED_PATH = re.compile(
     r"(?:^|\s)(?:file|filename|path)\s*=\s*[\"']?([^\"'\s`{}]+)",
     re.IGNORECASE,
 )
-
-MODELS_DIRECTORY = "models"
 
 
 def parse_fenced_blocks(markdown: str) -> list[Block]:
@@ -79,7 +72,7 @@ def extract_files(markdown: str) -> dict[str, str]:
             raise ExtractionError(
                 f"block #{index} (```{block.info}) does not name a file. Every "
                 "block must declare its own path, for example "
-                "```json file=semantic_cases.json"
+                f"```json file={SEMANTIC_CASES_FILE}"
             )
         path = canonical_generated_path(declared, block_index=index)
         if path in extracted:
@@ -94,8 +87,8 @@ def extract_files(markdown: str) -> dict[str, str]:
 def declared_file_path(block: Block) -> str | None:
     """The path this block states for itself, or ``None`` when it states none.
 
-    Only the block's own info string is consulted. Reading the prose before a
-    block is how an illustrative snippet became a generated artifact.
+    Only the block's own info string is read. The prose before a block is
+    ignored, because it may introduce an example rather than an artifact.
     """
     match = DECLARED_PATH.search(block.info)
     if match:
@@ -136,7 +129,7 @@ def canonical_generated_path(declared: str, *, block_index: int) -> str:
     raise ExtractionError(
         f"block #{block_index} declares the model file {declared!r} outside "
         f"{MODELS_DIRECTORY}/. Generated model files belong under "
-        f"{MODELS_DIRECTORY}/, as the paths in semantic_cases.json reference them."
+        f"{MODELS_DIRECTORY}/, as the paths in {SEMANTIC_CASES_FILE} reference them."
     )
 
 
@@ -147,9 +140,7 @@ def java_files(extracted: dict[str, str]) -> list[str]:
 
 def model_files(extracted: dict[str, str]) -> list[str]:
     """Return generated model artifact paths in deterministic order."""
-    return sorted(
-        path for path in extracted if path.endswith((".model", ".xmi", ".xml"))
-    )
+    return sorted(path for path in extracted if path.endswith(MODEL_FILE_SUFFIXES))
 
 
 def semantic_case_files(extracted: dict[str, str]) -> list[str]:

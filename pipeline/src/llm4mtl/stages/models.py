@@ -10,6 +10,20 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
+# Internal stage names: the ``StageResult.name`` each stage reports. The
+# contract stage id each one maps to is ``stage_contract.CONTRACT_STAGE_IDS``.
+EXTRACTION_STAGE_NAME = "extraction"
+TECHNICAL_VALIDATION_STAGE_NAME = "technical_validation"
+REFERENCE_VALIDATION_STAGE_NAME = "reference_validation"
+TRANSFORMATION_PARSING_STAGE_NAME = "transformation_parsing"
+TRANSFORMATION_VALIDATION_STAGE_NAME = "transformation_validation"
+
+# Maven timeout for one suite execution, in every stage that runs a suite.
+# Matches the reference-validation CLI default. The stage service has no
+# per-request timeout of its own.
+SUITE_TIMEOUT_SECONDS = 240
+
+
 
 class ConfigError(ValueError):
     """Raised when an experiment configuration violates the run contract."""
@@ -33,7 +47,6 @@ class PipelineConfig:
     transformation_models: list[str] = field(default_factory=list)
     transformation_strategies: list[str] = field(default_factory=list)
     suite_id: str | None = None
-    overwrite: bool = False
     technical_validation: bool = True
     reference_validation: bool = True
     transformation_parsing: bool = True
@@ -53,13 +66,10 @@ class PipelineConfig:
     force: bool = False
     dry_run: bool = False
     output_format: str = "text"
-    verbose: bool = False
-    keep_workspace: bool = False
     fail_fast: bool = False
     engine_dir: str | None = None
-    # Runtime scope resolved by the run store. This is deliberately not an
-    # experiment identity axis; adapters use it to keep evidence inside the
-    # current run even when the orchestrator has a non-default runs root.
+    # The run directory, resolved by the run store. Not an identity axis: the
+    # stages use it to keep their evidence inside the current run.
     run_dir: str | None = None
     transformation_selection_locked: bool = False
     command: str = "pipeline.run"

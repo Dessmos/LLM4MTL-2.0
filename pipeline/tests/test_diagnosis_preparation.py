@@ -27,14 +27,16 @@ from typing import Any
 from llm4mtl.paths import REPO_ROOT, TARGET
 from llm4mtl.provenance import input_hashes
 from llm4mtl.semantic_tests.diagnosis_preparation import (
+    DiagnosisPreparationError,
     _index_counts,
     _match_assertion,
     diagnosis_artifact_references,
     diagnosis_response_dir,
     prepare_after_execution_stage,
     prepare_execution_diagnosis,
+    read_failure_reports_for_attempt,
 )
-from llm4mtl.semantic_tests.failure_report import FailureReportError
+from llm4mtl.semantic_tests.failure_report import FailureReportError, write_report
 from llm4mtl.semantic_tests.failure_report.case_report import _failure_evidence
 from llm4mtl.semantic_tests.failure_report.surefire_view import _surefire_test_case
 from llm4mtl.semantic_tests.execution_evidence import (
@@ -49,6 +51,10 @@ TASK = "AmaltheaToAscet_All"
 CASE = "component_container_tasks_are_mapped_to_software_tasks"
 METHOD = "componentContainerTasksAreMappedToSoftwareTasks"
 ASSERTION_MESSAGE = "count assertion for OUT::AscetModule"
+# The XML-escaped Surefire message of that assertion when it finds 0, not 1.
+MISMATCH_MESSAGE = (
+    f"{ASSERTION_MESSAGE} ==&gt; expected: &lt;1&gt; but was: &lt;0&gt;"
+)
 
 SEMANTIC_CASES: dict[str, Any] = {
     "schemaVersion": "1.0",
@@ -506,6 +512,33 @@ class DiagnosisPreparationTests(unittest.TestCase):
         self.assertEqual(1, len(result["actual_target_model"]))
         self.assertTrue(report["source_diagnosis"]["eligible"])
         self.assertEqual("passed", result["reference_transformation_result"]["status"])
+
+    def test_a_case_whose_id_differs_from_its_name_is_found_by_its_name(self) -> None:
+        """Every renderer names the JUnit method after the case ``name``.
+
+        A case may also carry an ``id``. The failing method must still lead
+        back to its case, and the report keeps the ``id`` as the case id.
+        """
+        case = {**SEMANTIC_CASES["tests"][0], "id": "c1", "name": "creates nodes"}
+        write_json(
+            self.suite_dir / "semantic_cases.json", {**SEMANTIC_CASES, "tests": [case]}
+        )
+        observation = self._complete_failing_run()
+        self._archive_evidence(
+            observation, _surefire_xml(MISMATCH_MESSAGE).replace(METHOD, "createsNodes")
+        )
+
+        index = prepare_execution_diagnosis(self.run_dir, 1)
+        entry = index["pairs"][0]["reports"][0]
+
+        self.assertEqual("created", entry["status"], entry.get("detail"))
+        self.assertEqual("c1", entry["test_case_id"])
+        self.assertEqual("assertion-001", entry["assertion_id"])
+        self.assertTrue(entry["eligible"])
+        report = read_json(REPO_ROOT / entry["report"])
+        failure = report["test_case_result"]["failure"]
+        self.assertEqual("createsNodes", failure["test_method"])
+        self.assertEqual("1", failure["expected"])
 
     def test_the_bundle_satisfies_what_source_diagnosis_requires(self) -> None:
         """The two ends of the evidence contract are pinned to each other.
@@ -1238,6 +1271,187 @@ class DiagnosisPreparationTests(unittest.TestCase):
         second = prepare_execution_diagnosis(self.run_dir, 1)
 
         self.assertEqual(first, second)
+
+    # ------------------------------------------------ skips, refusals, reads
+
+    def _start_a_new_run(self) -> None:
+        """Give one subTest its own run: an attempt's index is written once."""
+        self.setUp()
+
+    def test_a_failed_pair_without_usable_evidence_is_skipped_with_its_reason(
+        self,
+    ) -> None:
+        def lose_the_observation(observation: Path) -> None:
+            observation.unlink()
+
+        def lose_the_syntax_attempt(observation: Path) -> None:
+            shutil.rmtree(self.run_dir / "stages" / "syntax-validation")
+
+        def lose_the_suite_directory(observation: Path) -> None:
+            execution = read_json(observation)
+            execution["inputs"]["suite"]["path"] = "artifacts/work/no/such/suite"
+            write_json(observation, execution)
+
+        def lose_the_archive(observation: Path) -> None:
+            shutil.rmtree(observation.parent / "execution_evidence")
+
+        def lose_the_semantic_cases(observation: Path) -> None:
+            (self.suite_dir / "semantic_cases.json").unlink()
+
+        cases = {
+            "no_recorded_observation": lose_the_observation,
+            "no_syntax_validation_attempt": lose_the_syntax_attempt,
+            "no_candidate_suite_directory": lose_the_suite_directory,
+            "no_archived_execution_evidence": lose_the_archive,
+            "no_semantic_cases": lose_the_semantic_cases,
+        }
+        for reason, lose in cases.items():
+            with self.subTest(reason=reason):
+                self._start_a_new_run()
+                lose(self._complete_failing_run())
+
+                index = prepare_execution_diagnosis(self.run_dir, 1)
+
+                pair = index["pairs"][0]
+                self.assertEqual([], pair["reports"])
+                self.assertEqual([reason], [skip["reason"] for skip in pair["skipped"]])
+                self.assertEqual(1, index["counts"]["pairs_without_reports"])
+
+    def test_a_failure_no_single_case_or_assertion_explains_is_refused(
+        self,
+    ) -> None:
+        cases = {
+            "semantic case rendering to 'otherMethod', found 0": _surefire_xml(
+                MISMATCH_MESSAGE
+            ).replace(METHOD, "otherMethod"),
+            "matching the recorded failure message, found 0": _surefire_xml(
+                "something no assertion prints"
+            ),
+        }
+        for detail, xml in cases.items():
+            with self.subTest(detail=detail):
+                self._start_a_new_run()
+                self._archive_evidence(self._complete_failing_run(), xml)
+
+                index = prepare_execution_diagnosis(self.run_dir, 1)
+
+                entry = index["pairs"][0]["reports"][0]
+                self.assertEqual("refused", entry["status"])
+                self.assertIn(detail, entry["detail"])
+                self.assertNotIn("report", entry)
+                self.assertEqual(1, index["counts"]["reports_refused"])
+
+    def _direct_case_request(self, assertion_id: str) -> dict[str, Any]:
+        observation = (
+            self._pair_root()
+            / TASK
+            / "gpt-5"
+            / "few_shot"
+            / "suite_001"
+            / "suite_execution.json"
+        )
+        attempts = self.run_dir / "stages"
+        return {
+            "run_manifest": _relative(self.run_dir / "manifest.json"),
+            "syntax_evidence": _relative(
+                attempts / "syntax-validation/attempts/attempt-001/evidence.json"
+            ),
+            "execution_evidence": _relative(
+                attempts / "execution/attempts/attempt-001/evidence.json"
+            ),
+            "generated_execution": _relative(observation),
+            "reference_execution": _relative(
+                self.run_dir
+                / "observations"
+                / TASK
+                / "gpt-5"
+                / "few_shot"
+                / "suite_001"
+                / "suite_execution.json"
+            ),
+            "test_case_id": CASE,
+            "assertion_id": assertion_id,
+            "attempt": 1,
+            "actual_target_models": [],
+        }
+
+    def test_a_request_naming_an_assertion_that_did_not_lose_is_refused(
+        self,
+    ) -> None:
+        self._complete_failing_run()
+        output = self.run_dir / "direct" / "report.json"
+
+        with self.assertRaisesRegex(
+            FailureReportError, "does not match the Surefire failure message"
+        ):
+            write_report(
+                self._direct_case_request("assertion-002"), output, scope="test_case"
+            )
+        self.assertFalse(output.exists())
+
+    def test_a_request_naming_an_assertion_with_a_shared_message_is_refused(
+        self,
+    ) -> None:
+        case = SEMANTIC_CASES["tests"][0]
+        first = case["assertions"][0]
+        # Same kind, model and type: both render the same message.
+        twin = {**first, "expected": 2}
+        write_json(
+            self.suite_dir / "semantic_cases.json",
+            {**SEMANTIC_CASES, "tests": [{**case, "assertions": [first, twin]}]},
+        )
+        self._complete_failing_run()
+        output = self.run_dir / "direct" / "report.json"
+
+        with self.assertRaisesRegex(FailureReportError, "message is not unique"):
+            write_report(
+                self._direct_case_request("assertion-001"), output, scope="test_case"
+            )
+        self.assertFalse(output.exists())
+
+    def test_reading_the_reports_of_an_attempt_refuses_a_bad_index(self) -> None:
+        self._complete_failing_run()
+        self._write_snapshot()
+        index = prepare_execution_diagnosis(self.run_dir, 1)
+        index_path = (
+            self.run_dir / "diagnosis" / "execution" / "attempt-001" / "index.json"
+        )
+        report = REPO_ROOT / index["pairs"][0]["reports"][0]["report"]
+        nested = report.parent / "nested" / report.name
+        nested.parent.mkdir()
+        shutil.copyfile(report, nested)
+
+        def without_report_reference(entry: dict[str, Any]) -> None:
+            del entry["report"]
+
+        def nested_report(entry: dict[str, Any]) -> None:
+            entry["report"] = _relative(nested)
+
+        cases = {
+            "has no file reference": without_report_reference,
+            "is not a direct attempt report": nested_report,
+        }
+        for detail, tamper in cases.items():
+            with self.subTest(detail=detail):
+                tampered = json.loads(json.dumps(index))
+                tamper(tampered["pairs"][0]["reports"][0])
+                write_json(index_path, tampered)
+
+                with self.assertRaisesRegex(DiagnosisPreparationError, detail):
+                    read_failure_reports_for_attempt(self.run_dir, 1)
+
+        with self.subTest(detail="identity does not match request"):
+            write_json(index_path, {**index, "run_id": "another-run"})
+            with self.assertRaisesRegex(
+                DiagnosisPreparationError, "identity does not match request"
+            ):
+                read_failure_reports_for_attempt(self.run_dir, 1)
+
+        with self.subTest(detail="no diagnosis index"):
+            with self.assertRaisesRegex(
+                DiagnosisPreparationError, "no diagnosis index for execution attempt 2"
+            ):
+                read_failure_reports_for_attempt(self.run_dir, 2)
 
     def test_a_failed_parser_verdict_is_not_diagnosable(self) -> None:
         observation = self._write_observation(

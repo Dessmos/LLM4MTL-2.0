@@ -207,7 +207,8 @@ The body contains only attempt-specific controls:
 }
 ```
 
-An empty object is valid. `suite_id`, when present, uses the same opaque
+An empty object is valid. `verbose` is accepted so existing callers stay
+valid, but it has no effect. `suite_id`, when present, uses the same opaque
 one-component identifier syntax. Identity fields and all other unknown fields
 are rejected with `422`; the service reconstructs language/task/model/strategy
 selection exclusively from `manifest.json`.

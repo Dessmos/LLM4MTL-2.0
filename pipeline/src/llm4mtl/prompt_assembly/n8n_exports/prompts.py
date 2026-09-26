@@ -1,20 +1,18 @@
 """What the models are asked, in every n8n export.
 
-This module is text and the facts that text interpolates — nothing else. It
-holds the system messages and user turns sent to the prompt-generation,
-transformation-generation, and semantic-test-generation models. It knows
-nothing about n8n nodes, connections, or files, so the exact wording a model
-receives can be reviewed here without reading any workflow plumbing.
+This module holds the system messages and user turns sent to the
+prompt-generation, transformation-generation, and semantic-test-generation
+models, so the exact wording can be reviewed in one place. The user turns are
+n8n expressions that read item fields and the output of a few named nodes.
+This module builds no nodes and no connections.
 
-One instruction per purpose, shared by every language. Only a language's
-grammar clause, the names of its declared entities, and one optional extra
-rule may differ; everything around them is identical, so a model is asked for
-the same thing in every language.
+Each purpose has one instruction for all languages. Only the parts in
+:class:`WorkflowInputs` differ, so every language is asked for the same thing.
 
-The semantic-test contract is deliberately stated in one place only. The
-system message points at the REQUIRED OUTPUT CONTRACT section instead of
-paraphrasing it: when the two disagreed, the paraphrase won, and every
-generated suite reproduced it rather than the contract.
+The semantic-test output contract is stated in one place only. The system
+message points at the REQUIRED OUTPUT CONTRACT section and must not paraphrase
+it: a paraphrase in the system message wins over the contract, and the model
+follows the paraphrase.
 """
 
 from __future__ import annotations
@@ -22,15 +20,27 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 
+from llm4mtl.prompt_assembly.n8n_exports.node_names import (
+    EXAMPLES_TEXT_NODE,
+    GRAMMAR_TEXT_NODE,
+    HELPER_METHODS_TEXT_NODE,
+)
+
+# Item fields that the generated workflows set and the user turns read.
+ASSEMBLED_PROMPT_FIELD = "assembled_prompt"
+OUTPUT_CONTRACT_FIELD = "output_contract"
+
+QWEN_MODEL = "qwen2.5-coder:7b"
+NO_METAMODEL_TEXT = "(no external metamodel file is required by the task contract)"
+
 
 @dataclass(frozen=True)
 class WorkflowInputs:
     display_name: str
     reference_extension: str
-    # What "follow the grammar exactly" means in this language, and what its
-    # named entities are called. These are the only parts of the transformation
-    # instruction that may differ between languages; everything around them is
-    # shared, so a model is asked for the same thing in every language.
+    # The only parts of the transformation instruction that differ between
+    # languages: the grammar clause, the names of declared entities, and one
+    # optional extra rule.
     grammar_constructs: str
     named_entities: str
     extra_rule: str = ""
@@ -95,9 +105,9 @@ INPUTS = {
 }
 
 
-# The frozen task prompt describes the transformation under test. It is written
-# for the transformation generator, so test generation has to say out loud what
-# role it plays here, or the model answers it instead of testing it.
+# The frozen task prompt is written for the transformation generator. Test
+# generation must say that it describes the code under test, or the model
+# implements the task instead of testing it.
 TASK_SPECIFICATION_HEADER = (
     "## Task specification (describes the transformation under test: "
     "write tests for it, do not implement it)\\n"
@@ -109,8 +119,8 @@ FEW_SHOT_SECTION_HEADER = (
     "\\n\\n## Few-shot examples (they illustrate the binding contract above; "
     "on any conflict the contract wins)\\n"
 )
-# Plain title text, with no escaping, because it is also restated by the
-# refinement prompt that Python renders outside any n8n expression.
+# Plain text with no escaping: ``refinement.py`` also uses it outside any n8n
+# expression.
 PREREQUISITES_SECTION_HEADER = (
     "Reactions that run beside this one (their tasks, not yours to implement; "
     "a test builds its pre-state through the changes they react to)"
@@ -118,12 +128,9 @@ PREREQUISITES_SECTION_HEADER = (
 
 
 def transformation_system_message(language: str) -> str:
-    """One instruction, one rule list, for every language.
+    """The same instruction and numbered rule list for every language.
 
-    The four languages' instructions had drifted into four different texts:
-    different rule numbering (ATL skipped rule 4), different punctuation, and a
-    QVT-O display name used nowhere else. Only the grammar clause, the names of
-    a language's declared entities, and one optional extra rule may differ.
+    Only the :class:`WorkflowInputs` parts differ between languages.
     """
     inputs = INPUTS[language]
     rules = [
@@ -155,10 +162,9 @@ def transformation_system_message(language: str) -> str:
 
 
 def transformation_request() -> str:
-    """The user turn. Identical in every language, including the namespaces.
+    """The user turn, identical in every language.
 
-    The namespace line used to be a hardcoded Vitruv URI in every workflow,
-    which was simply untrue for ETL and ATL. It now comes from the contract.
+    The namespace URIs come from the task contract (``metamodel_uri_text``).
     """
     return (
         "={{ $json.prompt }}\n\n"
@@ -167,15 +173,34 @@ def transformation_request() -> str:
         "{{ $json.metamodel_text }}\n\n"
         "The metamodel namespace URIs for this task are:\n"
         "{{ $json.metamodel_uri_text }}\n\n"
-        "{{ $if($('Extract text from examples file').isExecuted, "
-        '"Here are some examples as guideline:\\n" + '
-        "$('Extract text from examples file').item.json.examples, \"\") }}\n\n"
-        "{{ $if($('Extract text from grammar').isExecuted, "
-        '"Here is the grammar of the Language:\\n" + '
-        "$('Extract text from grammar').item.json.grammar, \"\") }}\n\n"
-        "{{ $if($('Extract text from helper methods').isExecuted, "
-        '"Here are helper methods you can use:\\n" + '
-        "$('Extract text from helper methods').item.json.helper_methods, \"\") }}"
+        + "\n\n".join(
+            (
+                _template_section_if_ran(
+                    EXAMPLES_TEXT_NODE,
+                    "Here are some examples as guideline:",
+                    "examples",
+                ),
+                _template_section_if_ran(
+                    GRAMMAR_TEXT_NODE,
+                    "Here is the grammar of the Language:",
+                    "grammar",
+                ),
+                _template_section_if_ran(
+                    HELPER_METHODS_TEXT_NODE,
+                    "Here are helper methods you can use:",
+                    "helper_methods",
+                ),
+            )
+        )
+    )
+
+
+def _template_section_if_ran(node: str, heading: str, field: str) -> str:
+    """A template part: ``heading`` and a field of ``node``, only if that node ran."""
+    return (
+        f"{{{{ $if($('{node}').isExecuted, "
+        f'"{heading}\\n" + '
+        f"$('{node}').item.json.{field}, \"\") }}}}"
     )
 
 
@@ -188,7 +213,7 @@ def cloud_prompt_request(language: str) -> str:
         "File: {{ $json.reference.path }}\n"
         "{{ $json.reference.content }}\n\n"
         "Exact task-specific metamodel files selected by the task contract:\n"
-        "{{ $json.metamodel_text || '(no external metamodel file is required by the task contract)' }}\n\n"
+        f"{{{{ $json.metamodel_text || '{NO_METAMODEL_TEXT}' }}}}\n\n"
         f"{inputs.display_name} grammar:\n{{{{ $json.grammar.content }}}}\n\n"
         "Reconstruct the concise natural-language developer request that could "
         "have produced this reference transformation. Preserve the task's "
@@ -212,29 +237,33 @@ def prompt_generation_system_message(language: str) -> str:
 
 
 def qwen_prompt_request(language: str) -> str:
-    system = json.dumps(
-        prompt_generation_system_message(language),
-        ensure_ascii=False,
-    )
     requirements = json.dumps(
         _prompt_language_requirements(language), ensure_ascii=False
     )
-    return (
-        "={{ JSON.stringify({ model: 'qwen2.5-coder:7b', stream: false, "
-        f"messages: [{{ role: 'system', content: {system} }}, "
-        "{ role: 'user', content: "
+    user_content = (
         "'Task name: ' + ($json.task || '') + "
         "'\\n\\nReference transformation (' + ($json.reference.path || '') + '):\\n' + "
         "($json.reference.content || '') + "
         "'\\n\\nExact task-specific metamodel files:\\n' + "
-        "($json.metamodel_text || '(no external metamodel file is required by the task contract)') + "
+        f"($json.metamodel_text || '{NO_METAMODEL_TEXT}') + "
         "'\\n\\nGrammar:\\n' + (($json.grammar || {}).content || '') + "
         "'\\n\\nReconstruct the concise natural-language developer request that "
         "could have produced this reference. Preserve observable intent and "
         "explicitly name its rules, mappings, or reactions. Do not generate code "
         "or tests, do not invent facts, and keep it under 100 words. "
         f"Language-specific requirements: ' + {requirements} + "
-        "'\\n\\nReturn only the task prompt text.' }], "
+        "'\\n\\nReturn only the task prompt text.'"
+    )
+    return _qwen_chat_request(prompt_generation_system_message(language), user_content)
+
+
+def _qwen_chat_request(system_message: str, user_content: str) -> str:
+    """The JSON body of one local-Qwen chat request, as an n8n expression."""
+    system = json.dumps(system_message, ensure_ascii=False)
+    return (
+        f"={{{{ JSON.stringify({{ model: '{QWEN_MODEL}', stream: false, "
+        f"messages: [{{ role: 'system', content: {system} }}, "
+        f"{{ role: 'user', content: {user_content} }}], "
         "options: { temperature: 0.1, top_p: 1 } }) }}"
     )
 
@@ -252,7 +281,20 @@ def _prompt_language_requirements(language: str) -> str:
 
 
 def cloud_test_request(language: str) -> str:
-    grammar_name = INPUTS[language].display_name
+    grammar_heading = (
+        f"\\n\\n## {INPUTS[language].display_name} grammar (syntax guidance only)\\n"
+    )
+    examples = _concatenated_section_if_ran(
+        EXAMPLES_TEXT_NODE, FEW_SHOT_SECTION_HEADER, "examples"
+    )
+    grammar = _concatenated_section_if_ran(
+        GRAMMAR_TEXT_NODE, grammar_heading, "grammar"
+    )
+    helper_methods = _concatenated_section_if_ran(
+        HELPER_METHODS_TEXT_NODE,
+        "\\n\\n## Existing helper methods (background only)\\n",
+        "helper_methods",
+    )
     return (
         f'={{{{ "{TASK_SPECIFICATION_HEADER}" + $json.prompt + '
         '"\\n\\n## Authoritative metamodel files\\n" + '
@@ -260,16 +302,16 @@ def cloud_test_request(language: str) -> str:
         '$if(($json.prerequisite_prompt_text || "") != "", '
         f'"\\n\\n## {PREREQUISITES_SECTION_HEADER}\\n" + '
         '$json.prerequisite_prompt_text, "") + '
-        f'"{CONTRACT_SECTION_HEADER}" + ($json.output_contract || "") + '
-        '$if($("Extract text from examples file").isExecuted, '
-        f'"{FEW_SHOT_SECTION_HEADER}" + '
-        '$("Extract text from examples file").item.json.examples, "") + '
-        '$if($("Extract text from grammar").isExecuted, '
-        f'"\\n\\n## {grammar_name} grammar (syntax guidance only)\\n" + '
-        '$("Extract text from grammar").item.json.grammar, "") + '
-        '$if($("Extract text from helper methods").isExecuted, '
-        '"\\n\\n## Existing helper methods (background only)\\n" + '
-        '$("Extract text from helper methods").item.json.helper_methods, "") }}'
+        f'"{CONTRACT_SECTION_HEADER}" + ($json.{OUTPUT_CONTRACT_FIELD} || "") + '
+        f"{examples} + {grammar} + {helper_methods} }}}}"
+    )
+
+
+def _concatenated_section_if_ran(node: str, heading: str, field: str) -> str:
+    """An expression part: ``heading`` and a field of ``node``, only if it ran."""
+    return (
+        f'$if($("{node}").isExecuted, "{heading}" + '
+        f'$("{node}").item.json.{field}, "")'
     )
 
 
@@ -279,21 +321,16 @@ def qwen_assembled_prompt() -> str:
         f'={{{{ "{TASK_SPECIFICATION_HEADER}" + ($json.prompt || "") + '
         '"\\n\\n## Authoritative metamodel files\\n" + '
         '($json.metamodel_text || "") + '
-        f'"{CONTRACT_SECTION_HEADER}" + ($json.output_contract || "") }}}}'
+        f'"{CONTRACT_SECTION_HEADER}" + ($json.{OUTPUT_CONTRACT_FIELD} || "") }}}}'
     )
 
 
 def test_generation_system_message(language: str) -> str:
-    """Defer to the contract instead of paraphrasing it.
+    """The test-generation system message. It points at the contract.
 
-    This message used to restate the artifact shape in its own words, and the
-    two texts disagreed. It listed the model fields as "name, kind, role, path,
-    generated, and metamodelUri only for EMF", which reads as the literal value
-    ``"EMF"``; it named neither the closed ``kind``/``role`` vocabularies nor
-    the mandatory ``model`` and ``type`` fields of an assertion. Being the
-    highest-priority instruction, it won over the contract that stated all of
-    them, and every generated ATL suite reproduced this message rather than the
-    contract. One authority now states the shape, and this message points at it.
+    Do not describe the ``semantic_cases.json`` shape here. The system message
+    has the highest priority, so any paraphrase of the contract here would win
+    over the contract itself, and generated suites would follow its mistakes.
     """
     message = (
         f"Generate semantic test artifacts for {INPUTS[language].display_name} "
@@ -322,13 +359,7 @@ def test_generation_system_message(language: str) -> str:
 
 
 def qwen_test_request(language: str) -> str:
-    system = json.dumps(
+    return _qwen_chat_request(
         test_generation_system_message(language),
-        ensure_ascii=False,
-    )
-    return (
-        "={{ JSON.stringify({ model: 'qwen2.5-coder:7b', stream: false, "
-        f"messages: [{{ role: 'system', content: {system} }}, "
-        "{ role: 'user', content: ($json.assembled_prompt || '') }], "
-        "options: { temperature: 0.1, top_p: 1 } }) }}"
+        f"($json.{ASSEMBLED_PROMPT_FIELD} || '')",
     )

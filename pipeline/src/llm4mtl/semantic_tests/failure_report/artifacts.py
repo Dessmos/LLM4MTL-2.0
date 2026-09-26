@@ -33,11 +33,10 @@ def _read_object(path: Path, label: str) -> dict[str, Any]:
 
 
 def _log_excerpt(path: Path) -> dict[str, Any]:
-    """A bounded, self-describing citation of one build log.
+    """A bounded citation of one build log.
 
-    The excerpt is the log's own tail, verbatim; ``path`` and ``sha256`` name the
-    complete stream so a reader who needs the rest can always get it, and
-    ``truncated`` says outright that this is not the whole file.
+    The excerpt is the log's tail, copied as is. ``path`` and ``sha256`` name
+    the full log, and ``truncated`` says whether the excerpt is the whole file.
     """
     try:
         content = path.read_text(encoding="utf-8", errors="replace")
@@ -55,6 +54,11 @@ def _log_excerpt(path: Path) -> dict[str, Any]:
         "excerpt_lines": excerpt.count("\n") + 1 if excerpt else 0,
         "truncated": excerpt != content.rstrip("\n"),
     }
+
+
+def _optional_log_excerpt(path: Path | None) -> dict[str, Any] | None:
+    """:func:`_log_excerpt` of ``path``, or ``None`` when no log was recorded."""
+    return _log_excerpt(path) if path is not None else None
 
 
 def _text_artifact(path: Path) -> dict[str, Any]:
@@ -98,12 +102,10 @@ def _suite_artifact_path(suite_dir: Path, raw_path: object, label: str) -> Path:
 def _relevant_log_lines(cited_log: dict[str, Any] | None) -> dict[str, Any] | None:
     """The build-log lines that say something about this run's outcome.
 
-    A Maven log is mostly reactor progress. The lines that matter are the ones
-    the build itself marked — errors, warnings, the Surefire summary, the build
-    verdict — and selecting by those markers is a filter over the log's own
-    output, not a judgement about the failure. The report keeps the wider
-    excerpt and the archive keeps the whole stream, so nothing is lost by
-    sending less.
+    A Maven log is mostly build progress. The useful lines are the ones Maven
+    itself marked: errors, warnings, the Surefire summary, the build result.
+    Filtering on those markers judges nothing about the failure. The report
+    keeps the wider excerpt and the archive keeps the full log.
     """
     if cited_log is None:
         return None
@@ -128,12 +130,10 @@ def _cited(artifact: dict[str, Any]) -> dict[str, Any]:
 
 
 def _repository_path(path: Path) -> str:
-    """A cited path, in this package's error vocabulary.
+    """``path`` relative to the repository, or :class:`FailureReportError`.
 
-    The spelling is the repository's own; what this adds is the refusal. A
-    report that cited a path outside the repository would be unreadable to
-    anyone who did not produce it, so the boundary translates that into the
-    error the assembler already handles rather than letting it escape.
+    A report that cited a path outside the repository would be unreadable to
+    anyone else, so that case becomes the error the builders already handle.
     """
     try:
         return require_repository_relative(path)

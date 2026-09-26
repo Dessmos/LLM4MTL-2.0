@@ -1,7 +1,7 @@
 """LLM4MTL deterministic experiment pipeline.
 
-The package contains pipeline stages, run and experiment stores, local
-orchestration, and the transport-only stage service used by n8n.
+The package holds the pipeline stages, the language adapters, the run store,
+the local runner, and the transport-only stage service that n8n calls.
 """
 
 __version__ = "0.0.0"

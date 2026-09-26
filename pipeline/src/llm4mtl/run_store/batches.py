@@ -27,8 +27,13 @@ from typing import Any
 from llm4mtl.artifact_schemas import validate_artifact
 from llm4mtl.run_store.attempts import claim_attempt, next_free_number
 from llm4mtl.run_store.identity import resolve_contained_dir
-from llm4mtl.run_store.models import SCHEMA_VERSION
-from llm4mtl.serialization.json_io import read_json, write_json_once
+from llm4mtl.run_store.models import RECORDED_AT, SCHEMA_VERSION, without_recorded_at
+from llm4mtl.serialization.json_io import (
+    JsonDocumentConflictError,
+    read_json,
+    write_json_once,
+    write_json_once_or_match,
+)
 
 BATCH_PREFIX = "batch_"
 MANIFEST_FILENAME = "batch.json"
@@ -146,27 +151,29 @@ def record_batch_result(paths: BatchPaths, result: dict[str, Any]) -> dict[str, 
         "schema_version": SCHEMA_VERSION,
         "batch_id": paths.batch_id,
         **result,
-        "recorded_at": datetime.now(timezone.utc).isoformat(),
+        RECORDED_AT: datetime.now(timezone.utc).isoformat(),
     }
     validate_artifact("batch-result", payload)
-    existing = read_batch_result(paths)
-    if existing is not None:
-        if _without_time(existing) != _without_time(payload):
-            raise BatchResultConflictError(
-                f"batch already ended as {existing['status']}: {paths.result}"
-            )
-        return existing
-    write_json_once(paths.result, payload)
-    return payload
+    try:
+        return write_json_once_or_match(
+            paths.result,
+            payload,
+            comparable=without_recorded_at,
+            check_stored=_validate_batch_result,
+        )
+    except JsonDocumentConflictError as exc:
+        raise BatchResultConflictError(
+            f"batch already ended as {exc.stored['status']}: {paths.result}"
+        ) from exc
 
 
 def read_batch_result(paths: BatchPaths) -> dict[str, Any] | None:
     if not paths.result.is_file():
         return None
     payload = read_json(paths.result)
-    validate_artifact("batch-result", payload)
+    _validate_batch_result(payload)
     return payload
 
 
-def _without_time(payload: dict[str, Any]) -> dict[str, Any]:
-    return {key: value for key, value in payload.items() if key != "recorded_at"}
+def _validate_batch_result(payload: dict[str, Any]) -> None:
+    validate_artifact("batch-result", payload)

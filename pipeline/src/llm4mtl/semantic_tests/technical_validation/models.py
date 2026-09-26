@@ -1,4 +1,4 @@
-"""Data structures and constants for generated-suite technical validation."""
+"""CSV columns of the generated-suite technical-validation results."""
 
 from __future__ import annotations
 

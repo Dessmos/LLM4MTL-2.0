@@ -3,16 +3,26 @@
 from __future__ import annotations
 
 import hashlib
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from llm4mtl.artifact_schemas import validate_artifact
 from llm4mtl.conventions import frozen_task_prompt, language_config
-from llm4mtl.run_store.models import RunPaths
-from llm4mtl.serialization.json_io import read_json, write_json_once
+from llm4mtl.run_store.models import RECORDED_AT, RunPaths, without_recorded_at
+from llm4mtl.serialization.json_io import (
+    JsonDocumentConflictError,
+    write_json_once_or_match,
+)
 
 SCHEMA_VERSION = "1.0"
+# The artifact types a generation or refinement call produces.
+SEMANTIC_TEST_ARTIFACT = "semantic-test"
+TRANSFORMATION_ARTIFACT = "transformation"
+# The response directory, below a run, of each artifact type's generations.
+SEMANTIC_TEST_GENERATION = "semantic-test-generation"
+TRANSFORMATION_GENERATION = "transformation-generation"
 
 
 class GenerationRecordError(ValueError):
@@ -78,35 +88,12 @@ def record_generation(
     model: str,
     strategy: str | None,
 ) -> dict[str, Any]:
-    operation, suffix = _operation_and_suffix(manifest, artifact_type)
-    output = paths.generation_response(
-        operation, iteration, f"{manifest['task']}.{suffix}"
-    )
-    if not output.is_file():
-        raise GenerationRecordError(f"raw generation output is missing: {output}")
+    """Record, once, which files one generation call read and wrote.
 
-    request_path = paths.refinement_dir(artifact_type, iteration) / "request.json"
-    if iteration > 0 and not request_path.is_file():
-        raise GenerationRecordError(f"refinement request is missing: {request_path}")
-    # Semantic-test workflows archive the fully assembled prompt beside their
-    # response. Transformation exports currently do not, so refinement falls
-    # back to Python's exact prepared prompt and initial generation to the
-    # task prompt the run was created with.
-    prompt = paths.generation_iteration_dir(operation, iteration) / "prompt.md"
-    if not prompt.is_file() and iteration > 0:
-        prompt = paths.refinement_dir(artifact_type, iteration) / "prompt.md"
-    if not prompt.is_file():
-        prompt = task_prompt_source(paths, manifest)
-    previous = None
-    if iteration > 0:
-        previous = paths.generation_response(
-            operation, iteration - 1, f"{manifest['task']}.{suffix}"
-        )
-        if not previous.is_file():
-            raise GenerationRecordError(
-                f"input generation artifact is missing: {previous}"
-            )
-
+    A retry that records the same facts reads the first record back; different
+    facts for the same iteration raise :class:`GenerationRecordError`.
+    """
+    files = _generation_files(paths, manifest, artifact_type, iteration)
     payload = {
         "schema_version": SCHEMA_VERSION,
         "run_id": paths.root.name,
@@ -118,46 +105,132 @@ def record_generation(
         "provider": provider,
         "model": model,
         "strategy": strategy,
-        "input_artifact_iteration": iteration - 1 if iteration > 0 else None,
-        "created_artifact_iteration": iteration,
-        "prompt": _file_fact(paths, prompt),
-        "input_artifact": _file_fact(paths, previous) if previous is not None else None,
-        "output_artifact": _file_fact(paths, output),
-        "refinement_request": _file_fact(paths, request_path)
-        if iteration > 0
-        else None,
-        "recorded_at": datetime.now(timezone.utc).isoformat(),
+        **_file_links(paths, files, iteration),
+        RECORDED_AT: datetime.now(timezone.utc).isoformat(),
     }
     validate_artifact("generation-result", payload)
-    destination = paths.generation_record(artifact_type, iteration)
+    return _write_record_once(paths.generation_record(artifact_type, iteration), payload)
+
+
+@dataclass(frozen=True)
+class _GenerationFiles:
+    """The files one generation call read and wrote.
+
+    ``input_artifact`` and ``refinement_request`` exist only for a refinement,
+    that is for an iteration above 0.
+    """
+
+    prompt: Path
+    output_artifact: Path
+    input_artifact: Path | None
+    refinement_request: Path | None
+
+
+def _generation_files(
+    paths: RunPaths, manifest: dict[str, Any], artifact_type: str, iteration: int
+) -> _GenerationFiles:
+    """Find the files of one generation call; raise when one is missing."""
+    operation, suffix = _operation_and_suffix(manifest, artifact_type)
+    response_name = f"{manifest['task']}.{suffix}"
+    output = paths.generation_response(operation, iteration, response_name)
+    _require_file(output, "raw generation output is missing")
+    if iteration == 0:
+        return _GenerationFiles(
+            prompt=_prompt_file(paths, manifest, artifact_type, iteration),
+            output_artifact=output,
+            input_artifact=None,
+            refinement_request=None,
+        )
+    request = paths.refinement_request(artifact_type, iteration)
+    _require_file(request, "refinement request is missing")
+    prompt = _prompt_file(paths, manifest, artifact_type, iteration)
+    previous = paths.generation_response(operation, iteration - 1, response_name)
+    _require_file(previous, "input generation artifact is missing")
+    return _GenerationFiles(
+        prompt=prompt,
+        output_artifact=output,
+        input_artifact=previous,
+        refinement_request=request,
+    )
+
+
+def _prompt_file(
+    paths: RunPaths, manifest: dict[str, Any], artifact_type: str, iteration: int
+) -> Path:
+    """The prompt a generation call was sent.
+
+    Semantic-test workflows archive the full prompt beside their response.
+    Transformation workflows do not. Then a refinement falls back to the prompt
+    Python prepared, and an initial generation to the run's task prompt.
+    """
+    operation = _operation_for_artifact_type(artifact_type)
+    archived = paths.generation_prompt(operation, iteration)
+    if archived.is_file():
+        return archived
+    if iteration > 0:
+        prepared = paths.refinement_prompt(artifact_type, iteration)
+        if prepared.is_file():
+            return prepared
+    return task_prompt_source(paths, manifest)
+
+
+def _file_links(
+    paths: RunPaths, files: _GenerationFiles, iteration: int
+) -> dict[str, Any]:
+    """Which iteration the call read and wrote, and the files it used."""
+    return {
+        "input_artifact_iteration": iteration - 1 if iteration > 0 else None,
+        "created_artifact_iteration": iteration,
+        "prompt": _file_fact(paths, files.prompt),
+        "input_artifact": _optional_file_fact(paths, files.input_artifact),
+        "output_artifact": _file_fact(paths, files.output_artifact),
+        "refinement_request": _optional_file_fact(paths, files.refinement_request),
+    }
+
+
+def _write_record_once(destination: Path, payload: dict[str, Any]) -> dict[str, Any]:
+    """Write the record once; a retry must record the same facts."""
     try:
-        write_json_once(destination, payload)
-    except FileExistsError:
-        existing = read_json(destination)
-        validate_artifact("generation-result", existing)
-        if _without_time(existing) != _without_time(payload):
-            raise GenerationRecordError(
-                f"generation attempt already has different provenance: {destination}"
-            )
-        return existing
-    return payload
+        return write_json_once_or_match(
+            destination,
+            payload,
+            comparable=without_recorded_at,
+            check_stored=_validate_generation_record,
+        )
+    except JsonDocumentConflictError as exc:
+        raise GenerationRecordError(
+            f"generation attempt already has different provenance: {destination}"
+        ) from exc
+
+
+def _require_file(path: Path, problem: str) -> None:
+    if not path.is_file():
+        raise GenerationRecordError(f"{problem}: {path}")
+
+
+def _validate_generation_record(record: dict[str, Any]) -> None:
+    validate_artifact("generation-result", record)
 
 
 def _operation_and_suffix(
     manifest: dict[str, Any], artifact_type: str
 ) -> tuple[str, str]:
     operation = _operation_for_artifact_type(artifact_type)
-    if artifact_type == "semantic-test":
+    if artifact_type == SEMANTIC_TEST_ARTIFACT:
         return operation, "md"
     return operation, language_config(str(manifest["language"])).language_key
 
 
 def _operation_for_artifact_type(artifact_type: str) -> str:
-    if artifact_type == "semantic-test":
-        return "semantic-test-generation"
-    if artifact_type == "transformation":
-        return "transformation-generation"
+    if artifact_type == SEMANTIC_TEST_ARTIFACT:
+        return SEMANTIC_TEST_GENERATION
+    if artifact_type == TRANSFORMATION_ARTIFACT:
+        return TRANSFORMATION_GENERATION
     raise GenerationRecordError(f"unsupported artifact type: {artifact_type}")
+
+
+def _optional_file_fact(paths: RunPaths, path: Path | None) -> dict[str, Any] | None:
+    return None if path is None else _file_fact(paths, path)
 
 
 def _file_fact(paths: RunPaths, path: Path) -> dict[str, Any]:
@@ -171,7 +244,3 @@ def _file_fact(paths: RunPaths, path: Path) -> dict[str, Any]:
         "sha256": hashlib.sha256(content).hexdigest(),
         "bytes": len(content),
     }
-
-
-def _without_time(payload: dict[str, Any]) -> dict[str, Any]:
-    return {key: value for key, value in payload.items() if key != "recorded_at"}

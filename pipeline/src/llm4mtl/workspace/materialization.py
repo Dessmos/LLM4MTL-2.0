@@ -6,7 +6,12 @@ import fcntl
 import os
 import shutil
 import tempfile
+from contextlib import contextmanager
 from pathlib import Path
+from typing import Iterator
+
+# Build output and repository metadata are not part of the engine template.
+IGNORED_TEMPLATE_ENTRIES = ("target", ".git", "*.class")
 
 
 class WorkspaceMaterializationError(RuntimeError):
@@ -37,27 +42,40 @@ def materialize_engine(
     workspaces_root = Path(workspaces_root).resolve()
     workspaces_root.mkdir(parents=True, exist_ok=True)
     destination = workspaces_root / workspace_name
-    lock_path = workspaces_root / f".{workspace_name}.materialize.lock"
-    with lock_path.open("a", encoding="utf-8") as lock:
-        fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+    with _exclusive_lock(workspaces_root / f".{workspace_name}.materialize.lock"):
         if destination.is_dir():
             return destination
         if destination.exists():
             raise WorkspaceMaterializationError(
                 f"workspace destination is not a directory: {destination}"
             )
-
-        temporary_root = Path(
-            tempfile.mkdtemp(prefix=f".{workspace_name}-", dir=workspaces_root)
-        )
-        candidate = temporary_root / "engine"
-        try:
-            shutil.copytree(
-                source,
-                candidate,
-                ignore=shutil.ignore_patterns("target", ".git", "*.class"),
-            )
-            os.rename(candidate, destination)
-        finally:
-            shutil.rmtree(temporary_root, ignore_errors=True)
+        _copy_then_rename(source, destination)
     return destination
+
+
+@contextmanager
+def _exclusive_lock(lock_path: Path) -> Iterator[None]:
+    """Hold an exclusive lock on ``lock_path`` for the duration of the block."""
+    with lock_path.open("a", encoding="utf-8") as lock:
+        fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+        yield
+
+
+def _copy_then_rename(source: Path, destination: Path) -> None:
+    """Copy ``source`` beside ``destination``, then rename it into place.
+
+    The rename is atomic, so ``destination`` is either absent or complete.
+    """
+    temporary_root = Path(
+        tempfile.mkdtemp(prefix=f".{destination.name}-", dir=destination.parent)
+    )
+    candidate = temporary_root / "engine"
+    try:
+        shutil.copytree(
+            source,
+            candidate,
+            ignore=shutil.ignore_patterns(*IGNORED_TEMPLATE_ENTRIES),
+        )
+        os.rename(candidate, destination)
+    finally:
+        shutil.rmtree(temporary_root, ignore_errors=True)

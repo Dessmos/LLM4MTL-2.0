@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from llm4mtl.conventions import ETL_CONFIG, LanguageConfig, default_task_contracts_root
-from llm4mtl.task_contracts.models import ModelContract, TaskContract
+from llm4mtl.task_contracts.models import EMF_KIND, ModelContract, TaskContract
 
 
 def load_task_contract(
@@ -17,9 +17,8 @@ def load_task_contract(
 ) -> TaskContract | None:
     """Return the contract for ``task`` or ``None`` when no contract exists.
 
-    A missing contract is not an error at this low-level loader. Production
-    adapters still fail artifact validation when a required benchmark contract
-    is absent.
+    A missing contract is not an error here. Language adapters still reject a
+    suite whose benchmark task has no contract.
     """
     root = contracts_root or default_task_contracts_root(config)
     path = Path(root) / f"{task}.json"
@@ -40,9 +39,8 @@ def contract_from_mapping(
     resolved_task = str(data.get("task") or task or "")
     return TaskContract(
         task=resolved_task,
-        # The contract names its own transformation file. There is no default:
-        # guessing ".etl" here is how a missing field used to become an ETL
-        # assumption inside an ATL, QVT-O, or Reactions run.
+        # No default: guessing ".etl" would put an ETL assumption into ATL,
+        # QVT-O, or Reactions runs.
         transformation=str(data.get("transformation") or ""),
         models=models,
     )
@@ -52,28 +50,29 @@ def _model_from_dict(raw: dict[str, Any]) -> ModelContract:
     return ModelContract(
         runtime_name=str(raw.get("runtimeName") or ""),
         roles=tuple(str(role) for role in raw.get("roles", [])),
-        kind=str(raw.get("kind") or "emf"),
-        metamodel_uri=str(raw["metamodelUri"]) if raw.get("metamodelUri") else None,
-        metamodel_ns_prefix=str(raw["metamodelNsPrefix"])
-        if raw.get("metamodelNsPrefix")
-        else None,
-        metamodel_alias=str(raw["metamodelAlias"])
-        if raw.get("metamodelAlias")
-        else None,
-        metamodel_file=str(raw["metamodelFile"]) if raw.get("metamodelFile") else None,
-        types_used_in_transformation=tuple(
-            str(type_name)
-            for type_name in (
-                raw.get("typesUsedInTransformation")
-                # The snake_case spelling is the originally published schema,
-                # still accepted by schemas/contract.schema.json. The former
-                # ETL-only "typesUsedInEtL" spelling is not: every benchmark
-                # contract now uses the one language-neutral key.
-                or raw.get("types_used_in_transformation")
-                or []
-            )
-        ),
+        kind=str(raw.get("kind") or EMF_KIND),
+        metamodel_uri=_optional_text(raw, "metamodelUri"),
+        metamodel_ns_prefix=_optional_text(raw, "metamodelNsPrefix"),
+        metamodel_alias=_optional_text(raw, "metamodelAlias"),
+        metamodel_file=_optional_text(raw, "metamodelFile"),
+        types_used_in_transformation=_types_used_in_transformation(raw),
         available_types=tuple(
             str(type_name) for type_name in raw.get("availableTypes", [])
         ),
     )
+
+
+def _optional_text(raw: dict[str, Any], key: str) -> str | None:
+    """``raw[key]`` as text, or ``None`` when it is absent or empty."""
+    return str(raw[key]) if raw.get(key) else None
+
+
+def _types_used_in_transformation(raw: dict[str, Any]) -> tuple[str, ...]:
+    # Also accept the older snake_case key, which schemas/contract.schema.json
+    # still allows.
+    types_used = (
+        raw.get("typesUsedInTransformation")
+        or raw.get("types_used_in_transformation")
+        or []
+    )
+    return tuple(str(type_name) for type_name in types_used)

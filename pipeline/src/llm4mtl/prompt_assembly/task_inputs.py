@@ -1,10 +1,10 @@
 """Resolve the exact repository inputs for one task prompt.
 
-The task contract is the only mapping from a reference transformation to its
-metamodel files.  Callers receive the reference, those exact metamodels, and the
-language grammar; the raw contract is intentionally not included in the LLM
-input.  A custom task supplies its own metamodel instead and resolves through
-:func:`resolve_custom_task_inputs`, which produces the same shape.
+The task contract is the only link from a reference transformation to its
+metamodel files. Callers get the reference, those exact metamodels, and the
+language grammar. The raw contract itself is not given to the LLM. A custom
+task brings its own metamodel and uses :func:`resolve_custom_task_inputs`,
+which returns the same shape.
 """
 
 from __future__ import annotations
@@ -17,6 +17,8 @@ from typing import Any
 
 from llm4mtl.artifact_schemas import ArtifactSchemaError, validate_artifact
 from llm4mtl.conventions import (
+    LanguageConfig,
+    default_references_root,
     default_task_contracts_root,
     language_config,
 )
@@ -80,9 +82,8 @@ class ResolvedTaskInputs:
     def metamodel_uri_text(self) -> str:
         """The namespace URIs a generated transformation must reference.
 
-        These come from the contract, so a prompt cannot state a namespace the
-        task does not use. Transformation prompts used to hardcode one Vitruv
-        URI for every language, which was wrong for ETL and ATL.
+        They come from the contract, so a prompt never names a namespace the
+        task does not use.
         """
         return "\n".join(f"- {uri}" for uri in self.metamodel_uris)
 
@@ -90,10 +91,9 @@ class ResolvedTaskInputs:
     def prerequisite_prompt_text(self) -> str:
         """The specifications of the tasks this one presupposes.
 
-        A test has to build its pre-state through changes something reacts to.
-        Which changes those are is decided by the other tasks that run beside
-        this one, and their specifications say it in the same words as this
-        task's own -- so they are handed over rather than left to be guessed.
+        A test builds its starting state through changes that the prerequisite
+        tasks react to. Their specifications describe those changes, so they are
+        given to the LLM instead of being left to guesswork.
         """
         return "\n\n".join(
             f"### {prompt.path}\n{prompt.content}"
@@ -127,28 +127,21 @@ def resolve_custom_task_inputs(
 ) -> ResolvedTaskInputs:
     """The prompt inputs of a task whose metamodel the user wrote or attached.
 
-    The metamodel arrives with the run rather than through a contract, so there
-    is no contract and no reference to resolve; the grammar is the language's,
-    as it is for every task.
+    The metamodel comes with the run, so there is no contract and no reference.
+    The grammar is the language's, as for every task.
     """
-    if not TASK_NAME.fullmatch(task):
-        raise TaskInputResolutionError(f"invalid task name: {task!r}")
+    _check_task_name(task)
     if not metamodel.strip():
         raise TaskInputResolutionError(f"custom task {task!r} supplied no metamodel")
-
-    try:
-        config = language_config(language)
-    except KeyError as exc:
-        raise TaskInputResolutionError(str(exc)) from exc
-
+    config = _language_config(language)
     return ResolvedTaskInputs(
         language=config.language_key,
         task=task,
         contract_path=None,
         reference=None,
         metamodels=(PromptInputFile(path=metamodel_path, content=metamodel),),
-        # Namespace URIs come from a contract, and a custom metamodel has none:
-        # the prompt then states no URI rather than one from another task's.
+        # URIs come from a contract, and a custom task has none. Stating no URI
+        # is better than stating another task's.
         metamodel_uris=(),
         grammar=_read_input(_grammar_path(config.language_key)),
     )
@@ -157,38 +150,19 @@ def resolve_custom_task_inputs(
 def resolve_task_inputs(language: str, task: str) -> ResolvedTaskInputs:
     """Resolve ``reference -> task contract -> exact metamodel files``.
 
-    All persisted paths must be repository-relative and remain inside the
-    protected benchmark tree.  A missing or stale path fails the request rather
-    than falling back to a language-wide glob.
+    Every recorded path must be repository-relative and stay inside the
+    protected benchmark tree. A missing or stale path raises
+    :class:`TaskInputResolutionError`; there is no fallback search.
     """
-    if not TASK_NAME.fullmatch(task):
-        raise TaskInputResolutionError(f"invalid task name: {task!r}")
-
-    try:
-        config = language_config(language)
-    except KeyError as exc:
-        raise TaskInputResolutionError(str(exc)) from exc
-
+    _check_task_name(task)
+    config = _language_config(language)
     language_key = config.language_key
-    contract_path = default_task_contracts_root(config) / f"{task}.json"
-    if not contract_path.is_file():
-        raise TaskInputResolutionError(
-            f"task contract not found for {language_key}/{task}"
-        )
-
+    contract_path = _contract_path(config, task)
     contract = _load_task_contract(contract_path, language_key, task)
     _validate_contract_identity(contract, language_key, task)
-
-    reference_path = _protected_path(
-        contract.get("reference"),
-        field="reference",
-        required_root=TARGET.benchmark / "tasks" / language_key / "references",
-    )
-    _validate_reference_identity(contract, reference_path, language_key, task)
+    reference_path = _reference_path(contract, config, task)
     metamodel_paths, metamodel_uris = _contract_metamodels(contract)
-
     grammar_path = _grammar_path(language_key)
-
     return ResolvedTaskInputs(
         language=language_key,
         task=task,
@@ -201,10 +175,31 @@ def resolve_task_inputs(language: str, task: str) -> ResolvedTaskInputs:
     )
 
 
+def _check_task_name(task: str) -> None:
+    if not TASK_NAME.fullmatch(task):
+        raise TaskInputResolutionError(f"invalid task name: {task!r}")
+
+
+def _language_config(language: str) -> LanguageConfig:
+    try:
+        return language_config(language)
+    except KeyError as exc:
+        raise TaskInputResolutionError(str(exc)) from exc
+
+
+def _contract_path(config: LanguageConfig, task: str) -> Path:
+    contract_path = default_task_contracts_root(config) / f"{task}.json"
+    if not contract_path.is_file():
+        raise TaskInputResolutionError(
+            f"task contract not found for {config.language_key}/{task}"
+        )
+    return contract_path
+
+
 def _prerequisite_prompts(
     language: str,
     contract: dict[str, Any],
-    config: Any,
+    config: LanguageConfig,
 ) -> tuple[PromptInputFile, ...]:
     """Task specifications of the prerequisites, prerequisites first."""
     contracts_root = default_task_contracts_root(config)
@@ -252,14 +247,25 @@ def _validate_contract_identity(
             f"task contract identity mismatch: expected {task!r}, "
             f"found {contract.get('task')!r}"
         )
-    # Every contract records its own language, so this check applies to every
-    # language rather than being skipped for whichever ones omitted the field.
     recorded_language = contract.get("language")
     if recorded_language != language:
         raise TaskInputResolutionError(
             f"task contract language mismatch: expected {language!r}, "
             f"found {recorded_language!r}"
         )
+
+
+def _reference_path(
+    contract: dict[str, Any], config: LanguageConfig, task: str
+) -> Path:
+    """The protected reference the contract names, checked against the contract."""
+    reference_path = _protected_path(
+        contract.get("reference"),
+        field="reference",
+        required_root=default_references_root(config),
+    )
+    _validate_reference_identity(contract, reference_path, config.language_key, task)
+    return reference_path
 
 
 def _validate_reference_identity(

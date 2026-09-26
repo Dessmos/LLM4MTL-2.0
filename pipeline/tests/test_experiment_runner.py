@@ -3,7 +3,7 @@ from __future__ import annotations
 import io
 import tempfile
 import unittest
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 
@@ -37,7 +37,7 @@ class ConfigTests(unittest.TestCase):
 
     def test_loads_repository_experiment_yaml(self) -> None:
         config = load_pipeline_config(
-            TARGET.experiments_presets / "etl" / "gpt_tests_vs_claude.yaml"
+            TARGET.experiments / "presets" / "etl" / "gpt_tests_vs_claude.yaml"
         )
         self.assertEqual(["Tree2Graph"], config.tasks)
         self.assertEqual(["gpt-5"], config.test_models)
@@ -197,6 +197,14 @@ class CliTests(unittest.TestCase):
         with self.assertRaises(SystemExit):
             build_parser().parse_args(["tests", "extract", "--task", "Tree2Graph"])
 
+    def test_options_that_did_nothing_are_rejected(self) -> None:
+        base = ["tests", "extract", "--language", "etl", "--task", "Tree2Graph"]
+        for option in ("--overwrite", "--no-overwrite", "--keep-workspace", "--verbose"):
+            with self.subTest(option=option):
+                with patch("sys.stderr", new_callable=io.StringIO):
+                    with self.assertRaises(SystemExit):
+                        build_parser().parse_args([*base, option])
+
     def test_suite_id_builds_identity_selection(self) -> None:
         args = build_parser().parse_args(
             [
@@ -317,7 +325,7 @@ class CliTests(unittest.TestCase):
 class OrchestratorTests(unittest.TestCase):
 
     def test_failure_report_command_delegates_to_the_shared_assembler(self) -> None:
-        orchestrator = ExperimentOrchestrator(REPO_ROOT)
+        orchestrator = ExperimentOrchestrator()
         payload = {"attempt": 1}
         expected = {"report_type": "semantic_test_case_failure"}
         with patch(
@@ -344,7 +352,7 @@ class OrchestratorTests(unittest.TestCase):
     def test_dry_run_does_not_create_run_directory(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             repo_root = Path(temp_dir)
-            orchestrator = ExperimentOrchestrator(REPO_ROOT)
+            orchestrator = ExperimentOrchestrator()
             orchestrator.artifacts = ArtifactRoots(repo_root)
             config = PipelineConfig(
                 language="etl",
@@ -368,7 +376,7 @@ class OrchestratorTests(unittest.TestCase):
             transformation_selection_locked=True,
             transformations=[],
         )
-        result = TransformationValidationAdapter(REPO_ROOT).semantic_validation(
+        result = TransformationValidationAdapter().semantic_validation(
             config, dry_run=True
         )
         self.assertEqual("skipped", result.status)
@@ -378,7 +386,7 @@ class OrchestratorTests(unittest.TestCase):
 
     def test_semantic_dry_run_preserves_pairing_and_detail_keys(self) -> None:
         config = PipelineConfig(language="etl", tasks=["Tree2Graph"])
-        adapter = TransformationValidationAdapter(REPO_ROOT)
+        adapter = TransformationValidationAdapter()
         suite = Path("/generated/Tree2Graph/candidates/gpt-5/grammar/suite_001")
         transformation = Path("/generated/Tree2Graph.etl")
 
@@ -402,6 +410,219 @@ class OrchestratorTests(unittest.TestCase):
         )
         self.assertNotIn("reference_validated_suites", result.details)
         select_suites.assert_called_once_with(config, require_observation=False)
+
+
+class ConfigBoundaryTests(unittest.TestCase):
+
+    def test_disabled_extraction_starts_the_run_at_technical_validation(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "config.json"
+            path.write_text(
+                '{"language": "etl", "tasks": ["Tree2Graph"],'
+                ' "test_suites": {"extraction": {"enabled": false}}}',
+                encoding="utf-8",
+            )
+            config = load_pipeline_config(path)
+
+        self.assertEqual("technical", config.start_stage)
+        self.assertEqual("semantic", config.stop_after)
+
+    def test_a_config_with_a_blank_language_is_refused(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "config.json"
+            path.write_text('{"language": " ", "tasks": ["Tree2Graph"]}', encoding="utf-8")
+
+            with self.assertRaisesRegex(ConfigError, "non-empty language"):
+                load_pipeline_config(path)
+
+    def test_direct_commands_default_to_the_whole_pipeline_and_text_output(
+        self,
+    ) -> None:
+        args = build_parser().parse_args(
+            ["tests", "extract", "--language", "etl", "--task", "Tree2Graph"]
+        )
+        config = config_from_args(args)
+
+        self.assertEqual("extract", config.start_stage)
+        self.assertEqual("semantic", config.stop_after)
+        self.assertEqual("text", config.output_format)
+        self.assertEqual([], config.responses)
+
+    def test_diagnosis_commands_accept_only_the_known_output_formats(self) -> None:
+        commands = (
+            ["diagnosis", "report", "--request", "r.json", "--output", "o.json"],
+            ["diagnosis", "prepare", "--run", "run-001", "--batch", "batch_001"],
+            ["diagnosis", "aggregate", "--run", "run-001", "--batch", "batch_001"],
+        )
+        for command in commands:
+            with self.subTest(command=command[1]):
+                parser = build_parser()
+                self.assertEqual("text", parser.parse_args(command).output_format)
+                self.assertEqual(
+                    "json",
+                    parser.parse_args([*command, "--output-format", "json"]).output_format,
+                )
+                with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+                    parser.parse_args([*command, "--output-format", "yaml"])
+
+
+class StageSequenceTests(unittest.TestCase):
+
+    def stage_names(self, **overrides: object) -> list[str]:
+        config = PipelineConfig(language="etl", tasks=["Tree2Graph"], **overrides)  # type: ignore[arg-type]
+        orchestrator = ExperimentOrchestrator()
+        return [name for name, _ in orchestrator.stage_sequence(config)]
+
+    def test_standalone_commands_run_their_own_stages(self) -> None:
+        cases = (
+            ({"command": "tests.extract"}, ["extraction"]),
+            ({"command": "transformations.parse"}, ["transformation_parsing"]),
+            ({"command": "transformations.validate"}, ["transformation_validation"]),
+            (
+                {"command": "tests.validate", "test_validation_stage": "technical"},
+                ["technical_validation"],
+            ),
+            (
+                {"command": "tests.validate", "test_validation_stage": "reference"},
+                ["reference_validation"],
+            ),
+            (
+                {"command": "tests.validate", "test_validation_stage": "all"},
+                ["technical_validation", "reference_validation"],
+            ),
+        )
+        for overrides, expected in cases:
+            with self.subTest(**overrides):
+                self.assertEqual(expected, self.stage_names(**overrides))
+
+    def test_a_pipeline_runs_its_stage_range_without_disabled_stages(self) -> None:
+        self.assertEqual(
+            ["technical_validation", "transformation_parsing"],
+            self.stage_names(
+                start_stage="technical",
+                stop_after="parsing",
+                reference_validation=False,
+            ),
+        )
+
+    def test_each_stage_runs_the_matching_adapter_method(self) -> None:
+        orchestrator = ExperimentOrchestrator()
+        config = PipelineConfig(language="etl", tasks=["Tree2Graph"])
+
+        self.assertEqual(
+            [
+                ("extraction", orchestrator.tests.extract),
+                ("technical_validation", orchestrator.tests.technical_validation),
+                ("reference_validation", orchestrator.tests.reference_validation),
+                ("transformation_parsing", orchestrator.parser.parse),
+                (
+                    "transformation_validation",
+                    orchestrator.transformations.semantic_validation,
+                ),
+            ],
+            orchestrator.stage_sequence(config),
+        )
+
+
+def failed_stage(name: str) -> StageResult:
+    return StageResult(name, "completed", {"selected": 1, "failed": 1})
+
+
+def passed_stage(name: str) -> StageResult:
+    return StageResult(name, "completed", {"selected": 1, "failed": 0})
+
+
+class LocalRunTests(unittest.TestCase):
+    """Whole local runs, with the stages replaced and the runs root in a temp tree."""
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.artifacts = ArtifactRoots(Path(self._tmp.name).resolve())
+        repo_root_patcher = patch(
+            "llm4mtl.experiment_runner.orchestrator.REPO_ROOT",
+            self.artifacts.artifacts_work,
+        )
+        repo_root_patcher.start()
+        self.addCleanup(repo_root_patcher.stop)
+        self.orchestrator = ExperimentOrchestrator()
+        self.orchestrator.artifacts = self.artifacts
+        self.extract = patch.object(
+            self.orchestrator.tests,
+            "extract",
+            side_effect=lambda *_: failed_stage("extraction"),
+        ).start()
+        self.parse = patch.object(
+            self.orchestrator.parser,
+            "parse",
+            side_effect=lambda *_: passed_stage("transformation_parsing"),
+        ).start()
+        self.addCleanup(patch.stopall)
+
+    def config(self, run_id: str, **overrides: object) -> PipelineConfig:
+        fields: dict[str, object] = {
+            "language": "etl",
+            "tasks": ["Tree2Graph"],
+            "test_models": ["gpt-5"],
+            "test_strategies": ["few_shot"],
+            "transformation_models": ["gpt-5"],
+            "transformation_strategies": ["grammar"],
+            "stop_after": "parsing",
+            "technical_validation": False,
+            "reference_validation": False,
+            "run_id": run_id,
+        }
+        fields.update(overrides)
+        return PipelineConfig(**fields)  # type: ignore[arg-type]
+
+    def test_fail_fast_stops_after_the_first_failing_stage(self) -> None:
+        for fail_fast, expected in (
+            (True, ["extraction"]),
+            (False, ["extraction", "transformation_parsing"]),
+        ):
+            with self.subTest(fail_fast=fail_fast):
+                result = self.orchestrator.run(
+                    self.config(f"fail-fast-{fail_fast}".lower(), fail_fast=fail_fast)
+                )
+
+                self.assertEqual(expected, [stage.name for stage in result.stages])
+                self.assertEqual("completed_with_failures", result.status)
+
+    def test_an_existing_run_is_reused_only_on_resume_or_force(self) -> None:
+        first = self.orchestrator.run(self.config("existing-run"))
+        batch_id = first.run_dir.split("/")[-2] if first.run_dir else None
+
+        with self.assertRaisesRegex(ConfigError, "Run already exists: existing-run"):
+            self.orchestrator.run(self.config("existing-run", batch_id=batch_id))
+
+    def test_resume_reuses_a_completed_stage_with_matching_hashes(self) -> None:
+        first = self.orchestrator.run(self.config("resumed-run"))
+        batch_id = first.run_dir.split("/")[-2] if first.run_dir else None
+        self.parse.reset_mock()
+
+        resumed = self.orchestrator.run(
+            self.config("resumed-run", batch_id=batch_id, resume=True)
+        )
+
+        parsing = resumed.stages[-1]
+        self.assertEqual("resumed", parsing.status)
+        self.assertEqual(
+            "matching config and input hashes", parsing.details["resume_reason"]
+        )
+        # Planned again to compare hashes, but not executed again.
+        self.assertEqual([True], [call.args[1] for call in self.parse.call_args_list])
+
+    def test_diagnosis_needs_a_recorded_execution_attempt(self) -> None:
+        first = self.orchestrator.run(self.config("no-execution"))
+        batch_id = first.run_dir.split("/")[-2] if first.run_dir else ""
+
+        for command in (
+            self.orchestrator.prepare_diagnosis_evidence,
+            self.orchestrator.aggregate_diagnosis_evidence,
+        ):
+            with self.subTest(command=command.__name__):
+                with self.assertRaisesRegex(ConfigError, "recorded no execution attempt"):
+                    command(batch_id, "no-execution")
 
 
 if __name__ == "__main__":

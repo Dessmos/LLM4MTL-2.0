@@ -9,6 +9,9 @@ from pathlib import Path
 from typing import Any
 
 from llm4mtl.experiment_runner.config import (
+    FIRST_PIPELINE_STAGE,
+    LAST_PIPELINE_STAGE,
+    PIPELINE_STAGES,
     load_pipeline_config,
     load_resolved_config,
     validate_config,
@@ -19,6 +22,9 @@ from llm4mtl.semantic_tests.failure_report import FailureReportError
 from llm4mtl.stages.models import ConfigError, PipelineConfig, StageResult
 
 PIPELINE_RUN_COMMAND = "pipeline.run"
+DEFAULT_OUTPUT_FORMAT = "text"
+JSON_OUTPUT_FORMAT = "json"
+OUTPUT_FORMATS = (DEFAULT_OUTPUT_FORMAT, JSON_OUTPUT_FORMAT)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -49,9 +55,6 @@ def _add_test_commands(domains: argparse._SubParsersAction) -> None:
     add_execution(extract)
     extract.add_argument("--response", action="append", type=Path)
     extract.add_argument("--suite-id")
-    overwrite = extract.add_mutually_exclusive_group()
-    overwrite.add_argument("--overwrite", action="store_true")
-    overwrite.add_argument("--no-overwrite", action="store_true")
 
     tests_validate = test_actions.add_parser(
         "validate",
@@ -106,18 +109,23 @@ def _add_diagnosis_commands(domains: argparse._SubParsersAction) -> None:
         help="Prepare deterministic evidence for source diagnosis.",
     )
     diagnosis_actions = diagnosis.add_subparsers(dest="action", required=True)
-    diagnosis_report = diagnosis_actions.add_parser(
+    _add_diagnosis_report_command(diagnosis_actions)
+    _add_diagnosis_prepare_command(diagnosis_actions)
+    _add_diagnosis_aggregate_command(diagnosis_actions)
+
+
+def _add_diagnosis_report_command(actions: argparse._SubParsersAction) -> None:
+    report = actions.add_parser(
         "report",
         help="Assemble one per-assertion failure report from an existing run.",
     )
-    diagnosis_report.add_argument("--request", type=Path, required=True)
-    diagnosis_report.add_argument("--output", type=Path, required=True)
-    diagnosis_report.add_argument(
-        "--output-format",
-        choices=("text", "json"),
-        default="text",
-    )
-    diagnosis_prepare = diagnosis_actions.add_parser(
+    report.add_argument("--request", type=Path, required=True)
+    report.add_argument("--output", type=Path, required=True)
+    _add_output_format(report)
+
+
+def _add_diagnosis_prepare_command(actions: argparse._SubParsersAction) -> None:
+    prepare = actions.add_parser(
         "prepare",
         help=(
             "Assemble every failure report one recorded execution attempt "
@@ -125,19 +133,17 @@ def _add_diagnosis_commands(domains: argparse._SubParsersAction) -> None:
             "command re-derives the same index for an existing run."
         ),
     )
-    add_run_selection(diagnosis_prepare)
-    diagnosis_prepare.add_argument(
+    add_run_selection(prepare)
+    prepare.add_argument(
         "--attempt",
         type=int,
         help="execution attempt to prepare; defaults to the latest recorded one",
     )
-    diagnosis_prepare.add_argument(
-        "--output-format",
-        choices=("text", "json"),
-        default="text",
-    )
+    _add_output_format(prepare)
 
-    diagnosis_aggregate = diagnosis_actions.add_parser(
+
+def _add_diagnosis_aggregate_command(actions: argparse._SubParsersAction) -> None:
+    aggregate = actions.add_parser(
         "aggregate",
         help=(
             "Cluster one execution attempt's prepared reports by the failure "
@@ -145,17 +151,20 @@ def _add_diagnosis_commands(domains: argparse._SubParsersAction) -> None:
             "recorded evidence only; it writes and changes nothing."
         ),
     )
-    add_run_selection(diagnosis_aggregate)
-    diagnosis_aggregate.add_argument(
+    add_run_selection(aggregate)
+    aggregate.add_argument(
         "--attempt",
         type=int,
         help="execution attempt to aggregate; defaults to the latest recorded one",
     )
-    diagnosis_aggregate.add_argument(
-        "--output-format",
-        choices=("text", "json"),
-        default="text",
-    )
+    _add_output_format(aggregate)
+
+
+def _add_output_format(
+    parser: argparse.ArgumentParser,
+    default: str | None = DEFAULT_OUTPUT_FORMAT,
+) -> None:
+    parser.add_argument("--output-format", choices=OUTPUT_FORMATS, default=default)
 
 
 def _add_pipeline_commands(domains: argparse._SubParsersAction) -> None:
@@ -172,14 +181,8 @@ def _add_pipeline_commands(domains: argparse._SubParsersAction) -> None:
     add_transformation_selection(pipeline_run)
     add_execution(pipeline_run, defaults_none=True)
     pipeline_run.add_argument("--suite-id")
-    pipeline_run.add_argument(
-        "--start-stage",
-        choices=("extract", "technical", "reference", "parsing", "semantic"),
-    )
-    pipeline_run.add_argument(
-        "--stop-after",
-        choices=("extract", "technical", "reference", "parsing", "semantic"),
-    )
+    pipeline_run.add_argument("--start-stage", choices=PIPELINE_STAGES)
+    pipeline_run.add_argument("--stop-after", choices=PIPELINE_STAGES)
 
 
 def add_run_selection(parser: argparse.ArgumentParser) -> None:
@@ -212,8 +215,6 @@ def locate_run(run: str, batch: str | None) -> tuple[str, str]:
 
 
 def add_language(parser: argparse.ArgumentParser, *, required: bool = True) -> None:
-    # Every thesis language is offered; `validate_config` rejects the ones whose
-    # adapter is not implemented yet, with a message naming what is missing.
     from llm4mtl.languages import REQUIRED_LANGUAGES
 
     parser.add_argument("--language", choices=REQUIRED_LANGUAGES, required=required)
@@ -246,17 +247,7 @@ def add_execution(parser: argparse.ArgumentParser, defaults_none: bool = False) 
     )
     parser.add_argument("--resume", action="store_true", default=boolean_default)
     parser.add_argument("--force", action="store_true", default=boolean_default)
-    parser.add_argument(
-        "--output-format",
-        choices=("text", "json"),
-        default=None if defaults_none else "text",
-    )
-    parser.add_argument("--verbose", action="store_true", default=boolean_default)
-    parser.add_argument(
-        "--keep-workspace",
-        action="store_true",
-        default=boolean_default,
-    )
+    _add_output_format(parser, default=None if defaults_none else DEFAULT_OUTPUT_FORMAT)
     parser.add_argument("--fail-fast", action="store_true", default=boolean_default)
 
 
@@ -266,41 +257,47 @@ def config_from_args(args: argparse.Namespace) -> PipelineConfig:
     if loaded_config is not None:
         return loaded_config
 
-    config = PipelineConfig(
+    config = _config_from_options(args, command)
+    validate_command_constraints(config)
+    validate_config(config)
+    return config
+
+
+def _config_from_options(args: argparse.Namespace, command: str) -> PipelineConfig:
+    """The configuration the command-line options state, not yet validated.
+
+    Commands define different options, so an option a command lacks reads as
+    unset.
+    """
+    return PipelineConfig(
         language=args.language,
-        tasks=list(args.task or []),
+        tasks=_option_values(args, "task"),
         all_tasks=bool(args.all_tasks),
-        responses=[str(path) for path in getattr(args, "response", None) or []],
-        suites=[str(path) for path in getattr(args, "suite", None) or []],
-        transformations=[
-            str(path) for path in getattr(args, "transformation", None) or []
-        ],
-        test_models=list(getattr(args, "test_model", None) or []),
-        test_strategies=list(getattr(args, "test_strategy", None) or []),
-        transformation_models=list(getattr(args, "transformation_model", None) or []),
-        transformation_strategies=list(
-            getattr(args, "transformation_strategy", None) or []
-        ),
+        responses=_option_values(args, "response"),
+        suites=_option_values(args, "suite"),
+        transformations=_option_values(args, "transformation"),
+        test_models=_option_values(args, "test_model"),
+        test_strategies=_option_values(args, "test_strategy"),
+        transformation_models=_option_values(args, "transformation_model"),
+        transformation_strategies=_option_values(args, "transformation_strategy"),
         suite_id=getattr(args, "suite_id", None),
-        overwrite=bool(getattr(args, "overwrite", False))
-        and not bool(getattr(args, "no_overwrite", False)),
         test_validation_stage=getattr(args, "stage", "all"),
-        start_stage=getattr(args, "start_stage", None) or "extract",
-        stop_after=getattr(args, "stop_after", None) or "semantic",
+        start_stage=getattr(args, "start_stage", None) or FIRST_PIPELINE_STAGE,
+        stop_after=getattr(args, "stop_after", None) or LAST_PIPELINE_STAGE,
         run_id=args.run_id,
         batch_id=args.batch_id,
         resume=bool(args.resume),
         force=bool(args.force),
         dry_run=bool(args.dry_run),
-        output_format=args.output_format or "text",
-        verbose=bool(args.verbose),
-        keep_workspace=bool(args.keep_workspace),
+        output_format=args.output_format or DEFAULT_OUTPUT_FORMAT,
         fail_fast=bool(args.fail_fast),
         command=command,
     )
-    validate_command_constraints(config)
-    validate_config(config)
-    return config
+
+
+def _option_values(args: argparse.Namespace, name: str) -> list[str]:
+    """A repeatable option's values as strings; empty when absent or unset."""
+    return [str(value) for value in getattr(args, name, None) or []]
 
 
 def _load_pipeline_config_from_args(
@@ -412,8 +409,6 @@ def apply_execution_overrides(config: PipelineConfig, args: argparse.Namespace) 
         "dry_run",
         "resume",
         "force",
-        "verbose",
-        "keep_workspace",
         "fail_fast",
     ):
         value = getattr(args, name)
@@ -428,7 +423,7 @@ def apply_execution_overrides(config: PipelineConfig, args: argparse.Namespace) 
 
 
 def emit_result(result: RunResult, output_format: str) -> None:
-    if output_format == "json":
+    if output_format == JSON_OUTPUT_FORMAT:
         print(json.dumps(result.to_dict(), indent=2, ensure_ascii=False))
         return
     print(f"Run: {result.run_id}")
@@ -477,7 +472,7 @@ def emit_failure_report_result(
         "identity": report.get("identity"),
         "diagnosis_eligible": diagnosis_eligible,
     }
-    if output_format == "json":
+    if output_format == JSON_OUTPUT_FORMAT:
         print(json.dumps(payload, indent=2, ensure_ascii=False))
         return
     print(f"Failure report: {output}")
@@ -486,7 +481,7 @@ def emit_failure_report_result(
 
 def emit_diagnosis_index(index: dict[str, object], output_format: str) -> None:
     """Print the prepared evidence without repeating the reports themselves."""
-    if output_format == "json":
+    if output_format == JSON_OUTPUT_FORMAT:
         print(json.dumps(index, indent=2, ensure_ascii=False))
         return
     counts = index.get("counts", {})
@@ -507,7 +502,7 @@ def emit_diagnosis_index(index: dict[str, object], output_format: str) -> None:
 
 def emit_diagnosis_aggregate(aggregated: dict[str, Any], output_format: str) -> None:
     """One line per distinct failure, not per report about it."""
-    if output_format == "json":
+    if output_format == JSON_OUTPUT_FORMAT:
         print(json.dumps(aggregated, ensure_ascii=False))
         return
     totals = aggregated.get("totals", {})
@@ -576,11 +571,11 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _output_format(args: argparse.Namespace) -> str:
-    return getattr(args, "output_format", None) or "text"
+    return getattr(args, "output_format", None) or DEFAULT_OUTPUT_FORMAT
 
 
 def _emit_error(message: str, output_format: str) -> None:
-    if output_format == "json":
+    if output_format == JSON_OUTPUT_FORMAT:
         print(
             json.dumps(
                 {"status": "error", "error": message},

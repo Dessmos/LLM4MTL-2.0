@@ -1,10 +1,9 @@
 """Low-level Java-emitter string helpers (escaping, literals, identifiers).
 
-Some of these rules are read in both directions. The emitter uses them to write
-the harness; diagnosis runs them forwards again over the recorded semantic
-cases to work out which case or assertion a Surefire entry came from. Those
-rules live here so neither side can restate them: a divergence would fail
-nothing and simply stop matching real failures.
+Some rules are used twice. The renderers use them to write the harness, and
+diagnosis runs them again over the recorded semantic cases to find which case or
+assertion a Surefire entry came from. They live here so neither side keeps its
+own copy: a difference would fail no test and just stop matching real failures.
 """
 
 from __future__ import annotations
@@ -37,12 +36,25 @@ def safe_temp_prefix(value: str) -> str:
 
 
 def sanitize_class_name(value: str, task: str) -> str:
-    """Return a deterministic valid Java class name."""
-    value = value.split(".")[-1]
-    value = value.removesuffix(".java")
-    cleaned = re.sub(r"[^A-Za-z0-9_]", "", value)
+    """Return a deterministic valid Java class name.
+
+    ``value`` may be a file name or a qualified name; only the simple class
+    name is kept. When ``value`` holds no usable name, the result is
+    ``Generated<Task>SemanticTest``, or ``GeneratedSemanticTest`` when ``task``
+    holds none either.
+    """
+    class_name = _simple_class_name(value)
+    if class_name:
+        return class_name
+    return f"Generated{_simple_class_name(task)}SemanticTest"
+
+
+def _simple_class_name(value: str) -> str:
+    """The last dotted part of ``value`` as a Java identifier, or ``""``."""
+    simple_name = value.removesuffix(".java").split(".")[-1]
+    cleaned = re.sub(r"[^A-Za-z0-9_]", "", simple_name)
     if not cleaned or not re.match(r"[A-Za-z_]", cleaned[0]):
-        return f"Generated{sanitize_class_name(task, 'ETL')}SemanticTest"
+        return ""
     return cleaned
 
 
@@ -63,19 +75,29 @@ def sanitize_method_name(value: str) -> str:
     return method
 
 
+def rendered_method_name(test_case: Mapping[str, Any]) -> str:
+    """The JUnit method name of a semantic case.
+
+    Every renderer names the method after the case ``name``, never its ``id``.
+    A case without a name was never rendered, so it gets ``""``, which matches
+    no method.
+    """
+    name = test_case.get("name")
+    return "" if name is None else sanitize_method_name(str(name))
+
+
 def assertion_message(assertion: Mapping[str, Any]) -> str:
     """The message the harness prints when ``assertion`` fails.
 
-    Read in both directions: the renderer embeds it in the generated assertion,
-    and diagnosis matches it against the message Surefire recorded to attribute
-    a failure to the assertion that lost. The renderer is the authority — an
-    assertion's own ``message`` is used whenever it has one, whatever its type,
-    because that is what the renderer stringifies into the Java literal.
+    Used twice: the renderer writes it into the generated assertion, and
+    diagnosis matches it against the message Surefire recorded to find the
+    assertion that failed. An assertion's own ``message`` wins whenever it is
+    set, whatever its type, because the renderer writes that into the Java
+    literal.
 
     Returns ``""`` when there is no message and no fields to build the default
-    from. The renderer cannot reach that case; it resolves those fields before
-    it asks for a message. For the reader it means this assertion cannot be
-    matched, which is a refusal to attribute rather than a guess.
+    from. The renderer never hits that case. For diagnosis it means the
+    assertion cannot be matched, so no failure is attributed to it.
     """
     explicit = assertion.get("message")
     if explicit:
@@ -96,10 +118,9 @@ def escape_java(value: str) -> str:
 def java_value(value: Any) -> str:
     """Render an ``expected`` value the way the harness renders what it observes.
 
-    The harness stringifies model values through Java: a boolean attribute reads
-    ``true``/``false`` and an unset value reads ``null``. Python's ``str`` writes
-    ``True`` and ``None`` for the same JSON values, which never equal anything
-    the harness observes, so a suite that expected ``true`` could only fail.
+    The harness turns model values into strings through Java: a boolean reads
+    ``true``/``false`` and an unset value reads ``null``. Python's ``str`` would
+    write ``True`` and ``None``, which never match what the harness sees.
     """
     if value is None:
         return "null"

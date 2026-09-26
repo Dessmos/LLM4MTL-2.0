@@ -18,13 +18,16 @@ from typing import Callable
 # A stage cannot legitimately need more attempts than this within one run; the
 # bound turns a pathological state into a loud failure instead of a hang.
 MAX_ATTEMPTS = 1000
+ATTEMPT_PREFIX = "attempt-"
 
 
 class AttemptAllocationError(RuntimeError):
     """Raised when no free attempt number could be claimed."""
 
 
-ATTEMPT_PREFIX = "attempt-"
+def attempt_dir_name(attempt: int) -> str:
+    """The directory name of one attempt, ``attempt-NNN``."""
+    return f"{ATTEMPT_PREFIX}{attempt:03d}"
 
 
 def claim_attempt(

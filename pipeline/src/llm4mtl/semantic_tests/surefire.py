@@ -1,28 +1,26 @@
-"""Read which harness phase failed out of the Surefire reports.
+"""Read which harness phase failed from the Surefire XML reports.
 
 JUnit separates a ``<failure>`` (an assertion did not hold) from an ``<error>``
-(the test threw before it could judge anything). That distinction is the whole
-difference between "the generated oracle disagrees with the reference" and "the
-generated test could not run", and Maven's console output does not carry it:
-both print as ``Tests run: N, Failures: F, Errors: E``.
+(the test threw before it could judge anything). That is the difference between
+"the generated oracle disagrees with the reference" and "the generated test
+could not run". Maven's console output loses it: both print as
+``Tests run: N, Failures: F, Errors: E``.
 
-Every marker below was taken from a real report, never guessed. The original
-set came from the ETL harness (see
-``pipeline/tests/fixtures/surefire/phase-probe.xml``);
-the per-engine markers were read off the recorded observations of the
-2026-07-30/31 ATL, QVT-O, and Reactions runs under ``artifacts/work/runs/``.
+Every marker below was copied from a real report, never guessed. The ETL
+markers come from the phase-probe report in ``pipeline/tests/fixtures/surefire/``.
+The other engines' markers come from the recorded 2026-07-30/31 ATL, QVT-O, and
+Reactions runs.
 
-An error that matches no marker is reported as ``unclassified_runtime`` and NOT
-as a phase. Guessing a phase would attribute the failure either to the suite or
-to the transformation, and both are claims this evidence cannot support; the
-funnel counts these separately as inconclusive so neither the pass nor the fail
-population absorbs them.
+An error that matches no marker is ``unclassified_runtime``, NOT a phase.
+Guessing a phase would blame either the suite or the transformation, and this
+evidence supports neither. Such a run reaches no oracle verdict, so it counts in
+neither the reference-pass nor the reference-fail population.
 
 Add a marker only when the string identifies the phase on its own. Two known
-messages are deliberately left unclassified because they do not:
-``java.lang.String cannot be cast to java.util.Collection`` (Reactions) could
-come from the harness or the engine, and ``Type 'Source!Tree' not found`` (ETL)
-could be an unregistered model or a genuine type error in the transformation.
+messages stay unclassified for that reason:
+``java.lang.String cannot be cast to java.util.Collection`` (Reactions) can come
+from the harness or the engine, and ``Type 'Source!Tree' not found`` (ETL) can
+be an unregistered model or a real type error in the transformation.
 """
 
 from __future__ import annotations
@@ -30,6 +28,8 @@ from __future__ import annotations
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
+
+from llm4mtl.domain.observations import FailureStage
 
 # An error raised while loading a model: the engine never ran.
 #
@@ -73,8 +73,12 @@ TRANSFORMATION_PARSE_MARKERS = (
     "Compilation errors found in unit",
 )
 
-# The error threw, but nothing in it identifies which phase. Never a phase claim.
-UNCLASSIFIED_RUNTIME = "unclassified_runtime"
+# Where Maven writes the reports, relative to the Maven project directory.
+SUREFIRE_REPORTS_DIR = Path("target") / "surefire-reports"
+# The file name pattern of one Surefire XML report.
+REPORT_FILE_GLOB = "TEST-*.xml"
+# A longer report message is cut to this many characters.
+MAX_MESSAGE_CHARS = 500
 
 
 @dataclass(frozen=True)
@@ -99,72 +103,73 @@ class SurefireReport:
         """Which phase this run failed in, or ``""`` when nothing failed.
 
         Errors are checked before failures: a run that both threw and failed an
-        assertion never reached a trustworthy verdict, so the throw is what the
-        observation is about.
+        assertion never reached a trustworthy verdict, so the throw decides.
 
-        An error no marker recognizes yields ``unclassified_runtime``. That is a
-        statement about the evidence, not about the suite or the transformation,
-        and every consumer must keep it out of both verdict populations.
+        An error no marker recognizes yields ``unclassified_runtime``. That says
+        the evidence is unclear. It blames neither the suite nor the
+        transformation.
         """
         if self.errors:
             joined = " ".join(self.error_messages)
             if _contains(joined, TRANSFORMATION_PARSE_MARKERS):
-                return "transformation_parse"
+                return FailureStage.TRANSFORMATION_PARSE
             if _contains(joined, MODEL_LOADING_MARKERS):
-                return "model_loading"
+                return FailureStage.MODEL_LOADING
             if _contains(joined, ENGINE_RUNTIME_MARKERS):
-                return "engine_runtime"
-            return UNCLASSIFIED_RUNTIME
+                return FailureStage.ENGINE_RUNTIME
+            return FailureStage.UNCLASSIFIED_RUNTIME
         if self.failures:
             if _contains(
                 " ".join(self.failure_messages), TRANSFORMATION_PARSE_MARKERS
             ):
-                return "transformation_parse"
-            return "assertion_failure"
+                return FailureStage.TRANSFORMATION_PARSE
+            return FailureStage.ASSERTION_FAILURE
         return ""
 
 
 def read_surefire_reports(reports_dir: Path) -> SurefireReport | None:
-    """Aggregate the Surefire XML reports of one run, or ``None`` when absent.
+    """Add up the Surefire XML reports of one run, or ``None`` when absent.
 
-    ``None`` means "no readable report exists", which is the only state the
-    console fallback may be used for. A report that parsed and recorded zero
-    tests is NOT that state: it is positive evidence that nothing ran, and the
-    caller must treat it as a test-discovery failure rather than fall back to a
-    console summary that would read an exit code of 0 as success.
+    ``None`` means "no readable report exists". Only then may the caller fall
+    back to the console. A report that parsed and counted zero tests is NOT that
+    state: it proves nothing ran, and the caller must treat it as a
+    test-discovery failure. The console fallback would read exit code 0 as
+    success.
     """
-    if not reports_dir.is_dir():
+    report_roots = _parsed_report_roots(reports_dir)
+    if not report_roots:
+        # No report file, or every one was malformed: there is no readable XML
+        # evidence.
         return None
-    report_files = sorted(reports_dir.glob("TEST-*.xml"))
-    if not report_files:
-        return None
+    return _aggregate(report_roots)
 
-    parsed = 0
-    tests = failures = errors = 0
-    error_messages: list[str] = []
-    failure_messages: list[str] = []
-    for path in report_files:
+
+def _parsed_report_roots(reports_dir: Path) -> list[ET.Element]:
+    """Parse every report file of one run, in file-name order."""
+    if not reports_dir.is_dir():
+        return []
+    roots: list[ET.Element] = []
+    for path in sorted(reports_dir.glob(REPORT_FILE_GLOB)):
         try:
-            root = ET.parse(path).getroot()
+            roots.append(ET.parse(path).getroot())
         except ET.ParseError:
             # A malformed report says nothing; the console fallback decides.
             continue
-        parsed += 1
-        tests += _count(root, "tests")
-        failures += _count(root, "failures")
-        errors += _count(root, "errors")
+    return roots
+
+
+def _aggregate(report_roots: list[ET.Element]) -> SurefireReport:
+    """Add up the counts and messages of all parsed reports of one run."""
+    error_messages: list[str] = []
+    failure_messages: list[str] = []
+    for root in report_roots:
         report_errors, report_failures = _report_messages(root)
         error_messages.extend(report_errors)
         failure_messages.extend(report_failures)
-
-    if not parsed:
-        # Every report file was malformed: there is no readable XML evidence.
-        return None
-
     return SurefireReport(
-        tests=tests,
-        failures=failures,
-        errors=errors,
+        tests=sum(_count(root, "tests") for root in report_roots),
+        failures=sum(_count(root, "failures") for root in report_roots),
+        errors=sum(_count(root, "errors") for root in report_roots),
         error_messages=tuple(error_messages),
         failure_messages=tuple(failure_messages),
     )
@@ -174,14 +179,12 @@ def testcase_outcome(case: ET.Element) -> tuple[str, ET.Element | None]:
     """The outcome of one ``<testcase>``: ``passed``, ``failed``, or ``error``.
 
     An ``<error>`` wins over a ``<failure>``. A case that both threw and lost an
-    assertion never reached a trustworthy verdict, so the throw is what it is
-    about; reading the assertion instead would attribute the failure to a check
-    that had already been invalidated.
+    assertion never reached a trustworthy verdict, so the throw decides; the
+    assertion result is no longer reliable.
 
-    Stated here because four readers of these reports need it — the phase
-    classifier below, both failure-report views, and diagnosis preparation —
-    and a reader that ordered the two differently would disagree with the
-    others about the same recorded case.
+    The failure-report views and diagnosis preparation all use this function,
+    and ``SurefireReport.failure_stage`` uses the same order, so they cannot
+    disagree about one recorded case.
     """
     error = case.find("error")
     if error is not None:
@@ -213,7 +216,7 @@ def _count(root: ET.Element, attribute: str) -> int:
 
 def _describe(case: ET.Element, node: ET.Element) -> str:
     message = (node.get("message") or node.get("type") or "").strip()
-    return f"{case.get('name', '?')}: {message}"[:500]
+    return f"{case.get('name', '?')}: {message}"[:MAX_MESSAGE_CHARS]
 
 
 def _contains(text: str, markers: tuple[str, ...]) -> bool:

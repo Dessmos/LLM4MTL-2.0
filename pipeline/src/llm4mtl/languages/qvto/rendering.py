@@ -11,10 +11,10 @@ from llm4mtl.languages.java_assertions import (
 )
 from llm4mtl.semantic_tests.codegen.java_rendering import (
     escape_java,
-    sanitize_method_name,
+    rendered_method_name,
 )
 from llm4mtl.semantic_tests.semantic_spec import effective_models
-from llm4mtl.semantic_tests.suites.java import slug
+from llm4mtl.semantic_tests.suites.generated_models import generated_model_resource
 
 
 def render_qvto_test(class_name: str, spec: dict[str, Any], task: str) -> str:
@@ -48,15 +48,12 @@ def _render_method(
             f"QVT-O scenario {test.get('name')!r} needs one source and one or two targets"
         )
     source = sources[0]
-    path = str(source["path"]).replace("\\", "/")
-    if path.startswith("models/"):
-        path = path[len("models/") :]
-    resource_path = f"generated-models/{slug(task)}/{path}"
+    resource_path = generated_model_resource(task, str(source["path"]))
     transformation = str(spec["transformation"]).split("/")[-1]
     variables = {str(source["name"]): "sourceRoots"}
     lines = [
         "    @Test",
-        f"    void {sanitize_method_name(str(test['name']))}() throws Exception {{",
+        f"    void {rendered_method_name(test)}() throws Exception {{",
         f'        BasicModelExtent input = loadInputModel("{escape_java(resource_path)}");',
         "        List<EObject> sourceRoots = new ArrayList<>(input.getContents());",
     ]
@@ -79,7 +76,7 @@ def _render_outputs(
 ) -> list[str]:
     """Render target extents and register their assertion variables."""
     escaped_transformation = escape_java(transformation)
-    test_name = escape_java(sanitize_method_name(str(test["name"])))
+    test_name = escape_java(rendered_method_name(test))
     if len(targets) == 1:
         target_name = escape_java(str(targets[0]["name"]))
         variables[str(targets[0]["name"])] = "target0Roots"

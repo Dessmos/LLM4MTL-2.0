@@ -23,5 +23,13 @@ llm4mtl = "llm4mtl.experiment_runner.cli:main"
 where = ["src"]
 include = ["llm4mtl*"]
 
+# Java source that the language renderers copy into generated test harnesses.
+[tool.setuptools.package-data]
+"llm4mtl.languages" = ["java/*.java.txt"]
+"llm4mtl.languages.atl" = ["java/*.java.txt"]
+"llm4mtl.languages.etl" = ["java/*.java.txt"]
+"llm4mtl.languages.qvto" = ["java/*.java.txt"]
+"llm4mtl.languages.reactions" = ["java/*.java.txt"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]

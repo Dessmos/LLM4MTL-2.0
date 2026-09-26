@@ -1,14 +1,12 @@
-"""The two validation gates, shared by the CLI and the orchestrator.
+"""The two validation gates, shared by the stand-alone CLIs and the test stage.
 
-Both entry points call these functions with the same typed context, so there is
-one implementation of what technical executability and oracle validity mean. The
-orchestrator previously re-derived those verdicts by running the CLI and matching
-its printed output with regular expressions — two implementations of one rule,
-and the fragile one decided the experiment's counts.
+The validation CLIs and :mod:`llm4mtl.stages.test_generation` call these
+functions with the same typed context, so technical executability and oracle
+validity are defined once.
 
-Suite verdicts are also the funnel's denominators, which is why counting them is
-here rather than at a caller: a suite that could not be executed was never judged
-as an oracle, and must not be added to either the passing or the failing side.
+Suite verdicts are also the funnel's denominators, so they are counted here
+too. A suite that could not run was never judged as an oracle, and must count
+on neither the passing nor the failing side.
 """
 
 from __future__ import annotations
@@ -18,6 +16,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from llm4mtl.domain import GeneratedSuite, SuiteExecutionObservation
+from llm4mtl.domain.observations import FailureStage
 from llm4mtl.languages.base import LanguageAdapter, Workspace
 from llm4mtl.semantic_tests.suite_execution import (
     observation_lock,
@@ -33,8 +32,6 @@ NOT_EXECUTABLE = "NOT_EXECUTABLE"
 REFERENCE_INVALID = "REFERENCE_INVALID"
 TECHNICALLY_EXECUTABLE = "TECHNICALLY_EXECUTABLE"
 VALIDATED = "VALIDATED"
-
-JUDGED_STATUSES = frozenset({VALIDATED, REFERENCE_INVALID})
 
 
 @dataclass(frozen=True)
@@ -62,16 +59,12 @@ class SuiteVerdict:
         )
 
     @property
-    def is_judged_as_oracle(self) -> bool:
-        return self.status in JUDGED_STATUSES
-
-    @property
     def failure_stage(self) -> str:
         if self.observation is not None:
             return self.observation.failure_stage
         if self.status == ARTIFACT_INVALID:
-            return "artifact_validation"
-        return "infrastructure"
+            return FailureStage.ARTIFACT_VALIDATION
+        return FailureStage.INFRASTRUCTURE
 
 
 def observe_suite(suite: GeneratedSuite, context: ValidationContext) -> SuiteVerdict:
@@ -112,9 +105,9 @@ def _reference_observation(
 ) -> SuiteExecutionObservation:
     """Return the recorded reference observation, executing once if absent."""
     observations_root = context.workspace.observations_dir
-    # The second read happens while holding the per-suite lock. Without it,
-    # technical and reference stage calls can both observe a miss and execute
-    # the same mutable harness concurrently.
+    # Read again while holding the per-suite lock. Without it, the technical and
+    # the reference stage could both see no record and run the same harness
+    # at the same time.
     with observation_lock(observations_root, suite):
         observation = read_observation(observations_root, suite, reference)
         if observation is None:
@@ -160,7 +153,7 @@ def technical_counts(verdicts: list[SuiteVerdict], selected: int) -> dict[str, i
         1
         for verdict in verdicts
         if verdict.status == NOT_EXECUTABLE
-        and verdict.failure_stage == "java_compilation"
+        and verdict.failure_stage == FailureStage.JAVA_COMPILATION
     )
     return {
         "selected": selected,

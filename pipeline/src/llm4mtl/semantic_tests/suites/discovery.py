@@ -15,6 +15,8 @@ from pathlib import Path
 from llm4mtl.domain import GeneratedSuite
 
 CANDIDATES_DIRECTORY = "candidates"
+# The number of path parts in <task>/candidates/<llm>/<strategy>/<suite_id>.
+_CANDIDATE_PATH_LENGTH = 5
 
 
 @dataclass(frozen=True)
@@ -33,13 +35,18 @@ def candidate_identity(path: Path) -> CandidateIdentity:
     Raises :class:`ValueError` when the path does not end in that shape.
     """
     parts = Path(path).parts
-    if len(parts) < 5 or parts[-4] != CANDIDATES_DIRECTORY:
-        raise ValueError(
-            "not a candidate suite directory "
-            f"(<task>/{CANDIDATES_DIRECTORY}/<llm>/<strategy>/<suite_id>): {path}"
-        )
-    return CandidateIdentity(
-        task=parts[-5], llm=parts[-3], strategy=parts[-2], suite_id=parts[-1]
+    if len(parts) < _CANDIDATE_PATH_LENGTH:
+        raise _not_a_candidate(path)
+    task, candidates, llm, strategy, suite_id = parts[-_CANDIDATE_PATH_LENGTH:]
+    if candidates != CANDIDATES_DIRECTORY:
+        raise _not_a_candidate(path)
+    return CandidateIdentity(task=task, llm=llm, strategy=strategy, suite_id=suite_id)
+
+
+def _not_a_candidate(path: Path) -> ValueError:
+    return ValueError(
+        "not a candidate suite directory "
+        f"(<task>/{CANDIDATES_DIRECTORY}/<llm>/<strategy>/<suite_id>): {path}"
     )
 
 
@@ -61,12 +68,10 @@ def matches_selection(
 
 
 def candidate_suite_directories(generated_tests_root: Path) -> list[Path]:
-    """Return every candidate suite directory, regardless of its opaque id.
+    """Return every candidate suite directory, whatever its id.
 
-    Explicit suite ids are allowed to use the same one-component syntax as run
-    ids. They are not required to start with ``suite_``; n8n deliberately uses
-    the run id plus an attempt suffix so every generated suite stays attributable
-    to its run.
+    Suite ids need not start with ``suite_``: n8n uses the run id plus an
+    attempt suffix, so each generated suite stays traceable to its run.
     """
     root = generated_tests_root.resolve()
     return sorted(
@@ -85,11 +90,7 @@ def discover_suites(args: argparse.Namespace, language: str) -> list[GeneratedSu
     root = args.generated_tests_root.resolve()
     if args.suite:
         return [
-            suite_from_path(
-                path.resolve(),
-                root,
-                language,
-            )
+            suite_from_path(path.resolve(), language)
             for path in args.suite
         ]
 
@@ -110,22 +111,17 @@ def _discover_task_suites(
     language: str,
 ) -> list[GeneratedSuite]:
     return [
-        suite_from_path(suite_dir.resolve(), generated_tests_root, language)
+        suite_from_path(suite_dir.resolve(), language)
         for suite_dir in candidate_suite_directories(generated_tests_root)
         if candidate_identity(suite_dir).task == task_dir.name
     ]
 
 
-def suite_from_path(
-    path: Path,
-    generated_tests_root: Path,
-    language: str,
-) -> GeneratedSuite:
+def suite_from_path(path: Path, language: str) -> GeneratedSuite:
     """Build a suite identity from its candidate-directory path.
 
-    ``generated_tests_root`` is kept for the callers that already pass it; the
-    identity is read off the path itself, so a suite is spelled the same whether
-    or not it lies below the root it was discovered from.
+    The identity is read from the path itself, so a suite gets the same identity
+    wherever its folder lies.
     """
     try:
         identity = candidate_identity(path)

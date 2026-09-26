@@ -13,7 +13,12 @@ import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
-from llm4mtl.domain import GeneratedSuite, SuiteExecutionObservation
+from llm4mtl.domain import (
+    GeneratedSuite,
+    OutcomeStatus,
+    SuiteExecutionObservation,
+    TransformationOutcome,
+)
 from llm4mtl.stages.transformation_validation import (
     TransformationValidationAdapter,
     execution_counts,
@@ -123,7 +128,7 @@ class TestGenerationAdapterValidationTests(unittest.TestCase):
                 test_strategies=["few_shot"],
                 suite_id=suite_id,
             )
-            adapter = GenerationAdapter(root)
+            adapter = GenerationAdapter()
 
             with patch.object(adapter, "generated_tests_root", return_value=root):
                 suites = adapter.select_candidate_suites(config)
@@ -141,7 +146,7 @@ class TestGenerationAdapterValidationTests(unittest.TestCase):
             "suite_001",
         )
         config = PipelineConfig(language="etl", tasks=["Tree2Graph"])
-        adapter = GenerationAdapter(Path("/repository"))
+        adapter = GenerationAdapter()
         cases = (
             (False, TECHNICALLY_EXECUTABLE, "technical_validation", ""),
             (True, VALIDATED, "reference_validation", "count for H1 was 4, not 3"),
@@ -206,7 +211,7 @@ class ObservationScopeTests(unittest.TestCase):
         from llm4mtl.stages.models import PipelineConfig
         from llm4mtl.paths import REPO_ROOT
 
-        scoped = GenerationAdapter(REPO_ROOT).observations_root(
+        scoped = GenerationAdapter().observations_root(
             PipelineConfig(
                 language="etl",
                 run_id="etl-smoke-1",
@@ -246,7 +251,7 @@ class ObservationScopeTests(unittest.TestCase):
                 suites=[str(suite_path)],
                 run_id="run-001",
             )
-            adapter = TransformationValidationAdapter(Path(temp_dir))
+            adapter = TransformationValidationAdapter()
 
             with (
                 patch(
@@ -294,7 +299,7 @@ class ObservationScopeTests(unittest.TestCase):
                 tasks=["Tree2Graph"],
                 suites=[str(suite_path)],
             )
-            adapter = TransformationValidationAdapter(Path(temp_dir))
+            adapter = TransformationValidationAdapter()
 
             with patch(
                 "llm4mtl.stages.transformation_validation.read_observation"
@@ -389,6 +394,55 @@ class TransformationExecutionCountTests(unittest.TestCase):
 
         self.assertEqual(1, counts["skipped"])
         self.assertEqual(0, counts["evaluated"])
+
+    def test_each_pair_lands_in_exactly_one_category(self) -> None:
+        passed = self.unclassified_observation(
+            assertions_evaluated=True,
+            assertions_passed=True,
+            failure_stage="",
+        )
+        assertion_failure = self.unclassified_observation(
+            assertions_evaluated=True, failure_stage="assertion_failure"
+        )
+        unrunnable = self.unclassified_observation(failure_stage="artifact_validation")
+        cases = (
+            ("passed", passed, None),
+            ("failed", assertion_failure, None),
+            ("failed", unrunnable, TransformationOutcome(OutcomeStatus.RUNTIME_FAILED)),
+            ("skipped", unrunnable, None),
+            (
+                "infrastructure_errors",
+                unrunnable,
+                TransformationOutcome(OutcomeStatus.TIMED_OUT),
+            ),
+            (
+                "infrastructure_errors",
+                passed,
+                TransformationOutcome(OutcomeStatus.INFRASTRUCTURE_FAILED),
+            ),
+        )
+        categories = ("passed", "failed", "skipped", "infrastructure_errors")
+
+        for expected, observation, outcome in cases:
+            with self.subTest(expected=expected, outcome=outcome):
+                counts = execution_counts([(observation, outcome)])
+
+                self.assertEqual(
+                    {category: int(category == expected) for category in categories},
+                    {category: counts[category] for category in categories},
+                )
+
+    def test_no_pairs_count_as_zero_everywhere(self) -> None:
+        self.assertEqual(
+            {
+                "evaluated": 0,
+                "passed": 0,
+                "failed": 0,
+                "skipped": 0,
+                "infrastructure_errors": 0,
+            },
+            execution_counts([]),
+        )
 
 
 if __name__ == "__main__":
