@@ -45,7 +45,9 @@
       "parameters": {
         "operation": "text",
         "destinationKey": "failure_report_text",
-        "options": {}
+        "options": {
+          "encoding": "utf8"
+        }
       },
       "id": "e1000000-0000-4000-8000-000000000004",
       "name": "Extract Failure Report",
@@ -87,7 +89,9 @@
       "parameters": {
         "operation": "text",
         "destinationKey": "system_prompt",
-        "options": {}
+        "options": {
+          "encoding": "utf8"
+        }
       },
       "id": "e1000000-0000-4000-8000-000000000007",
       "name": "Extract Diagnosis Prompt",

@@ -81,6 +81,36 @@ Three properties make the trend honest rather than merely pretty:
   `NOT_RUN` never becomes a silent repair; it remains visible in `error_count`
   and `not_run_count`.
 
+## Refinement loops per batch
+
+To judge how many transformation refinement loops are worth running, tabulate
+what every loop produced, straight from the pipeline's own recorded verdicts. It
+needs no held-out suite and reads whole batches, including runs whose
+transformation was never judged:
+
+```bash
+PYTHONPATH=pipeline/src .venv/bin/python -m evaluation.refinement_loops \
+  --batch batch_007 [--batch batch_008 ...] \
+  --output-dir evaluation/results/batch_007
+```
+
+It writes:
+
+- `refinement-loops-<language>.csv` — one row per run with its batch, model,
+  strategy, budgets and flags, a `loop_<k>` column per loop, `loops_needed`
+  (blank when never solved) and the run's `final_state`. A loop cell holds the
+  latest `execution` outcome for that transformation iteration, else the latest
+  `syntax-validation` outcome, else `DONE` (an earlier loop passed),
+  `OVER_BUDGET`, `STOPPED` (the run ended before it), `NOT_JUDGED` or
+  `UNFINISHED`;
+- `refinement-loops-summary.csv` — per language, configuration and loop `k`:
+  runs solved within `k` loops over the runs whose state at `k` is known
+  (judged at `k` or later, or already passed), plus an `ALL` group per language;
+- `refinement-loops.md` — the same tables, readable.
+
+The verdict is the run's generated test, not a held-out suite. Like
+`heldout-trajectory.csv`, this is a reporting view, not a campaign metric.
+
 ## Qualified mutation evaluation
 
 `generate_mutants.py` applies exact, deterministic text replacements. A mutation

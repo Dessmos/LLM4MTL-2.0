@@ -104,7 +104,9 @@
       "parameters": {
         "operation": "text",
         "destinationKey": "examples",
-        "options": {}
+        "options": {
+          "encoding": "utf8"
+        }
       },
       "type": "n8n-nodes-base.extractFromFile",
       "typeVersion": 1,
@@ -146,7 +148,9 @@
       "parameters": {
         "operation": "text",
         "destinationKey": "grammar",
-        "options": {}
+        "options": {
+          "encoding": "utf8"
+        }
       },
       "type": "n8n-nodes-base.extractFromFile",
       "typeVersion": 1,
@@ -178,7 +182,9 @@
       "parameters": {
         "operation": "text",
         "destinationKey": "prompt",
-        "options": {}
+        "options": {
+          "encoding": "utf8"
+        }
       },
       "type": "n8n-nodes-base.extractFromFile",
       "typeVersion": 1,
@@ -336,7 +342,9 @@
       "parameters": {
         "operation": "text",
         "destinationKey": "helper_methods",
-        "options": {}
+        "options": {
+          "encoding": "utf8"
+        }
       },
       "type": "n8n-nodes-base.extractFromFile",
       "typeVersion": 1,
@@ -680,11 +688,6 @@
     "Save file name": {
       "main": [
         [
-          {
-            "node": "Extract text from prompt file",
-            "type": "main",
-            "index": 0
-          },
           {
             "node": "Resolve exact task inputs",
             "type": "main",

@@ -187,6 +187,14 @@ cohort rows state how many runs reached each iteration, because runs end at
 different iterations and an average over a shrinking population would otherwise
 read as a trend.
 
+`refinement-loops-*.csv` (`evaluation/refinement_loops.py`) is a second
+reporting view: per batch and language, the verdict the pipeline itself recorded
+for each transformation iteration. It is judged by the run's generated test, so
+it is never a substitute for held-out results, and it adds no metric. Its
+per-loop summary counts a run only where its state at that loop is known; a run
+cut off earlier by its budget or another stop is left out, not counted as
+unsolved.
+
 Every per-run metric row retains language, task, pipeline variant, both
 refinement budgets, and all three ablation flags. Aggregate rows expose their
 population and denominator and do not invent a single configuration label for

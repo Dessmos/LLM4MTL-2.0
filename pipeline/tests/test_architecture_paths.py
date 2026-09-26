@@ -5,6 +5,7 @@ import json
 import re
 import unittest
 from copy import deepcopy
+from pathlib import Path
 
 from llm4mtl.conventions import (
     LANGUAGE_CONFIGS,
@@ -51,6 +52,22 @@ def _identity_from_name(file_name: str) -> tuple[str, str, str]:
     assert match is not None, file_name
     language, model, strategy = match.groups()
     return language.lower(), model, strategy
+
+
+def _launched_generation_workflows() -> list[Path]:
+    """Every generation export the master can select for a run."""
+    tests = TARGET.workflows / "tests" / "workflows"
+    transformations = TARGET.workflows / "transformations" / "workflows"
+    return sorted(
+        [
+            *tests.glob("*_variants/test_generation/Prompting_tests_*_*.json"),
+            *transformations.glob("*_variants/Prompting_*.json"),
+            transformations
+            / "updated_reactions_workflow"
+            / "generate_reactions"
+            / "LLM4MTL_Generate_Reactions_for_all_Configurations.json",
+        ]
+    )
 
 
 def _nested_strings(value: object) -> list[str]:
@@ -722,6 +739,49 @@ class N8nWorkflowTests(unittest.TestCase):
                                 (f'$("{asset_node}").isExecuted' in expression)
                                 or (f"$('{asset_node}').isExecuted" in expression)
                             )
+
+    def test_every_launched_workflow_reads_its_task_prompt_once(self) -> None:
+        """One incoming edge into the prompt extractor, so one LLM call per task.
+
+        ATL, ETL and QVT-O transformation exports also fed the extractor from
+        ``Save file name``. The chain then ran a second time with the task prompt
+        alone -- no metamodels, URIs, examples or grammar -- and that response
+        overwrote the complete one.
+        """
+        checked = 0
+        for workflow in _launched_generation_workflows():
+            payload = json.loads(workflow.read_text(encoding="utf-8"))
+            incoming = [
+                source
+                for source, outputs in payload["connections"].items()
+                for targets in outputs.get("main", [])
+                for target in targets or []
+                if target["node"] == "Extract text from prompt file"
+            ]
+            with self.subTest(workflow=workflow.name):
+                self.assertEqual(1, len(incoming), incoming)
+            checked += 1
+        self.assertGreater(checked, 0)
+
+    def test_every_launched_text_extraction_decodes_utf8(self) -> None:
+        """Without a declared encoding n8n guesses one per file.
+
+        The guess read the UTF-8 prompts of Tree2Graph, equivalent,
+        User2Account_All and Constructors as windows-1252, so their typographic
+        apostrophes reached the model as "â€™".
+        """
+        diagnosis = TARGET.workflows / "subworkflows" / "diagnosis" / "llm-diagnosis.json"
+        checked = 0
+        for workflow in [*_launched_generation_workflows(), diagnosis]:
+            payload = json.loads(workflow.read_text(encoding="utf-8"))
+            for node in payload["nodes"]:
+                if node["type"] != "n8n-nodes-base.extractFromFile":
+                    continue
+                with self.subTest(workflow=workflow.name, node=node["name"]):
+                    self.assertEqual("text", node["parameters"]["operation"])
+                    self.assertEqual("utf8", node["parameters"]["options"].get("encoding"))
+                checked += 1
+        self.assertGreater(checked, 0)
 
     def test_frozen_task_prompts_cover_every_task_exactly_once(self) -> None:
         for language, inputs in INPUTS.items():

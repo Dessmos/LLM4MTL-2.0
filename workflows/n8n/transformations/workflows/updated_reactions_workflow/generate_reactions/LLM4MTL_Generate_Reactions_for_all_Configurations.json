@@ -63,7 +63,9 @@
       "parameters": {
         "operation": "text",
         "destinationKey": "examples",
-        "options": {}
+        "options": {
+          "encoding": "utf8"
+        }
       },
       "type": "n8n-nodes-base.extractFromFile",
       "typeVersion": 1,
@@ -92,7 +94,9 @@
       "parameters": {
         "operation": "text",
         "destinationKey": "grammar",
-        "options": {}
+        "options": {
+          "encoding": "utf8"
+        }
       },
       "type": "n8n-nodes-base.extractFromFile",
       "typeVersion": 1,
@@ -125,7 +129,8 @@
         "operation": "text",
         "destinationKey": "prompt",
         "options": {
-          "keepSource": "json"
+          "keepSource": "json",
+          "encoding": "utf8"
         }
       },
       "type": "n8n-nodes-base.extractFromFile",
@@ -229,7 +234,9 @@
       "parameters": {
         "operation": "text",
         "destinationKey": "helper_methods",
-        "options": {}
+        "options": {
+          "encoding": "utf8"
+        }
       },
       "type": "n8n-nodes-base.extractFromFile",
       "typeVersion": 1,

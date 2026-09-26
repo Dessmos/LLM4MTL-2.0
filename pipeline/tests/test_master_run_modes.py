@@ -279,17 +279,24 @@ def _adapt(
     )
 
 
-def _model_nodes(unconfigured: tuple[str, ...] = ()) -> dict[str, Any]:
+def _model_nodes(
+    unconfigured: tuple[str, ...] = (),
+    reasoning_efforts: dict[str, str] | None = None,
+) -> dict[str, Any]:
     """Every standard AI Model node on the canvas, as the master reads it.
 
     A role in ``unconfigured`` has no model picked in any of its provider nodes,
     which is what a user who never touched that role's nodes actually has.
+    ``reasoning_efforts`` sets, per role, the reasoning effort of its OpenAI node.
     """
     nodes: dict[str, Any] = {}
     for role, prefix in ROLE_NODES.items():
         for provider, params in PROVIDER_PARAMS.items():
             name = f"{prefix} - {PROVIDER_SUFFIX[provider]}"
-            nodes[name] = {"params": {} if role in unconfigured else dict(params)}
+            configured = {} if role in unconfigured else dict(params)
+            if provider == "OpenAI" and role in (reasoning_efforts or {}):
+                configured["options"] = {"reasoningEffort": reasoning_efforts[role]}
+            nodes[name] = {"params": configured}
     return nodes
 
 
@@ -308,6 +315,7 @@ def _configure(
     unconfigured_roles: tuple[str, ...] = (),
     custom_tasks: dict[str, str] | None = None,
     attached_metamodels: dict[str, str] | None = None,
+    reasoning_efforts: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Submit the configuration screen and build the run queue.
 
@@ -345,7 +353,7 @@ def _configure(
             )
         ],
         binary=[_as_uploaded(attached_metamodels or {})],
-        nodes=_model_nodes(unconfigured_roles),
+        nodes=_model_nodes(unconfigured_roles, reasoning_efforts),
     )
 
 
@@ -2384,6 +2392,206 @@ class ReactionsMatrixStrategyTests(unittest.TestCase):
         )
         self.assertEqual(list(STRATEGIES), [entry["name"] for entry in declared])
         self.assertFalse(any(entry["Helper_methods"] for entry in declared))
+
+
+# Every role on OpenAI, so each role's own reasoning effort can be told apart.
+ALL_OPENAI = {
+    "semantic_test_provider": "OpenAI",
+    "transformation_provider": "OpenAI",
+    "source_diagnosis_provider": "OpenAI",
+    "refinement_provider": "OpenAI",
+}
+DISTINCT_EFFORTS = {
+    "semantic_test": "low",
+    "transformation": "max",
+    "source_diagnosis": "high",
+    "refinement": "medium",
+}
+DIAGNOSIS_WORKFLOW = (
+    REPOSITORY_ROOT / "workflows" / "n8n" / "subworkflows" / "diagnosis" / "llm-diagnosis.json"
+)
+INITIAL_ETL_GENERATION = {
+    "language": "etl",
+    "task": "Tree2Graph",
+    "run_id": "run-effort-1",
+    "n8n_run_dir": "/data/artifacts/runs/batch_001/run-effort-1",
+    "transformation_iteration": 0,
+}
+
+
+def _openai_node(adapted: dict[str, Any]) -> dict[str, Any]:
+    return next(
+        node
+        for node in adapted["result"]["workflow_json"]["nodes"]
+        if node["type"] == "@n8n/n8n-nodes-langchain.lmChatOpenAi"
+    )
+
+
+@unittest.skipUnless(shutil.which("node"), "the master workflow's Code nodes need Node")
+class ReasoningEffortTests(unittest.TestCase):
+    """The effort set on a role's OpenAI node reaches every call that role makes."""
+
+    def test_each_role_records_the_effort_of_its_openai_node(self) -> None:
+        config = _configure(providers=ALL_OPENAI, reasoning_efforts=DISTINCT_EFFORTS)
+        self.assertTrue(config["ok"], config.get("error"))
+        llms = config["result"]["config"]["llms"]
+        self.assertEqual(
+            DISTINCT_EFFORTS,
+            {role: llms[role]["reasoning_effort"] for role in DISTINCT_EFFORTS},
+        )
+
+    def test_a_level_typed_in_expression_mode_is_read_as_its_literal(self) -> None:
+        config = _configure(providers=ALL_OPENAI, reasoning_efforts={"transformation": "=max"})
+        self.assertTrue(config["ok"], config.get("error"))
+        self.assertEqual(
+            "max", config["result"]["config"]["llms"]["transformation"]["reasoning_effort"]
+        )
+
+    def test_an_expression_is_refused_rather_than_sent_as_its_source(self) -> None:
+        config = _configure(
+            providers=ALL_OPENAI,
+            reasoning_efforts={"transformation": "={{ $json.effort }}"},
+        )
+        self.assertFalse(config["ok"])
+        self.assertIn("Transformation Generation - OpenAI Chat Model", config["error"])
+
+    def test_no_effort_is_recorded_when_none_is_set_or_the_provider_has_none(self) -> None:
+        # OpenAI serves tests and diagnosis without an effort; Anthropic serves
+        # transformation and refinement.
+        config = _configure()
+        self.assertTrue(config["ok"], config.get("error"))
+        llms = config["result"]["config"]["llms"]
+        for role in ROLE_NODES:
+            with self.subTest(role=role):
+                self.assertIsNone(llms[role]["reasoning_effort"])
+
+    def test_every_llm_call_receives_the_effort_of_the_role_making_it(self) -> None:
+        config = _configure(providers=ALL_OPENAI, reasoning_efforts=DISTINCT_EFFORTS)
+        self.assertTrue(config["ok"], config.get("error"))
+        executions = 0
+
+        def next_execution() -> dict[str, Any]:
+            nonlocal executions
+            executions += 1
+            return _failing_execution() if executions == 1 else PASSING_RESULTS["execution"]
+
+        observed: list[dict[str, Any]] = []
+        _drive(
+            config["result"],
+            {
+                "read_diagnosis_index": _diagnosis_index(
+                    {
+                        "path": "artifacts/work/runs/batch_001/etl-tree2graph-0001/"
+                        "diagnosis/execution/attempt-001/reports/r0.json"
+                    }
+                )
+            },
+            factories={
+                "execution": next_execution,
+                "diagnose": lambda: {
+                    "classification": "transformation_defect",
+                    "confidence": "high",
+                    "test_case_id": "case-1",
+                    "assertion_id": "assertion-001",
+                },
+            },
+            observed_states=observed,
+        )
+        calls = [
+            (
+                state["action"],
+                state["subworkflow_input"]["llm_role"],
+                state["subworkflow_input"]["reasoning_effort"],
+            )
+            for state in observed
+            if state["action"] in ("generate_tests", "generate_transformations", "diagnose")
+        ]
+        self.assertEqual(
+            [
+                ("generate_tests", "semantic_test", "low"),
+                ("generate_transformations", "transformation", "max"),
+                ("diagnose", "source_diagnosis", "high"),
+                ("generate_transformations", "refinement", "medium"),
+            ],
+            calls,
+        )
+
+    def test_an_effort_moves_the_openai_call_to_the_responses_api(self) -> None:
+        """n8n forwards a level such as max only through the Responses API."""
+        cases = (
+            (
+                TRANSFORMATION_WORKFLOW,
+                "generate_transformations",
+                INITIAL_ETL_GENERATION,
+                {"refinement_iteration": 0},
+            ),
+            (
+                REACTIONS_MATRIX,
+                "generate_transformations",
+                {
+                    **INITIAL_ETL_GENERATION,
+                    "language": "reactions",
+                    "task": "FamiliesToPersons_CreatedFather",
+                },
+                {"refinement_iteration": 0, "strategy": "few_shots_AND_grammar"},
+            ),
+            (DIAGNOSIS_WORKFLOW, "diagnose", {"language": "etl", "task": "Tree2Graph"}, {}),
+        )
+        for workflow, action, current, subworkflow_input in cases:
+            with self.subTest(workflow=workflow.name):
+                exported = next(
+                    node
+                    for node in json.loads(workflow.read_text(encoding="utf-8"))["nodes"]
+                    if node["type"] == "@n8n/n8n-nodes-langchain.lmChatOpenAi"
+                )
+                adapted = _adapt(
+                    workflow,
+                    action=action,
+                    current=current,
+                    subworkflow_input={**subworkflow_input, "reasoning_effort": "max"},
+                    model="gpt-5.6-luna",
+                )
+                self.assertTrue(adapted["ok"], adapted.get("error"))
+                node = _openai_node(adapted)
+                self.assertEqual(1.3, node["typeVersion"])
+                self.assertTrue(node["parameters"]["responsesApiEnabled"])
+                self.assertEqual("gpt-5.6-luna", node["parameters"]["model"]["value"])
+                self.assertEqual(
+                    {**exported["parameters"]["options"], "reasoningEffort": "max"},
+                    node["parameters"]["options"],
+                )
+
+    def test_without_an_effort_the_openai_node_stays_as_exported(self) -> None:
+        exported = next(
+            node
+            for node in json.loads(TRANSFORMATION_WORKFLOW.read_text(encoding="utf-8"))["nodes"]
+            if node["type"] == "@n8n/n8n-nodes-langchain.lmChatOpenAi"
+        )
+        adapted = _adapt(
+            TRANSFORMATION_WORKFLOW,
+            action="generate_transformations",
+            current=INITIAL_ETL_GENERATION,
+            subworkflow_input={"refinement_iteration": 0, "reasoning_effort": None},
+        )
+        self.assertTrue(adapted["ok"], adapted.get("error"))
+        node = _openai_node(adapted)
+        self.assertEqual(exported["typeVersion"], node["typeVersion"])
+        self.assertNotIn("responsesApiEnabled", node["parameters"])
+        self.assertEqual(exported["parameters"]["options"], node["parameters"]["options"])
+
+    def test_an_effort_for_another_provider_is_refused(self) -> None:
+        adapted = _adapt(
+            TRANSFORMATION_WORKFLOW.with_name(
+                "Prompting_ETL_claude-sonnet-4_few_shots_AND_grammar.json"
+            ),
+            action="generate_transformations",
+            current=INITIAL_ETL_GENERATION,
+            subworkflow_input={"refinement_iteration": 0, "reasoning_effort": "max"},
+            provider="anthropic",
+            model="claude-sonnet-4-20250514",
+        )
+        self.assertFalse(adapted["ok"])
+        self.assertIn("OpenAI models only", adapted["error"])
 
 
 if __name__ == "__main__":

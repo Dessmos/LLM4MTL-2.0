@@ -117,6 +117,26 @@ def preflight_runs(runs_root: Path, run_ids_path: Path) -> tuple[SelectedRun, ..
     return tuple(selected)
 
 
+def read_run_manifest(run_root: Path) -> dict[str, Any]:
+    """Read and validate one run's manifest; the run id is the directory name."""
+    manifest_path = run_root / "manifest.json"
+    if not manifest_path.is_file():
+        raise EvaluationInputError("manifest.json is missing")
+    manifest = read_json_object(manifest_path)
+    _validate_manifest(run_root.name, manifest)
+    return manifest
+
+
+def read_terminal_result(run_root: Path) -> dict[str, Any] | None:
+    """Read and validate one run's terminal result; ``None`` while it is unfinished."""
+    terminal_path = run_root / "result.json"
+    if not terminal_path.is_file():
+        return None
+    terminal = read_json_object(terminal_path)
+    _validate_terminal_result(run_root.name, terminal)
+    return terminal
+
+
 def transformation_iterations(selected_run: SelectedRun) -> tuple[tuple[int, Path], ...]:
     """Return each stored transformation iteration from its authoritative metadata."""
     iterations: list[tuple[int, Path]] = []

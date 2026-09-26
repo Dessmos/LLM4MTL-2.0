@@ -68,6 +68,23 @@ PROVIDER_CREDENTIALS = {
 }
 
 
+# Every prompt asset is UTF-8. A text extraction that names no encoding makes
+# n8n guess one per file, and the guess turns a short UTF-8 task prompt with a
+# typographic apostrophe into windows-1252 mojibake ("Node’s" -> "Nodeâ€™s")
+# before it reaches the model.
+TEXT_EXTRACTION_ENCODING = "utf8"
+
+
+def _pin_text_extraction_encoding(payload: dict[str, Any]) -> dict[str, Any]:
+    for node in payload["nodes"]:
+        if node.get("type") != EXTRACT_FROM_FILE.name:
+            continue
+        if node["parameters"].get("operation") != "text":
+            continue
+        node["parameters"].setdefault("options", {})["encoding"] = TEXT_EXTRACTION_ENCODING
+    return payload
+
+
 def _pin_provider_model_ids(payload: dict[str, Any]) -> dict[str, Any]:
     for node in payload["nodes"]:
         pinned = PROVIDER_MODEL_IDS.get(node.get("type", ""))
@@ -90,8 +107,8 @@ def normalize_workflow_shape(payload: dict[str, Any]) -> dict[str, Any]:
     """Remove cosmetic differences, so two languages' exports diff cleanly.
 
     Gives the manual trigger one fixed name and renumbers assignment and
-    condition ids. Also drops unwired chat models and pins provider model ids
-    and credentials.
+    condition ids. Also drops unwired chat models and pins provider model ids,
+    credentials, and the encoding every text extraction decodes with.
 
     The top-level workflow ``id`` is removed too. The master workflow runs these
     exports as inline sub-workflows, and n8n stores each sub-execution under
@@ -101,8 +118,10 @@ def normalize_workflow_shape(payload: dict[str, Any]) -> dict[str, Any]:
     payload.pop("id", None)
     for node in payload["nodes"]:
         _normalize_node_shape(payload, node)
-    return _pin_provider_credentials(
-        _pin_provider_model_ids(drop_unwired_chat_models(payload))
+    return _pin_text_extraction_encoding(
+        _pin_provider_credentials(
+            _pin_provider_model_ids(drop_unwired_chat_models(payload))
+        )
     )
 
 

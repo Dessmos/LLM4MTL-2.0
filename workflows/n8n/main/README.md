@@ -179,6 +179,17 @@ Refinement                  - {OpenAI, Anthropic, Google Gemini} Chat Model
 Those selectors are the provider's own model list, so the master never carries
 one of its own.
 
+The **reasoning effort** of an OpenAI role is read from the same node
+(`Options → Reasoning Effort`), recorded as `config.llms.<role>.reasoning_effort`,
+and applied to every call that role makes: generation, refinement, and source
+diagnosis. The shipped nodes ask for `max`. n8n's list offers only low, medium,
+and high, so another level is entered as a fixed value; an expression is
+refused. Apart from the model id, it is the only node setting that reaches the
+subworkflow call: temperature and the other options stay those of the export.
+n8n forwards a level beyond high only through the Responses API, so a call with
+an effort runs on OpenAI node version 1.3 with the Responses API enabled. A node
+without an effort leaves the call at the model's default.
+
 The artifact tree is one directory per **model family**, not per exact model id:
 every `gpt-5` variant writes under `gpt-5`, every `claude-sonnet-4` variant under
 `claude-sonnet-4`, every `gemini-2.5-pro` variant under `gemini-2-5-pro`. The

@@ -83,6 +83,7 @@ from llm4mtl.prompt_assembly.n8n_exports.workflow_graph import (
     MERGE,
     READ_WRITE_FILE,
     SET,
+    TEXT_EXTRACTION_ENCODING,
     TRIGGER_NODE,
     connect_in_sequence,
     connection_targets,
@@ -551,7 +552,7 @@ def _extract_contract_node(
         parameters={
             "operation": "text",
             "destinationKey": OUTPUT_CONTRACT_FIELD,
-            "options": {},
+            "options": {"encoding": TEXT_EXTRACTION_ENCODING},
         },
     )
 
@@ -666,6 +667,7 @@ def synchronize_transformation_generation(
     save_name = (
         SAVE_FILE_NAME_NODE if SAVE_FILE_NAME_NODE in nodes else SAVE_REACTION_NAME_NODE
     )
+    _extract_prompt_once(payload["connections"], save_name)
     return _replace_language_wide_models(
         payload,
         language=language,
@@ -673,6 +675,20 @@ def synchronize_transformation_generation(
         merge_name=MERGE_NODE,
         merge_input=TRANSFORMATION_EXACT_INPUTS_MERGE_INPUT,
     )
+
+
+def _extract_prompt_once(connections: dict[str, Any], save_name: str) -> None:
+    """Feed the prompt extractor from the loop item only, as test generation does.
+
+    The legacy exports also fed ``Extract text from prompt file`` from the
+    task-name node. n8n runs a node once per incoming run, so the extractor, the
+    merge behind it and the LLM chain ran twice per task: the second time with
+    the task prompt alone -- no metamodels, namespace URIs, examples or grammar --
+    and that response overwrote the complete one on disk.
+    """
+    remove_connection_targets(connections.get(save_name, {}), {EXTRACT_PROMPT_TEXT_NODE})
+    if not connection_targets(connections.get(LOOP_OVER_ITEMS_NODE, {}), EXTRACT_PROMPT_TEXT_NODE):
+        raise ValueError(f"{LOOP_OVER_ITEMS_NODE} does not feed {EXTRACT_PROMPT_TEXT_NODE}")
 
 
 def _install_transformation_request(
