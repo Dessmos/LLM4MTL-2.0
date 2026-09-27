@@ -280,7 +280,6 @@
           "cachedResultName": "gpt-5"
         },
         "options": {
-          "temperature": 0,
           "timeout": 600000
         }
       },

@@ -1139,7 +1139,7 @@
         "options": {
           "temperature": 0,
           "timeout": 600000,
-          "reasoningEffort": "max"
+          "reasoningEffort": "xhigh"
         }
       }
     },
@@ -1205,7 +1205,7 @@
         "options": {
           "temperature": 0,
           "timeout": 600000,
-          "reasoningEffort": "max"
+          "reasoningEffort": "xhigh"
         }
       }
     },
@@ -1271,7 +1271,7 @@
         "options": {
           "temperature": 0,
           "timeout": 600000,
-          "reasoningEffort": "max"
+          "reasoningEffort": "xhigh"
         }
       }
     },
@@ -1337,7 +1337,7 @@
         "options": {
           "temperature": 0,
           "timeout": 600000,
-          "reasoningEffort": "max"
+          "reasoningEffort": "xhigh"
         }
       }
     },

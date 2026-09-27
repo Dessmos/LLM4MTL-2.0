@@ -182,7 +182,8 @@ one of its own.
 The **reasoning effort** of an OpenAI role is read from the same node
 (`Options → Reasoning Effort`), recorded as `config.llms.<role>.reasoning_effort`,
 and applied to every call that role makes: generation, refinement, and source
-diagnosis. The shipped nodes ask for `max`. n8n's list offers only low, medium,
+diagnosis. The shipped nodes ask for `xhigh` (see
+[docs/model-selection.md](../../../docs/model-selection.md)). n8n's list offers only low, medium,
 and high, so another level is entered as a fixed value; an expression is
 refused. Apart from the model id, it is the only node setting that reaches the
 subworkflow call: temperature and the other options stay those of the export.
