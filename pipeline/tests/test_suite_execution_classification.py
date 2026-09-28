@@ -103,14 +103,6 @@ class ClassificationTests(unittest.TestCase):
         self.assertTrue(observation.is_infrastructure_failure)
         self.assertEqual("transformation_parse", observation.failure_stage)
 
-    def test_timeout_is_not_executable(self) -> None:
-        observation = classify_maven_run(maven("", exit_code=124, timed_out=True))
-
-        self.assertFalse(observation.is_technically_executable)
-        self.assertTrue(observation.is_infrastructure_failure)
-        self.assertEqual("timeout", observation.failure_stage)
-
-
     def test_a_timeout_keeps_the_compile_verdict(self) -> None:
         cases = ((COMPILE_FAILURE, False), (ALL_PASSED, True))
         for output, compiled in cases:
@@ -122,6 +114,8 @@ class ClassificationTests(unittest.TestCase):
                 self.assertEqual("timeout", observation.failure_stage)
                 self.assertTrue(observation.timed_out)
                 self.assertEqual(compiled, observation.compiled)
+                self.assertFalse(observation.is_technically_executable)
+                self.assertTrue(observation.is_infrastructure_failure)
 
 
 class ConsoleFallbackTests(unittest.TestCase):
@@ -195,6 +189,7 @@ class ReportPhaseTests(unittest.TestCase):
                 self.assertEqual(models_loaded, observation.models_loaded)
                 self.assertEqual(engine_started, observation.engine_started)
                 self.assertFalse(observation.assertions_evaluated)
+                self.assertFalse(observation.is_technically_executable)
                 self.assertEqual(message, observation.error_summary)
 
     def test_a_harness_failure_summary_prefers_the_first_error(self) -> None:

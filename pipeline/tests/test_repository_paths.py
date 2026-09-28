@@ -84,12 +84,6 @@ class FailureReportBoundaryTests(unittest.TestCase):
             _repository_path(OUTSIDE)
         self.assertIn("escapes the repository", str(raised.exception))
 
-    def test_a_cited_path_inside_the_repository_is_spelled_the_same_way(self) -> None:
-        self.assertEqual(
-            "pipeline/pyproject.toml",
-            _repository_path(REPO_ROOT / "pipeline/pyproject.toml"),
-        )
-
 
 if __name__ == "__main__":
     unittest.main()

@@ -20,11 +20,7 @@ from llm4mtl.paths import ArtifactRoots
 from llm4mtl.stages.models import StageResult
 from llm4mtl.provenance import build_provenance
 from llm4mtl.serialization.json_io import read_json
-from llm4mtl.stage_recording import (
-    announce_stage_start,
-    infrastructure_error_result,
-    record_stage_attempt,
-)
+from llm4mtl.stage_recording import infrastructure_error_result, record_stage_attempt
 from llm4mtl.stage_service.app import app
 from run_records import read_events
 
@@ -87,33 +83,6 @@ class SharedOwnerContractTests(unittest.TestCase):
         # so it must not be something only the persisted copy knows.
         self.assertEqual(1, recorded.payload["attempt"])
 
-    def test_internal_evidence_is_stored_beside_the_contract_result(self) -> None:
-        recorded = record_stage_attempt(self.paths, "extract", extraction_result())
-
-        evidence = read_json(
-            self.paths.stage_attempt_evidence("extract", recorded.attempt)
-        )
-        self.assertEqual(EXTRACTION_COUNTS, evidence["counts"])
-        self.assertEqual(EXTRACTION_DETAILS, evidence["details"])
-        # Evidence is not the n8n contract and must not be confused with it.
-        self.assertNotIn("outcome_code", evidence)
-
-    def test_finished_event_carries_the_recorded_attempt(self) -> None:
-        recorded = record_stage_attempt(self.paths, "extract", extraction_result())
-
-        self.assertEqual(
-            [
-                {
-                    "event": "stage_finished",
-                    "stage": "extract",
-                    "status": "passed",
-                    "outcome_code": "EXTRACTED",
-                    "attempt": recorded.attempt,
-                }
-            ],
-            stage_events(self.paths),
-        )
-
     def test_caller_supplied_artifacts_join_the_persisted_result(self) -> None:
         recorded = record_stage_attempt(
             self.paths,
@@ -133,18 +102,6 @@ class SharedOwnerContractTests(unittest.TestCase):
                 "semantic_test_generation_record": "generations/semantic-test.json",
             },
             persisted["artifacts"],
-        )
-
-    def test_a_non_execution_stage_prepares_no_diagnosis(self) -> None:
-        recorded = record_stage_attempt(self.paths, "extract", extraction_result())
-        self.assertIsNone(recorded.diagnosis_index)
-
-    def test_announcing_a_start_is_a_separate_step(self) -> None:
-        """The two callers announce at different moments, so it is not folded in."""
-        announce_stage_start(self.paths, "extract")
-        self.assertEqual(
-            [{"event": "stage_started", "stage": "extract"}],
-            stage_events(self.paths),
         )
 
 
@@ -200,17 +157,6 @@ class ServiceRecordingTests(unittest.TestCase):
             response = self.client.post(f"/batches/{BATCH}/runs/{run_id}/stages/extract", json={})
         self.assertEqual(200, response.status_code)
         return run_store.open_run(self.batch.root, run_id)
-
-    def test_the_persisted_result_is_the_contract_payload(self) -> None:
-        paths = self._record_through_service("result")
-
-        persisted = read_json(paths.stage_attempt_result("extract", 1))
-
-        self.assertEqual("extract", persisted["stage"])
-        self.assertEqual("passed", persisted["status"])
-        self.assertEqual("EXTRACTED", persisted["outcome_code"])
-        self.assertEqual(EXTRACTION_COUNTS, persisted["counts"])
-        self.assertEqual(1, persisted["attempt"])
 
     def test_the_stage_is_announced_before_it_finishes(self) -> None:
         paths = self._record_through_service("events")

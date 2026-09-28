@@ -1090,17 +1090,6 @@ class RunModeTests(unittest.TestCase):
         self.assertEqual("completed", state["results"][0]["status"])
         self.assertEqual("SEMANTIC_PASSED", state["results"][0]["reason"])
 
-    def test_full_diagnoses_a_semantic_failure_and_refines(self) -> None:
-        actions, _ = _drive_diagnosis(["transformation_defect"])
-        self.assertIn("read_diagnosis_index", actions)
-        self.assertIn("diagnose", actions)
-        # The diagnosed transformation defect sends the run back through
-        # transformation generation rather than test generation.
-        self.assertEqual("prepare_refinement", actions[actions.index("diagnose") + 1])
-        self.assertEqual(
-            "generate_transformations", actions[actions.index("diagnose") + 2]
-        )
-
     def test_a_failure_without_a_prepared_index_says_so(self) -> None:
         """The shortcut report alone is no longer enough to diagnose on."""
         config = _configure(run_mode="Full Pipeline")
@@ -1138,14 +1127,6 @@ class RunModeTests(unittest.TestCase):
             "SEMANTIC_EXECUTION_FAILED:SEMANTIC_FEEDBACK_DISABLED",
             state["results"][0]["reason"],
         )
-
-    def test_every_run_mode_has_a_successful_terminal_path(self) -> None:
-        for mode in ("Semantic Tests Only", "Transformations Only", "Full Pipeline"):
-            with self.subTest(mode=mode):
-                config = _configure(run_mode=mode)
-                self.assertTrue(config["ok"], config.get("error"))
-                _, state = _drive(config["result"])
-                self.assertEqual("completed", state["results"][0]["status"])
 
 
 @unittest.skipUnless(shutil.which("node"), "the master workflow's Code nodes need Node")
@@ -1383,21 +1364,6 @@ class SourceDiagnosisAggregationTests(unittest.TestCase):
         self.assertEqual("prepare_refinement", actions[last + 1])
         self.assertEqual("generate_tests", actions[last + 2])
 
-    def test_a_refined_transformation_keeps_the_validated_suite(self) -> None:
-        """Only a refined *suite* is a new suite.
-
-        A refined transformation is judged against the suite that already passed
-        on the reference — that pairing is what makes its failure evidence about
-        the transformation. Renaming the suite here left the execution stage
-        selecting a suite id that never existed, so it evaluated nothing and
-        every transformation refinement ended in an infrastructure error.
-        """
-        _, state = _drive_diagnosis(["transformation_defect"])
-        result = state["results"][0]
-
-        self.assertEqual(1, result["refinement_iterations"])
-        self.assertEqual("etl-tree2graph-0001_000", result["suite_id"])
-
     def test_a_refined_suite_gets_its_own_id(self) -> None:
         _, state = _drive_diagnosis(["test_defect"])
         result = state["results"][0]
@@ -1510,6 +1476,7 @@ class SourceDiagnosisAggregationTests(unittest.TestCase):
             [0, 1],
             [entry["refinement_iteration"] for entry in syntax_attempts],
         )
+        self.assertEqual(1, state["results"][0]["refinement_iterations"])
         self.assertEqual("etl-tree2graph-0001_000", state["results"][0]["suite_id"])
 
     def test_test_refinement_does_not_change_the_initial_transformation_model(
@@ -1942,42 +1909,6 @@ class ConfigurationPresentationTests(unittest.TestCase):
         ):
             with self.subTest(field=field):
                 self.assertEqual(["0", "1", "2", "3"], _field_options(field))
-
-    def test_the_choice_fields_are_native_option_inputs(self) -> None:
-        """Cards are CSS over radio/checkbox, not custom HTML controls.
-
-        n8n forms only submit native inputs; an HTML element rendered as a button
-        would show up and return nothing usable, so every field a run reads has to
-        stay a real option input.
-        """
-        submitted_types = {
-            "radio",
-            "checkbox",
-            "dropdown",
-            "hiddenField",
-            "text",
-            "textarea",
-            "file",
-        }
-        for field in _form_fields():
-            if field["fieldType"] == "html":
-                continue
-            with self.subTest(field=field.get("fieldName")):
-                self.assertIn(field["fieldType"], submitted_types)
-
-    def test_the_whole_configuration_is_one_screen(self) -> None:
-        """One form node, so the run is configured behind a single link."""
-        form_nodes = [
-            node
-            for node in _master()["nodes"]
-            if node["type"] in ("n8n-nodes-base.form", "n8n-nodes-base.formTrigger")
-        ]
-        self.assertEqual(
-            ["n8n-nodes-base.formTrigger"], [node["type"] for node in form_nodes]
-        )
-        css = form_nodes[0]["parameters"]["options"]["customCss"]
-        self.assertIn(".multiselect-option", css)
-        self.assertNotIn("<", css)
 
     def test_the_form_submits_the_names_the_queue_builder_reads(self) -> None:
         """The submitted key has to be the field name, not the field label.

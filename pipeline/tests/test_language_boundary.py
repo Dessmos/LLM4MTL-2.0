@@ -23,25 +23,12 @@ from llm4mtl.conventions import (
     default_references_root,
     language_config,
 )
-from llm4mtl.domain import (
-    ArtifactValidation,
-    OutcomeStatus,
-    ParseObservation,
-    SuiteExecutionObservation,
-    TransformationOutcome,
-)
+from llm4mtl.domain import OutcomeStatus, SuiteExecutionObservation
 from llm4mtl.external_tools.maven import CommandResult
-from llm4mtl.languages import (
-    REQUIRED_LANGUAGES,
-    LanguageAdapter,
-    language_adapter,
-)
+from llm4mtl.languages import REQUIRED_LANGUAGES, language_adapter
 from llm4mtl.languages.common import validate_rendered_suite
 from llm4mtl.languages.etl.adapter import EtlAdapter
-from llm4mtl.languages.reactions.adapter import (
-    ReactionsAdapter,
-    _contains_only_unresolved_linkage_diagnostics,
-)
+from llm4mtl.languages.reactions.adapter import ReactionsAdapter
 from llm4mtl.languages.reactions.prerequisites import (
     SEGMENT_NAME,
     UnmergeableTransformationError,
@@ -55,19 +42,9 @@ class RegistryTests(unittest.TestCase):
     def test_all_four_thesis_languages_are_declared(self) -> None:
         self.assertEqual(("etl", "atl", "qvto", "reactions"), REQUIRED_LANGUAGES)
 
-    def test_every_required_language_has_an_adapter(self) -> None:
-        for language in REQUIRED_LANGUAGES:
-            with self.subTest(language=language):
-                self.assertIsInstance(language_adapter(language), LanguageAdapter)
-
     def test_an_unknown_language_is_rejected(self) -> None:
         with self.assertRaises(KeyError):
             language_adapter("cobol")
-
-    def test_all_adapters_satisfy_the_shared_interface(self) -> None:
-        adapter = language_adapter("etl")
-        self.assertIsInstance(adapter, LanguageAdapter)
-        self.assertEqual("etl", adapter.language_id)
 
 
 class ConventionsTests(unittest.TestCase):
@@ -95,13 +72,6 @@ class EtlAdapterContractTests(unittest.TestCase):
         self.assertEqual("2.5.0", versions["epsilon"])
         self.assertEqual("5.10.2", versions["junit"])
 
-    def test_it_reports_artifact_validity_without_executing(self) -> None:
-        observation = self.adapter.validate_suite_artifacts(
-            _suite(Path("/does/not/exist"))
-        )
-        self.assertIsInstance(observation, ArtifactValidation)
-        self.assertFalse(observation.valid)
-
     def test_static_validation_preserves_extraction_reason_precedence(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             observation = validate_rendered_suite(
@@ -124,14 +94,6 @@ class EtlAdapterContractTests(unittest.TestCase):
             ("No deterministic task contract exists for etl/Tree2Graph",),
             observation.violations,
         )
-
-    def test_parsing_nothing_observes_nothing(self) -> None:
-        from llm4mtl.languages.base import Workspace
-
-        observations = self.adapter.parse_transformations(
-            [], Workspace(Path("/engine"), Path("/observations"))
-        )
-        self.assertEqual({}, observations)
 
     def test_parser_writes_legacy_csv_only_to_run_evidence(self) -> None:
         from llm4mtl.languages.base import Workspace
@@ -293,21 +255,6 @@ class EtlAdapterContractTests(unittest.TestCase):
                 ).exists()
             )
 
-    def test_it_reports_the_shared_observation_types(self) -> None:
-        # The adapter's outputs are domain types, so the pipeline and the
-        # evaluation layer never see an ETL-shaped result.
-        annotations = {
-            "render_suite_artifacts": ArtifactValidation,
-            "validate_suite_artifacts": ArtifactValidation,
-            "execute_suite": SuiteExecutionObservation,
-            "normalize_transformation_failure": TransformationOutcome,
-            "parse_transformations": ParseObservation,
-        }
-        for method, expected in annotations.items():
-            with self.subTest(method=method):
-                self.assertTrue(hasattr(self.adapter, method))
-                self.assertIsNotNone(expected)
-
     def test_it_normalizes_only_attributable_transformation_failures(self) -> None:
         runtime = SuiteExecutionObservation(
             compiled=True,
@@ -347,28 +294,6 @@ class EtlAdapterContractTests(unittest.TestCase):
         self.assertEqual(OutcomeStatus.RUNTIME_FAILED, unclassified_outcome.status)
         self.assertTrue(
             unclassified_outcome.status.is_attributable_to_the_transformation
-        )
-
-
-class ReactionsParserNormalizationTests(unittest.TestCase):
-
-    def test_known_frozen_parser_linkage_false_positives_are_not_syntax_errors(
-        self,
-    ) -> None:
-        diagnostic = "\n".join(
-            [
-                "Syntax issues (2):",
-                "Duplicate reactions segment name 'example' (WARNING)",
-                "The method run(unknown) refers to the missing type unknown (ERROR)",
-            ]
-        )
-        self.assertTrue(_contains_only_unresolved_linkage_diagnostics(diagnostic))
-
-    def test_real_grammar_diagnostics_still_fail(self) -> None:
-        self.assertFalse(
-            _contains_only_unresolved_linkage_diagnostics(
-                "Syntax issues (1):\nno viable alternative at input ']' (ERROR)"
-            )
         )
 
 

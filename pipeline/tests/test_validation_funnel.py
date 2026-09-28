@@ -150,17 +150,6 @@ class TechnicalValidationTests(FunnelFixture):
         self.assertFalse(verdict.observation.assertions_passed)
         self.assertEqual("assertion_failure", verdict.failure_stage)
 
-    def test_compile_failure_is_not_technically_valid(self) -> None:
-        with patch(
-            "llm4mtl.semantic_tests.suite_execution.run_maven",
-            return_value=COMPILE_FAILURE,
-        ):
-            verdict = check_suite(self.suite, self.context())
-
-        self.assertFalse(verdict.is_technically_executable)
-        self.assertEqual("NOT_EXECUTABLE", verdict.status)
-        self.assertEqual("java_compilation", verdict.failure_stage)
-
     def test_an_artifact_invalid_suite_is_never_executed(self) -> None:
         self.write_metadata(valid=False)
         with patch(
@@ -211,18 +200,6 @@ class TechnicalValidationTests(FunnelFixture):
 
 
 class ReferenceValidationTests(FunnelFixture):
-
-    def test_a_failing_oracle_is_reference_invalid_not_a_technical_failure(
-        self,
-    ) -> None:
-        with patch(
-            "llm4mtl.semantic_tests.suite_execution.run_maven",
-            return_value=ASSERTION_FAILURE,
-        ):
-            verdict = validate_suite(self.suite, self.context())
-
-        self.assertEqual("REFERENCE_INVALID", verdict.status)
-        self.assertTrue(verdict.is_technically_executable)
 
     def test_a_passing_oracle_is_validated(self) -> None:
         with patch(

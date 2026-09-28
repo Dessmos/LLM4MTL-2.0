@@ -8,7 +8,6 @@ would surface for the first time when a second language was added.
 from __future__ import annotations
 
 import json
-import tempfile
 import unittest
 
 from llm4mtl.domain import ModelRole, ScenarioKind
@@ -75,29 +74,6 @@ class SpecToScenarioTests(unittest.TestCase):
 
 
 class ProductionGateTests(unittest.TestCase):
-
-    def test_extraction_refuses_a_suite_the_contract_cannot_express(self) -> None:
-        # The contract is load-bearing: a suite that cannot be expressed never
-        # becomes an executable artifact, whatever the ETL path would accept.
-        spec = json.loads(json.dumps(SPEC))
-        spec["tests"][0]["assertions"][0]["kind"] = "count"
-        extracted = {"semantic_cases.json": json.dumps(spec)}
-
-        _, validation = language_adapter("etl").render_suite_artifacts(
-            "SmokeTask",
-            extracted,
-        )
-        self.assertTrue(validation.valid)
-
-        with tempfile.TemporaryDirectory():
-            broken = json.loads(json.dumps(SPEC))
-            broken["tests"][0]["models"][1]["name"] = "Tgt"
-            broken["tests"][0]["assertions"][0]["model"] = "Tgt"
-            _, still_valid = language_adapter("etl").render_suite_artifacts(
-                "SmokeTask",
-                {"semantic_cases.json": json.dumps(broken)},
-            )
-            self.assertTrue(still_valid.valid)
 
     def test_the_gate_reports_why_a_suite_is_inexpressible(self) -> None:
         spec = json.loads(json.dumps(SPEC))

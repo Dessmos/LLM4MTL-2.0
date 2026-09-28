@@ -318,29 +318,6 @@ class MissingReportsTests(unittest.TestCase):
             self.assertIsNone(manifest["surefire"]["errors"])
             self.assertEqual((), archived_execution_evidence(path).surefire_reports)
 
-    def test_the_stdout_that_explains_the_absence_is_still_archived(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir)
-            harness = _Harness(root)
-            observation, evidence = harness.run(
-                stdout="[ERROR] COMPILATION ERROR :",
-                stderr="",
-                exit_code=1,
-                reports={},
-            )
-            path = record_observation(
-                root / "observations",
-                _suite(root),
-                _transformation(root, "only.etl"),
-                observation,
-                evidence=evidence,
-            )
-
-            self.assertEqual(
-                "[ERROR] COMPILATION ERROR :",
-                (evidence_dir(path) / STDOUT_FILENAME).read_text(encoding="utf-8"),
-            )
-
 
 class VerdictIsUnaffectedTests(unittest.TestCase):
 

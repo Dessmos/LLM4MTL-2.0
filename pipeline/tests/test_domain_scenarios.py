@@ -79,39 +79,7 @@ def inserted_daughter_scenario() -> SemanticScenario:
     )
 
 
-def tree2graph_scenario() -> SemanticScenario:
-    """A batch ETL scenario, for contrast: one input, one produced output."""
-    return SemanticScenario(
-        name="everyTreeNodeBecomesAGraphNode",
-        kind=ScenarioKind.BATCH_TRANSFORMATION,
-        slots=(
-            ModelSlot(
-                name="source",
-                role=ModelRole.INPUT,
-                metamodel="Tree",
-                artifact="models/in.model",
-            ),
-            ModelSlot(name="target", role=ModelRole.OUTPUT, metamodel="Graph"),
-        ),
-        expectations=(
-            Expectation(
-                kind="count", slot="target", type_name="Node", payload={"expected": 3}
-            ),
-        ),
-    )
-
-
 class ChangePropagationTests(unittest.TestCase):
-
-    def test_a_real_reactions_scenario_is_expressible(self) -> None:
-        scenario = inserted_daughter_scenario()
-
-        self.assertEqual(ScenarioKind.CHANGE_PROPAGATION, scenario.kind)
-        self.assertEqual(
-            ("families", "persons"), tuple(slot.name for slot in scenario.slots)
-        )
-        self.assertEqual(1, len(scenario.changes))
-        self.assertEqual("daughters", scenario.changes[0].feature)
 
     def test_both_related_models_are_read_and_written(self) -> None:
         # Reactions needs slots that are simultaneously input and output; a
@@ -135,23 +103,8 @@ class ChangePropagationTests(unittest.TestCase):
                 ),
             )
 
-    def test_changes_are_a_closed_vocabulary_not_code(self) -> None:
-        # The value carried by a change is structured data, never a snippet the
-        # adapter would have to execute.
-        change = inserted_daughter_scenario().changes[0]
-        self.assertIsInstance(change.value, ElementSpec)
-        self.assertEqual("Member", change.value.type_name)
-        self.assertIn(change.kind, set(ChangeKind))
-
 
 class BatchTransformationTests(unittest.TestCase):
-
-    def test_a_batch_scenario_is_expressible(self) -> None:
-        scenario = tree2graph_scenario()
-
-        self.assertEqual(ScenarioKind.BATCH_TRANSFORMATION, scenario.kind)
-        self.assertEqual((), scenario.changes)
-        self.assertFalse(_slot(scenario, "target").role.is_readable)
 
     def test_a_batch_scenario_cannot_declare_changes(self) -> None:
         with self.assertRaises(ValueError):

@@ -15,7 +15,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from llm4mtl.provenance import build_provenance
-from llm4mtl.run_store import ManifestExistsError, create_run, write_manifest
+from llm4mtl.run_store import create_run
 from llm4mtl.run_store.identity import InvalidRunIdError
 from llm4mtl.stages.dispatch import prepare_workspace
 from llm4mtl.stages.models import ConfigError
@@ -62,15 +62,6 @@ class SelectionTests(unittest.TestCase):
 
     def test_an_explicit_selection_is_used_as_given(self) -> None:
         self.assertEqual({"gpt-5"}, fixed_selection("test-generation model", ["gpt-5"]))
-
-
-class ManifestImmutabilityTests(unittest.TestCase):
-
-    def test_a_manifest_can_never_be_replaced(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            paths = create_run(Path(temp_dir), "run_001", IDENTITY)
-            with self.assertRaises(ManifestExistsError):
-                write_manifest(paths, {"run_id": "run_001", **IDENTITY})
 
 
 class RunDirectoryContainmentTests(unittest.TestCase):

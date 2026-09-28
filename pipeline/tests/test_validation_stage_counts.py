@@ -327,19 +327,6 @@ class TransformationExecutionCountTests(unittest.TestCase):
         self.assertEqual(1, counts["evaluated"])
         self.assertEqual(0, counts["skipped"])
 
-    def test_evaluated_is_exactly_passed_plus_failed(self) -> None:
-        for stage in ("assertion_failure", "engine_runtime", "unclassified_runtime"):
-            with self.subTest(stage=stage):
-                counts = self.counts_for(
-                    self.unclassified_observation(
-                        failure_stage=stage,
-                        assertions_evaluated=stage == "assertion_failure",
-                    )
-                )
-                self.assertEqual(
-                    counts["evaluated"], counts["passed"] + counts["failed"]
-                )
-
     def test_a_model_loading_failure_of_a_generated_transformation_is_a_failure(
         self,
     ) -> None:

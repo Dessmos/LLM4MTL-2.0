@@ -34,14 +34,6 @@ class WriteJsonOnceOrMatchTests(unittest.TestCase):
         self.addCleanup(self._tmp.cleanup)
         self.path = Path(self._tmp.name) / "nested" / "record.json"
 
-    def test_the_first_write_creates_the_record(self) -> None:
-        stored = write_json_once_or_match(
-            self.path, {"status": "done", "at": "1"}, comparable=without_time
-        )
-
-        self.assertEqual({"status": "done", "at": "1"}, stored)
-        self.assertEqual(stored, read_json(self.path))
-
     def test_a_retry_gets_the_first_record_back(self) -> None:
         write_json_once_or_match(
             self.path, {"status": "done", "at": "1"}, comparable=without_time

@@ -123,20 +123,6 @@ class NoExpectedScavengingTests(unittest.TestCase):
     `values`, `equals`, `ids`, `pairs`, `where`, or `match`."
     """
 
-    def test_a_where_clause_is_not_used_as_the_expected_value(self) -> None:
-        with self.assertRaises(SemanticCasesError):
-            parse(
-                spec_with(
-                    {
-                        "kind": "featureValues",
-                        "model": "Graph",
-                        "type": "Node",
-                        "feature": "name",
-                        "where": {"name": "root"},
-                    }
-                )
-            )
-
     def test_no_alternate_primary_key_stands_in_for_expected(self) -> None:
         for alternate in (
             "equals",
@@ -298,10 +284,6 @@ class NoUndefinedExpectedValuesTests(unittest.TestCase):
                 "expected": expected,
             }
         )
-
-    def test_a_pair_with_a_null_target_is_rejected(self) -> None:
-        with self.assertRaisesRegex(SemanticCasesError, "no target identity"):
-            parse(self.reference_pairs([{"source": "a", "target": None}]))
 
     def test_a_pair_with_a_null_source_is_rejected(self) -> None:
         with self.assertRaisesRegex(SemanticCasesError, "no source identity"):

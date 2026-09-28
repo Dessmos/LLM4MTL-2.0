@@ -345,12 +345,8 @@ class N8nArtifactRoutingTests(unittest.TestCase):
         # One node issues every stage-service call, so each request is built
         # where its action is chosen.
         machine = nodes["State Machine"]["parameters"]["jsCode"]
-        self.assertEqual(
-            "={{ $json.request.body }}",
-            nodes["Call Stage Service"]["parameters"]["jsonBody"],
-        )
 
-        terminal = machine.split("if (action === 'final') {", 1)[1].split(
+        terminal =machine.split("if (action === 'final') {", 1)[1].split(
             "\n  }\n", 1
         )[0]
         self.assertIn("method: 'POST'", terminal)

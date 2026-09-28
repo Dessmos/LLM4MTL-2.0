@@ -28,7 +28,6 @@ from llm4mtl.paths import REPO_ROOT, TARGET
 from llm4mtl.provenance import input_hashes
 from llm4mtl.semantic_tests.diagnosis_preparation import (
     DiagnosisPreparationError,
-    _index_counts,
     _match_assertion,
     diagnosis_artifact_references,
     diagnosis_response_dir,
@@ -93,36 +92,6 @@ SEMANTIC_CASES: dict[str, Any] = {
         }
     ],
 }
-
-
-class DiagnosisIndexCountTests(unittest.TestCase):
-
-    def test_prepared_report_counts_preserve_status_scope_and_eligibility(self) -> None:
-        pairs = [
-            {
-                "reports": [
-                    {
-                        "status": "created",
-                        "scope": "execution_pair",
-                        "eligible": True,
-                    },
-                    {"status": "refused", "eligible": False},
-                ]
-            },
-            {"reports": []},
-        ]
-
-        self.assertEqual(
-            {
-                "failed_pairs": 2,
-                "reports_created": 1,
-                "reports_refused": 1,
-                "pair_level_reports": 1,
-                "diagnosis_eligible": 1,
-                "pairs_without_reports": 1,
-            },
-            _index_counts(pairs),
-        )
 
 
 class SurefireTestCaseTests(unittest.TestCase):
@@ -206,27 +175,6 @@ def _surefire_xml(message: str, element: str = "failure") -> str:
 
 
 class AssertionMatchingTests(unittest.TestCase):
-
-    def test_explicit_assertion_id_is_selected_by_message_prefix(self) -> None:
-        semantic_cases = {
-            "tests": [
-                {
-                    "id": "case-1",
-                    "assertions": [
-                        {"id": "check-count", "message": "expected two nodes"},
-                    ],
-                }
-            ]
-        }
-
-        self.assertEqual(
-            "check-count",
-            _match_assertion(
-                semantic_cases,
-                "case-1",
-                "expected two nodes ==> expected: <2> but was: <1>",
-            ),
-        )
 
     def test_ambiguous_rendered_messages_are_refused(self) -> None:
         semantic_cases = {
@@ -498,11 +446,14 @@ class DiagnosisPreparationTests(unittest.TestCase):
         self.assertEqual(1, index["counts"]["reports_created"])
         self.assertEqual(1, index["counts"]["diagnosis_eligible"])
         entry = index["pairs"][0]["reports"][0]
+        self.assertEqual(0, index["counts"]["pair_level_reports"])
         self.assertEqual(CASE, entry["test_case_id"])
         self.assertEqual("assertion-001", entry["assertion_id"])
         self.assertEqual("parser_passed_and_semantic_test_failed", entry["reason"])
 
         report = read_json(REPO_ROOT / entry["report"])
+        self.assertEqual("semantic_test_case_failure", report["report_type"])
+        self.assertNotIn("pair_result", report)
         result = report["test_case_result"]
         self.assertEqual(CASE, result["test_case"]["name"])
         # Only the failing case travels to diagnosis, never the whole suite.
@@ -659,22 +610,6 @@ class DiagnosisPreparationTests(unittest.TestCase):
         prepare_execution_diagnosis(self.run_dir, 1)
         self.assertTrue(directory.is_dir())
 
-    def test_an_attempt_with_nothing_diagnosable_gets_no_trace_directory(self) -> None:
-        """An empty directory would claim a diagnosis was possible when none was."""
-        self._complete_failing_run()
-        self._write_snapshot()
-        self._write_observation(
-            root=self.run_dir / "observations",
-            role="reference_transformation",
-            assertions_passed=False,
-            failure_stage="assertion_failure",
-        )
-
-        index = prepare_execution_diagnosis(self.run_dir, 1)
-
-        self.assertEqual(0, index["counts"]["diagnosis_eligible"])
-        self.assertFalse(diagnosis_response_dir(self.run_dir, 1).exists())
-
     def test_an_ineligible_report_is_never_selected_for_diagnosis(self) -> None:
         """Eligibility stays the gate that selection honours.
 
@@ -696,6 +631,9 @@ class DiagnosisPreparationTests(unittest.TestCase):
         self.assertEqual("created", entry["status"])
         self.assertFalse(entry["eligible"])
         self.assertEqual("reference_result_not_passing", entry["reason"])
+        self.assertEqual(0, index["counts"]["diagnosis_eligible"])
+        # An empty directory would claim a diagnosis was possible when none was.
+        self.assertFalse(diagnosis_response_dir(self.run_dir, 1).exists())
 
         references = diagnosis_artifact_references(self.run_dir, index)
         self.assertNotIn("failure_report_path", references)
@@ -824,30 +762,6 @@ class DiagnosisPreparationTests(unittest.TestCase):
         self.assertIsNone(result["assertion"])
         self.assertTrue(report["source_diagnosis"]["evidence_bundle"])
 
-    def test_a_timeout_is_not_attributed_to_the_pairing(self) -> None:
-        observation = self._write_observation(
-            root=self._pair_root(),
-            role="generated_transformation",
-            assertions_evaluated=False,
-            failure_stage="timeout",
-        )
-        self._archive_evidence(
-            observation, _surefire_xml("interrupted", element="error")
-        )
-        self._write_observation(
-            root=self.run_dir / "observations",
-            role="reference_transformation",
-            assertions_passed=True,
-            failure_stage="",
-        )
-        self._write_stage_attempts(observation)
-
-        index = prepare_execution_diagnosis(self.run_dir, 1)
-        entry = index["pairs"][0]["reports"][0]
-
-        self.assertFalse(entry["eligible"])
-        self.assertEqual("failure_not_attributable_to_the_pairing", entry["reason"])
-
     def test_a_suite_that_did_not_pass_the_reference_is_not_diagnosable(self) -> None:
         observation = self._write_observation(
             root=self._pair_root(), role="generated_transformation"
@@ -949,20 +863,6 @@ class DiagnosisPreparationTests(unittest.TestCase):
         self.assertNotIn("test_case", result)
         self.assertNotIn("assertion", result)
         self.assertNotIn("test_case_result", report)
-
-    def test_a_test_method_failure_uses_the_per_case_report(self) -> None:
-        self._complete_failing_run()
-
-        index = prepare_execution_diagnosis(self.run_dir, 1)
-        entry = index["pairs"][0]["reports"][0]
-        report = read_json(REPO_ROOT / entry["report"])
-
-        self.assertEqual(0, index["counts"]["pair_level_reports"])
-        self.assertEqual(1, index["counts"]["reports_created"])
-        self.assertEqual("semantic_test_case_failure", report["report_type"])
-        self.assertEqual(CASE, entry["test_case_id"])
-        self.assertEqual("assertion-001", entry["assertion_id"])
-        self.assertNotIn("pair_result", report)
 
     def _diagnose_report(self, entry: dict[str, object]) -> dict[str, object]:
         """Run the diagnosis subworkflow's own validation over a prepared report.

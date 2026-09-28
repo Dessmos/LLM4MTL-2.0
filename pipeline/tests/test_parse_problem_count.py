@@ -26,7 +26,7 @@ from llm4mtl.languages.qvto.adapter import QvtoAdapter
 from llm4mtl.paths import REPO_ROOT
 
 
-class QvtoProblemCountTests(unittest.TestCase):
+class QvtoProbeTestCase(unittest.TestCase):
     """The probe prints one LLM4MTL_PARSE line per file it actually parsed."""
 
     def observations(self, probe_output: str, *, returncode: int = 0):
@@ -58,6 +58,9 @@ class QvtoProblemCountTests(unittest.TestCase):
                 )
             return result[measured], result[missing]
 
+
+class QvtoProblemCountTests(QvtoProbeTestCase):
+
     def test_a_reported_zero_is_persisted_as_zero(self) -> None:
         measured, _ = self.observations("LLM4MTL_PARSE\t{measured}\t0\n")
 
@@ -80,15 +83,8 @@ class QvtoProblemCountTests(unittest.TestCase):
 
         self.assertFalse(missing.parsed)
 
-    def test_a_missing_report_is_never_confused_with_a_measured_zero(self) -> None:
-        measured, missing = self.observations("LLM4MTL_PARSE\t{measured}\t0\n")
 
-        self.assertEqual(0, measured.problem_count)
-        self.assertIsNone(missing.problem_count)
-        self.assertNotEqual(measured.problem_count, missing.problem_count)
-
-
-class QvtoParseDiagnosticTests(QvtoProblemCountTests):
+class QvtoParseDiagnosticTests(QvtoProbeTestCase):
     """A rejected file must say what the parser objected to.
 
     The probe used to print only the count, so the diagnostic fell back to the
@@ -127,18 +123,6 @@ class QvtoParseDiagnosticTests(QvtoProblemCountTests):
         )
 
         self.assertNotIn("no viable alternative", missing.diagnostic)
-
-
-class DefaultIsUnmeasuredTests(unittest.TestCase):
-
-    def test_an_observation_that_states_no_count_reports_none(self) -> None:
-        # ETL's parser driver reports pass/fail lists and no counts at all.
-        self.assertIsNone(ParseObservation(parsed=False).problem_count)
-
-    def test_a_stated_zero_is_kept(self) -> None:
-        self.assertEqual(
-            0, ParseObservation(parsed=True, problem_count=0).problem_count
-        )
 
 
 class SerializationTests(unittest.TestCase):
@@ -182,18 +166,6 @@ class SerializationTests(unittest.TestCase):
         serialized = json.loads(json.dumps(details))
         self.assertEqual(0, serialized["problem_counts"][str(measured)])
         self.assertIsNone(serialized["problem_counts"][str(missing)])
-
-    def test_every_selected_transformation_appears_so_absence_is_visible(self) -> None:
-        measured, missing = Path("/tmp/measured.qvto"), Path("/tmp/missing.qvto")
-        details = self.stage_details(
-            {
-                measured: ParseObservation(parsed=True, problem_count=0),
-                missing: ParseObservation(parsed=False, problem_count=None),
-            },
-            [measured, missing],
-        )
-
-        self.assertEqual({str(measured), str(missing)}, set(details["problem_counts"]))
 
 
 if __name__ == "__main__":

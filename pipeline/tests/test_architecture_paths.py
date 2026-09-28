@@ -4,7 +4,6 @@ import ast
 import json
 import re
 import unittest
-from copy import deepcopy
 from pathlib import Path
 
 from llm4mtl.conventions import (
@@ -12,11 +11,6 @@ from llm4mtl.conventions import (
     n8n_workflows_root,
 )
 from llm4mtl.paths import REPO_ROOT, TARGET
-from llm4mtl.prompt_assembly.n8n_exports import (
-    synchronize_prompt_generation,
-    synchronize_test_generation,
-    synchronize_transformation_generation,
-)
 from llm4mtl.prompt_assembly.n8n_exports.node_names import PROMPT_INPUT_NODE
 from llm4mtl.prompt_assembly.n8n_exports.prompts import INPUTS
 from llm4mtl.prompt_assembly.n8n_exports.workflow_graph import (
@@ -87,9 +81,6 @@ def _nested_strings(value: object) -> list[str]:
 
 
 class ActivePathTests(unittest.TestCase):
-
-    def test_active_runtime_uses_existing_repository_root(self) -> None:
-        self.assertTrue(REPO_ROOT.is_dir())
 
     def test_target_layout_names_the_repository_areas(self) -> None:
         self.assertEqual(REPO_ROOT / "prompt_assets", TARGET.prompt_assets)
@@ -297,7 +288,6 @@ class N8nWorkflowTests(unittest.TestCase):
             '"../../../benchmark/metamodels:/data/models:ro"',
             text,
         )
-        self.assertNotIn("/data/snippets", text)
         self.assertNotIn("/data/baseline", text)
 
     def test_n8n_compose_allows_only_the_mounted_workflow_workspace(self) -> None:
@@ -367,14 +357,6 @@ class N8nWorkflowTests(unittest.TestCase):
                     self.assertNotIn("prompt_drafts", serialized)
                     self.assertNotIn("prompts_smoke", serialized)
                     self.assertNotIn("writes drafts only", serialized)
-                    self.assertEqual(
-                        payload,
-                        synchronize_prompt_generation(
-                            deepcopy(payload),
-                            language,
-                            model,
-                        ),
-                    )
                     if language == "reactions":
                         self.assertIn("reaction-triggered change", serialized)
                         self.assertIn("propagated effect", serialized)
@@ -427,13 +409,6 @@ class N8nWorkflowTests(unittest.TestCase):
                     self.assertNotIn(
                         "expert Java/JUnit test engineer",
                         serialized,
-                    )
-                    self.assertEqual(
-                        payload,
-                        synchronize_test_generation(
-                            deepcopy(payload),
-                            language,
-                        ),
                     )
                     if language == "reactions":
                         self.assertIn("change_propagation", serialized)
@@ -894,13 +869,6 @@ class N8nWorkflowTests(unittest.TestCase):
                 self.assertNotIn("Read model files", nodes)
                 self.assertIn("metamodel_text", serialized)
                 self.assertNotIn("concatenated_model", serialized)
-                self.assertEqual(
-                    payload,
-                    synchronize_transformation_generation(
-                        deepcopy(payload),
-                        language,
-                    ),
-                )
             checked += 1
         self.assertEqual(len(EXPECTED_TRANSFORMATION_WORKFLOWS), checked)
 

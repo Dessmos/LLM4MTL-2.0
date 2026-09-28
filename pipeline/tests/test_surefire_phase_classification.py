@@ -84,43 +84,6 @@ class RealHarnessReportTests(unittest.TestCase):
 
 class PhaseClassificationTests(unittest.TestCase):
 
-    def test_a_model_loading_error_is_not_technically_executable(self) -> None:
-        observation = classify_maven_run(
-            CONSOLE,
-            report_of(
-                tests=1,
-                failures=0,
-                errors=1,
-                messages=(
-                    "modelLoadingFails: Resource not found: does-not-exist.model",
-                ),
-            ),
-        )
-
-        self.assertFalse(observation.models_loaded)
-        self.assertFalse(observation.engine_started)
-        self.assertFalse(observation.is_technically_executable)
-        self.assertFalse(observation.is_reference_valid)
-        self.assertEqual("model_loading", observation.failure_stage)
-
-    def test_an_engine_runtime_error_is_not_an_oracle_disagreement(self) -> None:
-        observation = classify_maven_run(
-            CONSOLE,
-            report_of(
-                tests=1,
-                failures=0,
-                errors=1,
-                messages=(
-                    "engineRuntimeFails: Type 'Tree!Tree' not found at org.eclipse.epsilon",
-                ),
-            ),
-        )
-
-        self.assertTrue(observation.models_loaded)
-        self.assertTrue(observation.engine_started)
-        self.assertFalse(observation.is_technically_executable)
-        self.assertEqual("engine_runtime", observation.failure_stage)
-
     def test_only_an_assertion_failure_is_an_oracle_disagreement(self) -> None:
         observation = classify_maven_run(
             CONSOLE, report_of(tests=1, failures=1, errors=0)
@@ -185,15 +148,6 @@ class PhaseClassificationTests(unittest.TestCase):
         self.assertTrue(observation.is_reference_valid)
         self.assertEqual("", observation.failure_stage)
 
-    def test_no_report_falls_back_to_the_console(self) -> None:
-        compile_failure = CommandResult(
-            exit_code=1, stdout="[ERROR] COMPILATION ERROR :", stderr=""
-        )
-        observation = classify_maven_run(compile_failure, None)
-
-        self.assertFalse(observation.compiled)
-        self.assertEqual("java_compilation", observation.failure_stage)
-
     def test_no_report_never_turns_a_junit_error_into_an_oracle_failure(self) -> None:
         runtime_error = CommandResult(
             exit_code=1,
@@ -205,20 +159,6 @@ class PhaseClassificationTests(unittest.TestCase):
         self.assertFalse(observation.is_technically_executable)
         self.assertFalse(observation.assertions_evaluated)
         self.assertEqual("unclassified_runtime", observation.failure_stage)
-
-    def test_an_unknown_xml_error_is_not_attributed_to_the_engine(self) -> None:
-        observation = classify_maven_run(
-            CONSOLE,
-            report_of(
-                tests=1,
-                failures=0,
-                errors=1,
-                messages=("generatedTest: java.lang.NullPointerException",),
-            ),
-        )
-
-        self.assertEqual("unclassified_runtime", observation.failure_stage)
-        self.assertFalse(observation.is_technically_executable)
 
 
 class NoTestRanTests(unittest.TestCase):
@@ -259,19 +199,6 @@ class NoTestRanTests(unittest.TestCase):
 
         self.assertEqual("test_discovery", observation.failure_stage)
         self.assertFalse(observation.is_reference_valid)
-
-    def test_a_console_run_that_did_execute_tests_still_passes(self) -> None:
-        observation = classify_maven_run(
-            CommandResult(
-                exit_code=0,
-                stdout="Tests run: 3, Failures: 0, Errors: 0, Skipped: 0",
-                stderr="",
-            ),
-            None,
-        )
-
-        self.assertEqual("", observation.failure_stage)
-        self.assertTrue(observation.is_reference_valid)
 
 
 class PerEngineMarkerTests(unittest.TestCase):

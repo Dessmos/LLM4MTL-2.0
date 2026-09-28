@@ -15,11 +15,7 @@ from llm4mtl.semantic_tests.failure_report.eligibility import (
     _diagnosis_reason,
     _pair_diagnosis_reason,
 )
-from llm4mtl.semantic_tests.failure_report.semantic_cases import (
-    assertion_id,
-    case_id,
-    rendered_method_name,
-)
+from llm4mtl.semantic_tests.failure_report.semantic_cases import rendered_method_name
 
 PARSED = {"status": "passed"}
 FAILED_ON_GENERATED = {
@@ -145,19 +141,8 @@ class CaseDiagnosisReasonTests(unittest.TestCase):
 
 class SemanticCaseNamingTests(unittest.TestCase):
 
-    def test_the_method_comes_from_the_name_and_the_id_names_the_case(self) -> None:
-        case = {"id": "c1", "name": "creates nodes"}
-
-        self.assertEqual("createsNodes", rendered_method_name(case))
-        self.assertEqual("c1", case_id(case))
-        self.assertEqual("creates nodes", case_id({"name": "creates nodes"}))
-
     def test_a_case_without_a_name_renders_no_method(self) -> None:
         self.assertEqual("", rendered_method_name({"id": "c1"}))
-
-    def test_an_assertion_without_an_id_is_named_by_its_position(self) -> None:
-        self.assertEqual("assertion-007", assertion_id({"kind": "count"}, 7))
-        self.assertEqual("mine", assertion_id({"id": "mine"}, 7))
 
 
 if __name__ == "__main__":

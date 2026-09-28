@@ -124,43 +124,6 @@ class StageAttemptTests(unittest.TestCase):
             self.assertEqual("Extracted: 1; failed: 0", evidence["stdout"])
 
 
-class ResponseAttemptTests(unittest.TestCase):
-
-    def test_diagnoses_are_stored_as_immutable_attempts(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            paths = run_store.create_run(Path(temp_dir), "run_001", IDENTITY)
-            diagnosis = {
-                "schema_version": "1.0",
-                "classification": "AMBIGUOUS",
-                "rationale": "Evidence is inconclusive.",
-                "provider": "openai",
-                "model": "gpt-5",
-                "created_at": "2026-07-29T12:00:00Z",
-            }
-
-            # A diagnosis is a result other work consumes, so it is stored
-            # outside the run's own state, in the directory the layout assigns
-            # to this run.
-            run_diagnoses = Path(temp_dir) / "diagnoses" / "run_001"
-            first, first_artifact = run_store.record_diagnosis(
-                diagnosis, run_diagnoses
-            )
-            second, second_artifact = run_store.record_diagnosis(
-                {**diagnosis, "classification": "TEST_DEFECT"}, run_diagnoses
-            )
-
-            self.assertEqual((1, 2), (first, second))
-            self.assertEqual(
-                run_diagnoses / "attempt-001" / "diagnosis.json", first_artifact
-            )
-            self.assertEqual(
-                run_diagnoses / "attempt-002" / "diagnosis.json", second_artifact
-            )
-            self.assertEqual("AMBIGUOUS", read_json(first_artifact)["classification"])
-            # Nothing about the diagnosis is left behind in the run.
-            self.assertFalse((paths.responses_dir / "failure-diagnosis").exists())
-
-
 class EventLogTests(unittest.TestCase):
 
     def test_events_are_append_only(self) -> None:

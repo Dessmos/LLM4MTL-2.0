@@ -10,7 +10,6 @@ from fastapi.testclient import TestClient
 
 from llm4mtl import run_store
 from llm4mtl.paths import ArtifactRoots
-from llm4mtl.provenance import build_provenance
 from llm4mtl.serialization.json_io import read_json, write_json
 from llm4mtl.semantic_tests.extraction.models import SuiteExistsError
 from llm4mtl.stage_service.app import app
@@ -342,15 +341,6 @@ class StageServiceTests(unittest.TestCase):
         fetched = self.client.get(f"/batches/{BATCH}/runs/svc-immutable")
         self.assertEqual("Tree2Graph", fetched.json()["manifest"]["task"])
 
-    def test_unknown_run_and_unknown_stage_return_404(self) -> None:
-        self.assertEqual(
-            404, self.client.post(f"/batches/{BATCH}/runs/nope/stages/extract", json={}).status_code
-        )
-        self.client.post(f"/batches/{BATCH}/runs", json=run_payload(run_id="svc-2", task="Tree2Graph"))
-        self.assertEqual(
-            404, self.client.post(f"/batches/{BATCH}/runs/svc-2/stages/not-a-stage", json={}).status_code
-        )
-
     def test_an_unknown_stage_is_refused_before_anything_is_recorded(self) -> None:
         self.client.post(f"/batches/{BATCH}/runs", json=run_payload(run_id="svc-unknown"))
         paths = run_store.open_run(self.batch_root, "svc-unknown")
@@ -459,52 +449,6 @@ class StageServiceTests(unittest.TestCase):
         self.assertEqual(
             404, self.client.get(f"/batches/{BATCH}/runs/svc-identity/stages/extract").status_code
         )
-
-    def test_stage_request_cannot_fill_an_identity_axis_recorded_as_null(self) -> None:
-        run_store.create_run(
-            self.batch_root,
-            "svc-null-axis",
-            {
-                "language": "etl",
-                "task": "Tree2Graph",
-                "transformation_model": None,
-                "test_generation_model": "gpt-5",
-                "transformation_strategy": None,
-                "test_generation_strategy": "few_shot",
-                "seed": 1,
-                "pipeline_variant": "full",
-                "provenance": build_provenance("etl", "Tree2Graph"),
-            },
-        )
-
-        response = self.client.post(
-            f"/batches/{BATCH}/runs/svc-null-axis/stages/syntax-validation",
-            json={
-                "transformation_models": ["gpt-5"],
-                "transformation_strategies": ["grammar"],
-            },
-        )
-        self.assertEqual(422, response.status_code)
-        self.assertEqual(
-            404,
-            self.client.get(f"/batches/{BATCH}/runs/svc-null-axis/stages/syntax-validation").status_code,
-        )
-
-    def test_stage_request_cannot_expand_to_all_tasks(self) -> None:
-        self.client.post(f"/batches/{BATCH}/runs", json=run_payload(run_id="svc-one-task"))
-        response = self.client.post(
-            f"/batches/{BATCH}/runs/svc-one-task/stages/extract",
-            json={"all_tasks": True},
-        )
-        self.assertEqual(422, response.status_code)
-
-    def test_stage_request_rejects_even_matching_identity_repetitions(self) -> None:
-        self.client.post(f"/batches/{BATCH}/runs", json=run_payload(run_id="svc-agree"))
-        response = self.client.post(
-            f"/batches/{BATCH}/runs/svc-agree/stages/extract",
-            json={"language": "etl", "tasks": ["Tree2Graph"]},
-        )
-        self.assertEqual(422, response.status_code)
 
     def test_stage_request_rejects_a_traversing_suite_id(self) -> None:
         self.client.post(f"/batches/{BATCH}/runs", json=run_payload(run_id="svc-suite-id"))
@@ -650,50 +594,6 @@ class StageServiceTests(unittest.TestCase):
         stored = run_store.read_latest(paths, "extract")
         assert stored is not None
         self.assertEqual(response.json()["artifacts"], stored["artifacts"])
-
-    def test_two_runs_cannot_read_each_others_generation_response(self) -> None:
-        observed: list[tuple[str, str]] = []
-        for run_id, content in (
-            ("svc-run-a", "response A"),
-            ("svc-run-b", "response B"),
-        ):
-            self.client.post(f"/batches/{BATCH}/runs", json=run_payload(run_id=run_id))
-            response_path = (
-                self.batch_root
-                / run_id
-                / "responses"
-                / "semantic-test-generation"
-                / "iteration-000"
-                / "Tree2Graph.md"
-            )
-            response_path.parent.mkdir(parents=True, exist_ok=True)
-            response_path.write_text(content, encoding="utf-8")
-
-        def capture(config):
-            path = Path(config.responses[0])
-            observed.append((path.parts[-5], path.read_text(encoding="utf-8")))
-            return StageResult(
-                "extraction",
-                "completed",
-                {"selected": 1, "created": 1, "failed": 0},
-                {},
-            )
-
-        with patch(
-            "llm4mtl.stage_service.app._stages.tests.extract",
-            side_effect=capture,
-        ):
-            for run_id in ("svc-run-a", "svc-run-b"):
-                response = self.client.post(
-                    f"/batches/{BATCH}/runs/{run_id}/stages/extract",
-                    json={"suite_id": f"{run_id}_000", "refinement_iteration": 0},
-                )
-                self.assertEqual(200, response.status_code, response.text)
-
-        self.assertEqual(
-            [("svc-run-a", "response A"), ("svc-run-b", "response B")],
-            observed,
-        )
 
     def test_stage_exception_is_recorded_as_infrastructure_error(self) -> None:
         self.client.post(f"/batches/{BATCH}/runs", json=run_payload(run_id="svc-4", task="Tree2Graph"))

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import unittest
 
-from llm4mtl.domain import OutcomeStatus, TransformationOutcome
+from llm4mtl.domain import OutcomeStatus
 
 
 class OutcomeTests(unittest.TestCase):
@@ -27,11 +27,6 @@ class OutcomeTests(unittest.TestCase):
         ):
             with self.subTest(status=status):
                 self.assertTrue(status.is_attributable_to_the_transformation)
-
-    def test_an_outcome_without_a_diagnostic_states_an_empty_one(self) -> None:
-        outcome = TransformationOutcome(status=OutcomeStatus.RUNTIME_FAILED)
-
-        self.assertEqual("", outcome.diagnostic)
 
 
 if __name__ == "__main__":

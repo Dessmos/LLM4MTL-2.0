@@ -124,12 +124,10 @@ class KnownArtifactRoleTests(unittest.TestCase):
                     extract_files(block(f"text file={declared}", "x"))
 
     def test_a_model_file_outside_models_is_not_relocated(self) -> None:
-        with self.assertRaisesRegex(ExtractionError, "outside models/"):
-            extract_files(block("xml file=input.model", "<a/>"))
-
-    def test_a_model_file_in_a_foreign_directory_is_not_relocated(self) -> None:
-        with self.assertRaisesRegex(ExtractionError, "outside models/"):
-            extract_files(block("xml file=src/test/resources/input.model", "<a/>"))
+        for declared in ("input.model", "src/test/resources/input.model"):
+            with self.subTest(declared=declared):
+                with self.assertRaisesRegex(ExtractionError, "outside models/"):
+                    extract_files(block(f"xml file={declared}", "<a/>"))
 
     def test_a_declared_path_escaping_the_suite_is_refused(self) -> None:
         for declared in ("../models/input.model", "/etc/models/input.model"):

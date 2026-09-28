@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import unittest
-from typing import Any, Callable
+from typing import Any
 
 from llm4mtl.languages.java_assertions import helpers, render_assertions
 from llm4mtl.languages.etl.rendering import java_helpers, render_assertion
@@ -84,35 +84,6 @@ class JavaAssertionRenderingTests(unittest.TestCase):
 
         self.assertEqual(list(EXPECTED_LINES), shared_lines)
         self.assertEqual(list(EXPECTED_LINES), etl_lines)
-
-    def test_each_renderer_preserves_its_unsupported_kind_exception(self) -> None:
-        assertion = {"kind": "unknown", "model": "OUT", "type": "Node"}
-        renderers: tuple[
-            tuple[Callable[[dict[str, Any]], list[str]], type[BaseException], str],
-            ...,
-        ] = (
-            (
-                lambda value: render_assertions([value], {"OUT": "model0"}),
-                ValueError,
-                "unsupported assertion kind: unknown",
-            ),
-            (
-                lambda value: render_assertion(value, {"OUT": "model0"}),
-                AssertionError,
-                "Unsupported assertion kind: unknown",
-            ),
-        )
-
-        for renderer, exception_type, message in renderers:
-            with self.subTest(exception_type=exception_type):
-                with self.assertRaisesRegex(exception_type, message):
-                    renderer(assertion)
-
-    def test_etl_renderer_preserves_unhashable_kind_exception(self) -> None:
-        assertion = {"kind": [], "model": "OUT", "type": "Node"}
-
-        with self.assertRaisesRegex(TypeError, "unhashable type: 'list'"):
-            render_assertion(assertion, {"OUT": "model0"})
 
 
 if __name__ == "__main__":

@@ -118,29 +118,10 @@ class ExtractionArtifactPolicyTests(unittest.TestCase):
             self.assertEqual([], sorted(suite_dir.glob("*.java")))
             self.assertNotEqual("", artifact_invalid_reason(suite_dir))
 
-    def test_llm_java_is_replaced_by_the_rendered_harness(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            suite_dir, validation = self.write(
-                Path(temp_dir), response_markdown(with_spec=True, with_java=True)
-            )
-
-            self.assertTrue(validation.valid)
-            rendered = sorted(suite_dir.glob("*.java"))
-            self.assertEqual(1, len(rendered))
-            source = rendered[0].read_text(encoding="utf-8")
-            self.assertNotIn("Runtime.getRuntime", source)
-            self.assertIn("extends EtlTestBase", source)
-            self.assertEqual("", artifact_invalid_reason(suite_dir))
-
-    def test_metadata_records_why_a_suite_is_invalid(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            suite_dir, _ = self.write(
-                Path(temp_dir), response_markdown(with_spec=False, with_java=True)
-            )
+            # The metadata records why the suite is invalid.
             metadata = json.loads(
                 (suite_dir / "metadata.json").read_text(encoding="utf-8")
             )
-
             self.assertEqual("invalid", metadata["status"])
             self.assertFalse(metadata["artifact_validation"]["valid"])
             self.assertEqual(
@@ -155,6 +136,20 @@ class ExtractionArtifactPolicyTests(unittest.TestCase):
                 ],
                 metadata["artifact_validation"]["violations"],
             )
+
+    def test_llm_java_is_replaced_by_the_rendered_harness(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            suite_dir, validation = self.write(
+                Path(temp_dir), response_markdown(with_spec=True, with_java=True)
+            )
+
+            self.assertTrue(validation.valid)
+            rendered = sorted(suite_dir.glob("*.java"))
+            self.assertEqual(1, len(rendered))
+            source = rendered[0].read_text(encoding="utf-8")
+            self.assertNotIn("Runtime.getRuntime", source)
+            self.assertIn("extends EtlTestBase", source)
+            self.assertEqual("", artifact_invalid_reason(suite_dir))
 
     def test_a_contract_violation_is_written_as_readable_json(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

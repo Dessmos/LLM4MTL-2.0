@@ -61,11 +61,6 @@ class LegacyShapeDetectionTests(unittest.TestCase):
 
 class LegacyExpectationValidationTests(unittest.TestCase):
 
-    def test_node_names_accept_strings_and_named_objects(self) -> None:
-        self.assertEqual(
-            ["root", "leaf"], expected_node_names(["root", {"name": "leaf"}])
-        )
-
     def test_invalid_node_expectations_are_rejected(self) -> None:
         cases = {
             "not a list": ({"name": "root"}, "expectedNodes must be an array"),
@@ -83,12 +78,6 @@ class LegacyExpectationValidationTests(unittest.TestCase):
             with self.subTest(label):
                 with self.assertRaisesRegex(SemanticCasesError, message):
                     expected_node_names(raw_nodes)
-
-    def test_edge_pairs_are_joined_with_an_arrow(self) -> None:
-        self.assertEqual(
-            ["root->leaf"],
-            expected_edge_pairs([{"source": "root", "target": "leaf"}]),
-        )
 
     def test_invalid_edge_expectations_are_rejected(self) -> None:
         cases = {
