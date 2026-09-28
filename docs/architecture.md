@@ -165,9 +165,10 @@ a language is reachable without opening a stage.
 - `evaluation/` (repository root, outside the package) — offline metrics
   over stored runs. `experiment_*.py`, `heldout/`, `mutation/` and `coverage/`
   are active; `evaluation/legacy/{atl,etl,qvto,reactions}/` is a frozen record
-  of the analyses already run, kept reproducible rather than refactored. Its triplicated statistics modules, directory names containing
-  spaces, and committed CSVs are intentional there and nowhere else; they are
-  held in place by characterisation tests, not maintained.
+  of the pre-v5 significance analyses: scripts and their committed CSVs only.
+  Their input data lives in `engines/`; see `evaluation/legacy/README.md`. Its
+  triplicated statistics modules and committed CSVs are intentional there and
+  nowhere else; nothing reads or tests them, and they are not maintained.
 
 Facade polishing and `_internal/` reorganisation remain frozen until the
 measurement-driven boundaries settle.
