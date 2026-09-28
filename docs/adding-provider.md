@@ -49,6 +49,12 @@ until the provider registry is made data-driven.
 - Routing remains in n8n; provider subworkflows do not emit Python
   `next_action` decisions.
 
-Cost/token telemetry is specified in `measurement-spec.md`. Its target
-authoritative store is the run's append-only event journal; the ingest contract
-is not implemented yet.
+Token and latency telemetry is stored in the run's append-only event journal:
+every LLM call is an `llm_call_observed` event posted by n8n to
+`POST /batches/{batch_id}/runs/{run_id}/llm-calls` (see `runner-api.md`). The
+master calls the provider directly and reads the served model and the token
+counts from the provider's own response in `Adapt Subworkflow For This Run`, so
+a new provider needs a request builder and a response reader there. A provider
+reached through a proxy must return its native response: LiteLLM's unified
+routes replace the served model with the requested name, so only its
+pass-through routes qualify. Cost is not derived yet.

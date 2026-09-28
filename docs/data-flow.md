@@ -1,8 +1,9 @@
 # Data flow
 
 > Status: active description of the implemented four-language semantic-test
-> pipeline. Mutation evaluation and cost ingest are identified separately as
-> target work.
+> pipeline. Mutation evaluation and cost derivation are identified separately
+> as target work; per-call token and latency facts are already recorded as
+> `llm_call_observed` events (`runner-api.md`).
 
 ## Control and data planes
 

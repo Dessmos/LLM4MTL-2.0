@@ -25,6 +25,7 @@ GET  /batches/{batch_id}/runs/{run_id}/stages/{stage}
 
 POST /batches/{batch_id}/runs/{run_id}/refinements
 POST /batches/{batch_id}/runs/{run_id}/generations
+POST /batches/{batch_id}/runs/{run_id}/llm-calls
 GET  /batches/{batch_id}/runs/{run_id}/diagnosis/execution/{attempt}
 POST /batches/{batch_id}/runs/{run_id}/diagnoses
 POST /batches/{batch_id}/runs/{run_id}/result
@@ -288,6 +289,20 @@ with hashes of the persisted prompt input, prior artifact, raw output, and
 refinement request. Semantic-test workflows archive their fully assembled
 prompt; initial transformation generation currently hashes the frozen task
 prompt because the legacy export does not archive its assembled request.
+
+Every LLM call — generation, refinement, or source diagnosis — is reported
+right after the provider answers with
+`POST /batches/{batch_id}/runs/{run_id}/llm-calls`. The body is the call as n8n
+observed it: what it was for (`operation`, and `artifact_iteration` for a
+generation or `execution_attempt` and the run-relative `evidence_ref` for a
+diagnosis), `provider`, `route` (`direct` or `litellm_passthrough`),
+`requested_model`, `reasoning_effort`, the provider-reported `served_model` and
+`response_id`, normalized `usage` (`input_tokens`, `cached_input_tokens`,
+`output_tokens`, `reasoning_tokens`; null where the provider reported none), the
+provider's usage block verbatim as `provider_usage`, `started_at`,
+`finished_at`, `latency_ms`, and `n8n_execution_id`. Python validates it and
+appends it to `events.jsonl` as an `llm_call_observed` event
+(`schemas/events.schema.json` defines the fields); unknown fields are refused.
 
 `GET /batches/{batch_id}/runs/{run_id}/diagnosis/execution/{attempt}` validates the stored index and
 every eligible failure-report reference: containment, existence, report schema,

@@ -185,17 +185,33 @@ and applied to every call that role makes: generation, refinement, and source
 diagnosis. The shipped nodes ask for `xhigh` (see
 [docs/model-selection.md](../../../docs/model-selection.md)). n8n's list offers only low, medium,
 and high, so another level is entered as a fixed value; an expression is
-refused. Apart from the model id, it is the only node setting that reaches the
-subworkflow call: temperature and the other options stay those of the export.
-n8n forwards a level beyond high only through the Responses API, so a call with
-an effort runs on OpenAI node version 1.3 with the Responses API enabled. A node
-without an effort leaves the call at the model's default.
+refused. Claude's effort and Gemini's thinking level are chosen on the form
+(`anthropic_effort`, `google_thinking_level`), one per provider, because n8n's
+Gemini node has no thinking setting and its Anthropic node offers Sonnet no
+level above high; `Provider default` sends none. Apart from the model id and
+the effort, no setting of a canvas node reaches the call: the timeout and the
+sampling options stay those of the export, and an adaptive-thinking Claude call
+drops the export's temperature, which Anthropic refuses alongside thinking.
+
+**Direct LLM calls.** n8n's chain and chat-model nodes hand on the answer's text
+only. So in the copy of the subworkflow it runs, `Adapt Subworkflow For This
+Run` replaces the chain the selected model feeds by an explicit call (`<chain> -
+LLM prompt`, `- LLM request`, `- LLM call`, `- LLM response`, `- record LLM
+call`); the last node keeps the chain's name and hands on `text` as the chain
+did, and the export on disk is unchanged. OpenAI is called directly on its
+Responses API with the export's OpenAI credential. Anthropic and Google are
+called through LiteLLM's pass-through routes (`LITELLM_BASE_URL` in that node,
+default `http://litellm:4000`), the only LiteLLM routes that return the
+provider's own response; their n8n credentials hold the LiteLLM key. Each call
+is recorded with `POST /batches/{batch_id}/runs/{run_id}/llm-calls` as an
+`llm_call_observed` event: the requested and the served model, the provider's
+token counts, and the call's wall-clock time.
 
 The artifact tree is one directory per **model family**, not per exact model id:
 every `gpt-5` variant writes under `gpt-5`, every `claude-sonnet-4` variant under
 `claude-sonnet-4`, every `gemini-2.5-pro` variant under `gemini-2-5-pro`. The
 family is read from the variant workflow that was selected, which already
-declares it. The exact id reaches the n8n model node and remains in the master's
+declares it. The exact id reaches the provider call and remains in the master's
 LLM configuration; `POST /batches/{batch_id}/runs` receives the stable family id that Python uses
 for generated-suite identity and selection. Raw responses are selected from the
 run- and artifact-iteration-scoped path instead. All twelve nodes
@@ -394,8 +410,9 @@ refuses.
    `{run_id, run_dir, n8n_run_dir}`. The master keeps both directory spellings
    and derives every artifact path from them; it spells none itself, so the
    layout lives only in `llm4mtl.paths`.
-2. **Generation** (n8n owns it) — the provider subworkflow calls the LLM and
-   writes the raw response into the run-specific response directory. The
+2. **Generation** (n8n owns it) — the provider subworkflow calls the LLM,
+   records the call with `POST /batches/{batch_id}/runs/{run_id}/llm-calls`,
+   and writes the raw response into the run-specific response directory. The
    stage service then persists actual provider/model provenance as
    `generations/<artifact-type>/iteration-NNN/generation.json`, validated by
    `generation-result.schema.json`.

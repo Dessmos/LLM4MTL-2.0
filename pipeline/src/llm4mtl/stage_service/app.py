@@ -52,6 +52,7 @@ from llm4mtl.stage_service.api_models import (
     BatchResultRequest,
     DiagnosisRecordRequest,
     GenerationRecordRequest,
+    LlmCallRecordRequest,
     PromptInputsRequest,
     RefinementPrepareRequest,
     RunCreateRequest,
@@ -646,6 +647,23 @@ def record_run_generation(
     except run_store.GenerationRecordError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     return generation
+
+
+@app.post(
+    "/batches/{batch_id}/runs/{run_id}/llm-calls",
+    responses={
+        400: BAD_REQUEST_RESPONSE,
+        404: NOT_FOUND_RESPONSE,
+    },
+)
+def record_llm_call(
+    batch_id: str, run_id: str, request: LlmCallRecordRequest
+) -> dict[str, Any]:
+    """Append one LLM call n8n observed to the run's event log."""
+    paths, _ = _require_manifest(batch_id, run_id)
+    return run_store.append_event(
+        paths, "llm_call_observed", llm_call=request.model_dump(mode="json")
+    )
 
 
 @app.get(

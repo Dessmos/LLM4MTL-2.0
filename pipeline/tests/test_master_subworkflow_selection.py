@@ -390,20 +390,20 @@ class MasterSubworkflowSelectionTests(unittest.TestCase):
                 for path in written:
                     self.assertIn(f"/{family}/", path)
 
-                # The exact model still reaches the model node: the family names
-                # the directory, never what the run actually called.
-                model_node = next(
+                # The exact model still reaches the provider call: the family
+                # names the directory, never what the run actually called.
+                request = next(
                     node
                     for node in workflow["nodes"]
-                    if node["type"].startswith("@n8n/n8n-nodes-langchain.lmChat")
+                    if node["name"].endswith(" - LLM request")
                 )
-                configured = model_node["parameters"].get("modelName") or model_node[
-                    "parameters"
-                ].get("model")
-                value = (
-                    configured["value"] if isinstance(configured, dict) else configured
+                declaration = request["parameters"]["jsCode"].splitlines()[0]
+                call = json.loads(
+                    declaration.removeprefix("const call = ").removesuffix(";")
                 )
-                self.assertEqual(model, value)
+                # Google names a model as the resource `models/<id>`; the call
+                # addresses it by the id.
+                self.assertEqual(model.removeprefix("models/"), call["model"])
 
     def test_the_diagnosis_namespace_survives_model_patching(self) -> None:
         """``/responses/source-diagnosis/`` names a stage, not a model.

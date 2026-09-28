@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://llm4mtl/schemas/events.schema.json",
   "title": "Run event",
-  "description": "One line of the append-only events.jsonl run timeline. The events log is the source of truth for run history; full per-attempt evidence lives in stages/<stage>/attempts/. Run-scoped events (run_created, run_resumed, run_finished) carry no `stage`; stage-scoped events always do. `status` uses the stage vocabulary and `run_status` the run vocabulary; they are never interchangeable.",
+  "description": "One line of the append-only events.jsonl run timeline. The events log is the source of truth for run history; full per-attempt evidence lives in stages/<stage>/attempts/. Run-scoped events (run_created, run_resumed, run_finished) carry no `stage`; stage-scoped events always do. `status` uses the stage vocabulary and `run_status` the run vocabulary; they are never interchangeable. `llm_call_observed` is run-scoped and carries `llm_call`: one LLM call as n8n observed it, which no other event carries.",
   "type": "object",
   "required": [
     "schema_version",
@@ -31,7 +31,8 @@
         "stage_started",
         "stage_finished",
         "stage_skipped_resume",
-        "diagnosis_recorded"
+        "diagnosis_recorded",
+        "llm_call_observed"
       ]
     },
     "outcome_code": {
@@ -70,6 +71,186 @@
     "attempt": {
       "type": "integer",
       "minimum": 1
+    },
+    "llm_call": {
+      "type": "object",
+      "description": "One LLM call as n8n observed it: what was asked for, the model that answered, the provider's token counts, and how long the call took. Token counts are normalized across providers: `input_tokens` counts every prompt token, cached ones included; `output_tokens` counts every generated token, reasoning included. A count the provider did not report is null, never 0.",
+      "additionalProperties": false,
+      "required": [
+        "operation",
+        "artifact_iteration",
+        "execution_attempt",
+        "evidence_ref",
+        "provider",
+        "route",
+        "requested_model",
+        "reasoning_effort",
+        "served_model",
+        "response_id",
+        "usage",
+        "provider_usage",
+        "started_at",
+        "finished_at",
+        "latency_ms",
+        "n8n_execution_id"
+      ],
+      "properties": {
+        "operation": {
+          "enum": [
+            "semantic-test-generation",
+            "transformation-generation",
+            "source-diagnosis"
+          ]
+        },
+        "artifact_iteration": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "description": "Iteration of the generated artifact; null for a diagnosis."
+        },
+        "execution_attempt": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1,
+          "description": "Execution attempt a diagnosis belongs to; null for a generation."
+        },
+        "evidence_ref": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1,
+          "description": "Run-relative path of the diagnosed failure report; null for a generation."
+        },
+        "provider": {
+          "enum": [
+            "openai",
+            "anthropic",
+            "google"
+          ]
+        },
+        "route": {
+          "enum": [
+            "direct",
+            "litellm_passthrough"
+          ],
+          "description": "Whether n8n called the provider directly or through LiteLLM's pass-through route, which returns the provider's own response."
+        },
+        "requested_model": {
+          "type": "string",
+          "minLength": 1
+        },
+        "reasoning_effort": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1,
+          "description": "The level sent with the request; null when none was sent."
+        },
+        "served_model": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1,
+          "description": "The model version the provider reported as having answered; null when the response named none."
+        },
+        "response_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        },
+        "usage": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "input_tokens",
+            "cached_input_tokens",
+            "output_tokens",
+            "reasoning_tokens"
+          ],
+          "properties": {
+            "input_tokens": {
+              "$ref": "#/$defs/token_count"
+            },
+            "cached_input_tokens": {
+              "$ref": "#/$defs/token_count"
+            },
+            "output_tokens": {
+              "$ref": "#/$defs/token_count"
+            },
+            "reasoning_tokens": {
+              "$ref": "#/$defs/token_count"
+            }
+          }
+        },
+        "provider_usage": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "description": "The provider's usage block verbatim, as audit evidence for `usage`."
+        },
+        "started_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "finished_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "latency_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Wall-clock time of the call node in n8n, retries of that node included."
+        },
+        "n8n_execution_id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "event": {
+            "const": "llm_call_observed"
+          }
+        },
+        "required": [
+          "event"
+        ]
+      },
+      "then": {
+        "required": [
+          "llm_call"
+        ]
+      },
+      "else": {
+        "not": {
+          "required": [
+            "llm_call"
+          ]
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "token_count": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0
     }
   }
 }

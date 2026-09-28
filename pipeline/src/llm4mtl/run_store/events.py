@@ -27,8 +27,13 @@ def append_event(
     status: str | None = None,
     run_status: str | None = None,
     attempt: int | None = None,
+    llm_call: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Append one immutable event line; returns the written record."""
+    """Append one immutable event line; returns the written record.
+
+    ``llm_call`` belongs to ``llm_call_observed`` events only; the schema
+    refuses it on any other event.
+    """
     record: dict[str, Any] = {
         "schema_version": SCHEMA_VERSION,
         "ts": datetime.now(timezone.utc).isoformat(),
@@ -44,6 +49,8 @@ def append_event(
         record["outcome_code"] = outcome_code
     if attempt is not None:
         record["attempt"] = attempt
+    if llm_call is not None:
+        record["llm_call"] = llm_call
     validate_artifact("events", record)
     paths.events.parent.mkdir(parents=True, exist_ok=True)
     with paths.events.open("a", encoding="utf-8") as handle:

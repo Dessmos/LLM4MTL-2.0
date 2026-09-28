@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 # The four languages the thesis must cover. Kept as a closed set so a run can
 # never be created for a language the pipeline does not implement.
@@ -210,6 +210,68 @@ class GenerationRecordRequest(BaseModel):
     provider: Literal["openai", "anthropic", "google"]
     model: str = Field(min_length=1)
     strategy: str | None = Field(default=None, min_length=1)
+
+
+class LlmCallUsage(BaseModel):
+    """Provider token counts, normalized as ``schemas/events.schema.json`` defines.
+
+    ``None`` is a count the provider did not report, never zero.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    input_tokens: int | None = Field(ge=0)
+    cached_input_tokens: int | None = Field(ge=0)
+    output_tokens: int | None = Field(ge=0)
+    reasoning_tokens: int | None = Field(ge=0)
+
+
+class LlmCallRecordRequest(BaseModel):
+    """One LLM call as n8n observed it, recorded as an ``llm_call_observed`` event.
+
+    A generation call names the artifact iteration it produced; a diagnosis
+    call names the execution attempt and the failure report it diagnosed.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    operation: Literal["semantic-test-generation", "transformation-generation", "source-diagnosis"]
+    artifact_iteration: int | None = Field(ge=0)
+    execution_attempt: int | None = Field(ge=1)
+    evidence_ref: str | None = Field(min_length=1)
+    provider: Literal["openai", "anthropic", "google"]
+    route: Literal["direct", "litellm_passthrough"]
+    requested_model: str = Field(min_length=1)
+    reasoning_effort: str | None = Field(min_length=1)
+    served_model: str | None = Field(min_length=1)
+    response_id: str | None = Field(min_length=1)
+    usage: LlmCallUsage
+    provider_usage: dict[str, Any] | None
+    started_at: datetime
+    finished_at: datetime
+    latency_ms: int = Field(ge=0)
+    n8n_execution_id: str = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def _names_what_the_call_was_for(self) -> LlmCallRecordRequest:
+        if self.operation == "source-diagnosis":
+            attributed = (
+                self.artifact_iteration is None
+                and self.execution_attempt is not None
+                and self.evidence_ref is not None
+            )
+        else:
+            attributed = (
+                self.artifact_iteration is not None
+                and self.execution_attempt is None
+                and self.evidence_ref is None
+            )
+        if not attributed:
+            raise ValueError(
+                "a generation call names its artifact_iteration only; a diagnosis "
+                "call names its execution_attempt and evidence_ref only"
+            )
+        return self
 
 
 class PromptInputsRequest(BaseModel):

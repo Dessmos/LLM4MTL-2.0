@@ -279,6 +279,24 @@ def _adapt(
     )
 
 
+def _llm_user_prompt(nodes: dict[str, Any], chain: str) -> str:
+    """The prompt the direct call that replaced ``chain`` sends as the user message."""
+    return next(
+        assignment["value"]
+        for assignment in nodes[f"{chain} - LLM prompt"]["parameters"]["assignments"]["assignments"]
+        if assignment["name"] == "llm_user_prompt"
+    )
+
+
+def _direct_call(adapted: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    """The settings baked into the adapted copy's request node, and its call node."""
+    nodes = adapted["result"]["workflow_json"]["nodes"]
+    request = next(node for node in nodes if node["name"].endswith(" - LLM request"))
+    call = next(node for node in nodes if node["name"].endswith(" - LLM call"))
+    declaration = request["parameters"]["jsCode"].splitlines()[0]
+    return json.loads(declaration.removeprefix("const call = ").removesuffix(";")), call
+
+
 def _model_nodes(
     unconfigured: tuple[str, ...] = (),
     reasoning_efforts: dict[str, str] | None = None,
@@ -747,7 +765,7 @@ class TransformationWorkflowCompatibilityTests(unittest.TestCase):
         )
         self.assertEqual(
             "={{ $json.prompt }}",
-            nodes["(Re-)Generate code"]["parameters"]["text"],
+            _llm_user_prompt(nodes, "(Re-)Generate code"),
         )
         save_name = nodes["Save file name"]
         base_name = next(
@@ -807,7 +825,7 @@ class TransformationWorkflowCompatibilityTests(unittest.TestCase):
         )
         self.assertEqual(
             "={{ $json.prompt }}",
-            nodes["(Re-)Generate test suite"]["parameters"]["text"],
+            _llm_user_prompt(nodes, "(Re-)Generate test suite"),
         )
         self.assertEqual(
             "=/data/artifacts/runs/batch_001/run-tests-1/responses/"
@@ -893,9 +911,16 @@ class TransformationWorkflowCompatibilityTests(unittest.TestCase):
         )
         self.assertTrue(adapted["ok"], adapted.get("error"))
         callable_workflow = adapted["result"]["workflow_json"]
+        # Only the LLM call is rebuilt, as in every subworkflow: the selected
+        # model node goes, and the direct call's nodes follow the originals.
+        kept = [
+            node["name"]
+            for node in original["nodes"]
+            if node["name"] != "OpenAI Diagnosis Model"
+        ]
         self.assertEqual(
-            [node["name"] for node in original["nodes"]],
-            [node["name"] for node in callable_workflow["nodes"]],
+            kept,
+            [node["name"] for node in callable_workflow["nodes"]][: len(kept)],
         )
         self.assertNotIn(
             "semantic-test-generation", json.dumps(callable_workflow)
@@ -1997,6 +2022,8 @@ class ConfigurationPresentationTests(unittest.TestCase):
                 "transformation_provider",
                 "source_diagnosis_provider",
                 "refinement_provider",
+                "anthropic_effort",
+                "google_thinking_level",
                 "semantic_test_strategy",
                 "transformation_strategy",
                 "max_test_refinement_iterations",
@@ -2419,14 +2446,6 @@ INITIAL_ETL_GENERATION = {
 }
 
 
-def _openai_node(adapted: dict[str, Any]) -> dict[str, Any]:
-    return next(
-        node
-        for node in adapted["result"]["workflow_json"]["nodes"]
-        if node["type"] == "@n8n/n8n-nodes-langchain.lmChatOpenAi"
-    )
-
-
 @unittest.skipUnless(shutil.which("node"), "the master workflow's Code nodes need Node")
 class ReasoningEffortTests(unittest.TestCase):
     """The effort set on a role's OpenAI node reaches every call that role makes."""
@@ -2517,7 +2536,7 @@ class ReasoningEffortTests(unittest.TestCase):
         )
 
     def test_an_effort_moves_the_openai_call_to_the_responses_api(self) -> None:
-        """n8n forwards a level such as max only through the Responses API."""
+        """The direct call sends the model and a level such as max to the Responses API."""
         cases = (
             (
                 TRANSFORMATION_WORKFLOW,
@@ -2552,21 +2571,18 @@ class ReasoningEffortTests(unittest.TestCase):
                     model="gpt-5.6-luna",
                 )
                 self.assertTrue(adapted["ok"], adapted.get("error"))
-                node = _openai_node(adapted)
-                self.assertEqual(1.3, node["typeVersion"])
-                self.assertTrue(node["parameters"]["responsesApiEnabled"])
-                self.assertEqual("gpt-5.6-luna", node["parameters"]["model"]["value"])
+                call, call_node = _direct_call(adapted)
                 self.assertEqual(
-                    {**exported["parameters"]["options"], "reasoningEffort": "max"},
-                    node["parameters"]["options"],
+                    "https://api.openai.com/v1/responses", call_node["parameters"]["url"]
+                )
+                self.assertEqual("gpt-5.6-luna", call["model"])
+                self.assertEqual("max", call["reasoning_effort"])
+                self.assertEqual(
+                    exported["parameters"]["options"]["timeout"],
+                    call_node["parameters"]["options"]["timeout"],
                 )
 
-    def test_without_an_effort_the_openai_node_stays_as_exported(self) -> None:
-        exported = next(
-            node
-            for node in json.loads(TRANSFORMATION_WORKFLOW.read_text(encoding="utf-8"))["nodes"]
-            if node["type"] == "@n8n/n8n-nodes-langchain.lmChatOpenAi"
-        )
+    def test_without_an_effort_the_openai_request_carries_none(self) -> None:
         adapted = _adapt(
             TRANSFORMATION_WORKFLOW,
             action="generate_transformations",
@@ -2574,24 +2590,19 @@ class ReasoningEffortTests(unittest.TestCase):
             subworkflow_input={"refinement_iteration": 0, "reasoning_effort": None},
         )
         self.assertTrue(adapted["ok"], adapted.get("error"))
-        node = _openai_node(adapted)
-        self.assertEqual(exported["typeVersion"], node["typeVersion"])
-        self.assertNotIn("responsesApiEnabled", node["parameters"])
-        self.assertEqual(exported["parameters"]["options"], node["parameters"]["options"])
+        call, _ = _direct_call(adapted)
+        self.assertIsNone(call["reasoning_effort"])
 
-    def test_an_effort_for_another_provider_is_refused(self) -> None:
-        adapted = _adapt(
-            TRANSFORMATION_WORKFLOW.with_name(
-                "Prompting_ETL_claude-sonnet-4_few_shots_AND_grammar.json"
-            ),
-            action="generate_transformations",
-            current=INITIAL_ETL_GENERATION,
-            subworkflow_input={"refinement_iteration": 0, "reasoning_effort": "max"},
-            provider="anthropic",
-            model="claude-sonnet-4-20250514",
+    def test_a_level_the_provider_does_not_accept_is_refused(self) -> None:
+        # Gemini's thinking levels stop at high.
+        config = _configure(
+            providers={
+                "semantic_test_provider": "Google Gemini",
+                "google_thinking_level": "max",
+            }
         )
-        self.assertFalse(adapted["ok"])
-        self.assertIn("OpenAI models only", adapted["error"])
+        self.assertFalse(config["ok"])
+        self.assertIn("google_thinking_level", config["error"])
 
 
 if __name__ == "__main__":

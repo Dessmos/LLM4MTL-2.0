@@ -402,6 +402,15 @@ transformation generation hashes the frozen task prompt because the legacy
 export does not archive its assembled request. This keeps model selection in
 n8n without attributing a refinement to the initial manifest model family.
 
+What each LLM call observed is recorded apart from that provenance, as an
+`llm_call_observed` event in the run's `events.jsonl`: the model version the
+provider reports as having answered, its token counts (normalized: input with
+cached tokens included, output with reasoning included; null where not
+reported), and the call's wall-clock time in n8n. n8n reads these facts from the
+provider's own response and posts them with
+`POST /batches/{batch_id}/runs/{run_id}/llm-calls`; Python validates and appends
+them. They are raw observations, not metrics.
+
 Refinement is prepared before that call:
 
 ```text
