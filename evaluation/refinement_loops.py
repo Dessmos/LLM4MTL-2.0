@@ -31,15 +31,24 @@ in the table and in the ``runs`` count, so a batch is shown in full.
 
 It writes ``refinement-loops-<language>.csv`` for every language,
 ``refinement-loops-summary.csv`` and a readable ``refinement-loops.md``.
+
+It also writes ``batch-runs.csv``: every run of every language in one table, the
+loop cells plus the run's terminal outcome, wall-clock time and the LLM usage
+recorded as ``llm_call_observed`` events. ``total_tokens`` is input plus output
+tokens; cached and reasoning tokens are already inside those two. A usage or
+time field stays blank, not zero, when the run recorded no such fact (batches
+from before per-call telemetry, or a call whose provider did not report it).
 """
 
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import sys
 from collections import defaultdict
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
@@ -84,6 +93,26 @@ RUN_FIELDS = (
     "semantic_feedback",
     "source_diagnosis",
     "test_iterations_used",
+)
+OUTCOME_FIELDS = (
+    "status",
+    "terminal_reason",
+    "refinement_iterations_used",
+    "transformation_iterations_used",
+    "suite_id",
+)
+TIME_FIELDS = ("started_at", "finished_at", "duration_seconds")
+USAGE_FIELDS = (
+    "input_tokens",
+    "cached_input_tokens",
+    "output_tokens",
+    "reasoning_tokens",
+)
+TELEMETRY_FIELDS = TIME_FIELDS + (
+    "llm_calls",
+    "llm_latency_seconds",
+    *USAGE_FIELDS,
+    "total_tokens",
 )
 # The configuration a summary group must not mix. The transformation budget is
 # absent on purpose: a smaller budget only shrinks the known population.
@@ -264,6 +293,72 @@ def loop_rows(runs: Sequence[RunLoops], width: int) -> list[dict[str, Any]]:
     return rows
 
 
+def batch_rows(runs: Sequence[RunLoops], width: int) -> list[dict[str, Any]]:
+    """One row per run of every language: loop cells, outcome, time and LLM usage."""
+    rows = []
+    for run in sorted(runs, key=lambda run: (run.run.language, *_run_order(run))):
+        [loops] = loop_rows([run], width)
+        terminal = run.run.terminal_result
+        rows.append(
+            {
+                **loops,
+                "status": terminal.get("status", ""),
+                "terminal_reason": terminal.get("terminal_reason") or "",
+                "refinement_iterations_used": terminal.get("refinement_iterations_used", ""),
+                "transformation_iterations_used": terminal.get("transformation_iteration", ""),
+                "suite_id": terminal.get("suite_id") or "",
+                **run_telemetry(run.run.root),
+            }
+        )
+    return rows
+
+
+def run_telemetry(run_root: Path) -> dict[str, Any]:
+    """Wall-clock time and summed LLM usage from the run's ``events.jsonl``."""
+    events = _read_events(run_root / "events.jsonl")
+    started = _event_time(events, "run_created")
+    finished = _event_time(events, "run_finished")
+    calls = [event["llm_call"] for event in events if event.get("event") == "llm_call_observed"]
+    telemetry: dict[str, Any] = {
+        "started_at": started.isoformat() if started else "",
+        "finished_at": finished.isoformat() if finished else "",
+        "duration_seconds": round((finished - started).total_seconds(), 1) if started and finished else "",
+        "llm_calls": len(calls) if calls else "",
+        "llm_latency_seconds": _summed(calls, lambda call: call.get("latency_ms"), scale=1000),
+    }
+    for field in USAGE_FIELDS:
+        telemetry[field] = _summed(calls, lambda call, field=field: (call.get("usage") or {}).get(field))
+    telemetry["total_tokens"] = (
+        telemetry["input_tokens"] + telemetry["output_tokens"]
+        if telemetry["input_tokens"] != "" and telemetry["output_tokens"] != ""
+        else ""
+    )
+    return telemetry
+
+
+def _read_events(path: Path) -> list[dict[str, Any]]:
+    if not path.is_file():
+        return []
+    try:
+        return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    except json.JSONDecodeError as exc:
+        raise EvaluationInputError(f"{path} is not valid JSON Lines: {exc}") from exc
+
+
+def _event_time(events: Sequence[Mapping[str, Any]], name: str) -> datetime | None:
+    stamps = [event["ts"] for event in events if event.get("event") == name and event.get("ts")]
+    return datetime.fromisoformat(stamps[-1]) if stamps else None
+
+
+def _summed(calls: Sequence[Mapping[str, Any]], fact: Any, scale: int = 1) -> Any:
+    """The sum over all calls, or blank when any call lacks the fact."""
+    values = [fact(call) for call in calls]
+    if not values or any(not isinstance(value, (int, float)) for value in values):
+        return ""
+    total = sum(values)
+    return round(total / scale, 1) if scale != 1 else total
+
+
 def summary_rows(runs: Sequence[RunLoops], width: int) -> list[dict[str, Any]]:
     """Per loop, runs solved within it over runs whose state at it is known.
 
@@ -419,7 +514,7 @@ def _table_width(runs: Sequence[RunLoops]) -> int:
 
 
 def write_reports(runs: Sequence[RunLoops], output_dir: Path) -> list[Path]:
-    """Write the per-language CSVs, the summary CSV and the Markdown report."""
+    """Write the per-language CSVs, the whole-batch CSV, the summary and the Markdown report."""
     runs_by_language: dict[str, list[RunLoops]] = defaultdict(list)
     for run in runs:
         runs_by_language[run.run.language].append(run)
@@ -432,6 +527,17 @@ def write_reports(runs: Sequence[RunLoops], output_dir: Path) -> list[Path]:
         write_csv(path, fields, loop_rows(language_runs, width))
         written.append(path)
         summary.extend(summary_rows(language_runs, width))
+    batch_path = output_dir / "batch-runs.csv"
+    width = _table_width(runs)
+    batch_fields = (
+        RUN_FIELDS
+        + OUTCOME_FIELDS
+        + tuple(f"loop_{loop}" for loop in range(width))
+        + ("loops_needed", "final_state")
+        + TELEMETRY_FIELDS
+    )
+    write_csv(batch_path, batch_fields, batch_rows(runs, width))
+    written.append(batch_path)
     summary_path = output_dir / "refinement-loops-summary.csv"
     write_csv(summary_path, SUMMARY_FIELDS, summary)
     markdown_path = output_dir / "refinement-loops.md"

@@ -1,20 +1,54 @@
-"""Qualify mutants and run baseline/generated suites against them offline."""
+"""Qualify mutants and run baseline/generated suites against them offline.
+
+``--batch`` is a second, separate mode: a task × mutant table for one batch.
+For every run it takes the run's final generated suite (``suite_id`` in
+``result.json``), runs it once on the task's reference and then on every mutant
+of that task in ``evaluation/mutants/manifest.json``. Tasks have different
+numbers of mutants; an operator that does not apply to a task is ``N/A``.
+
+    KILLED        the suite passes on the reference and fails on the mutant
+    SURVIVED      the suite passes on the reference and on the mutant
+    PARSE_FAILED  the mutant does not parse, so the suite was not run
+    ERROR         the suite could not execute on the mutant
+    NOT_JUDGED    the suite does not pass on the reference (or the run has no
+                  suite), so no mutant can be judged
+    N/A           the operator does not apply to this task
+
+``kill_rate`` is ``killed / mutants`` over the task's applicable mutants, blank
+when nothing could be judged. It is a per-run reporting view, not ``MS_Q``:
+there are no qualification suites here, so nothing is excluded as equivalent.
+
+It must run in UTC, as the stage service container does: generated suites
+compare dates as the JVM prints them in its default time zone, so elsewhere a
+suite that passed in the pipeline can fail on the reference.
+
+    TZ=UTC PYTHONPATH=pipeline/src .venv/bin/python -m evaluation.mutation.run_mutants \
+      --batch batch_004 --output evaluation/results/batch_004/mutants.csv
+"""
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import sys
 import tempfile
+import time
+from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 from evaluation._common import (
     EvaluationInputError,
+    SelectedRun,
     read_csv,
+    read_json_object,
     write_csv,
 )
 from evaluation.mutation.generate_mutants import CATALOG_FIELDS
+from evaluation.refinement_loops import read_batch
+from llm4mtl.conventions import default_generated_tests_root, language_config
 from llm4mtl.domain import GeneratedSuite, SuiteExecutionObservation
 from llm4mtl.languages import Workspace, language_adapter
 from llm4mtl.paths import REPO_ROOT, TARGET
@@ -32,6 +66,14 @@ OBSERVATION_FIELDS = (
     "killed",
 )
 TEST_SOURCES = frozenset({"qualification", "baseline", "generated"})
+MUTANTS_MANIFEST = REPO_ROOT / "evaluation" / "mutants" / "manifest.json"
+KILLED = "KILLED"
+SURVIVED = "SURVIVED"
+PARSE_FAILED = "PARSE_FAILED"
+NOT_JUDGED = "NOT_JUDGED"
+NOT_APPLICABLE = "N/A"
+MATRIX_RUN_FIELDS = ("batch_id", "run_id", "language", "task", "suite_id", "reference_result")
+MATRIX_COUNT_FIELDS = ("mutants", "killed", "survived", "kill_rate")
 
 
 @dataclass(frozen=True)
@@ -111,15 +153,7 @@ def run_mutation_evaluation(
             language = row["language"].lower()
             task = row["task"]
             adapter = language_adapter(language)
-            workspace = workspaces.get(language)
-            if workspace is None:
-                engine_dir = materialize_engine(
-                    TARGET.engine_harness(language),
-                    root / "workspaces",
-                    f"{language}-harness",
-                )
-                workspace = Workspace(engine_dir, root / "observations" / language)
-                workspaces[language] = workspace
+            workspace = _language_workspace(language, root, workspaces)
             mutant = _resolve_catalog_path(row["mutant_path"])
             parse = adapter.parse_transformations([mutant], workspace)[mutant]
             matching_suites = [
@@ -183,6 +217,114 @@ def run_mutation_evaluation(
                 }
             )
     return qualified_catalog, observations
+
+
+def mutant_matrix(
+    runs: Sequence[SelectedRun],
+    mutants_manifest: Mapping[str, Any],
+    timeout_seconds: int,
+) -> tuple[list[str], list[dict[str, Any]]]:
+    """Return the operator columns and one task × mutant row per run."""
+    if timeout_seconds <= 0:
+        raise EvaluationInputError("timeout_seconds must be positive")
+    operators = sorted(mutants_manifest["operators"], key=lambda operator: int(operator.lstrip("M")))
+    mutants_by_task: dict[tuple[str, str], dict[str, Mapping[str, Any]]] = defaultdict(dict)
+    for entry in mutants_manifest["mutants"]:
+        mutants_by_task[(entry["language"].lower(), entry["task"])][entry["mutant"]] = entry
+    rows = []
+    with tempfile.TemporaryDirectory(prefix="llm4mtl-mutant-matrix-") as temporary:
+        root = Path(temporary)
+        workspaces: dict[str, Workspace] = {}
+        ordered = sorted(runs, key=lambda run: (run.language, run.task, run.run_id))
+        for index, run in enumerate(ordered):
+            task_mutants = mutants_by_task.get((run.language, run.task), {})
+            applicable = {
+                operator: entry
+                for operator, entry in task_mutants.items()
+                if entry.get("status") == "PRESENT"
+            }
+            reference_result, cells = _judge_run_mutants(
+                run, applicable, root / "suites" / str(index), root, workspaces, timeout_seconds
+            )
+            killed = sum(cell == KILLED for cell in cells.values())
+            judged = reference_result == "PASS" and bool(applicable)
+            rows.append(
+                {
+                    "batch_id": run.manifest.get("batch_id", ""),
+                    "run_id": run.run_id,
+                    "language": run.language,
+                    "task": run.task,
+                    "suite_id": run.terminal_result.get("suite_id") or "",
+                    "reference_result": reference_result,
+                    **{operator: cells.get(operator, NOT_APPLICABLE) for operator in operators},
+                    "mutants": len(applicable),
+                    "killed": killed,
+                    "survived": sum(cell == SURVIVED for cell in cells.values()),
+                    "kill_rate": round(killed / len(applicable), 3) if judged else "",
+                }
+            )
+    return operators, rows
+
+
+def _judge_run_mutants(
+    run: SelectedRun,
+    applicable: Mapping[str, Mapping[str, Any]],
+    suite_destination: Path,
+    root: Path,
+    workspaces: dict[str, Workspace],
+    timeout_seconds: int,
+) -> tuple[str, dict[str, str]]:
+    """Run the run's final suite on the reference, then on every applicable mutant."""
+    suite_id = run.terminal_result.get("suite_id")
+    if not suite_id:
+        return "NO_SUITE", {operator: NOT_JUDGED for operator in applicable}
+    suite = _prepare_suite(
+        SuiteInput("generated", suite_id, run.language, run.task, _generated_suite_path(run, suite_id)),
+        suite_destination,
+    )
+    adapter = language_adapter(run.language)
+    workspace = _language_workspace(run.language, root, workspaces)
+    reference_observation, _ = adapter.execute_suite(
+        suite, adapter.reference_transformation(run.task), workspace, timeout_seconds
+    )
+    reference_result = _execution_result(reference_observation)
+    if reference_result != "PASS":
+        return reference_result, {operator: NOT_JUDGED for operator in applicable}
+    cells = {}
+    for operator, entry in applicable.items():
+        mutant = _resolve_catalog_path(entry["file"])
+        if hashlib.sha256(mutant.read_bytes()).hexdigest() != entry.get("mutant_sha256"):
+            raise EvaluationInputError(f"{mutant} does not match its mutant_sha256 in the manifest")
+        if not adapter.parse_transformations([mutant], workspace)[mutant].parsed:
+            cells[operator] = PARSE_FAILED
+            continue
+        observation, _ = adapter.execute_suite(suite, mutant, workspace, timeout_seconds)
+        mutant_result = _execution_result(observation)
+        cells[operator] = {"FAIL": KILLED, "PASS": SURVIVED}.get(mutant_result, mutant_result)
+    return reference_result, cells
+
+
+def _generated_suite_path(run: SelectedRun, suite_id: str) -> Path:
+    candidates = default_generated_tests_root(language_config(run.language)) / run.task / "candidates"
+    matches = sorted(path for path in candidates.glob(f"*/*/{suite_id}") if path.is_dir())
+    if len(matches) != 1:
+        raise EvaluationInputError(
+            f"{run.run_id}: expected one generated suite {suite_id} under {candidates}, found {len(matches)}"
+        )
+    return matches[0]
+
+
+def _language_workspace(language: str, root: Path, workspaces: dict[str, Workspace]) -> Workspace:
+    workspace = workspaces.get(language)
+    if workspace is None:
+        engine_dir = materialize_engine(
+            TARGET.engine_harness(language),
+            root / "workspaces",
+            f"{language}-harness",
+        )
+        workspace = Workspace(engine_dir, root / "observations" / language)
+        workspaces[language] = workspace
+    return workspace
 
 
 def _prepare_suite(suite_input: SuiteInput, destination: Path) -> GeneratedSuite:
@@ -263,17 +405,25 @@ def _validate_catalog(rows: list[dict[str, str]]) -> None:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--catalog", type=Path, required=True)
-    parser.add_argument("--suites", type=Path, required=True)
-    parser.add_argument("--qualified-catalog", type=Path, required=True)
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--catalog", type=Path)
+    parser.add_argument("--suites", type=Path)
+    parser.add_argument("--qualified-catalog", type=Path)
+    parser.add_argument("--batch", help="write the task × mutant table for this batch instead")
+    parser.add_argument("--runs-root", type=Path, default=TARGET.runs)
+    parser.add_argument("--mutants", type=Path, default=MUTANTS_MANIFEST)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--timeout-seconds", type=int, default=1200)
     return parser
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    args = build_parser().parse_args(argv)
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    if args.batch:
+        return _write_mutant_matrix(args)
+    if not (args.catalog and args.suites and args.qualified_catalog):
+        parser.error("--catalog, --suites and --qualified-catalog are required without --batch")
     catalog_rows = read_csv(args.catalog)
     suite_inputs = load_suite_inputs(args.suites)
     qualified, observations = run_mutation_evaluation(
@@ -284,6 +434,20 @@ def main(argv: Sequence[str] | None = None) -> int:
     print(
         f"qualified {sum(row['qualified'] == 'true' for row in qualified)}/"
         f"{len(qualified)} mutants and wrote {args.output}"
+    )
+    return 0
+
+
+def _write_mutant_matrix(args: argparse.Namespace) -> int:
+    if time.tzname[0] != "UTC":
+        print(f"error: run in UTC like the stage service (prefix TZ=UTC); local zone is {time.tzname[0]}", file=sys.stderr)
+        return 1
+    runs = [loops.run for loops in read_batch(args.runs_root, args.batch)]
+    operators, rows = mutant_matrix(runs, read_json_object(args.mutants), args.timeout_seconds)
+    write_csv(args.output, MATRIX_RUN_FIELDS + tuple(operators) + MATRIX_COUNT_FIELDS, rows)
+    print(
+        f"killed {sum(row['killed'] for row in rows)}/{sum(row['mutants'] for row in rows)} "
+        f"mutants over {len(rows)} runs and wrote {args.output}"
     )
     return 0
 

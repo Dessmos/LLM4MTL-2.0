@@ -21,6 +21,7 @@ from evaluation.refinement_loops import (
     OVER_BUDGET,
     STOPPED,
     UNFINISHED,
+    batch_rows,
     loop_rows,
     main,
     read_batch,
@@ -213,6 +214,7 @@ class LoopReportFilesTests(unittest.TestCase):
             self.assertEqual(
                 sorted(path.name for path in output.iterdir()),
                 [
+                    "batch-runs.csv",
                     "refinement-loops-atl.csv",
                     "refinement-loops-etl.csv",
                     "refinement-loops-summary.csv",
@@ -226,6 +228,37 @@ class LoopReportFilesTests(unittest.TestCase):
         self.assertEqual((atl["loop_0"], atl["loop_1"], atl["loops_needed"]), ("SYNTAX_INVALID", "SEMANTIC_PASSED", "1"))
         self.assertIn("## atl", markdown)
         self.assertIn("## etl", markdown)
+
+    def test_batch_table_has_every_language_with_time_and_summed_usage(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            measured = _write_run(root, "measured", budget=0, language="etl",
+                                  attempts=[(EXECUTION, 0, "SEMANTIC_PASSED")])
+            _write_events(measured, [
+                _llm_call(input_tokens=100, cached=40, output_tokens=30, reasoning=10, latency_ms=1500),
+                _llm_call(input_tokens=200, cached=0, output_tokens=70, reasoning=20, latency_ms=2500),
+            ])
+            _write_run(root, "unmeasured", budget=0, language="atl",
+                       attempts=[(EXECUTION, 0, "SEMANTIC_PASSED")])
+
+            runs = read_batch(root, BATCH)
+            [unmeasured, measured_row] = batch_rows(runs, width=1)
+
+        self.assertEqual((unmeasured["language"], measured_row["language"]), ("atl", "etl"))
+        self.assertEqual(
+            {field: measured_row[field] for field in (
+                "llm_calls", "input_tokens", "cached_input_tokens", "output_tokens",
+                "reasoning_tokens", "total_tokens", "llm_latency_seconds", "duration_seconds")},
+            {"llm_calls": 2, "input_tokens": 300, "cached_input_tokens": 40, "output_tokens": 100,
+             "reasoning_tokens": 30, "total_tokens": 400, "llm_latency_seconds": 4.0,
+             "duration_seconds": 90.0},
+        )
+        self.assertEqual(measured_row["suite_id"], "measured_000")
+        # No recorded telemetry is unknown, not zero.
+        self.assertEqual(
+            (unmeasured["llm_calls"], unmeasured["total_tokens"], unmeasured["duration_seconds"]),
+            ("", "", ""),
+        )
 
     def test_main_reports_a_missing_batch_without_writing(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -279,6 +312,7 @@ def _write_run(
             "terminal_state": terminal_state,
             "recorded_at": "2026-01-01T00:00:00+00:00",
             "test_iteration": 0,
+            "suite_id": f"{run_id}_000",
         }
         (run_root / "result.json").write_text(json.dumps(terminal), encoding="utf-8")
     numbers: dict[str, int] = {}
@@ -297,6 +331,31 @@ def _write_run(
         }
         (attempt_dir / "result.json").write_text(json.dumps(result), encoding="utf-8")
     return run_root
+
+
+def _write_events(run_root: Path, calls: list[dict[str, object]]) -> None:
+    events = [{"ts": "2026-01-01T10:00:00+00:00", "event": "run_created"}]
+    events += [{"ts": "2026-01-01T10:00:30+00:00", "event": "llm_call_observed", "llm_call": call}
+               for call in calls]
+    events.append({"ts": "2026-01-01T10:01:30+00:00", "event": "run_finished"})
+    (run_root / "events.jsonl").write_text(
+        "".join(json.dumps(event) + "\n" for event in events), encoding="utf-8"
+    )
+
+
+def _llm_call(
+    *, input_tokens: int, cached: int, output_tokens: int, reasoning: int, latency_ms: int
+) -> dict[str, object]:
+    return {
+        "operation": "transformation-generation",
+        "usage": {
+            "input_tokens": input_tokens,
+            "cached_input_tokens": cached,
+            "output_tokens": output_tokens,
+            "reasoning_tokens": reasoning,
+        },
+        "latency_ms": latency_ms,
+    }
 
 
 if __name__ == "__main__":

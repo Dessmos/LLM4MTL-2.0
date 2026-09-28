@@ -106,7 +106,14 @@ It writes:
 - `refinement-loops-summary.csv` — per language, configuration and loop `k`:
   runs solved within `k` loops over the runs whose state at `k` is known
   (judged at `k` or later, or already passed), plus an `ALL` group per language;
-- `refinement-loops.md` — the same tables, readable.
+- `refinement-loops.md` — the same tables, readable;
+- `batch-runs.csv` — the whole batch in one table, one row per run of every
+  language: configuration, `status`, `terminal_reason`, `suite_id`, the loop
+  cells, `final_state`, `started_at`/`finished_at`/`duration_seconds`, and the
+  summed `llm_call_observed` usage: `llm_calls`, `llm_latency_seconds`,
+  `input_tokens`, `cached_input_tokens`, `output_tokens`, `reasoning_tokens`,
+  `total_tokens` (input + output). A field the run never recorded is blank,
+  not zero.
 
 The verdict is the run's generated test, not a held-out suite. Like
 `heldout-trajectory.csv`, this is a reporting view, not a campaign metric.
@@ -159,6 +166,23 @@ PYTHONPATH=pipeline/src .venv/bin/python -m evaluation.mutation.run_mutants \
   --suites evaluation/mutation/suites.csv \
   --qualified-catalog evaluation/results/qualified-mutants.csv \
   --output evaluation/results/mutation-observations.csv
+```
+
+### Task × mutant table for one batch
+
+A separate reporting mode, not `MS_Q`. For every run it runs the run's final
+generated suite on the reference and then on each mutant of that task from
+`evaluation/mutants/manifest.json`, and writes one row per run with a column per
+operator (`M1`…`M8`): `KILLED`, `SURVIVED`, `PARSE_FAILED`, `ERROR`,
+`NOT_JUDGED` (the suite fails on the reference, or the run has no suite) or
+`N/A` (the operator does not apply to that task). `kill_rate` is killed over the
+task's applicable mutants. It needs Maven and runs in UTC, as the stage service
+does; otherwise date assertions differ and it refuses to start:
+
+```bash
+TZ=UTC PYTHONPATH=pipeline/src .venv/bin/python -m evaluation.mutation.run_mutants \
+  --batch batch_004 \
+  --output evaluation/results/batch_004/mutants.csv
 ```
 
 ## Diagnosis agreement

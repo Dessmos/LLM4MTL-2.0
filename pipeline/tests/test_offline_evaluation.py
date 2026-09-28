@@ -6,6 +6,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from llm4mtl.paths import REPO_ROOT
@@ -31,6 +32,7 @@ from evaluation.coverage.calculate_coverage import (
 )
 from evaluation.heldout.run_heldout import classify_surefire_cases
 from evaluation.heldout.trajectory import trajectory_rows
+from evaluation.mutation import run_mutants
 from evaluation.mutation.generate_mutants import generate_mutants
 from llm4mtl.domain import RawExecutionEvidence, SurefireArtifact
 from llm4mtl.task_contracts import ModelContract
@@ -156,6 +158,128 @@ class MutationToolTests(unittest.TestCase):
 
         self.assertEqual(1.0, metrics["qualified_mutation_score"]["value"])
         self.assertEqual(0.5, metrics["incremental_mutation_score"]["value"])
+
+
+class MutantMatrixTests(unittest.TestCase):
+
+    def test_each_task_gets_its_own_mutants_and_absent_operators_are_not_applicable(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            mutants = {
+                name: _mutant_file(root / f"{name}.etl", name)
+                for name in ("killed", "survived", "unparsable", "unjudged")
+            }
+            manifest = {
+                "operators": {"M1": "a", "M2": "b", "M3": "c", "M10": "d"},
+                "mutants": [
+                    _manifest_entry("Judged", "M1", mutants["killed"]),
+                    _manifest_entry("Judged", "M2", mutants["survived"]),
+                    _manifest_entry("Judged", "M3", mutants["unparsable"]),
+                    {"language": "ETL", "task": "Judged", "mutant": "M10", "status": "NOT_APPLICABLE"},
+                    _manifest_entry("RefFails", "M1", mutants["unjudged"]),
+                ],
+            }
+            runs = [
+                _suite_run("run-judged", "Judged"),
+                _suite_run("run-ref-fails", "RefFails"),
+                SelectedRun("run-no-suite", root, {"language": "etl", "task": "Judged"}, {}),
+            ]
+            adapter = _FakeAdapter(
+                reference_passes={"Judged": True, "RefFails": False},
+                mutant_passes={mutants["killed"]: False, mutants["survived"]: True},
+                unparsable={mutants["unparsable"]},
+            )
+
+            with patch.object(run_mutants, "language_adapter", return_value=adapter), \
+                    patch.object(run_mutants, "_language_workspace", return_value=None), \
+                    patch.object(run_mutants, "_generated_suite_path", side_effect=lambda run, _: root), \
+                    patch.object(run_mutants, "_prepare_suite", side_effect=lambda suite, _: suite.task):
+                operators, rows = run_mutants.mutant_matrix(runs, manifest, timeout_seconds=60)
+
+        self.assertEqual(["M1", "M2", "M3", "M10"], operators)
+        by_run = {row["run_id"]: row for row in rows}
+        judged = by_run["run-judged"]
+        self.assertEqual(
+            ("PASS", "KILLED", "SURVIVED", "PARSE_FAILED", "N/A"),
+            (judged["reference_result"], judged["M1"], judged["M2"], judged["M3"], judged["M10"]),
+        )
+        self.assertEqual((3, 1, 1, 0.333), (judged["mutants"], judged["killed"], judged["survived"], judged["kill_rate"]))
+        unjudged = by_run["run-ref-fails"]
+        self.assertEqual(("FAIL", "NOT_JUDGED", "N/A", ""), (
+            unjudged["reference_result"], unjudged["M1"], unjudged["M2"], unjudged["kill_rate"]))
+        no_suite = by_run["run-no-suite"]
+        self.assertEqual(("NO_SUITE", "NOT_JUDGED", ""), (
+            no_suite["reference_result"], no_suite["M1"], no_suite["kill_rate"]))
+        # Only the reference runs of the two suites and the two parsable mutants executed.
+        self.assertEqual(4, adapter.executions)
+
+    def test_a_mutant_that_differs_from_its_manifest_hash_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            mutant = _mutant_file(Path(temporary) / "M1.etl", "original")
+            mutant.write_text("edited after the manifest was written", encoding="utf-8")
+            entry = {**_manifest_entry("Judged", "M1", mutant),
+                     "mutant_sha256": hashlib.sha256(b"original").hexdigest()}
+            adapter = _FakeAdapter(reference_passes={"Judged": True}, mutant_passes={}, unparsable=set())
+
+            with patch.object(run_mutants, "language_adapter", return_value=adapter), \
+                    patch.object(run_mutants, "_language_workspace", return_value=None), \
+                    patch.object(run_mutants, "_generated_suite_path", return_value=mutant.parent), \
+                    patch.object(run_mutants, "_prepare_suite", side_effect=lambda suite, _: suite.task), \
+                    self.assertRaisesRegex(EvaluationInputError, "mutant_sha256"):
+                run_mutants.mutant_matrix(
+                    [_suite_run("run", "Judged")],
+                    {"operators": {"M1": "a"}, "mutants": [entry]},
+                    timeout_seconds=60,
+                )
+
+
+class _FakeAdapter:
+    """Stands in for Maven: a suite is identified by its task name."""
+
+    def __init__(self, reference_passes, mutant_passes, unparsable) -> None:
+        self.reference_passes = reference_passes
+        self.mutant_passes = mutant_passes
+        self.unparsable = unparsable
+        self.executions = 0
+
+    def reference_transformation(self, task: str) -> str:
+        return f"reference:{task}"
+
+    def parse_transformations(self, paths, workspace):
+        return {path: SimpleNamespace(parsed=path not in self.unparsable) for path in paths}
+
+    def execute_suite(self, suite, transformation, workspace, timeout_seconds):
+        self.executions += 1
+        if transformation == f"reference:{suite}":
+            passed = self.reference_passes[suite]
+        else:
+            passed = self.mutant_passes[transformation]
+        return SimpleNamespace(is_technically_executable=True, assertions_passed=passed), None
+
+
+def _mutant_file(path: Path, content: str) -> Path:
+    path.write_text(content, encoding="utf-8")
+    return path.resolve()
+
+
+def _manifest_entry(task: str, operator: str, mutant: Path) -> dict[str, str]:
+    return {
+        "language": "ETL",
+        "task": task,
+        "mutant": operator,
+        "status": "PRESENT",
+        "file": str(mutant),
+        "mutant_sha256": hashlib.sha256(mutant.read_bytes()).hexdigest(),
+    }
+
+
+def _suite_run(run_id: str, task: str) -> SelectedRun:
+    return SelectedRun(
+        run_id,
+        Path("/tmp") / run_id,
+        {"language": "etl", "task": task, "batch_id": "batch_001"},
+        {"suite_id": f"{run_id}_000"},
+    )
 
 
 class CoverageEvaluationTests(unittest.TestCase):
