@@ -145,7 +145,7 @@ cython_debug/
 # ---- v5 architecture migration ----
 # Working plan document (maintainer-only, not a committed deliverable).
 docs/migration-plan.md
-# Behavioural baseline snapshots (environment-specific; capture script is tracked).
+# Behavioural baseline snapshots (environment-specific).
 baseline/snapshot-*/
 # Runtime experiment output (canonical run/experiment artifacts).
 artifacts/work/

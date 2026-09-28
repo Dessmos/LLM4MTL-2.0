@@ -11,7 +11,7 @@ Python performs deterministic extraction, validation, execution and evaluation.
 - benchmark/ — task contracts, references, metamodels and fixtures.
 - prompt_assets/ — grammar, few-shot examples and helper material.
 - workflows/n8n/ — transformation/test workflows and the master scaffold.
-- experiments/ — presets, variants and experiment matrices.
+- experiments/ — variants and experiment matrices.
 - schemas/ — JSON contracts shared by n8n, Python and stored artifacts.
 - artifacts/work/ — generated output, one `runs/batch_NNN/` per launch with one
   directory per run below it; intentionally not tracked by Git.

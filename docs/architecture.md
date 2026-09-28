@@ -62,7 +62,7 @@ the transition policy.
 - `benchmark/` — protected metamodels, references, fixtures, and task contracts.
 - `prompt_assets/` — hand-authored prompt templates, grammar, and examples.
 - `workflows/n8n/` — main workflow and provider/diagnosis subworkflows.
-- `experiments/` — protected presets, variants, and matrices.
+- `experiments/` — protected variants and matrices.
 - `artifacts/work/` — generated, reproducible run output.
 - `artifacts/published/` and `baseline/snapshot-*/` — frozen published inputs or
   prior results where present.
@@ -144,9 +144,9 @@ a language is reachable without opening a stage.
   assembler pinned to the attempt just written.
 - `run_store/` — immutable run identity, append-only events, and atomic stage
   attempts.
-- `evaluation/experiment_{aggregation,significance}.py` are the RQ4 ablation
-  scaffold. They are tested but not yet called from any entry point, because
-  the matrix axes are set by the measurement spec, which is still settling.
+- `evaluation/experiment_aggregation.py` is the RQ4 ablation scaffold. It is
+  not yet called from any entry point, because the matrix axes are set by the
+  measurement spec, which is still settling.
   Today every run is created on its own and is not joined into an experiment.
   `experiments/matrices/` describes the planned campaigns; no code reads it.
 - `evaluation/diagnosis_aggregation.py` — offline analysis: clusters one
@@ -163,8 +163,8 @@ a language is reachable without opening a stage.
   reporting alike, and belongs to none of them.
 - `external_tools/` — structured subprocess boundaries.
 - `evaluation/` (repository root, outside the package) — offline metrics
-  over stored runs. `experiment_*.py`, `heldout/`, `mutation/` and `coverage/`
-  are active; `evaluation/legacy/{atl,etl,qvto,reactions}/` is a frozen record
+  over stored runs. `experiment_aggregation.py`, `heldout/`, `mutation/` and
+  `coverage/` are active; `evaluation/legacy/{atl,etl,qvto,reactions}/` is a frozen record
   of the pre-v5 significance analyses: scripts and their committed CSVs only.
   Their input data lives in `engines/`; see `evaluation/legacy/README.md`. Its
   triplicated statistics modules and committed CSVs are intentional there and
