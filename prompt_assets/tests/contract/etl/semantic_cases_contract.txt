@@ -28,9 +28,7 @@ Use the case-sensitive runtime model names from the current ETL task:
   is an EMF target.
 - `rss2atom`: `RSS` is a `plainXml` source; `Atom` is a `plainXml` target.
 - `OO2DB`: `OO` and `OO2DB` are EMF sources; `DB` and `Trace` are EMF
-  targets. `OO` may also be used as a target when the scenario exercises that
-  part of the transformation. Use the role needed by the test; do not invent a
-  different runtime name.
+  targets. Do not invent a different runtime name.
 
 Never use synthetic names from the examples in an actual task. Copy each
 `metamodelUri` exactly from the authoritative metamodel input. Do not infer it
@@ -148,51 +146,21 @@ its ends in one multi-valued reference, do not name that reference as both
 with itself); use `pathValues` on the reference instead, for example
 `"path": "<ends>.<identityFeature>"` with one expected entry per end.
 
-The complete response shape is:
+The `semantic_cases.json` block has exactly these top-level fields:
 
-```json file=semantic_cases.json
-{
-  "schemaVersion": 1,
-  "testClass": "<JavaIdentifier>",
-  "transformation": "transformations/<task>.etl",
-  "metamodels": [
-    {"name": "<runtime model name>", "uri": "<exact metamodel URI>"}
-  ],
-  "tests": [
-    {
-      "name": "<test_name>",
-      "scenarioKind": "batch_transformation",
-      "models": [
-        {
-          "name": "<exact source runtime name>",
-          "kind": "emf",
-          "role": "source",
-          "path": "models/<fixture_name>.model",
-          "generated": true,
-          "metamodelUri": "<exact source metamodel URI>"
-        },
-        {
-          "name": "<exact target runtime name>",
-          "kind": "emf",
-          "role": "target",
-          "generated": false,
-          "metamodelUri": "<exact target metamodel URI>"
-        }
-      ],
-      "assertions": [
-        {
-          "kind": "count",
-          "model": "<exact target runtime name>",
-          "type": "<unqualified target type>",
-          "expected": 1
-        }
-      ]
-    }
-  ]
-}
-```
+- `"schemaVersion": 1`;
+- `testClass`: a Java identifier;
+- `transformation`: `"transformations/<task>.etl"`;
+- `metamodels`: one `{"name": ..., "uri": ...}` entry per runtime model,
+  named by the exact runtime model name, with its exact metamodel URI;
+- `tests`: the array of tests.
+
+Every test has exactly `name`, `"scenarioKind": "batch_transformation"`,
+`models`, and `assertions`. Every `models[]` entry has `name`,
+`"kind": "emf"` or `"kind": "plainXml"`, `role`, `generated`, a `path`
+for a generated source, and `metamodelUri` for an EMF model, as stated above.
 
 For `rss2atom`, use the same structure with `"kind": "plainXml"` for `RSS`
-and `Atom`, and omit `metamodelUri`. After the JSON block, emit exactly the XML
-file blocks referenced by readable model paths. Emit no target model file and
-no prose outside file blocks.
+and `Atom`, and omit `metamodelUri`. After the `semantic_cases.json` block,
+emit exactly the XML file blocks referenced by readable model paths. Emit no
+target model file and no prose outside file blocks.

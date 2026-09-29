@@ -144,58 +144,22 @@ its ends in one multi-valued reference, do not name that reference as both
 with itself); use `pathValues` on the reference instead, for example
 `"path": "<ends>.<identityFeature>"` with one expected entry per end.
 
-The complete response shape for the ordinary two-slot tasks is:
+The `semantic_cases.json` block has exactly these top-level fields:
 
-```json file=semantic_cases.json
-{
-  "schemaVersion": 1,
-  "testClass": "<JavaIdentifier>",
-  "transformation": "transformations/<task>.qvto",
-  "metamodels": [
-    {
-      "name": "inModel",
-      "uri": "http://www.eclipse.org/emf/2002/Ecore"
-    },
-    {
-      "name": "outModel",
-      "uri": "http://www.eclipse.org/emf/2002/Ecore"
-    }
-  ],
-  "tests": [
-    {
-      "name": "<test_name>",
-      "scenarioKind": "batch_transformation",
-      "models": [
-        {
-          "name": "inModel",
-          "kind": "emf",
-          "role": "source",
-          "path": "models/<fixture_name>.xmi",
-          "generated": true,
-          "metamodelUri": "http://www.eclipse.org/emf/2002/Ecore"
-        },
-        {
-          "name": "outModel",
-          "kind": "emf",
-          "role": "target",
-          "generated": false,
-          "metamodelUri": "http://www.eclipse.org/emf/2002/Ecore"
-        }
-      ],
-      "assertions": [
-        {
-          "kind": "count",
-          "model": "outModel",
-          "type": "<unqualified target type>",
-          "expected": 1
-        }
-      ]
-    }
-  ]
-}
-```
+- `"schemaVersion": 1`;
+- `testClass`: a Java identifier;
+- `transformation`: `"transformations/<task>.qvto"`;
+- `metamodels`: one `{"name": ..., "uri": ...}` entry per runtime model,
+  for the ordinary two-slot tasks `inModel` and `outModel`,
+  both with `http://www.eclipse.org/emf/2002/Ecore`;
+- `tests`: the array of tests.
+
+Every test has exactly `name`, `"scenarioKind": "batch_transformation"`,
+`models`, and `assertions`. Every `models[]` entry has `name`,
+`"kind": "emf"`, `role`, `generated`, a `path` for a generated source, and
+`metamodelUri` for an EMF model, as stated above.
 
 For `ModelExtents`, replace `inModel` with `m` and replace `outModel` with the
-separate target entries `x` and `y`. After the JSON block, emit exactly the XML
-file blocks referenced by source model paths. Emit no target model file and no
-prose outside file blocks.
+separate target entries `x` and `y`. After the `semantic_cases.json` block,
+emit exactly the XML file blocks referenced by source model paths. Emit no
+target model file and no prose outside file blocks.

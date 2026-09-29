@@ -167,50 +167,21 @@ its ends in one multi-valued reference, do not name that reference as both
 with itself); use `pathValues` on the reference instead, for example
 `"path": "<ends>.<identityFeature>"` with one expected entry per end.
 
-The complete response shape is:
+The `semantic_cases.json` block has exactly these top-level fields:
 
-```json file=semantic_cases.json
-{
-  "schemaVersion": 1,
-  "testClass": "<JavaIdentifier>",
-  "transformation": "transformations/<task>.atl",
-  "metamodels": [
-    {"name": "IN", "uri": "<exact source metamodel URI>"},
-    {"name": "OUT", "uri": "<exact target metamodel URI>"}
-  ],
-  "tests": [
-    {
-      "name": "<test_name>",
-      "scenarioKind": "batch_transformation",
-      "models": [
-        {
-          "name": "IN",
-          "kind": "emf",
-          "role": "source",
-          "path": "models/<fixture_name>.model",
-          "generated": true,
-          "metamodelUri": "<exact source metamodel URI>"
-        },
-        {
-          "name": "OUT",
-          "kind": "emf",
-          "role": "target",
-          "generated": false,
-          "metamodelUri": "<exact target metamodel URI>"
-        }
-      ],
-      "assertions": [
-        {
-          "kind": "count",
-          "model": "OUT",
-          "type": "<unqualified target type>",
-          "expected": 1
-        }
-      ]
-    }
-  ]
-}
-```
+- `"schemaVersion": 1`;
+- `testClass`: a Java identifier;
+- `transformation`: `"transformations/<task>.atl"`;
+- `metamodels`: one `{"name": ..., "uri": ...}` entry per runtime model,
+  `IN` with the exact source metamodel URI and `OUT` with the
+  exact target metamodel URI;
+- `tests`: the array of tests.
 
-After this JSON block, emit exactly the XML file blocks referenced by source
-model paths. Emit no target model file and no prose outside file blocks.
+Every test has exactly `name`, `"scenarioKind": "batch_transformation"`,
+`models`, and `assertions`. Every `models[]` entry has `name`,
+`"kind": "emf"`, `role`, `generated`, a `path` for a generated source, and
+`metamodelUri` for an EMF model, as stated above.
+
+After the `semantic_cases.json` block, emit exactly the XML file blocks
+referenced by source model paths. Emit no target model file and no prose
+outside file blocks.
