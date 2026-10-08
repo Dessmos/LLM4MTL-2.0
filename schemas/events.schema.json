@@ -136,9 +136,10 @@
         "route": {
           "enum": [
             "direct",
-            "litellm_passthrough"
+            "litellm_passthrough",
+            "litellm_unified"
           ],
-          "description": "Whether n8n called the provider directly or through LiteLLM's pass-through route, which returns the provider's own response."
+          "description": "How n8n reached the provider: directly, through LiteLLM's pass-through route, which returns the provider's own response, or through a LiteLLM unified route, which replaces the served model with the requested name."
         },
         "requested_model": {
           "type": "string",
@@ -158,7 +159,15 @@
             "null"
           ],
           "minLength": 1,
-          "description": "The model version the provider reported as having answered; null when the response named none."
+          "description": "The model version the provider reported as having answered; null when the response named none, and always null on a `litellm_unified` route."
+        },
+        "litellm_model_name": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1,
+          "description": "LiteLLM's `x-litellm-model-name` response header: the provider and model the proxy's configuration routed the call to, not a provider-reported version. Null when the response carried no such header. Absent from events recorded before 2026-09-30."
         },
         "response_id": {
           "type": [

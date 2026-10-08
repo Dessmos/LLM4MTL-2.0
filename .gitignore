@@ -149,6 +149,8 @@ docs/migration-plan.md
 baseline/snapshot-*/
 # Runtime experiment output (canonical run/experiment artifacts).
 artifacts/work/
+# Refinement-loop tables chosen for the evaluation write-up.
+artifacts/Chosen_for_evaluation/
 # Derived offline-evaluation reports.
 /evaluation/results/*
 # Engine runtime outputs written by drivers (relocated to engines/ in Stage 2).

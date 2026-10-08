@@ -297,6 +297,24 @@ def _direct_call(adapted: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any
     return json.loads(declaration.removeprefix("const call = ").removesuffix(";")), call
 
 
+def _run_llm_response_node(adapted: dict[str, Any], reply: dict[str, Any]) -> dict[str, Any]:
+    """Run the adapted copy's response node on ``reply``, the call node's full response."""
+    nodes = adapted["result"]["workflow_json"]["nodes"]
+    response = next(node for node in nodes if node["name"].endswith(" - LLM response"))
+    script = "\n".join(
+        [
+            "const $input = { first: () => ({ json: REPLY }) };",
+            "const $ = () => ({ first: () => ({ json: { llm_started_at: '2026-01-01T10:00:00Z' } }) });",
+            "const $execution = { id: '1' };",
+            f"console.log(JSON.stringify((() => {{ {response['parameters']['jsCode']} }})()[0].json));",
+        ]
+    ).replace("REPLY", json.dumps(reply), 1)
+    completed = subprocess.run(
+        ["node", "-e", script], capture_output=True, text=True, check=True
+    )
+    return json.loads(completed.stdout)
+
+
 def _model_nodes(
     unconfigured: tuple[str, ...] = (),
     reasoning_efforts: dict[str, str] | None = None,
@@ -2512,6 +2530,53 @@ class ReasoningEffortTests(unittest.TestCase):
                     exported["parameters"]["options"]["timeout"],
                     call_node["parameters"]["options"]["timeout"],
                 )
+
+    def test_claude_and_gemini_go_through_the_proxys_unified_routes(self) -> None:
+        """The proxy's routed model is recorded; its echo of the requested name is not."""
+        variants = REPOSITORY_ROOT / "workflows" / "n8n" / "transformations" / "workflows" / "etl_variants"
+        cases = (
+            (
+                "anthropic",
+                "google.claude-sonnet-5",
+                variants / "Prompting_ETL_claude-sonnet-4_few_shots_AND_grammar.json",
+                "https://litellm.scc.kit.edu/v1/messages",
+                {"model": "google.claude-sonnet-5", "content": [{"type": "text", "text": "rules"}]},
+            ),
+            (
+                "google",
+                "google.gemini-3.8-flash",
+                variants / "Prompting_ETL_gemini-2-5-pro_few_shots_AND_grammar.json",
+                "https://litellm.scc.kit.edu/v1beta/models/google.gemini-3.8-flash:generateContent",
+                {
+                    "modelVersion": "google.gemini-3.8-flash",
+                    "candidates": [{"content": {"parts": [{"text": "rules"}]}}],
+                },
+            ),
+        )
+        for provider, model, workflow, url, body in cases:
+            with self.subTest(provider=provider):
+                adapted = _adapt(
+                    workflow,
+                    action="generate_transformations",
+                    current=INITIAL_ETL_GENERATION,
+                    subworkflow_input={"refinement_iteration": 0},
+                    provider=provider,
+                    model=model,
+                )
+                self.assertTrue(adapted["ok"], adapted.get("error"))
+                _, call_node = _direct_call(adapted)
+                self.assertEqual(url, call_node["parameters"]["url"])
+                self.assertTrue(
+                    call_node["parameters"]["options"]["response"]["response"]["fullResponse"]
+                )
+                routed = f"vertex_ai/{model.removeprefix('google.')}"
+                observed = _run_llm_response_node(
+                    adapted, {"body": body, "headers": {"x-litellm-model-name": routed}}
+                )
+                self.assertEqual("rules", observed["text"])
+                self.assertEqual("litellm_unified", observed["llm_call"]["route"])
+                self.assertIsNone(observed["llm_call"]["served_model"])
+                self.assertEqual(routed, observed["llm_call"]["litellm_model_name"])
 
     def test_without_an_effort_the_openai_request_carries_none(self) -> None:
         adapted = _adapt(

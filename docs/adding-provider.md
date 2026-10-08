@@ -55,6 +55,7 @@ every LLM call is an `llm_call_observed` event posted by n8n to
 master calls the provider directly and reads the served model and the token
 counts from the provider's own response in `Adapt Subworkflow For This Run`, so
 a new provider needs a request builder and a response reader there. A provider
-reached through a proxy must return its native response: LiteLLM's unified
-routes replace the served model with the requested name, so only its
-pass-through routes qualify. Cost is not derived yet.
+reached through a proxy should return its native response: LiteLLM's unified
+routes replace the served model with the requested name, so a call on one
+records `served_model` as null and only the proxy's routed model
+(`litellm_model_name`). Cost is not derived yet.

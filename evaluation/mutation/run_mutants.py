@@ -10,8 +10,10 @@ numbers of mutants; an operator that does not apply to a task is ``N/A``.
     SURVIVED      the suite passes on the reference and on the mutant
     PARSE_FAILED  the mutant does not parse, so the suite was not run
     ERROR         the suite could not execute on the mutant
-    NOT_JUDGED    the suite does not pass on the reference (or the run has no
-                  suite), so no mutant can be judged
+    NOT_JUDGED    the suite does not pass on the reference, the run has no
+                  suite (``NO_SUITE``), or its suite violates the semantic-cases
+                  contract and cannot be rendered (``INVALID_SUITE``), so no
+                  mutant can be judged
     N/A           the operator does not apply to this task
 
 ``kill_rate`` is ``killed / mutants`` over the task's applicable mutants, blank
@@ -71,6 +73,8 @@ KILLED = "KILLED"
 SURVIVED = "SURVIVED"
 PARSE_FAILED = "PARSE_FAILED"
 NOT_JUDGED = "NOT_JUDGED"
+NO_SUITE = "NO_SUITE"
+INVALID_SUITE = "INVALID_SUITE"
 NOT_APPLICABLE = "N/A"
 MATRIX_RUN_FIELDS = ("batch_id", "run_id", "language", "task", "suite_id", "reference_result")
 MATRIX_COUNT_FIELDS = ("mutants", "killed", "survived", "kill_rate")
@@ -277,11 +281,16 @@ def _judge_run_mutants(
     """Run the run's final suite on the reference, then on every applicable mutant."""
     suite_id = run.terminal_result.get("suite_id")
     if not suite_id:
-        return "NO_SUITE", {operator: NOT_JUDGED for operator in applicable}
-    suite = _prepare_suite(
-        SuiteInput("generated", suite_id, run.language, run.task, _generated_suite_path(run, suite_id)),
-        suite_destination,
-    )
+        return NO_SUITE, {operator: NOT_JUDGED for operator in applicable}
+    try:
+        suite = _prepare_suite(
+            SuiteInput("generated", suite_id, run.language, run.task, _generated_suite_path(run, suite_id)),
+            suite_destination,
+        )
+    except EvaluationInputError:
+        # The pipeline's last refinement left a suite it never validated (its
+        # run ends in TEST_SPEC_INVALID); like a missing suite, it judges nothing.
+        return INVALID_SUITE, {operator: NOT_JUDGED for operator in applicable}
     adapter = language_adapter(run.language)
     workspace = _language_workspace(run.language, root, workspaces)
     reference_observation, _ = adapter.execute_suite(

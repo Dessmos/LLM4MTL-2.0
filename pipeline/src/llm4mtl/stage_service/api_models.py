@@ -240,10 +240,11 @@ class LlmCallRecordRequest(BaseModel):
     execution_attempt: int | None = Field(ge=1)
     evidence_ref: str | None = Field(min_length=1)
     provider: Literal["openai", "anthropic", "google"]
-    route: Literal["direct", "litellm_passthrough"]
+    route: Literal["direct", "litellm_passthrough", "litellm_unified"]
     requested_model: str = Field(min_length=1)
     reasoning_effort: str | None = Field(min_length=1)
     served_model: str | None = Field(min_length=1)
+    litellm_model_name: str | None = Field(min_length=1)
     response_id: str | None = Field(min_length=1)
     usage: LlmCallUsage
     provider_usage: dict[str, Any] | None

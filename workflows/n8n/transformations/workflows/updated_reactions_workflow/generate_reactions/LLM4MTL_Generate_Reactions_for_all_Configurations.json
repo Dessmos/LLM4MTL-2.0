@@ -198,7 +198,7 @@
       "name": "Google Gemini Chat Model",
       "credentials": {
         "googlePalmApi": {
-          "id": "nUZ88X2Akoz1dXpt",
+          "id": "zaSUDGrT0sLamQ3m",
           "name": "Google Gemini(PaLM) Api account"
         }
       }
@@ -225,7 +225,7 @@
       "name": "Anthropic Chat Model",
       "credentials": {
         "anthropicApi": {
-          "id": "R9d6pMqZ8LzipdDW",
+          "id": "MWdiTATf0XK2AQCn",
           "name": "Anthropic account"
         }
       }

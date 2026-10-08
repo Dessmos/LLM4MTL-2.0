@@ -22,6 +22,7 @@ from evaluation.refinement_loops import (
     STOPPED,
     UNFINISHED,
     batch_rows,
+    drop_retried_orchestration_errors,
     loop_rows,
     main,
     read_batch,
@@ -198,6 +199,22 @@ class LoopInputValidationTests(unittest.TestCase):
 
 class LoopReportFilesTests(unittest.TestCase):
 
+    def test_a_crashed_run_is_dropped_only_when_its_task_ran_again(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            _write_run(root, "crashed", budget=1, task="Retried",
+                       terminal_state="ORCHESTRATION_ERROR:diagnose",
+                       attempts=[(SYNTAX, 0, "SYNTAX_VALID"), (EXECUTION, 0, "SEMANTIC_EXECUTION_FAILED")])
+            _write_run(root, "retry", budget=1, task="Retried",
+                       attempts=[(SYNTAX, 0, "SYNTAX_VALID"), (EXECUTION, 0, "SEMANTIC_PASSED")])
+            _write_run(root, "lone", budget=1, terminal_state="ORCHESTRATION_ERROR:diagnose",
+                       attempts=[(SYNTAX, 0, "SYNTAX_VALID")])
+
+            kept, dropped = drop_retried_orchestration_errors(read_batch(root, BATCH))
+
+        self.assertEqual(sorted(run.run.run_id for run in kept), ["lone", "retry"])
+        self.assertEqual([run.run.run_id for run in dropped], ["crashed"])
+
     def test_main_writes_one_table_per_language_a_summary_and_markdown(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -284,6 +301,7 @@ def _write_run(
     strategy: str = "few_shots_AND_grammar",
     terminal_state: str | None = "SEMANTIC_PASSED",
     batch_id: str = BATCH,
+    task: str | None = None,
 ) -> Path:
     run_root = root / BATCH / run_id
     run_root.mkdir(parents=True)
@@ -291,7 +309,7 @@ def _write_run(
         "run_id": run_id,
         "batch_id": batch_id,
         "language": language,
-        "task": f"Task_{run_id}",
+        "task": task or f"Task_{run_id}",
         "transformation_model": "gpt-5",
         "transformation_strategy": strategy,
         "seed": 1,

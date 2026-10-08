@@ -74,6 +74,7 @@ STOPPED = "STOPPED"
 NOT_JUDGED = "NOT_JUDGED"
 UNFINISHED = "UNFINISHED"
 ALL = "ALL"
+ORCHESTRATION_ERROR = "ORCHESTRATION_ERROR"
 # Execution judges an iteration only after its syntax validation, so for one
 # iteration an execution attempt always outranks a syntax-validation attempt.
 JUDGING_STAGES = (SYNTAX_VALIDATION_STAGE_ID, EXECUTION_STAGE_ID)
@@ -275,6 +276,29 @@ def _validate_loops(run: RunLoops) -> None:
         raise EvaluationInputError(
             f"transformation iteration {last_judged} was judged after iteration {solved} passed"
         )
+
+
+def drop_retried_orchestration_errors(
+    runs: Sequence[RunLoops],
+) -> tuple[list[RunLoops], list[RunLoops]]:
+    """Split off the runs n8n stopped in that were run again; return ``(kept, dropped)``.
+
+    An ``ORCHESTRATION_ERROR`` run says only that the workflow failed, nothing
+    about the models. When the same language and task also ended normally in
+    the selected batches, that run stands for it. A crashed run nothing replaced
+    is kept, so a task never disappears from the table unnoticed.
+    """
+    replaced = {(run.run.language, run.run.task) for run in runs if not _is_orchestration_error(run)}
+    kept: list[RunLoops] = []
+    dropped: list[RunLoops] = []
+    for run in runs:
+        is_replaced = _is_orchestration_error(run) and (run.run.language, run.run.task) in replaced
+        (dropped if is_replaced else kept).append(run)
+    return kept, dropped
+
+
+def _is_orchestration_error(run: RunLoops) -> bool:
+    return str(run.run.terminal_result.get("terminal_state", "")).startswith(ORCHESTRATION_ERROR)
 
 
 def loop_rows(runs: Sequence[RunLoops], width: int) -> list[dict[str, Any]]:
@@ -555,6 +579,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--runs-root", type=Path, default=TARGET.runs)
     parser.add_argument("--output-dir", type=Path, required=True)
+    parser.add_argument(
+        "--drop-retried-orchestration-errors",
+        action="store_true",
+        help="leave out an ORCHESTRATION_ERROR run whose language and task also ended "
+        "normally in the selected batches; the dropped runs are listed in excluded-runs.txt",
+    )
     return parser
 
 
@@ -568,7 +598,20 @@ def main(argv: Sequence[str] | None = None) -> int:
     except EvaluationInputError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
-    for path in write_reports(runs, args.output_dir):
+    written = []
+    if args.drop_retried_orchestration_errors:
+        runs, dropped = drop_retried_orchestration_errors(runs)
+        excluded_path = args.output_dir / "excluded-runs.txt"
+        excluded_path.parent.mkdir(parents=True, exist_ok=True)
+        excluded_path.write_text(
+            "".join(
+                f"{run.batch_id}/{run.run.run_id}\t{run.run.terminal_result.get('terminal_state', '')}\n"
+                for run in dropped
+            ),
+            encoding="utf-8",
+        )
+        written.append(excluded_path)
+    for path in [*write_reports(runs, args.output_dir), *written]:
         print(path)
     return 0
 

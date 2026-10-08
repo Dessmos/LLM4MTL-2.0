@@ -295,9 +295,11 @@ right after the provider answers with
 `POST /batches/{batch_id}/runs/{run_id}/llm-calls`. The body is the call as n8n
 observed it: what it was for (`operation`, and `artifact_iteration` for a
 generation or `execution_attempt` and the run-relative `evidence_ref` for a
-diagnosis), `provider`, `route` (`direct` or `litellm_passthrough`),
-`requested_model`, `reasoning_effort`, the provider-reported `served_model` and
-`response_id`, normalized `usage` (`input_tokens`, `cached_input_tokens`,
+diagnosis), `provider`, `route` (`direct`, `litellm_passthrough`, or
+`litellm_unified`), `requested_model`, `reasoning_effort`, the provider-reported
+`served_model` (null on `litellm_unified`, whose response echoes the requested
+name), `litellm_model_name` (the proxy's `x-litellm-model-name` header, null
+without one), `response_id`, normalized `usage` (`input_tokens`, `cached_input_tokens`,
 `output_tokens`, `reasoning_tokens`; null where the provider reported none), the
 provider's usage block verbatim as `provider_usage`, `started_at`,
 `finished_at`, `latency_ms`, and `n8n_execution_id`. Python validates it and

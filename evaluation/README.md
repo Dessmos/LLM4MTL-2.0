@@ -115,6 +115,12 @@ It writes:
   `total_tokens` (input + output). A field the run never recorded is blank,
   not zero.
 
+`--drop-retried-orchestration-errors` leaves out a run that ended in
+`ORCHESTRATION_ERROR` (n8n stopped; nothing was learned about the models) when
+the same language and task also ended normally in the selected batches — the
+case of a batch relaunched after a workflow crash. The dropped runs are listed
+in `excluded-runs.txt`; a crashed run nothing replaced stays in the tables.
+
 The verdict is the run's generated test, not a held-out suite. Like
 `heldout-trajectory.csv`, this is a reporting view, not a campaign metric.
 
@@ -202,6 +208,31 @@ PYTHONPATH=pipeline/src .venv/bin/python -m evaluation.diagnosis_aggregation \
 
 Without `--attempt` it reads the run's latest execution attempt. `agreement` is
 null, not 1.0, when nothing was diagnosed.
+
+## Failure analysis
+
+`rq_metrics` counts the runs that succeeded; `failure_analysis` says why the
+others did not. It reads the same selection and run facts, so its populations
+are those of `rq-metrics.csv`, and writes four CSV files:
+
+```bash
+PYTHONPATH=pipeline/src .venv/bin/python -m evaluation.failure_analysis \
+  --output-dir artifacts/Chosen_for_evaluation/failure-analysis
+```
+
+- `failure-runs.csv` — one row per run: RQ1-RQ4 endpoints, the reason a run
+  left the successful path, and per-stage failure classes and fingerprints;
+- `failure-events.csv` — every stage attempt, diagnosis record and refinement
+  of every run, in recorded order;
+- `mutant-outcomes.csv` — one row per applicable mutant over the judged runs,
+  with the construct it changes;
+- `failure-crosstabs.csv` — diagnosis outcome by language, final recovery and
+  routed artifact, and every failure class by stage and language.
+
+Failure classes come from fixed patterns over recorded messages; a message no
+pattern matches stays in an `OTHER_*` class. `run_mutants` does not keep the
+message of a mutant `ERROR`, so mutant errors are characterised per mutant, not
+per run.
 
 ## EClass coverage and aggregation
 

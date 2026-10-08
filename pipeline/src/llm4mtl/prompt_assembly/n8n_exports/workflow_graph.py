@@ -59,11 +59,11 @@ PROVIDER_CREDENTIALS = {
     ),
     ANTHROPIC_CHAT_MODEL_TYPE: (
         "anthropicApi",
-        {"id": "R9d6pMqZ8LzipdDW", "name": "Anthropic account"},
+        {"id": "MWdiTATf0XK2AQCn", "name": "Anthropic account"},
     ),
     GEMINI_CHAT_MODEL_TYPE: (
         "googlePalmApi",
-        {"id": "nUZ88X2Akoz1dXpt", "name": "Google Gemini(PaLM) Api account"},
+        {"id": "zaSUDGrT0sLamQ3m", "name": "Google Gemini(PaLM) Api account"},
     ),
 }
 

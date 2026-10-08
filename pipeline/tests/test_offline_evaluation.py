@@ -213,6 +213,28 @@ class MutantMatrixTests(unittest.TestCase):
         # Only the reference runs of the two suites and the two parsable mutants executed.
         self.assertEqual(4, adapter.executions)
 
+    def test_a_final_suite_that_violates_its_contract_is_not_judged(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            mutant = _mutant_file(Path(temporary) / "M1.etl", "mutant")
+            adapter = _FakeAdapter(reference_passes={"Judged": True}, mutant_passes={}, unparsable=set())
+
+            def reject_suite(suite, destination):
+                raise EvaluationInputError(f"suite {suite.test_id} is invalid: schema violation")
+
+            with patch.object(run_mutants, "language_adapter", return_value=adapter), \
+                    patch.object(run_mutants, "_language_workspace", return_value=None), \
+                    patch.object(run_mutants, "_generated_suite_path", return_value=mutant.parent), \
+                    patch.object(run_mutants, "_prepare_suite", side_effect=reject_suite):
+                _, rows = run_mutants.mutant_matrix(
+                    [_suite_run("run", "Judged")],
+                    {"operators": {"M1": "a"}, "mutants": [_manifest_entry("Judged", "M1", mutant)]},
+                    timeout_seconds=60,
+                )
+
+        self.assertEqual(("INVALID_SUITE", "NOT_JUDGED", 0, ""), (
+            rows[0]["reference_result"], rows[0]["M1"], rows[0]["killed"], rows[0]["kill_rate"]))
+        self.assertEqual(0, adapter.executions)
+
     def test_a_mutant_that_differs_from_its_manifest_hash_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             mutant = _mutant_file(Path(temporary) / "M1.etl", "original")

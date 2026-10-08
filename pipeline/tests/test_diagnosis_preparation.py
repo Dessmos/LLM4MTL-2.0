@@ -1426,6 +1426,79 @@ def _required_evidence_fields(report_type: str) -> list[str]:
     return re.findall(r"'([a-z_]+)'", declaration.group(1))
 
 
+@unittest.skipUnless(shutil.which("node"), "the diagnosis subworkflow needs Node")
+class DiagnosisResponseParsingTests(unittest.TestCase):
+    """How the diagnosis subworkflow reads the model's verdict."""
+
+    VERDICT = {
+        "classification": "transformation_defect",
+        "confidence": "high",
+        "reasoning_summary": "The transformation names the source model in the wrong case.",
+        "evidence": ["Type 'flowchart!Flowchart' not found"],
+        "test_case_id": "case-1",
+        "assertion_id": None,
+    }
+
+    def test_one_json_fence_around_the_verdict_is_accepted(self) -> None:
+        # Claude Sonnet 5 answered this way in batch_009 despite the prompt.
+        fenced = "```json\n" + json.dumps(self.VERDICT, indent=2) + "\n```"
+
+        outcome = _attach_diagnosis_provenance(fenced)
+
+        self.assertTrue(outcome["ok"], outcome.get("error"))
+        self.assertEqual("transformation_defect", outcome["result"]["classification"])
+
+    def test_a_summary_longer_than_1000_characters_is_accepted(self) -> None:
+        # Claude Sonnet 5 wrote a 1027-character summary in batch_010.
+        verdict = {**self.VERDICT, "reasoning_summary": "x" * 1027}
+
+        outcome = _attach_diagnosis_provenance(json.dumps(verdict))
+
+        self.assertTrue(outcome["ok"], outcome.get("error"))
+
+    def test_prose_around_the_verdict_is_still_refused(self) -> None:
+        outcome = _attach_diagnosis_provenance(
+            "Here is my verdict:\n" + json.dumps(self.VERDICT)
+        )
+
+        self.assertFalse(outcome["ok"])
+        self.assertIn("invalid JSON", outcome["error"])
+
+
+def _attach_diagnosis_provenance(response_text: str) -> dict[str, Any]:
+    """Run the shipped node that parses the diagnosis model's answer."""
+    context = {
+        "run_id": "run-1",
+        "execution_attempt": 1,
+        "test_case_id": "case-1",
+        "assertion_id": None,
+        "evidence_ref": "diagnosis/execution/attempt-001/reports/r0.json",
+        "provider": "anthropic",
+        "model": "google.claude-sonnet-5",
+    }
+    spec = {
+        "workflow": str(TARGET.workflows / "subworkflows" / "diagnosis" / "llm-diagnosis.json"),
+        "node": "Attach Diagnosis Provenance",
+        "nodes": {
+            "Capture Raw Diagnosis Response": {"json": {"llm_response": {"text": response_text}}},
+            "Build Diagnosis Request Artifact": {"json": context},
+        },
+    }
+    with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as handle:
+        json.dump(spec, handle)
+        spec_path = handle.name
+    try:
+        completed = subprocess.run(
+            ["node", str(REPO_ROOT / "pipeline" / "tests" / "fixtures" / "run_master_code_node.js"), spec_path],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    finally:
+        Path(spec_path).unlink()
+    return json.loads(completed.stdout)
+
+
 def _relative(path: Path) -> str:
     return path.resolve().relative_to(REPO_ROOT).as_posix()
 

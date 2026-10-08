@@ -837,6 +837,44 @@ class StageServiceTests(unittest.TestCase):
         self.assertEqual(recorded["status"], body["status"])
         self.assertEqual(recorded["counts"], body["counts"])
 
+    def test_a_call_through_a_litellm_unified_route_keeps_the_routed_model(self) -> None:
+        self.client.post(f"/batches/{BATCH}/runs", json=run_payload(run_id="svc-llm-call"))
+        call = {
+            "operation": "transformation-generation",
+            "artifact_iteration": 0,
+            "execution_attempt": None,
+            "evidence_ref": None,
+            "provider": "anthropic",
+            "route": "litellm_unified",
+            "requested_model": "google.claude-sonnet-5",
+            "reasoning_effort": "xhigh",
+            "served_model": None,
+            "litellm_model_name": "vertex_ai/claude-sonnet-5",
+            "response_id": "msg_1",
+            "usage": {
+                "input_tokens": 120,
+                "cached_input_tokens": 0,
+                "output_tokens": 40,
+                "reasoning_tokens": None,
+            },
+            "provider_usage": {"input_tokens": 120, "output_tokens": 40},
+            "started_at": "2026-09-30T10:00:00Z",
+            "finished_at": "2026-09-30T10:00:02Z",
+            "latency_ms": 2000,
+            "n8n_execution_id": "1",
+        }
+        response = self.client.post(f"/batches/{BATCH}/runs/svc-llm-call/llm-calls", json=call)
+        self.assertEqual(200, response.status_code, response.text)
+        recorded = [
+            event["llm_call"]
+            for event in read_events(run_store.open_run(self.batch_root, "svc-llm-call"))
+            if event["event"] == "llm_call_observed"
+        ]
+        self.assertEqual(1, len(recorded))
+        self.assertEqual("litellm_unified", recorded[0]["route"])
+        self.assertIsNone(recorded[0]["served_model"])
+        self.assertEqual("vertex_ai/claude-sonnet-5", recorded[0]["litellm_model_name"])
+
     def test_diagnosis_rejects_unknown_run_and_invalid_classification(self) -> None:
         valid_payload = {
             "schema_version": "1.0",

@@ -200,12 +200,14 @@ LLM prompt`, `- LLM request`, `- LLM call`, `- LLM response`, `- record LLM
 call`); the last node keeps the chain's name and hands on `text` as the chain
 did, and the export on disk is unchanged. OpenAI is called directly on its
 Responses API with the export's OpenAI credential. Anthropic and Google are
-called through LiteLLM's pass-through routes (`LITELLM_BASE_URL` in that node,
-default `http://litellm:4000`), the only LiteLLM routes that return the
-provider's own response; their n8n credentials hold the LiteLLM key. Each call
-is recorded with `POST /batches/{batch_id}/runs/{run_id}/llm-calls` as an
-`llm_call_observed` event: the requested and the served model, the provider's
-token counts, and the call's wall-clock time.
+called through the KIT LiteLLM proxy (`LITELLM_BASE_URL` in that node) on its
+unified routes in each provider's own format; their n8n credentials hold the
+proxy key. Those routes echo the requested name instead of the model version,
+so these calls record no served model, only the model the proxy routed to
+(`x-litellm-model-name`). Each call is recorded with `POST
+/batches/{batch_id}/runs/{run_id}/llm-calls` as an `llm_call_observed` event:
+the requested and the served or routed model, the provider's token counts, and
+the call's wall-clock time.
 
 The artifact tree is one directory per **model family**, not per exact model id:
 every `gpt-5` variant writes under `gpt-5`, every `claude-sonnet-4` variant under
