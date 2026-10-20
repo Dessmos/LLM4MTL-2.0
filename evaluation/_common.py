@@ -5,12 +5,22 @@ from __future__ import annotations
 import csv
 import hashlib
 import json
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
 from llm4mtl.paths import REPO_ROOT
 
+
+# Older derived artifacts (the legacy-suite campaign, its freezes and reports)
+# record repository files by the absolute path of the machine that wrote them,
+# e.g. ``/Users/<user>/<...>/LLM4MTL-2.0/benchmark/tasks/...``. Everything after
+# this directory name is the repository-relative part of such a path.
+RECORDED_REPOSITORY_DIRECTORY = "LLM4MTL-2.0"
+_RECORDED_REPOSITORY_PREFIX = re.compile(
+    r"/(?:[^/\s\"';,|]+/)*?" + re.escape(RECORDED_REPOSITORY_DIRECTORY) + "/"
+)
 
 REQUIRED_EXPERIMENT_FIELDS = (
     "max_test_refinement_iterations",
@@ -226,6 +236,39 @@ def read_csv(path: Path) -> list[dict[str, str]]:
             return list(csv.DictReader(stream))
     except OSError as exc:
         raise EvaluationInputError(f"cannot read CSV {path}: {exc}") from exc
+
+
+def repository_path(recorded: str | Path) -> Path:
+    """Where a recorded repository path lies in this checkout.
+
+    A relative path is relative to the repository root. An absolute path that
+    an older artifact recorded on another machine is rebased onto this checkout
+    after ``RECORDED_REPOSITORY_DIRECTORY``. Any other absolute path is
+    returned unchanged.
+    """
+    path = Path(recorded)
+    if not path.is_absolute():
+        return REPO_ROOT / path
+    if RECORDED_REPOSITORY_DIRECTORY in path.parts:
+        parts = path.parts
+        return REPO_ROOT.joinpath(*parts[parts.index(RECORDED_REPOSITORY_DIRECTORY) + 1:])
+    return path
+
+
+def portable(value: Any) -> Any:
+    """``value`` for a derived output, with every absolute repository prefix removed.
+
+    Strings lose the prefix of this checkout and of recorded repositories, so a
+    path reads repository-relative whichever machine wrote it; mappings and
+    sequences are converted element by element, other values pass unchanged.
+    """
+    if isinstance(value, str):
+        return _RECORDED_REPOSITORY_PREFIX.sub("", value.replace(f"{REPO_ROOT.as_posix()}/", ""))
+    if isinstance(value, Mapping):
+        return {portable(key): portable(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [portable(item) for item in value]
+    return value
 
 
 def run_identity(selected_run: SelectedRun) -> dict[str, Any]:

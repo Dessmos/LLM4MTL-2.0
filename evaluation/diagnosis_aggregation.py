@@ -1,31 +1,4 @@
-"""Group one execution attempt's diagnoses by the failure they are about.
-
-Preparation writes one report per failing test case, and each report is
-diagnosed on its own. That is right for the pipeline: each report is separate
-evidence. But it over-counts faults. One broken model reference that fails three
-test cases gives three reports and three verdicts, yet it is *one* defect.
-
-So the raw records stay as written, and the grouping happens here, on read.
-Reports are grouped by a fingerprint over what identifies a failure:
-
-    failure_stage + exception type + normalized error summary
-                  + top stack frame + transformation sha256
-
-The error summary alone is not enough. It starts with the name of the first
-failing test method, so one fault gives a different string per case;
-normalization removes that prefix and the line numbers. And equal messages can
-come from different places; the stack frame and the transformation hash keep
-those apart.
-
-Grouping never changes a verdict. Each cluster lists the verdicts its reports
-received and how much they agree, which makes the consistency of Source
-Diagnosis measurable.
-
-It only reads recorded evidence and prints the result as JSON:
-
-    PYTHONPATH=pipeline/src .venv/bin/python -m evaluation.diagnosis_aggregation \
-      --batch batch_004 --run <run-id> [--attempt N]
-"""
+"""Group one execution attempt's diagnoses by the failure they are about."""
 
 from __future__ import annotations
 

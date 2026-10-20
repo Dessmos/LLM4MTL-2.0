@@ -1,32 +1,4 @@
-"""Qualify mutants and run baseline/generated suites against them offline.
-
-``--batch`` is a second, separate mode: a task × mutant table for one batch.
-For every run it takes the run's final generated suite (``suite_id`` in
-``result.json``), runs it once on the task's reference and then on every mutant
-of that task in ``evaluation/mutants/manifest.json``. Tasks have different
-numbers of mutants; an operator that does not apply to a task is ``N/A``.
-
-    KILLED        the suite passes on the reference and fails on the mutant
-    SURVIVED      the suite passes on the reference and on the mutant
-    PARSE_FAILED  the mutant does not parse, so the suite was not run
-    ERROR         the suite could not execute on the mutant
-    NOT_JUDGED    the suite does not pass on the reference, the run has no
-                  suite (``NO_SUITE``), or its suite violates the semantic-cases
-                  contract and cannot be rendered (``INVALID_SUITE``), so no
-                  mutant can be judged
-    N/A           the operator does not apply to this task
-
-``kill_rate`` is ``killed / mutants`` over the task's applicable mutants, blank
-when nothing could be judged. It is a per-run reporting view, not ``MS_Q``:
-there are no qualification suites here, so nothing is excluded as equivalent.
-
-It must run in UTC, as the stage service container does: generated suites
-compare dates as the JVM prints them in its default time zone, so elsewhere a
-suite that passed in the pipeline can fail on the reference.
-
-    TZ=UTC PYTHONPATH=pipeline/src .venv/bin/python -m evaluation.mutation.run_mutants \
-      --batch batch_004 --output evaluation/results/batch_004/mutants.csv
-"""
+"""Qualify mutants and run baseline/generated suites against them offline."""
 
 from __future__ import annotations
 

@@ -1,43 +1,4 @@
-"""Run-level failure analysis for the runs selected by ``rq_metrics``.
-
-``rq_metrics`` says how many runs succeeded; this report says why the others
-did not. It reads the same selection (``artifacts/Chosen_for_evaluation``) and
-the same run facts, so every population here is a population of
-``rq-metrics.csv``:
-
-- RQ1: a run's final suite is not VALID (``final_voy`` numerator complement);
-- RQ2: T0 was parsed by nobody's help and the syntax phase never parsed it
-  (``ssr_post_syntax`` complement over runs whose T0 was checked);
-- RQ3: T0 failed its first semantic execution and Tfinal does not pass,
-  split into runs that never got a transformation semantic refinement and
-  runs that did (``semantic_repair_success_rate`` complement);
-- RQ4: applicable mutants of judged runs that were not KILLED.
-
-It writes four CSV files into ``--output-dir``:
-
-``failure-runs.csv``
-    One row per selected run: the RQ1-RQ4 endpoints, the reasons a run left
-    the successful path and a failure fingerprint per stage. A blank cell means
-    "not applicable to this run" (for example no parser verdict for a run that
-    never generated a transformation), never zero.
-``failure-events.csv``
-    One row per stored stage attempt, diagnosis record and refinement, in
-    recorded order, for runs with several diagnosis/refinement rounds.
-``mutant-outcomes.csv``
-    One row per applicable mutant (language, task, operator) with its states
-    over the judged runs and the construct it changes.
-``failure-crosstabs.csv``
-    Long-format counts: diagnosis outcome by language, by final recovery and by
-    routed artifact, and every failure class by stage and language.
-
-Failure classes and parser categories come from fixed message patterns
-(``classify_execution_failure``, ``classify_parser_messages``). They are a
-reading aid derived from recorded messages; a message no pattern matches
-falls into an ``OTHER_*`` class instead of being guessed.
-
-    PYTHONPATH=pipeline/src .venv/bin/python -m evaluation.failure_analysis \\
-      --output-dir artifacts/Chosen_for_evaluation/failure-analysis
-"""
+"""Run-level failure analysis for the runs selected by ``rq_metrics``."""
 
 from __future__ import annotations
 
@@ -86,11 +47,7 @@ MUTANTS_MANIFEST = REPO_ROOT / "evaluation" / "mutants" / "manifest.json"
 FINGERPRINT_LENGTH = 220
 RATIONALE_LENGTH = 400
 
-
-# ---------------------------------------------------------------------------
 # Message classification
-# ---------------------------------------------------------------------------
-
 # Ordered: the first matching pattern names the class. Patterns are matched
 # against "<failure_stage>: <error_summary>".
 EXECUTION_FAILURE_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
@@ -117,6 +74,7 @@ EXECUTION_FAILURE_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("ASSERTION_OTHER", re.compile(r"^assertion_failure:")),
     ("ENGINE_CRASH", re.compile(r"StackOverflowError|several rules as default|^engine_runtime:")),
 )
+
 OTHER_EXECUTION_FAILURE = "OTHER_RUNTIME"
 
 
@@ -230,10 +188,6 @@ def classify_parser_messages(language: str, messages: Sequence[str]) -> ParserFa
     distinct = list(dict.fromkeys(messages))
     return ParserFailure(category, kinds, " | ".join(distinct[:3])[:FINGERPRINT_LENGTH * 2], tuple(messages))
 
-
-# ---------------------------------------------------------------------------
-# Raw evidence not carried by RunFacts
-# ---------------------------------------------------------------------------
 
 
 @dataclass(frozen=True)
@@ -397,10 +351,6 @@ def _artifact_iteration(stage_result: Mapping, key: str) -> int | None:
     return int(match.group(1)) if match else None
 
 
-# ---------------------------------------------------------------------------
-# Run-level reasons
-# ---------------------------------------------------------------------------
-
 RQ3_NOT_EXECUTED = "NOT_EXECUTED"
 RQ3_PASSED_INITIALLY = "PASSED_INITIALLY"
 RQ3_RECOVERED = "RECOVERED"
@@ -479,9 +429,6 @@ def regressed_cases(run: RunFacts) -> int | None:
     )
 
 
-# ---------------------------------------------------------------------------
-# Rows
-# ---------------------------------------------------------------------------
 
 RUN_FIELDS = (
     "batch_id", "run_id", "group", "model", "transformation_model", "strategy", "language", "task",
@@ -802,17 +749,18 @@ def crosstab_rows(run_rows: Sequence[Mapping[str, object]], runs: Sequence[RunFa
         if row.get("semantic_initial_failure_class"):
             counts[("rq3_initial_failure_class", row["semantic_initial_failure_class"],
                     row["semantic_population"], language)] += 1
+        if row.get("test_initial_executable") and row.get("test_final_executable"):
+            counts[("rq1_suite_executability_transition", f"initial_executable={row['test_initial_executable']}",
+                    f"final_executable={row['test_final_executable']}", language)] += 1
+        if row.get("semantic_population"):
+            is_syntax_refined = int(row.get("syntax_refinement_count") or 0) > 0
+            counts[("rq3_population_x_syntax_refinement", row["semantic_population"],
+                    f"syntax_refined={_flag(is_syntax_refined)}", language)] += 1
 
     return [
         {"table": table, "row": row, "column": column, "language": language, "count": count}
         for (table, row, column, language), count in sorted(counts.items(), key=lambda item: tuple(map(str, item[0])))
     ]
-
-
-# ---------------------------------------------------------------------------
-# Driver
-# ---------------------------------------------------------------------------
-
 
 def _group_metadata(selection_root: Path, group: EvaluationGroup) -> dict[str, dict[str, str]]:
     return {row["run_id"]: row for row in read_csv(selection_root / group.name / "batch-runs.csv")}

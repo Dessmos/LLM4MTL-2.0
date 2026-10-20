@@ -1,172 +1,4 @@
-"""Compute every RQ1-RQ4 thesis metric from stored run artifacts.
-
-The selection is the ``artifacts/Chosen_for_evaluation`` tree. Every directory
-in it that holds a ``batch-runs.csv`` is one evaluation *group*; its runs are the
-rows of that file minus the runs listed in ``excluded-runs.txt``, and its
-mutation results are the ``mutants*.csv`` files next to it. The top-level folder
-names the model, so a model folder with several groups (for example
-``GPT-5.1/1_batch_016-017`` and ``GPT-5.1/2_batch_018-019``) is also reported as
-one pooled scope, and every group together is the ``all`` scope. Pooling
-weights each group by its run count, so a model with several groups weighs
-more in ``all``. Groups are named by the model that was actually called;
-``manifest.json`` model labels are not used for grouping.
-
-Every metric is reported per scope for all languages together (``ALL``) and per
-language. The unit and population of each metric:
-
-RQ1 - test validation (unit: one generated suite, i.e. one semantic-test
-generation iteration of a run; a suite is *valid* when its reference execution
-is technically executable and passes the reference):
-
-    final_voy             runs whose last suite is valid / runs        primary
-    initial_voy           runs whose first suite is valid / runs       secondary
-    executability_rate_initial / _final
-                          runs whose first / last suite is executable
-                          / runs                                       secondary
-    reference_pass_rate_initial / _final
-                          runs whose first / last suite is valid
-                          / runs whose first / last suite is executable secondary
-    executability_rate_all_attempts
-                          executable suites / generated suites, every
-                          suite iteration of every run                 descriptive
-    reference_pass_rate_all_attempts
-                          valid suites / executable suites, likewise   descriptive
-    valid_suite_within_k / valid_suite_gain_at_k / mean_refinements_to_valid_suite
-                          refinement trajectory over test refinements,
-                          see "Refinement trajectories" below           descriptive
-    test_refinement_recovery_rate
-                          first suite invalid, refined, last valid
-                          / first suite invalid and refined            descriptive
-    suite_failure_reason  invalid suites by reason / generated suites  descriptive
-
-    The run-level rates decompose exactly: VOY = executability_rate *
-    reference_pass_rate at the same snapshot (initial or final). The
-    ``*_all_attempts`` rates count every suite iteration, including the ones a
-    refinement replaced, so they are attempt-level diagnostics and do not
-    decompose either VOY. A suite without a reference execution (generation
-    stopped at extract or technical validation) stays in every denominator as
-    NO_VERDICT.
-
-RQ2 - parser feedback (unit: run whose initial transformation T0 was parsed):
-
-    ssr_initial / ssr_post_syntax
-                          T0 parsed / parsed at the end of the syntax phase,
-                          i.e. T0 or an iteration created by syntax
-                          refinement before the first semantic refinement  secondary
-    delta_ssr             ssr_post_syntax - ssr_initial                   primary
-    ssr_final             the last syntax-checked iteration parsed, after
-                          any semantic refinement                         descriptive
-    parser_repair_success_rate
-                          T0 unparsable, syntax-refined, a later iteration
-                          parsed / T0 unparsable and syntax-refined       secondary
-    parsed_within_k / parsed_gain_at_k / mean_refinements_to_parsed
-                          refinement trajectory over syntax refinements in
-                          the syntax phase, population: runs whose T0 was
-                          parsed                                          descriptive
-    parser_problem_reduction
-                          (problems at T0 - problems after repair) / problems
-                          at T0; after repair = first parsed iteration, else
-                          the last checked one                            descriptive
-    noop_refinement_rate  syntax refinements whose output is byte-identical
-                          to their input / syntax refinements             descriptive
-
-    The post-syntax endpoint attributes to parser feedback only what parser
-    feedback produced: a semantic refinement starts from a parsed
-    transformation, so it can only break syntax, never repair it, and
-    ``ssr_final`` would charge such a break to the parser loop.
-
-    Parser problem counts are only comparable when the parser reports zero
-    problems for every parsed file. A language that ever reports a missing
-    count, or problems on a parsed file, gets a blank value instead of a
-    misleading one (ETL reports no counts, Reactions counts something on files
-    it accepts). The rule is checked on the data, not hard-coded.
-
-RQ3 - semantic feedback and diagnosis (unit: run with at least one semantic
-execution; the verdict comes from the run's own generated suite, there is no
-held-out suite):
-
-    semantic_repair_success_rate
-                          T0 fails, transformation semantically refined,
-                          Tfinal passes / T0 fails and refined            primary
-    stpr_before / stpr_after / delta_stpr
-                          mean per-run share of passing test cases at T0
-                          and Tfinal, over repair-population runs judged by
-                          the same suite at both points                   primary
-    regression_rate       test cases PASS at T0 and FAIL/ERROR at Tfinal
-                          / test cases PASS at T0 (same suite)            secondary
-    full_suite_success_before / _after
-                          T0 passes / Tfinal passes over all executed runs secondary
-    diagnosis_outcome     diagnosis records by classification / records   descriptive
-    diagnosis_gated_repair_success
-                          refinements routed to the artifact type, whose
-                          output passed its next execution / routed
-                          refinements whose output was executed           descriptive
-    gated_refinement_never_executed
-                          routed refinements whose output never reached
-                          execution / routed refinements                  descriptive
-    semantic_pass_within_k / semantic_pass_gain_at_k /
-    mean_refinements_to_semantic_pass
-                          refinement trajectory over transformation semantic
-                          refinements, population: the repair population of
-                          semantic_repair_success_rate                    descriptive
-
-    Tfinal is the last transformation iteration. When it never reached
-    execution (a later refinement broke its syntax) it counts as failing,
-    because the pipeline ended without a passing transformation.
-
-Refinement trajectories show how success grows with the refinement number
-``k`` (category column, 0 = no refinement yet, up to the scope's configured
-budget). For a fixed population:
-
-    *_within_k            runs that first succeeded after at most k
-                          refinements / population (cumulative)
-    *_gain_at_k           runs that first succeeded after exactly k
-                          refinements / population (the step at k)
-    mean_refinements_to_* mean k over the runs that needed at least one
-                          refinement and then succeeded
-
-The population never shrinks with ``k``: a run that stopped before ``k``
-without success counts as not succeeded at ``k``, because it never will. At
-the largest ``k`` the curves meet their headline metric (``initial_voy`` at
-k = 0 for RQ1, ``ssr_post_syntax`` for RQ2, ``semantic_repair_success_rate``
-for RQ3), except that RQ1 counts the first valid suite, which a later test
-refinement may have replaced, while ``final_voy`` judges the last suite. The
-transformation budget is shared by syntax and semantic refinements, so a run
-that spent refinements on syntax has fewer left for semantics.
-
-RQ4 - mutation fault detection (unit: one task mutant judged by one run's final
-suite; only runs whose final suite passes the reference are judged):
-
-    emkr                  KILLED / (KILLED + SURVIVED)                    primary
-    mutant_executability_rate
-                          (KILLED + SURVIVED) / applicable mutants        secondary
-    applicable_mutant_kill_rate
-                          KILLED / applicable mutants                     descriptive
-    operator_emkr         emkr per operator                               descriptive
-    mutant_exclusion_reason
-                          applicable mutants neither killed nor survived,
-                          by state / applicable mutants                   descriptive
-    run_not_judged        runs whose final suite did not pass the
-                          reference, by reference result / runs with
-                          mutation data                                   descriptive
-
-    A group without mutation results gets one blank ``emkr`` row, and a pooled
-    scope says in the ``note`` of its RQ4 rows which groups it lacks, so the
-    population never changes silently.
-
-Missing is not zero: an undefined fraction keeps its numerator and a zero
-denominator with a blank ``value``. ``value`` is a fraction, never a
-percentage: in [0, 1] for rates, a difference of two fractions for ``delta_*``,
-and negative for ``parser_problem_reduction`` when a repair attempt left more
-parser problems than T0 had.
-
-    PYTHONPATH=pipeline/src .venv/bin/python -m evaluation.rq_metrics \
-      --output evaluation/results/rq-metrics.csv
-
-``--decimal-comma`` writes ``;``-separated cells with a decimal comma. Use it
-for a spreadsheet in a German or Russian locale: such a locale reads ``.`` as a
-thousands separator, so a plain ``0.857`` opens as ``857``.
-"""
+"""Compute every RQ1-RQ4 thesis metric from stored run artifacts."""
 
 from __future__ import annotations
 
@@ -229,12 +61,6 @@ OUTPUT_FIELDS = (
     "value",
     "note",
 )
-
-
-# ---------------------------------------------------------------------------
-# Facts read from one run
-# ---------------------------------------------------------------------------
-
 
 @dataclass(frozen=True)
 class SuiteVerdict:
@@ -303,12 +129,6 @@ class EvaluationGroup:
     model: str
     runs: tuple[tuple[str, str], ...]
     mutant_rows: Mapping[str, Mapping[str, str]] | None
-
-
-# ---------------------------------------------------------------------------
-# Reading the selection and the run artifacts
-# ---------------------------------------------------------------------------
-
 
 def discover_groups(selection_root: Path) -> tuple[EvaluationGroup, ...]:
     """Return every group below ``selection_root``, ordered by name."""
@@ -536,12 +356,6 @@ def _number_suffix(name: str) -> int:
         raise EvaluationInputError(f"{name} has no numeric suffix")
     return int(match.group(1))
 
-
-# ---------------------------------------------------------------------------
-# Metric rows
-# ---------------------------------------------------------------------------
-
-
 @dataclass(frozen=True)
 class Scope:
     """Where a row belongs; ``rq4_note`` qualifies the mutation population."""
@@ -748,7 +562,18 @@ def _same_suite_endpoints(run: RunFacts) -> tuple[Execution, Execution] | None:
     return first, last
 
 
+def _first_candidate_executed(run: RunFacts) -> bool:
+    return bool(run.executions) and run.executions[0].transformation_iteration == 0
+
+
 def rq3_rows(sink: RowSink, runs: Sequence[RunFacts]) -> None:
+    initially_parsed = [run for run in runs if run.syntax and run.syntax[0].iteration == 0 and run.syntax[0].is_parsed]
+    unexecuted = sum(not _first_candidate_executed(run) for run in initially_parsed)
+    sink.fraction("RQ3", "pass_at_1", "secondary",
+                  sum(_first_candidate_executed(run) and run.executions[0].is_passed for run in initially_parsed),
+                  len(initially_parsed),
+                  note=f"{unexecuted} initially parsed runs lack a semantic execution of T0")
+
     executed = [run for run in runs if run.executions]
     sink.fraction("RQ3", "full_suite_success_before", "secondary",
                   sum(run.executions[0].is_passed for run in executed), len(executed))
@@ -905,12 +730,6 @@ def compute_rows(groups: Sequence[EvaluationGroup]) -> list[dict[str, object]]:
     every_run = [run for group in groups for run in facts_by_group[group.name]]
     rows.extend(scope_rows("all", ALL_GROUPS, every_run, problem_languages, note))
     return rows
-
-
-# ---------------------------------------------------------------------------
-# Output
-# ---------------------------------------------------------------------------
-
 
 def write_rows(path: Path, rows: Sequence[Mapping[str, object]], decimal_comma: bool) -> None:
     """Write the rows atomically; ``decimal_comma`` targets comma-decimal spreadsheets."""

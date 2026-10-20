@@ -227,12 +227,70 @@ PYTHONPATH=pipeline/src .venv/bin/python -m evaluation.failure_analysis \
 - `mutant-outcomes.csv` — one row per applicable mutant over the judged runs,
   with the construct it changes;
 - `failure-crosstabs.csv` — diagnosis outcome by language, final recovery and
-  routed artifact, and every failure class by stage and language.
+  routed artifact, and every failure class by stage and language. It also
+  counts runs by first against last suite executability, and the RQ3
+  population against whether the run spent any syntax refinement.
 
 Failure classes come from fixed patterns over recorded messages; a message no
 pattern matches stays in an `OTHER_*` class. `run_mutants` does not keep the
 message of a mutant `ERROR`, so mutant errors are characterised per mutant, not
 per run.
+
+## Campaign composition
+
+`campaign_composition` describes the selection behind `rq-metrics.csv`, the
+same groups minus `excluded-runs.txt`:
+
+```bash
+PYTHONPATH=pipeline/src .venv/bin/python -m evaluation.campaign_composition \
+  --output-dir artifacts/Chosen_for_evaluation/campaign-composition
+```
+
+- `campaign-tasks.csv` — benchmark tasks per language and their share. It stops
+  when the groups do not all cover the same task set.
+- `campaign-configurations.csv` — evaluation groups and runs per configuration.
+  A configuration is the model that fills every LLM role in the group's
+  `batch.json`, or `mixed` when the roles use different models.
+
+## Supplementary legacy-suite tables
+
+Two read-only reductions rebuild the supplementary tables under
+`artifacts/legacy-suite-evaluation/`. Each writes into a new directory, refuses
+to overwrite one, and copies itself into its output as provenance:
+
+```bash
+PYTHONPATH=pipeline/src:. .venv/bin/python -m evaluation.reduce_tables \
+  --output artifacts/legacy-suite-evaluation/<new-tables-directory>
+
+PYTHONPATH=pipeline/src:. .venv/bin/python -m evaluation.reduce_metrics \
+  --output artifacts/legacy-suite-evaluation/<new-rq-summary-directory>
+```
+
+- `reduce_tables` produced `tables-20261009-v1`. It recomputes
+  `rq_metrics` and stops unless the result equals the stored `rq-metrics.csv`,
+  so regenerate that file first whenever `rq_metrics` changes.
+- `reduce_metrics` produced `rq-summary-20261012-v1`. Its `Snapshots.csv` and
+  `Mutants.csv` are the inputs of `evaluation.equivalence_analysis` (PPL and
+  mutation-score bounds). It takes the candidate LoC definition from
+  `reduce_tables.code_loc`.
+
+Paths:
+
+- `reduce_tables`, `reduce_metrics` and `equivalence_analysis` name their input
+  directories in constants at the top of each file, relative to the
+  repository; change them there to point at other inputs.
+- The legacy campaign artifacts recorded files by the absolute path of the
+  machine that produced them. These three scripts rebase such paths onto the
+  current checkout (`evaluation._common.repository_path`), and every path they
+  write is repository-relative (`portable`). The same inputs therefore give
+  byte-identical outputs on any machine and in any checkout location.
+- `legacy_campaign/*`, `legacy_pilot/*`, `legacy_snapshots.py` and
+  `mutation/equivalence_probes.py` are frozen: their file hashes are part of the
+  campaign freezes and must not change. Their integrity checks still read the
+  absolute paths recorded in `freeze.json`, so `legacy_campaign.report` (and
+  the execution phases) only run where the repository sits at the recorded
+  location. Its stored output, `campaign-20261008-v1/report-v3`, is what the
+  other scripts read.
 
 ## EClass coverage and aggregation
 

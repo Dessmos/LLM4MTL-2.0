@@ -1,11 +1,5 @@
 """Tabulate what every transformation refinement loop produced, per language.
 
-Loop 0 is the initially generated transformation, loop ``k`` its ``k``-th
-refinement. Each cell is the verdict the pipeline itself recorded for that
-transformation iteration: the latest ``execution`` attempt that judged it, or,
-when it never reached execution, the latest ``syntax-validation`` attempt. The
-verdict comes from the run's own generated test, not from a held-out suite.
-
 A loop without a verdict says why:
 
     DONE          an earlier loop already passed, so the run ended there
@@ -15,29 +9,6 @@ A loop without a verdict says why:
                   passed on the reference, so no transformation was judged)
     NOT_JUDGED    a later loop was judged, but this one recorded no verdict
     UNFINISHED    the run has no terminal result yet
-
-The summary answers how many loops are worth paying for: per loop ``k`` it counts
-the runs solved within ``k`` loops over the runs whose state at ``k`` is known,
-namely those that were judged at ``k`` or later, or had already passed. A run
-cut off earlier by its budget or another stop is left out of loop ``k``'s
-population instead of being counted as a failure. This is a reporting view like
-``heldout-trajectory.csv``, not one of the campaign metrics.
-
-Unlike the campaign preflight, runs whose transformation was never judged stay
-in the table and in the ``runs`` count, so a batch is shown in full.
-
-    PYTHONPATH=pipeline/src .venv/bin/python -m evaluation.refinement_loops \
-      --batch batch_007 --output-dir evaluation/results/batch_007
-
-It writes ``refinement-loops-<language>.csv`` for every language,
-``refinement-loops-summary.csv`` and a readable ``refinement-loops.md``.
-
-It also writes ``batch-runs.csv``: every run of every language in one table, the
-loop cells plus the run's terminal outcome, wall-clock time and the LLM usage
-recorded as ``llm_call_observed`` events. ``total_tokens`` is input plus output
-tokens; cached and reasoning tokens are already inside those two. A usage or
-time field stays blank, not zero, when the run recorded no such fact (batches
-from before per-call telemetry, or a call whose provider did not report it).
 """
 
 from __future__ import annotations
@@ -137,16 +108,16 @@ SUMMARY_FIELDS = SUMMARY_GROUP_FIELDS + (
     "solved_rate",
 )
 CELL_LABELS = {
-    SEMANTIC_PASSED: "✅ PASSED",
-    "SEMANTIC_EXECUTION_FAILED": "❌ SEMANTIC_FAILED",
-    "SYNTAX_INVALID": "❌ SYNTAX_INVALID",
-    "SYNTAX_VALID": "⚠️ SYNTAX_VALID, not executed",
-    "INFRASTRUCTURE_ERROR": "⚠️ INFRASTRUCTURE_ERROR",
+    SEMANTIC_PASSED: "PASSED",
+    "SEMANTIC_EXECUTION_FAILED": "SEMANTIC_FAILED",
+    "SYNTAX_INVALID": "SYNTAX_INVALID",
+    "SYNTAX_VALID": "SYNTAX_VALID, not executed",
+    "INFRASTRUCTURE_ERROR": "INFRASTRUCTURE_ERROR",
     DONE: "— done",
-    OVER_BUDGET: "⛔ limit",
-    STOPPED: "⛔ stopped",
-    NOT_JUDGED: "? no verdict",
-    UNFINISHED: "… unfinished",
+    OVER_BUDGET: "limit",
+    STOPPED: "stopped",
+    NOT_JUDGED: "no verdict",
+    UNFINISHED: "unfinished",
 }
 
 
@@ -459,9 +430,9 @@ def render_markdown(runs_by_language: Mapping[str, Sequence[RunLoops]]) -> str:
         "the pipeline's own verdict for that iteration, judged by the run's generated test.",
         "",
         "- `— done`: an earlier loop already passed",
-        "- `⛔ limit`: beyond the run's transformation-refinement budget",
-        "- `⛔ stopped`: the run ended before this loop; see *Final state*",
-        "- `? no verdict`: a later loop was judged, this one was not",
+        "- `limit`: beyond the run's transformation-refinement budget",
+        "- `stopped`: the run ended before this loop; see *Final state*",
+        "- `no verdict`: a later loop was judged, this one was not",
         "",
     ]
     for language, runs in sorted(runs_by_language.items()):
