@@ -2531,29 +2531,31 @@ class ReasoningEffortTests(unittest.TestCase):
                     call_node["parameters"]["options"]["timeout"],
                 )
 
-    def test_claude_and_gemini_go_through_the_proxys_unified_routes(self) -> None:
-        """The proxy's routed model is recorded; its echo of the requested name is not."""
+    def test_claude_and_gemini_are_called_directly_on_the_providers_apis(self) -> None:
+        """The provider-reported model version is recorded; no proxy model is."""
         variants = REPOSITORY_ROOT / "workflows" / "n8n" / "transformations" / "workflows" / "etl_variants"
         cases = (
             (
                 "anthropic",
-                "google.claude-sonnet-5",
+                "claude-sonnet-5",
                 variants / "Prompting_ETL_claude-sonnet-4_few_shots_AND_grammar.json",
-                "https://litellm.scc.kit.edu/v1/messages",
-                {"model": "google.claude-sonnet-5", "content": [{"type": "text", "text": "rules"}]},
+                "https://api.anthropic.com/v1/messages",
+                "claude-sonnet-5-20260901",
+                {"model": "claude-sonnet-5-20260901", "content": [{"type": "text", "text": "rules"}]},
             ),
             (
                 "google",
-                "google.gemini-3.8-flash",
+                "gemini-3.8-flash",
                 variants / "Prompting_ETL_gemini-2-5-pro_few_shots_AND_grammar.json",
-                "https://litellm.scc.kit.edu/v1beta/models/google.gemini-3.8-flash:generateContent",
+                "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent",
+                "gemini-3.8-flash-001",
                 {
-                    "modelVersion": "google.gemini-3.8-flash",
+                    "modelVersion": "gemini-3.8-flash-001",
                     "candidates": [{"content": {"parts": [{"text": "rules"}]}}],
                 },
             ),
         )
-        for provider, model, workflow, url, body in cases:
+        for provider, model, workflow, url, served_model, body in cases:
             with self.subTest(provider=provider):
                 adapted = _adapt(
                     workflow,
@@ -2569,14 +2571,11 @@ class ReasoningEffortTests(unittest.TestCase):
                 self.assertTrue(
                     call_node["parameters"]["options"]["response"]["response"]["fullResponse"]
                 )
-                routed = f"vertex_ai/{model.removeprefix('google.')}"
-                observed = _run_llm_response_node(
-                    adapted, {"body": body, "headers": {"x-litellm-model-name": routed}}
-                )
+                observed = _run_llm_response_node(adapted, {"body": body, "headers": {}})
                 self.assertEqual("rules", observed["text"])
-                self.assertEqual("litellm_unified", observed["llm_call"]["route"])
-                self.assertIsNone(observed["llm_call"]["served_model"])
-                self.assertEqual(routed, observed["llm_call"]["litellm_model_name"])
+                self.assertEqual("direct", observed["llm_call"]["route"])
+                self.assertEqual(served_model, observed["llm_call"]["served_model"])
+                self.assertIsNone(observed["llm_call"]["litellm_model_name"])
 
     def test_without_an_effort_the_openai_request_carries_none(self) -> None:
         adapted = _adapt(

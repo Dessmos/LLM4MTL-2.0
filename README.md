@@ -10,9 +10,9 @@ All deterministic operations and their results are saved to disk, enabling subse
 
 The standard setup uses Docker and the Compose plugin. Docker Desktop is
 sufficient on macOS and Windows; on Linux, install Docker Engine and the
-Compose plugin. An OpenAI credential is the simplest way to run the complete
-pipeline. Anthropic and Google calls require the LiteLLM setup described in
-[docs/model-selection.md](docs/model-selection.md).
+Compose plugin. Each provider is called directly on its own API, so a run
+needs an n8n credential with that provider's API key (OpenAI, Anthropic, or
+Google Gemini).
 
 From the repository root, build and start n8n and the stage service:
 
