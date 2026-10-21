@@ -1,0 +1,5 @@
+schema_version: 1
+variant: no-semantic-feedback
+parser_feedback: true
+semantic_feedback: false
+failure_diagnosis: true

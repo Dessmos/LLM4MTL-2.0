@@ -1,0 +1,6 @@
+Create a transformation called **familiesToPersons** that reacts to changes in the **families** model and updates the **persons** model.  
+
+Define a reaction **CreatedFather** that triggers when a new father is set in a family.  
+In this reaction, first call a routine **updateNameAndCorrespondencesOfCorrespondingPerson** to update the corresponding person’s full name and maintain correspondences.  
+Then call a routine **createMaleFromNewMember** that ensures a male person is created if none exists.  
+Implement a helper routine **createMale** that instantiates a male, assigns the full name from the family, registers him, and establishes correspondences.

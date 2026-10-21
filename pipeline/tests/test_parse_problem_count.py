@@ -1,0 +1,221 @@
+"""A problem count the parser never reported is missing, not zero.
+
+`errors_per_LOC` divides a problem count by the reference size. Substituting 0
+for a transformation the parser never reached would report "no syntax problems
+found" for exactly the runs where nothing was measured, and would pull the mean
+towards zero in proportion to how often the parser failed.
+
+`parsed` is a separate fact and is unchanged by any of this: a transformation
+with no reported count is not parsed either way.
+"""
+
+from __future__ import annotations
+
+import json
+import tempfile
+import unittest
+from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
+
+from llm4mtl.domain import ParseObservation
+from llm4mtl.stages.transformation_parser import TransformationParserAdapter
+from llm4mtl.stages.models import PipelineConfig
+from llm4mtl.languages.base import Workspace
+from llm4mtl.languages.qvto.adapter import QvtoAdapter
+from llm4mtl.paths import REPO_ROOT
+
+
+class QvtoProbeTestCase(unittest.TestCase):
+    """The probe prints one LLM4MTL_PARSE line per file it actually parsed."""
+
+    def observations(self, probe_output: str, *, returncode: int = 0):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            measured = root / "measured.qvto"
+            missing = root / "missing.qvto"
+            for path in (measured, missing):
+                path.write_text("transformation x;\n", encoding="utf-8")
+            completed = SimpleNamespace(
+                stdout=probe_output.format(measured=measured.resolve()),
+                stderr="",
+                returncode=returncode,
+            )
+            with (
+                patch(
+                    "llm4mtl.languages.qvto.adapter.materialize_parser",
+                    return_value=root / "parser",
+                ),
+                patch(
+                    "llm4mtl.languages.common.subprocess.run",
+                    return_value=completed,
+                ),
+            ):
+                (root / "parser" / "src/test/java/org/qvto/parser").mkdir(parents=True)
+                result = QvtoAdapter().parse_transformations(
+                    [measured, missing],
+                    Workspace(root / "engine", root / "observations"),
+                )
+            return result[measured], result[missing]
+
+
+class QvtoProblemCountTests(QvtoProbeTestCase):
+
+    def test_a_reported_zero_is_persisted_as_zero(self) -> None:
+        measured, _ = self.observations("LLM4MTL_PARSE\t{measured}\t0\n")
+
+        self.assertEqual(0, measured.problem_count)
+        self.assertTrue(measured.parsed)
+
+    def test_a_reported_count_is_persisted_verbatim(self) -> None:
+        measured, _ = self.observations("LLM4MTL_PARSE\t{measured}\t7\n")
+
+        self.assertEqual(7, measured.problem_count)
+        self.assertFalse(measured.parsed)
+
+    def test_a_transformation_the_parser_never_reported_has_no_count(self) -> None:
+        _, missing = self.observations("LLM4MTL_PARSE\t{measured}\t0\n")
+
+        self.assertIsNone(missing.problem_count)
+
+    def test_a_missing_report_still_means_not_parsed(self) -> None:
+        _, missing = self.observations("LLM4MTL_PARSE\t{measured}\t0\n")
+
+        self.assertFalse(missing.parsed)
+
+
+class QvtoParseDiagnosticTests(QvtoProbeTestCase):
+    """A rejected file must say what the parser objected to.
+
+    The probe used to print only the count, so the diagnostic fell back to the
+    tail of Maven's output — which describes the build, not the transformation.
+    A refinement asked to repair that learns only that the file was rejected.
+    """
+
+    def test_reported_problems_become_the_diagnostic(self) -> None:
+        measured, _ = self.observations(
+            "LLM4MTL_PARSE\t{measured}\t2\n"
+            "LLM4MTL_PROBLEM\t{measured}\tline 3:7 no viable alternative at 'x'\n"
+            "LLM4MTL_PROBLEM\t{measured}\tline 9:1 missing ';'\n"
+        )
+
+        self.assertEqual(
+            "line 3:7 no viable alternative at 'x'\nline 9:1 missing ';'",
+            measured.diagnostic,
+        )
+
+    def test_a_clean_parse_states_no_problem(self) -> None:
+        measured, _ = self.observations("LLM4MTL_PARSE\t{measured}\t0\n")
+
+        self.assertEqual("", measured.diagnostic)
+
+    def test_a_file_the_probe_never_reached_keeps_the_driver_output(self) -> None:
+        _, missing = self.observations(
+            "LLM4MTL_PARSE\t{measured}\t0\nharness exploded\n"
+        )
+
+        self.assertIn("harness exploded", missing.diagnostic)
+
+    def test_one_files_problems_never_describe_another(self) -> None:
+        measured, missing = self.observations(
+            "LLM4MTL_PARSE\t{measured}\t1\n"
+            "LLM4MTL_PROBLEM\t{measured}\tline 3:7 no viable alternative at 'x'\n"
+        )
+
+        self.assertNotIn("no viable alternative", missing.diagnostic)
+
+
+class SerializationTests(unittest.TestCase):
+    """The stage's persisted evidence must keep the distinction readable."""
+
+    def stage_details(
+        self, observations: dict[Path, ParseObservation], paths: list[Path]
+    ):
+        adapter = TransformationParserAdapter()
+        config = PipelineConfig(
+            language="qvto",
+            tasks=["Mappings"],
+            run_dir=str(REPO_ROOT / "artifacts" / "work"),
+            engine_dir=str(REPO_ROOT),
+        )
+        with (
+            patch.object(
+                adapter.selector, "select_transformations", return_value=paths
+            ),
+            patch(
+                "llm4mtl.stages.transformation_parser.language_adapter"
+            ) as language,
+        ):
+            language.return_value.parse_transformations.return_value = observations
+            return adapter.parse(config).details
+
+    def test_a_missing_count_serializes_as_null_never_zero(self) -> None:
+        measured, missing = Path("/tmp/measured.qvto"), Path("/tmp/missing.qvto")
+        details = self.stage_details(
+            {
+                measured: ParseObservation(parsed=True, problem_count=0),
+                missing: ParseObservation(parsed=False, problem_count=None),
+            },
+            [measured, missing],
+        )
+
+        counts = details["problem_counts"]
+        self.assertEqual(0, counts[str(measured)])
+        self.assertIsNone(counts[str(missing)])
+
+        serialized = json.loads(json.dumps(details))
+        self.assertEqual(0, serialized["problem_counts"][str(measured)])
+        self.assertIsNone(serialized["problem_counts"][str(missing)])
+
+
+if __name__ == "__main__":
+    unittest.main()
+
+
+class ReactionsParseDiagnosticTests(unittest.TestCase):
+
+    def diagnostic(self, probe_output: str) -> str:
+        from llm4mtl.languages.reactions.adapter import ReactionsAdapter
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            transformation = root / "Broken.reactions"
+            transformation.write_text("reactions: broken\n", encoding="utf-8")
+            jar = root / "parser/target/parser-all.jar"
+            jar.parent.mkdir(parents=True)
+            jar.write_bytes(b"")
+            workspace = Workspace(root / "engine", root / "observations")
+            build = SimpleNamespace(returncode=0, stdout="", stderr="")
+            probe = SimpleNamespace(returncode=1, stdout=probe_output, stderr="")
+            with (
+                patch(
+                    "llm4mtl.languages.reactions.adapter.materialize_parser",
+                    return_value=root,
+                ),
+                patch(
+                    "llm4mtl.languages.reactions.adapter.default_reactions_metamodels_root",
+                    return_value=root,
+                ),
+                patch(
+                    "llm4mtl.languages.common.subprocess.run",
+                    side_effect=[build, probe],
+                ),
+            ):
+                observations = ReactionsAdapter().parse_transformations(
+                    [transformation], workspace
+                )
+            return observations[transformation].diagnostic
+
+    def test_a_long_problem_list_keeps_its_first_problems(self) -> None:
+        problems = [f"problem number {index} is an ERROR" for index in range(40)]
+        diagnostic = self.diagnostic(
+            "Syntax issues (40):\n" + "\n".join(problems)
+        )
+
+        self.assertTrue(diagnostic.startswith("Syntax issues (40):"))
+        self.assertIn(problems[0], diagnostic)
+
+    def test_a_short_problem_list_is_kept_whole(self) -> None:
+        reported = "Syntax issues (1):\nThe method or field x is undefined (ERROR)"
+
+        self.assertEqual(reported, self.diagnostic(reported))

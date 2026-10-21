@@ -1,0 +1,91 @@
+// Test harness: runs one Code node of the master n8n workflow the way n8n runs it.
+//
+// These nodes decide which subworkflow an experiment executes and what each run
+// mode does next, so the regression tests have to run the shipped JavaScript
+// rather than a Python restatement of it.
+//
+// n8n executes Code nodes inside a vm2 NodeVM, which is a fresh V8 context: it
+// has the JavaScript built-ins and nothing Node installs on its own global. Code
+// that reads `structuredClone`, `fetch`, `URL`, `TextEncoder` or `crypto` throws
+// there while running fine under plain `node`. This harness therefore evaluates
+// in a `node:vm` context configured to the same surface, so a Code node that
+// cannot run in n8n cannot pass here either.
+const fs = require('fs');
+const path = require('path');
+const vm = require('node:vm');
+
+const spec = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+// `workflow` is any workflow file: the master, or a subworkflow whose Code nodes
+// are just as much part of the orchestration contract.
+const workflowPath = spec.workflow || spec.master;
+const workflow = JSON.parse(fs.readFileSync(workflowPath, 'utf8'));
+const node = workflow.nodes.find((candidate) => candidate.name === spec.node);
+if (!node) throw new Error(`${workflowPath} has no node named ${spec.node}`);
+
+// `files` reads real workflow variants off disk the way the readWriteFile glob
+// feeds the node; `input` passes items straight through. `binary` is the item's
+// binary side, which is where the form trigger puts an uploaded file.
+const items = spec.files
+  ? spec.files.map((file) => ({
+    json: {
+      workflow_text: fs.readFileSync(file, 'utf8'),
+      fileName: path.basename(file),
+    },
+    binary: { data: { fileName: path.basename(file) } },
+  }))
+  : (spec.input || []).map((json, index) => ({
+    json,
+    binary: (spec.binary || [])[index] || {},
+  }));
+
+const $input = {
+  all: () => items,
+  first: () => items[0],
+};
+
+// Each stub is one referenced node: `json` is what it returned, `params` is how
+// it is configured. The AI Model nodes are read through `params`, which is how
+// the master keeps the exact model in n8n's own selector.
+const stubs = { ...(spec.nodes || {}) };
+if (spec.state) stubs['State Machine'] = { json: spec.state };
+const $ = (name) => {
+  const stub = stubs[name];
+  if (!stub) throw new Error(`Unstubbed node reference: ${name}`);
+  return {
+    params: stub.params || {},
+    first: () => ({ json: stub.json || {} }),
+    all: () => (stub.items || [{ json: stub.json || {} }]),
+  };
+};
+
+// The execution n8n is running the node under. The master records both ids on
+// the batch it creates, so a run is traceable back to the n8n execution.
+const $workflow = { id: spec.workflow_id || 'master-workflow', name: workflow.name, active: false };
+const $execution = { id: spec.execution_id || 'execution-1', mode: 'test' };
+
+// What vm2 grants a Code node beyond the language built-ins. Anything absent
+// here is absent in n8n too; `Proxy` is removed because vm2 does not expose it.
+const sandbox = {
+  $input,
+  $,
+  $workflow,
+  $execution,
+  console,
+  process,
+  Buffer,
+  setTimeout,
+  clearTimeout,
+};
+const context = vm.createContext(sandbox);
+vm.runInContext('Proxy = undefined;', context);
+
+try {
+  const run = vm.runInContext(
+    `(function ($input, $, $workflow, $execution) {\n${node.parameters.jsCode}\n})`,
+    context,
+  );
+  const output = run($input, $, $workflow, $execution);
+  process.stdout.write(JSON.stringify({ ok: true, result: output[0].json, items: output }));
+} catch (error) {
+  process.stdout.write(JSON.stringify({ ok: false, error: error.message }));
+}

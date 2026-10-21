@@ -1,0 +1,482 @@
+{
+  "name": "Tests_Reactions_qwen2.5-coder-7b_only_prompt",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -1120,
+        -240
+      ],
+      "id": "c3d4e5f6-2003-4f03-c003-000000000001",
+      "name": "When clicking 'Execute workflow'"
+    },
+    {
+      "parameters": {
+        "fileSelector": "=/data/task_prompts/reactions/*.txt",
+        "options": {
+          "dataPropertyName": "data"
+        }
+      },
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        -928,
+        -240
+      ],
+      "id": "c3d4e5f6-2003-4f03-c003-000000000002",
+      "name": "Read Qwen prompt files",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -736,
+        -240
+      ],
+      "id": "c3d4e5f6-2003-4f03-c003-000000000003",
+      "name": "Loop Over Items"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "save-task-name-assignments-1",
+              "name": "baseName",
+              "value": "={{$binary.data.fileName.replace(/\\.txt$/, '')}}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -512,
+        -96
+      ],
+      "id": "c3d4e5f6-2003-4f03-c003-000000000004",
+      "name": "Save task name"
+    },
+    {
+      "parameters": {
+        "operation": "text",
+        "destinationKey": "prompt",
+        "options": {
+          "encoding": "utf8"
+        }
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        -512,
+        -240
+      ],
+      "id": "c3d4e5f6-2003-4f03-c003-000000000005",
+      "name": "Extract text from prompt file"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "numberInputs": 4,
+        "options": {
+          "includeUnpaired": true
+        }
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        96,
+        -128
+      ],
+      "id": "c3d4e5f6-2003-4f03-c003-000000000009",
+      "name": "Merge prompt, task and models",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:11434/api/chat",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'qwen2.5-coder:7b', stream: false, messages: [{ role: 'system', content: \"Generate semantic test artifacts for Vitruv Reactions Language from the reviewed shared task prompt. The task specification describes the transformation under test: write tests for it, do not implement it. Use the exact task-specific metamodel files.\\n\\nThe user message contains a section titled REQUIRED OUTPUT CONTRACT. That section is binding and complete: it lists every allowed field name and every allowed field value of semantic_cases.json. Follow it literally. Do not introduce a field name or a field value that it does not list, and do not substitute a synonym for one that it does list. Where any other section of the prompt appears to disagree with it, the contract wins.\\n\\nReturn only fenced file blocks: exactly one ```json file=semantic_cases.json block and the model file blocks that it references. Never generate Java, JUnit, transformation code, Maven files, helper classes, or prose outside file blocks. Every test must use scenarioKind \\\"change_propagation\\\", model role \\\"inout\\\", and the closed declarative tests[].changes vocabulary. Do not reinterpret Reactions as a batch source-to-target transform.\" }, { role: 'user', content: ($json.assembled_prompt || '') }], options: { temperature: 0.1, top_p: 1 } }) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        320,
+        -128
+      ],
+      "id": "c3d4e5f6-2003-4f03-c003-00000000000a",
+      "name": "Generate Test Suite with local Qwen"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "extract-qwen-test-text-assignments-1",
+              "name": "text",
+              "value": "={{ $json.message.content }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        544,
+        -128
+      ],
+      "id": "c3d4e5f6-2003-4f03-c003-00000000000b",
+      "name": "Extract Qwen test text"
+    },
+    {
+      "parameters": {
+        "operation": "toText",
+        "sourceProperty": "text",
+        "binaryPropertyName": "={{ $json.text }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        768,
+        -128
+      ],
+      "id": "c3d4e5f6-2003-4f03-c003-00000000000c",
+      "name": "Convert response to file"
+    },
+    {
+      "parameters": {
+        "operation": "write",
+        "fileName": "=/data/artifacts/test_generation/reactions/responses/qwen2-5-coder-7b/only_prompt/{{ $node[\"Merge prompt, task and models\"].json.baseName }}.md",
+        "dataPropertyName": "={{ $('Extract Qwen test text').item.json.text }}",
+        "options": {
+          "append": false
+        }
+      },
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        992,
+        -128
+      ],
+      "id": "c3d4e5f6-2003-4f03-c003-00000000000d",
+      "name": "Write response to disk"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://stage-service:8129/prompt-inputs/resolve",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { language: 'reactions', task: $json.baseName } }}",
+        "options": {}
+      },
+      "id": "resolve-exact-task-inputs-reactions",
+      "name": "Resolve exact task inputs",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        736,
+        -368
+      ]
+    },
+    {
+      "parameters": {
+        "fileSelector": "=/data/contract/reactions/semantic_cases_contract.txt",
+        "options": {}
+      },
+      "id": "read-output-contract-reactions",
+      "name": "Read output contract",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        -512,
+        96
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "text",
+        "destinationKey": "output_contract",
+        "options": {
+          "encoding": "utf8"
+        }
+      },
+      "id": "extract-text-from-contract-reactions",
+      "name": "Extract text from contract",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        -288,
+        96
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "assemble-prompt-assignments-1",
+              "name": "assembled_prompt",
+              "value": "={{ \"## Task specification (describes the transformation under test: write tests for it, do not implement it)\\n\" + ($json.prompt || \"\") + \"\\n\\n## Authoritative metamodel files\\n\" + ($json.metamodel_text || \"\") + \"\\n\\n## REQUIRED OUTPUT CONTRACT (binding, overrides every other section)\\n\" + ($json.output_contract || \"\") }}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "assemble-prompt",
+      "name": "Assemble prompt",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        208,
+        -288
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "toText",
+        "sourceProperty": "assembled_prompt",
+        "binaryPropertyName": "data",
+        "options": {}
+      },
+      "id": "convert-prompt-to-file",
+      "name": "Convert prompt to File",
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        432,
+        -448
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "write",
+        "fileName": "=/data/artifacts/test_generation/reactions/prompts/qwen2-5-coder-7b/only_prompt/{{ $node[\"Merge prompt, task and models\"].json.baseName }}.md",
+        "dataPropertyName": "data",
+        "options": {}
+      },
+      "id": "write-prompt-to-disk",
+      "name": "Write prompt to disk",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        656,
+        -448
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking 'Execute workflow'": {
+      "main": [
+        [
+          {
+            "node": "Read Qwen prompt files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Qwen prompt files": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Extract text from prompt file",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Save task name",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Read output contract",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save task name": {
+      "main": [
+        [
+          {
+            "node": "Merge prompt, task and models",
+            "type": "main",
+            "index": 1
+          },
+          {
+            "node": "Resolve exact task inputs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract text from prompt file": {
+      "main": [
+        [
+          {
+            "node": "Merge prompt, task and models",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge prompt, task and models": {
+      "main": [
+        [
+          {
+            "node": "Assemble prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Test Suite with local Qwen": {
+      "main": [
+        [
+          {
+            "node": "Extract Qwen test text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Qwen test text": {
+      "main": [
+        [
+          {
+            "node": "Convert response to file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Convert response to file": {
+      "main": [
+        [
+          {
+            "node": "Write response to disk",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write response to disk": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resolve exact task inputs": {
+      "main": [
+        [
+          {
+            "node": "Merge prompt, task and models",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Read output contract": {
+      "main": [
+        [
+          {
+            "node": "Extract text from contract",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract text from contract": {
+      "main": [
+        [
+          {
+            "node": "Merge prompt, task and models",
+            "type": "main",
+            "index": 3
+          }
+        ]
+      ]
+    },
+    "Assemble prompt": {
+      "main": [
+        [
+          {
+            "node": "Generate Test Suite with local Qwen",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Convert prompt to File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Convert prompt to File": {
+      "main": [
+        [
+          {
+            "node": "Write prompt to disk",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "meta": {
+    "instanceId": "baac600b301729508052ad55e0d8a15d3b34368b7a1ed3c61d229191ca3faa41"
+  },
+  "tags": []
+}

@@ -1,3 +1,0 @@
-Create a transformation called **networkToGraph** that reacts to changes in the **network** model and applies actions in the **graph** model.  
-Define a reaction named **ComponentInsertedIntoSystem** that triggers whenever a **Component** is inserted into a **System**.  
-This reaction should call a routine named **createAndInsertEntity**, which ensures no corresponding **Entity** exists yet, retrieves the **Root** for the system, creates a new **Entity**, sets its name from the component, adds it to the root’s entities, and establishes the correspondence.

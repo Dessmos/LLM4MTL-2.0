@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "testClass": "GeneratedAtlWalkingSkeletonTest",
+  "tests": [
+    {
+      "name": "system_creates_one_graph_root",
+      "models": [
+        {
+          "name": "IN",
+          "kind": "emf",
+          "role": "source",
+          "path": "models/network.xmi",
+          "generated": true,
+          "metamodelUri": "http://vitruv.tools/methodologisttemplate/network"
+        },
+        {
+          "name": "OUT",
+          "kind": "emf",
+          "role": "target",
+          "generated": false,
+          "metamodelUri": "http://vitruv.tools/methodologisttemplate/graph"
+        }
+      ],
+      "assertions": [
+        {"kind": "count", "model": "OUT", "type": "Root", "expected": 1},
+        {"kind": "count", "model": "OUT", "type": "Entity", "expected": 0}
+      ]
+    }
+  ]
+}

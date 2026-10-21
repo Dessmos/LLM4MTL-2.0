@@ -1,0 +1,26 @@
+Collects the information about failure
+For each failure 1 JSON file
+
+Standard case — Surefire identifies the method: `nodesArePreserved` failed with a specific error message. The dossier then covers that single test case—and, if an assertion failed, that specific assertion.
+
+Early crash — the engine crashed before a single test could report back. There is nothing specific to name. In this case, the dossier covers the pair as a whole: this specific suite against this specific transformation—and that’s it.
+
+
+Diagnosis preparation builds these reports after every failed execution.
+There is no manual command for it.
+
+
+_init_.py       - interface of the folder
+eligibility.py  - checks if report should be created and why
+evidence.py     - collects facts for both variants of report
+                    1. which execution do we describe
+                    2. what do we know about the execution
+request.py	    - reads and checks the request: which run files the report uses
+case_report.py	- report about one test-case
+pair_report.py	- report about the pair
+report_document.py	- parts both reports share, and the write-once step
+semantic_cases.py	- how a case and an assertion are named
+surefire_view.py	- takes data from XML files
+artifacts.py	- reads the files a report needs
+models.py	    - constants
+

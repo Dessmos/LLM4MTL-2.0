@@ -1,0 +1,254 @@
+{
+  "name": "My workflow 3",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -224,
+        96
+      ],
+      "id": "b60579e1-5a36-44a0-8336-696ca12bfa33",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {
+          "includeUnpaired": true
+        }
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        448,
+        96
+      ],
+      "id": "4f5eed48-7c03-4400-9c90-22950687f228",
+      "name": "Merge",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// configurable parameters\nconst nOrder = 6;   // up to 6-grams\nconst beta   = 2;   // ChrF-2\n\n// normalize text: lowercase, strip comments, collapse whitespace\nfunction preprocess(str){\n  return str\n    // remove single-line // comments\n    .replace(/\\/\\/.*$/gm, '')\n    // remove block /* ... */ comments\n    .replace(/\\/\\*[\\s\\S]*?\\*\\//g, '')\n    // remove # comments (e.g. Python, DSLs)\n    .replace(/#.*$/gm, '')\n    // remove -- comments (SQL-like)\n    .replace(/--.*$/gm, '')\n    // collapse all whitespace\n    .replace(/\\s+/g, ' ')\n    // lowercase\n    .toLowerCase()\n    .trim();\n}\n\n// build n-gram counts from a string\nfunction ngrams(str, n){\n  const grams = {};\n  for (let i = 0; i <= str.length - n; i++){\n    const g = str.slice(i, i + n);\n    grams[g] = (grams[g] || 0) + 1;\n  }\n  return grams;\n}\n\n// compute chrF score\nfunction chrF(refRaw, resRaw){\n  const ref = preprocess(refRaw);\n  const res = preprocess(resRaw);\n\n  let sumF = 0, used = 0;\n\n  for (let n = 1; n <= nOrder; n++){\n    const refGr = ngrams(ref, n);\n    const resGr = ngrams(res, n);\n\n    // overlap count between reference and response n-grams\n    const overlap = Object.keys(resGr)\n      .reduce((s, g) => s + Math.min(resGr[g]||0, refGr[g]||0), 0);\n\n    const resTotal = Object.values(resGr).reduce((a,b)=>a+b,0);\n    const refTotal = Object.values(refGr).reduce((a,b)=>a+b,0);\n\n    const prec = resTotal ? overlap / resTotal : 0;\n    const rec  = refTotal ? overlap / refTotal : 0;\n\n    if (prec + rec > 0) {\n      const F = (1 + beta*beta) * prec * rec / (beta*beta * prec + rec);\n      sumF += F; used++;\n    }\n  }\n  return used ? sumF / used : 0; // return value in [0..1]\n}\n\n// per-item processing\nconst out = [];\n\nfor (const item of items){\n  const ref = item.json.reference;\n  const res = item.json.response;\n  const score = chrF(ref, res);\n\n  out.push({\n    json: {\n      reference : ref,\n      response  : res,\n      file      : item.json.fileName,\n      chrf2     : +(score * 100).toFixed(2) // percentage\n    }\n  });\n}\n\nreturn out;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        672,
+        0
+      ],
+      "id": "0bf3d81b-0bee-4b0c-9b12-6cbca85ce6a8",
+      "name": "Code",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "executeOnce": false,
+        "command": "=mkdir -p /data/artifacts/transformation_generation/reactions/parser_output/claude-sonnet-4/few_shots_AND_grammar_AND_helper\njava -jar /data/parser/*-all.jar /data/artifacts/transformation_generation/reactions/responses/claude-sonnet-4/few_shots_AND_grammar_AND_helper/{{ $json.fileName }} /data/artifacts/transformation_generation/reactions/parser_output/claude-sonnet-4/few_shots_AND_grammar_AND_helper/{{ $json.fileName.split('.').slice(0,-1).join('.') }}.xmi /data/models\n"
+      },
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        672,
+        192
+      ],
+      "id": "74f3a68a-b42e-4a22-b593-1d5db9546806",
+      "name": "Execute Command",
+      "disabled": true,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "fileSelector": "/data/benchmark/tasks/reactions/references/*",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "ea021e43-c64c-4ebb-8358-3855f5f54b6d",
+      "name": "Read reference files"
+    },
+    {
+      "parameters": {
+        "operation": "text",
+        "destinationKey": "response",
+        "options": {
+          "keepSource": "json"
+        }
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        224,
+        192
+      ],
+      "id": "b4d11851-7876-4a03-914e-73f8dfa0b570",
+      "name": "Extract Text"
+    },
+    {
+      "parameters": {
+        "fileSelector": "/data/artifacts/transformation_generation/reactions/responses/claude-sonnet-4/few_shots_AND_grammar_AND_helper/*",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        0,
+        192
+      ],
+      "id": "53d05330-5c09-4a27-b1c7-f176e59556b8",
+      "name": "Read Response Files"
+    },
+    {
+      "parameters": {
+        "operation": "text",
+        "destinationKey": "reference",
+        "options": {
+          "keepSource": "json"
+        }
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        224,
+        0
+      ],
+      "id": "9e7e0598-0e2c-4df7-ba13-24b0d52d3ec3",
+      "name": "Extract  Text"
+    },
+    {
+      "parameters": {
+        "jsCode": "// n8n Function-Node\n\n// Hole alle Items\nconst items = $input.all();\n\n// Extrahiere die Werte\nconst scores = items.map(item => Number(item.json.chrf2));\n\n// Summe und Durchschnitt berechnen\nconst sum = scores.reduce((a, b) => a + b, 0);\nconst avg = sum / scores.length;\n\n// Ergebnis als einzelnes Item zurückgeben\nreturn [\n  {\n    json: {\n      sum,\n      count: scores.length,\n      average: avg,\n    },\n  },\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        0
+      ],
+      "id": "269f64bb-66b0-4d20-ad2a-95a563abe85e",
+      "name": "Average"
+    },
+    {
+      "parameters": {
+        "content": "## ChrF - Score\nThis workflow calculates a similarity score of reference code to generated code and their average.\nMake sure the same number of code snippets are present.",
+        "height": 256,
+        "width": 464
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        640,
+        -128
+      ],
+      "id": "092063fb-3158-4c94-99af-7c0c4765cced",
+      "name": "Sticky Note"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Read reference files",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Read Response Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Code",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Execute Command",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read reference files": {
+      "main": [
+        [
+          {
+            "node": "Extract  Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Text": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Read Response Files": {
+      "main": [
+        [
+          {
+            "node": "Extract Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract  Text": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code": {
+      "main": [
+        [
+          {
+            "node": "Average",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "beb9807d-d535-4c86-afce-72371dc5e0aa",
+  "meta": {
+    "instanceId": "baac600b301729508052ad55e0d8a15d3b34368b7a1ed3c61d229191ca3faa41"
+  },
+  "id": "KHSbpMEUtlQ0HtpB",
+  "tags": []
+}

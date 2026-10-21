@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://llm4mtl/schemas/transformation-adoption.schema.json",
+  "title": "Adopted transformation inputs",
+  "description": "The run's own immutable copy of the generated transformations one artifact refinement iteration judged. The raw response and this adopted input are both run-scoped, so the bytes behind a recorded result stay recoverable.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "run_id",
+    "language",
+    "task",
+    "iteration",
+    "adopted_at",
+    "transformations"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "run_id": {"type": "string", "minLength": 1},
+    "language": {"type": "string", "enum": ["etl", "atl", "qvto", "reactions"]},
+    "task": {"type": "string", "minLength": 1},
+    "iteration": {"type": "integer", "minimum": 0, "description": "Refinement iteration these inputs belong to."},
+    "model": {"type": ["string", "null"], "description": "Transformation model recorded by the run manifest; null when the run has no transformation branch."},
+    "strategy": {"type": ["string", "null"], "description": "Prompting strategy recorded by the run manifest."},
+    "adopted_at": {"type": "string", "format": "date-time"},
+    "transformations": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["path", "sha256", "bytes", "source"],
+        "additionalProperties": false,
+        "properties": {
+          "path": {"type": "string", "minLength": 1, "description": "Path of the run's copy, relative to the run directory."},
+          "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "bytes": {"type": "integer", "minimum": 0},
+          "source": {"type": "string", "minLength": 1, "description": "Path the copy was taken from, repository-relative when it lies in the repository."}
+        }
+      }
+    }
+  }
+}

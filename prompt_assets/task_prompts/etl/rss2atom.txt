@@ -1,0 +1,8 @@
+Create an ETL transformation that converts an **RSS model** into an **Atom model**.  
+Define the following rules:  
+
+- **Rss2Atom**: transform the root RSS element into a feed, assigning it as the Atom root and including the equivalents of all RSS items.  
+- **Item2Entry**: turn each item into an entry and include converted child elements.  
+- **Title2Title**, **Link2Link**, **Generator2Generator**, **Creator2Author**, **Description2Summary**, **ContentEncoded2Content**, and **PubDate2Published**: map corresponding RSS elements to their Atom counterparts, copying textual content.  
+
+Also, provide helper operations **appendChildren** and **appendEquivalentsOfChildrenOf** to attach converted elements.

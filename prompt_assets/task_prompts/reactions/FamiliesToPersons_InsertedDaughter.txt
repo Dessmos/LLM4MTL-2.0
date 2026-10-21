@@ -1,0 +1,5 @@
+Create a transformation named **familiesToPersons** that reacts to changes in the families model and updates the persons model.  
+
+Define a reaction **InsertedDaughter** that triggers when a new daughter is added to a family. In this reaction, call routines to either create or find a corresponding female person and to update her name and correspondences.  
+
+Implement routines **createOrFindFemale**, **createFemale**, and **updateNameAndCorrespondencesOfCorrespondingPerson** to handle creation of a Female in the PersonRegister, build her full name from first and last names, and maintain correspondences between family members and persons.

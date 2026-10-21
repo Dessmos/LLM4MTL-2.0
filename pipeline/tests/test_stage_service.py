@@ -1,0 +1,904 @@
+from __future__ import annotations
+
+import hashlib
+import tempfile
+import unittest
+from pathlib import Path
+from unittest.mock import patch
+
+from fastapi.testclient import TestClient
+
+from llm4mtl import run_store
+from llm4mtl.paths import ArtifactRoots
+from llm4mtl.serialization.json_io import read_json, write_json
+from llm4mtl.semantic_tests.extraction.models import SuiteExistsError
+from llm4mtl.stage_service.app import app
+from llm4mtl.stages.models import StageResult
+from run_records import read_events
+
+# A run is exactly one combination, so creating one states every identity axis.
+IDENTITY = {
+    "language": "etl",
+    "task": "Tree2Graph",
+    "transformation_model": "gpt-5",
+    "test_generation_model": "gpt-5",
+    "transformation_strategy": "grammar",
+    "test_generation_strategy": "few_shot",
+}
+EXPERIMENT_CONFIG = {
+    "max_test_refinement_iterations": 1,
+    "max_transformation_refinement_iterations": 2,
+    "parser_feedback": True,
+    "semantic_feedback": True,
+    "source_diagnosis": True,
+}
+
+
+def run_payload(**overrides: object) -> dict[str, object]:
+    return {**IDENTITY, "experiment_config": EXPERIMENT_CONFIG, **overrides}
+
+
+# Every run of one launch is created below its batch.
+BATCH = "batch_001"
+
+
+class StageServiceTests(unittest.TestCase):
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.artifacts = ArtifactRoots(Path(self._tmp.name))
+        self._diagnoses = self.artifacts.diagnoses
+        patcher = patch(
+            "llm4mtl.stage_service.app._artifact_roots", return_value=self.artifacts
+        )
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.client = TestClient(app)
+        created = self.client.post("/batches", json={"batch_id": BATCH})
+        self.assertEqual(200, created.status_code, created.text)
+        self.batch_root = self.artifacts.batch_dir(BATCH)
+
+    def test_batches_are_claimed_in_sequence_and_never_shared(self) -> None:
+        first = self.client.post("/batches", json={"run_mode": "full"})
+        second = self.client.post("/batches", json={})
+        self.assertEqual(200, first.status_code, first.text)
+        self.assertEqual("batch_002", first.json()["batch_id"])
+        self.assertEqual("batch_003", second.json()["batch_id"])
+        self.assertEqual(
+            {
+                "batch_id": "batch_002",
+                "status": "initialized",
+                "batch_dir": str(self.artifacts.batch_dir("batch_002").resolve()),
+                "n8n_batch_dir": "/data/artifacts/runs/batch_002",
+            },
+            first.json(),
+        )
+        manifest = run_store.read_batch_manifest(
+            run_store.open_batch(self.artifacts.runs, "batch_002")
+        )
+        self.assertEqual("full", manifest["run_mode"])
+        self.assertEqual(
+            409, self.client.post("/batches", json={"batch_id": BATCH}).status_code
+        )
+        self.assertEqual(
+            400, self.client.post("/batches", json={"batch_id": "../up"}).status_code
+        )
+
+    def test_a_run_is_created_below_its_batch_and_knows_it(self) -> None:
+        created = self.client.post(
+            f"/batches/{BATCH}/runs", json=run_payload(run_id="svc-below")
+        )
+        self.assertEqual(200, created.status_code, created.text)
+        self.assertEqual(
+            {
+                "run_id": "svc-below",
+                "batch_id": BATCH,
+                "status": "initialized",
+                "run_dir": str((self.batch_root / "svc-below").resolve()),
+                "n8n_run_dir": f"/data/artifacts/runs/{BATCH}/svc-below",
+            },
+            created.json(),
+        )
+        self.assertTrue((self.batch_root / "svc-below" / "manifest.json").is_file())
+        manifest = self.client.get(f"/batches/{BATCH}/runs/svc-below").json()["manifest"]
+        self.assertEqual(BATCH, manifest["batch_id"])
+        batch = self.client.get(f"/batches/{BATCH}").json()
+        self.assertEqual(["svc-below"], batch["runs"])
+        self.assertIsNone(batch["result"])
+        self.assertEqual(
+            404,
+            self.client.post(
+                "/batches/batch_999/runs", json=run_payload(run_id="svc-orphan")
+            ).status_code,
+        )
+        self.assertFalse((self.artifacts.runs / "svc-orphan").exists())
+
+    def test_a_batch_result_is_written_once(self) -> None:
+        ending = {
+            "status": "completed_with_failures",
+            "run_mode": "full",
+            "pipeline_variant": "full",
+            "run_count": 1,
+            "results": [
+                {
+                    "run_id": "svc-1",
+                    "language": "etl",
+                    "task": "Tree2Graph",
+                    "status": "completed_with_failures",
+                    "reason": "SYNTAX_INVALID:REFINEMENT_LIMIT_REACHED",
+                    "timeline": [],
+                }
+            ],
+        }
+        first = self.client.post(f"/batches/{BATCH}/result", json=ending)
+        self.assertEqual(200, first.status_code, first.text)
+        self.assertEqual(BATCH, first.json()["batch_id"])
+        self.assertEqual([], first.json()["results"][0]["timeline"])
+        again = self.client.post(f"/batches/{BATCH}/result", json=ending)
+        self.assertEqual(first.json(), again.json())
+        self.assertEqual(
+            409,
+            self.client.post(
+                f"/batches/{BATCH}/result", json={**ending, "status": "failed"}
+            ).status_code,
+        )
+        self.assertEqual(
+            first.json(), self.client.get(f"/batches/{BATCH}").json()["result"]
+        )
+
+    def test_create_run_then_read_manifest(self) -> None:
+        created = self.client.post(
+            f"/batches/{BATCH}/runs", json=run_payload(run_id="svc-1")
+        )
+        self.assertEqual(200, created.status_code)
+        self.assertEqual("svc-1", created.json()["run_id"])
+        self.assertEqual("initialized", created.json()["status"])
+
+        paths = run_store.open_run(self.batch_root, "svc-1")
+        self.assertTrue(
+            paths.generation_iteration_dir("semantic-test-generation", 0).is_dir()
+        )
+        self.assertTrue(
+            paths.generation_iteration_dir("transformation-generation", 0).is_dir()
+        )
+
+        fetched = self.client.get(f"/batches/{BATCH}/runs/svc-1")
+        self.assertEqual(200, fetched.status_code)
+        self.assertEqual("etl", fetched.json()["manifest"]["language"])
+        self.assertEqual("svc-1", fetched.json()["manifest"]["run_id"])
+        self.assertEqual(
+            EXPERIMENT_CONFIG,
+            fetched.json()["manifest"]["experiment_config"],
+        )
+
+    def test_run_experiment_config_is_bounded(self) -> None:
+        response = self.client.post(
+            f"/batches/{BATCH}/runs",
+            json=run_payload(
+                run_id="svc-invalid-budget",
+                experiment_config={
+                    **EXPERIMENT_CONFIG,
+                    "max_test_refinement_iterations": 4,
+                },
+            ),
+        )
+        self.assertEqual(422, response.status_code)
+
+    def test_a_custom_task_keeps_both_its_inputs_and_hashes_them_into_its_manifest(
+        self,
+    ) -> None:
+        prompt = "Flatten every tree into one graph node per leaf.\n"
+        metamodel = "class Tree { children: Tree[] }\n"
+        created = self.client.post(
+            f"/batches/{BATCH}/runs",
+            json=run_payload(
+                task="TreeFlattening",
+                pipeline_variant="full:custom-task:TreeFlattening",
+                custom_task={
+                    "name": "TreeFlattening",
+                    "prompt": prompt,
+                    "metamodel": metamodel,
+                },
+            ),
+        )
+        self.assertEqual(200, created.status_code, created.text)
+        run_id = created.json()["run_id"]
+        self.assertIn("treeflattening", run_id)
+
+        paths = run_store.open_run(self.batch_root, run_id)
+        self.assertEqual(prompt, paths.task_prompt.read_text(encoding="utf-8"))
+        self.assertEqual(metamodel, paths.metamodel.read_text(encoding="utf-8"))
+        manifest = run_store.read_manifest(paths)
+        assert manifest is not None
+        # Nothing is borrowed, so the identity is the custom task's own name.
+        self.assertEqual("TreeFlattening", manifest["task"])
+        hashes = manifest["provenance"]["input_hashes"]
+        self.assertEqual(hashlib.sha256(prompt.encode()).hexdigest(), hashes["task_prompt"])
+        self.assertEqual("custom", hashes["task_prompt_source"])
+        self.assertEqual(
+            {"custom-task-metamodel": hashlib.sha256(metamodel.encode()).hexdigest()},
+            hashes["metamodels"],
+        )
+        self.assertEqual("custom", hashes["metamodel_source"])
+        # No contract selected these inputs and no reference implements them,
+        # and every stage that would read either is disabled for such a run.
+        self.assertIsNone(hashes["reference_transformation"])
+        self.assertIsNone(hashes["task_contract"])
+        self.assertEqual(
+            {"name": "TreeFlattening"},
+            manifest["provenance"]["custom_task"],
+        )
+
+    def test_a_custom_task_resolves_the_metamodel_it_was_created_with(self) -> None:
+        metamodel = "class Tree { children: Tree[] }"
+        response = self.client.post(
+            "/prompt-inputs/resolve",
+            json={
+                "language": "etl",
+                "task": "TreeFlattening",
+                "metamodel": metamodel,
+            },
+        )
+        self.assertEqual(200, response.status_code, response.text)
+        body = response.json()
+        self.assertEqual("TreeFlattening", body["task"])
+        self.assertIn(metamodel, body["metamodel_text"])
+        # The grammar is the language's, as it is for every task.
+        self.assertEqual(
+            "prompt_assets/transformations/grammar/etl/EBNF.txt",
+            body["grammar"]["path"],
+        )
+        # Nothing of another task's leaks in: no reference to copy from, and no
+        # namespace URI a contract would have named.
+        self.assertIsNone(body["reference"])
+        self.assertIsNone(body["contract_path"])
+        self.assertEqual("", body["metamodel_uri_text"])
+
+    def test_a_benchmark_run_keeps_no_task_prompt_of_its_own(self) -> None:
+        created = self.client.post(
+            f"/batches/{BATCH}/runs", json=run_payload(run_id="svc-frozen")
+        )
+        self.assertEqual(200, created.status_code, created.text)
+        paths = run_store.open_run(self.batch_root, "svc-frozen")
+        self.assertFalse(paths.task_prompt.exists())
+        manifest = run_store.read_manifest(paths)
+        assert manifest is not None
+        self.assertNotIn("task_prompt_source", manifest["provenance"]["input_hashes"])
+
+    def test_a_custom_task_name_must_be_a_safe_identifier(self) -> None:
+        for name in ("no spaces", "../escape", ""):
+            with self.subTest(name=name):
+                response = self.client.post(
+                    f"/batches/{BATCH}/runs",
+                    json=run_payload(custom_task={"name": name, "prompt": "p"}),
+                )
+                self.assertEqual(422, response.status_code)
+
+    def test_openapi_documents_explicit_http_errors(self) -> None:
+        paths = self.client.get("/openapi.json").json()["paths"]
+        run = "/batches/{batch_id}/runs/{run_id}"
+        expected = {
+            ("/prompt-inputs/resolve", "post"): {"422"},
+            ("/batches", "post"): {"400", "409", "422"},
+            ("/batches/{batch_id}", "get"): {"400", "404"},
+            ("/batches/{batch_id}/result", "post"): {"400", "404", "409"},
+            ("/batches/{batch_id}/runs", "post"): {"400", "404", "409", "422"},
+            (f"{run}/stages/{{stage}}", "post"): {"400", "404", "409"},
+            (f"{run}/stages/{{stage}}", "get"): {"400", "404"},
+            (f"{run}/refinements", "post"): {"400", "404", "409", "422"},
+            (f"{run}/generations", "post"): {"400", "404", "409"},
+            (f"{run}/diagnosis/execution/{{attempt}}", "get"): {
+                "400",
+                "404",
+                "409",
+            },
+            (run, "get"): {"400", "404"},
+            (f"{run}/diagnoses", "post"): {"400", "404"},
+            (f"{run}/result", "post"): {"400", "404", "409"},
+        }
+        for (path, method), status_codes in expected.items():
+            with self.subTest(path=path, method=method):
+                documented = set(paths[path][method]["responses"])
+                self.assertTrue(status_codes <= documented)
+
+    def test_prompt_inputs_are_resolved_through_the_task_contract(self) -> None:
+        response = self.client.post(
+            "/prompt-inputs/resolve",
+            json={"language": "etl", "task": "Tree2Graph"},
+        )
+        self.assertEqual(200, response.status_code)
+        body = response.json()
+        self.assertEqual("Tree2Graph", body["task"])
+        self.assertEqual(
+            "benchmark/tasks/etl/references/Tree2Graph.etl",
+            body["reference"]["path"],
+        )
+        self.assertEqual(
+            [
+                "benchmark/metamodels/additional_models/ETL_model/Graph.ecore",
+                "benchmark/metamodels/additional_models/ETL_model/Tree.ecore",
+            ],
+            [metamodel["path"] for metamodel in body["metamodels"]],
+        )
+        self.assertNotIn("models", body["reference"])
+        self.assertNotIn("contract", body)
+
+    def test_prompt_input_resolution_does_not_fall_back_for_unknown_task(self) -> None:
+        response = self.client.post(
+            "/prompt-inputs/resolve",
+            json={"language": "etl", "task": "does-not-exist"},
+        )
+        self.assertEqual(422, response.status_code)
+
+    def test_create_run_refuses_to_replace_existing_manifest(self) -> None:
+        first = self.client.post(f"/batches/{BATCH}/runs", json=run_payload(run_id="svc-immutable"))
+        duplicate = self.client.post(
+            f"/batches/{BATCH}/runs", json=run_payload(run_id="svc-immutable", task="OO2DB")
+        )
+        self.assertEqual(200, first.status_code)
+        self.assertEqual(409, duplicate.status_code)
+        fetched = self.client.get(f"/batches/{BATCH}/runs/svc-immutable")
+        self.assertEqual("Tree2Graph", fetched.json()["manifest"]["task"])
+
+    def test_an_unknown_stage_is_refused_before_anything_is_recorded(self) -> None:
+        self.client.post(f"/batches/{BATCH}/runs", json=run_payload(run_id="svc-unknown"))
+        paths = run_store.open_run(self.batch_root, "svc-unknown")
+        events_before = read_events(paths)
+
+        with patch("llm4mtl.stage_service.app.prepare_workspace") as prepare:
+            response = self.client.post(
+                f"/batches/{BATCH}/runs/svc-unknown/stages/transformation_validation",
+                json={},
+            )
+
+        self.assertEqual(404, response.status_code)
+        self.assertEqual(
+            "unknown stage: transformation_validation", response.json()["detail"]
+        )
+        self.assertEqual(events_before, read_events(paths))
+        prepare.assert_not_called()
+
+    def test_malformed_or_escaping_run_ids_are_rejected(self) -> None:
+        # A traversing id cannot arrive through the URL path (the router normalises
+        # it away), so the containment check matters for ids supplied in a body.
+        self.assertEqual(
+            400,
+            self.client.post(f"/batches/{BATCH}/runs", json=run_payload(run_id="../escape")).status_code,
+        )
+        # An id that does reach the handler is refused before it becomes a path.
+        self.assertEqual(400, self.client.get(f"/batches/{BATCH}/runs/bad$id").status_code)
+        self.assertEqual(
+            400, self.client.post(f"/batches/{BATCH}/runs/bad$id/stages/extract", json={}).status_code
+        )
+
+    def test_a_run_must_fix_the_language_and_task_it_reports(self) -> None:
+        for missing in ("language", "task"):
+            with self.subTest(missing=missing):
+                partial = {
+                    key: value for key, value in IDENTITY.items() if key != missing
+                }
+                response = self.client.post(
+                    f"/batches/{BATCH}/runs", json={**partial, "run_id": f"svc-no-{missing}"}
+                )
+                self.assertEqual(422, response.status_code)
+
+    def test_a_generation_axis_no_stage_uses_is_recorded_as_null(self) -> None:
+        """A run mode need not have both generation branches.
+
+        A semantic-tests-only run has no transformation model, and the manifest
+        schema already types that axis as nullable: "not applicable to the stages
+        this run executes". Null is not "any value" — a stage that needs a null
+        axis refuses, which ``fixed_selection`` covers in test_run_identity.
+        """
+        transformation_axes = (
+            "transformation_model",
+            "transformation_strategy",
+        )
+        partial = {
+            key: value
+            for key, value in IDENTITY.items()
+            if key not in transformation_axes
+        }
+        created = self.client.post(
+            f"/batches/{BATCH}/runs", json={**partial, "run_id": "svc-tests-only"}
+        )
+        self.assertEqual(200, created.status_code)
+
+        manifest = self.client.get(f"/batches/{BATCH}/runs/svc-tests-only").json()["manifest"]
+        for axis in transformation_axes:
+            self.assertIsNone(manifest[axis])
+        self.assertEqual("gpt-5", manifest["test_generation_model"])
+
+    def test_an_identity_axis_cannot_be_blanked_instead_of_omitted(self) -> None:
+        """Empty is not the same statement as "not applicable"."""
+        response = self.client.post(
+            f"/batches/{BATCH}/runs",
+            json=run_payload(run_id="svc-blank", transformation_model=""),
+        )
+        self.assertEqual(422, response.status_code)
+
+    def test_transport_models_reject_unknown_fields(self) -> None:
+        created = self.client.post(
+            f"/batches/{BATCH}/runs",
+            json=run_payload(run_id="svc-extra", unexpected_identity="value"),
+        )
+        self.assertEqual(422, created.status_code)
+
+    def test_stage_request_cannot_carry_run_identity(self) -> None:
+        self.client.post(
+            f"/batches/{BATCH}/runs",
+            json=run_payload(run_id="svc-identity"),
+        )
+
+        wrong_task = self.client.post(
+            f"/batches/{BATCH}/runs/svc-identity/stages/extract", json={"tasks": ["OO2DB"]}
+        )
+        wrong_language = self.client.post(
+            f"/batches/{BATCH}/runs/svc-identity/stages/extract", json={"language": "atl"}
+        )
+        wrong_model = self.client.post(
+            f"/batches/{BATCH}/runs/svc-identity/stages/syntax-validation",
+            json={"transformation_models": ["claude-sonnet-4"]},
+        )
+
+        self.assertEqual(422, wrong_task.status_code)
+        self.assertEqual(422, wrong_language.status_code)
+        self.assertEqual(422, wrong_model.status_code)
+        # A rejected request records no evidence under the run.
+        self.assertEqual(
+            404, self.client.get(f"/batches/{BATCH}/runs/svc-identity/stages/extract").status_code
+        )
+
+    def test_stage_request_rejects_a_traversing_suite_id(self) -> None:
+        self.client.post(f"/batches/{BATCH}/runs", json=run_payload(run_id="svc-suite-id"))
+        response = self.client.post(
+            f"/batches/{BATCH}/runs/svc-suite-id/stages/extract",
+            json={"suite_id": "../../outside"},
+        )
+        self.assertEqual(422, response.status_code)
+
+    def test_stage_returns_and_records_outcome_code(self) -> None:
+        self.client.post(f"/batches/{BATCH}/runs", json=run_payload(run_id="svc-3"))
+        with patch(
+            "llm4mtl.stage_service.app._stages.tests.extract",
+            return_value=StageResult(
+                "extraction",
+                "infrastructure_error",
+                {"infrastructure_errors": 1},
+                {"error": "fixture failure"},
+            ),
+        ):
+            response = self.client.post(
+                f"/batches/{BATCH}/runs/svc-3/stages/extract",
+                json={},
+            )
+        self.assertEqual(200, response.status_code)
+        body = response.json()
+        self.assertEqual("extract", body["stage"])
+        self.assertEqual("infrastructure_error", body["status"])
+        self.assertEqual("INFRASTRUCTURE_ERROR", body["outcome_code"])
+        self.assertEqual(1, body["attempt"])
+
+        # The result is persisted and readable via GET (the latest recorded attempt).
+        fetched = self.client.get(f"/batches/{BATCH}/runs/svc-3/stages/extract")
+        self.assertEqual(200, fetched.status_code)
+        self.assertEqual("INFRASTRUCTURE_ERROR", fetched.json()["outcome_code"])
+
+    def test_an_existing_candidate_is_recorded_as_a_stage_outcome(self) -> None:
+        """A refused extraction is an attempt n8n can read, never an HTTP 500.
+
+        n8n retrying an attempt with the same suite id finds the candidate
+        already written. That refusal used to be a ``SystemExit``, which no
+        ``except Exception`` catches, so the attempt was never recorded.
+        """
+        run_id = "svc-existing-suite"
+        self.client.post(f"/batches/{BATCH}/runs", json=run_payload(run_id=run_id))
+        response_file = (
+            self.batch_root
+            / run_id
+            / "responses"
+            / "semantic-test-generation"
+            / "iteration-000"
+            / "Tree2Graph.md"
+        )
+        response_file.parent.mkdir(parents=True, exist_ok=True)
+        response_file.write_text("```json file=semantic_cases.json\n{}\n```\n", encoding="utf-8")
+
+        with patch(
+            "llm4mtl.stages.test_generation.extract_one",
+            side_effect=SuiteExistsError("Target suite already exists and is immutable"),
+        ):
+            response = self.client.post(
+                f"/batches/{BATCH}/runs/{run_id}/stages/extract",
+                json={"suite_id": f"{run_id}_000"},
+            )
+
+        self.assertEqual(200, response.status_code, response.text)
+        self.assertEqual("infrastructure_error", response.json()["status"])
+        fetched = self.client.get(f"/batches/{BATCH}/runs/{run_id}/stages/extract")
+        self.assertEqual(1, fetched.json()["attempt"])
+
+    def test_extract_consumes_the_run_scoped_generation_response(self) -> None:
+        self.client.post(f"/batches/{BATCH}/runs", json=run_payload(run_id="svc-response"))
+        seen = []
+
+        def capture(config):
+            seen.append(config)
+            return StageResult(
+                "extraction",
+                "completed",
+                {"selected": 1, "created": 1, "failed": 0},
+                {},
+            )
+
+        with patch(
+            "llm4mtl.stage_service.app._stages.tests.extract",
+            side_effect=capture,
+        ):
+            response = self.client.post(
+                f"/batches/{BATCH}/runs/svc-response/stages/extract",
+                json={"suite_id": "svc-response_002", "refinement_iteration": 2},
+            )
+
+        self.assertEqual(200, response.status_code, response.text)
+        expected = (
+            self.batch_root
+            / "svc-response"
+            / "responses"
+            / "semantic-test-generation"
+            / "iteration-002"
+            / "Tree2Graph.md"
+        )
+        self.assertEqual([str(expected.resolve())], seen[0].responses)
+
+    def test_stage_result_references_the_generation_iteration_it_consumed(self) -> None:
+        run_id = "svc-generation-attribution"
+        self.client.post(f"/batches/{BATCH}/runs", json=run_payload(run_id=run_id))
+        paths = run_store.open_run(self.batch_root, run_id)
+        manifest = run_store.read_manifest(paths)
+        assert manifest is not None
+        raw = paths.generation_response("semantic-test-generation", 0, "Tree2Graph.md")
+        raw.parent.mkdir(parents=True, exist_ok=True)
+        raw.write_text("generated suite\n", encoding="utf-8")
+        run_store.record_generation(
+            paths,
+            manifest,
+            artifact_type="semantic-test",
+            iteration=0,
+            purpose="initial",
+            provider="anthropic",
+            model="claude-sonnet-4-20250514",
+            strategy="few_shot",
+        )
+
+        with patch(
+            "llm4mtl.stage_service.app._stages.tests.extract",
+            return_value=StageResult(
+                "extraction",
+                "completed",
+                {"selected": 1, "created": 1, "failed": 0},
+                {},
+            ),
+        ):
+            response = self.client.post(
+                f"/batches/{BATCH}/runs/{run_id}/stages/extract",
+                json={"suite_id": f"{run_id}_000", "refinement_iteration": 0},
+            )
+
+        self.assertEqual(200, response.status_code, response.text)
+        self.assertEqual(
+            "generations/semantic-test/iteration-000/generation.json",
+            response.json()["artifacts"]["semantic_test_generation_record"],
+        )
+        stored = run_store.read_latest(paths, "extract")
+        assert stored is not None
+        self.assertEqual(response.json()["artifacts"], stored["artifacts"])
+
+    def test_stage_exception_is_recorded_as_infrastructure_error(self) -> None:
+        self.client.post(f"/batches/{BATCH}/runs", json=run_payload(run_id="svc-4", task="Tree2Graph"))
+        with patch(
+            "llm4mtl.stage_service.app._stages.tests.extract",
+            side_effect=RuntimeError("adapter failed"),
+        ):
+            response = self.client.post(f"/batches/{BATCH}/runs/svc-4/stages/extract", json={})
+        self.assertEqual(200, response.status_code)
+        self.assertEqual("infrastructure_error", response.json()["status"])
+        self.assertEqual("INFRASTRUCTURE_ERROR", response.json()["outcome_code"])
+        self.assertEqual(1, response.json()["attempt"])
+
+    def test_diagnosis_is_persisted_with_model_provenance(self) -> None:
+        self.client.post(
+            f"/batches/{BATCH}/runs", json=run_payload(run_id="svc-diagnosis", task="Tree2Graph")
+        )
+        payload = {
+            "schema_version": "1.0",
+            "classification": "TRANSFORMATION_DEFECT",
+            "evidence_ref": "stages/execution/attempts/attempt-001/result.json",
+            "rationale": "The generated transformation omitted the target node.",
+            "provider": "openai",
+            "model": "gpt-5",
+            "created_at": "2026-07-29T12:00:00Z",
+        }
+
+        first = self.client.post(f"/batches/{BATCH}/runs/svc-diagnosis/diagnoses", json=payload)
+        second = self.client.post(
+            f"/batches/{BATCH}/runs/svc-diagnosis/diagnoses",
+            json={**payload, "classification": "AMBIGUOUS"},
+        )
+
+        self.assertEqual(200, first.status_code)
+        self.assertEqual(1, first.json()["attempt"])
+        # The verdict is what downstream work consumes, so it is stored in its
+        # own area keyed by the run, not among that run's working state.
+        self.assertEqual(
+            f"{BATCH}/svc-diagnosis/attempt-001/diagnosis.json",
+            first.json()["artifact"],
+        )
+        self.assertEqual("gpt-5", first.json()["model"])
+        self.assertEqual(2, second.json()["attempt"])
+
+        artifact = self._diagnoses.joinpath(first.json()["artifact"])
+        self.assertTrue(artifact.is_file())
+        self.assertEqual("openai", read_json(artifact)["provider"])
+        # A consumer never has to open the run directory to find it.
+        self.assertFalse(
+            (
+                self.batch_root
+                / "svc-diagnosis"
+                / "responses"
+                / "failure-diagnosis"
+            ).exists()
+        )
+
+    def _failing_execution(self, run_id: str, index: dict[str, object]):
+        """Drive one failing execution stage with a prepared diagnosis index."""
+        self.client.post(f"/batches/{BATCH}/runs", json=run_payload(run_id=run_id))
+        with (
+            patch(
+                "llm4mtl.stage_service.app.prepare_workspace",
+                return_value=Path(self._tmp.name) / "workspace",
+            ),
+            patch(
+                "llm4mtl.stage_service.app._stages.transformations.semantic_validation",
+                return_value=StageResult(
+                    "transformation_validation",
+                    "failed",
+                    {"evaluated": 1, "failed": 1},
+                    {},
+                ),
+            ),
+            patch(
+                # Recording an attempt — and preparing the evidence pinned to
+                # it — is owned by llm4mtl.stage_recording for both callers.
+                "llm4mtl.stage_recording.prepare_after_execution_stage",
+                return_value=index,
+            ),
+        ):
+            return self.client.post(f"/batches/{BATCH}/runs/{run_id}/stages/execution", json={})
+
+    def _write_report(self, name: str, *, available: bool) -> str:
+        """One prepared failure report, named by its absolute path."""
+        report = Path(self._tmp.name) / f"{name}.json"
+        write_json(
+            report,
+            {
+                "report_type": "semantic_test_case_failure",
+                "source_diagnosis": {
+                    "eligible": True,
+                    "evidence_bundle": {
+                        "structured_actual_vs_expected_difference": {
+                            "available": available,
+                        }
+                    },
+                },
+            },
+        )
+        return str(report)
+
+    def test_execution_exposes_the_first_diagnosable_failure_report(self) -> None:
+        """The selected report is the first the run recorded as diagnosable.
+
+        A refused report was never written and an ineligible one must not be
+        diagnosed. Order is the recorded one — pairs as the execution evidence
+        listed them, reports as Surefire reported the failures — so the same
+        attempt always selects the same report.
+        """
+        # Each rejected report gets its own path, so picking the wrong one for
+        # the wrong reason cannot still satisfy the assertion.
+        refused = self._write_report("refused", available=True)
+        ineligible = self._write_report("ineligible", available=True)
+        selected = self._write_report("diagnosable", available=True)
+        later = self._write_report("later", available=True)
+        index = {
+            "attempt": 1,
+            "pairs": [
+                {
+                    "reports": [
+                        # Preparation names no file when it refuses a report.
+                        # One is named here anyway, so a refused entry stays
+                        # skipped even if it ever starts carrying a path.
+                        {
+                            "status": "refused",
+                            "detail": "no matching case",
+                            "report": refused,
+                        },
+                        {"status": "created", "eligible": False, "report": ineligible},
+                    ]
+                },
+                {
+                    "reports": [
+                        {"status": "created", "eligible": True, "report": selected}
+                    ]
+                },
+                {"reports": [{"status": "created", "eligible": True, "report": later}]},
+            ],
+        }
+
+        response = self._failing_execution("svc-exec-diagnosable", index)
+        self.assertEqual(200, response.status_code)
+        artifacts = response.json()["artifacts"]
+        self.assertEqual(selected, artifacts["failure_report_path"])
+        self.assertIn("failure_report_index", artifacts)
+
+    def test_a_report_without_a_model_comparison_is_still_diagnosable(self) -> None:
+        """An unavailable comparator difference does not disqualify a report.
+
+        No comparator produces the model-level difference yet. Requiring it
+        would reject every real report and leave what the run did observe — the
+        JUnit expected/actual pair, the target-model snapshots, the recorded
+        exception — unused, which is the whole evidence base Source Diagnosis
+        exists to reason over.
+        """
+        unavailable = self._write_report("no-difference", available=False)
+        index = {
+            "attempt": 1,
+            "pairs": [
+                {
+                    "reports": [
+                        {"status": "created", "eligible": True, "report": unavailable}
+                    ]
+                }
+            ],
+        }
+
+        response = self._failing_execution("svc-exec-no-difference", index)
+        self.assertEqual(
+            unavailable, response.json()["artifacts"]["failure_report_path"]
+        )
+
+    def test_execution_omits_the_report_path_when_none_is_diagnosable(self) -> None:
+        """A missing key is the honest answer: there is nothing to diagnose.
+
+        The index is still named, so a caller can read why every report was
+        refused instead of having to guess that preparation ran at all.
+        """
+        index = {
+            "attempt": 1,
+            "pairs": [
+                {
+                    "reports": [
+                        {"status": "refused", "detail": "no matching case"},
+                        {
+                            "status": "created",
+                            "eligible": False,
+                            "report": self._write_report("ineligible", available=True),
+                        },
+                    ]
+                }
+            ],
+        }
+
+        response = self._failing_execution("svc-exec-undiagnosable", index)
+        artifacts = response.json()["artifacts"]
+        self.assertNotIn("failure_report_path", artifacts)
+        self.assertIn("failure_report_index", artifacts)
+
+    def test_prepared_evidence_references_stay_out_of_the_recorded_result(self) -> None:
+        """Where evidence lives is orchestration, not a recorded observation.
+
+        Preparation can only run once the attempt has claimed its number, so the
+        references reach the caller through the response while ``result.json``
+        keeps exactly the contract it was validated against. Both paths stay
+        re-derivable from the run directory, so nothing is lost.
+        """
+        index = {
+            "attempt": 1,
+            "pairs": [
+                {
+                    "reports": [
+                        {
+                            "status": "created",
+                            "eligible": True,
+                            "report": self._write_report("recorded", available=True),
+                        }
+                    ]
+                }
+            ],
+        }
+
+        response = self._failing_execution("svc-exec-recorded", index)
+        body = response.json()
+        self.assertIn("failure_report_path", body["artifacts"])
+
+        recorded = read_json(
+            self.batch_root
+            / "svc-exec-recorded"
+            / "stages"
+            / "execution"
+            / "attempts"
+            / "attempt-001"
+            / "result.json"
+        )
+        self.assertNotIn("failure_report_path", recorded["artifacts"])
+        self.assertNotIn("failure_report_index", recorded["artifacts"])
+        # The stage facts the attempt recorded are the ones the caller reads.
+        self.assertEqual(recorded["outcome_code"], body["outcome_code"])
+        self.assertEqual(recorded["status"], body["status"])
+        self.assertEqual(recorded["counts"], body["counts"])
+
+    def test_a_call_through_a_litellm_unified_route_keeps_the_routed_model(self) -> None:
+        self.client.post(f"/batches/{BATCH}/runs", json=run_payload(run_id="svc-llm-call"))
+        call = {
+            "operation": "transformation-generation",
+            "artifact_iteration": 0,
+            "execution_attempt": None,
+            "evidence_ref": None,
+            "provider": "anthropic",
+            "route": "litellm_unified",
+            "requested_model": "google.claude-sonnet-5",
+            "reasoning_effort": "xhigh",
+            "served_model": None,
+            "litellm_model_name": "vertex_ai/claude-sonnet-5",
+            "response_id": "msg_1",
+            "usage": {
+                "input_tokens": 120,
+                "cached_input_tokens": 0,
+                "output_tokens": 40,
+                "reasoning_tokens": None,
+            },
+            "provider_usage": {"input_tokens": 120, "output_tokens": 40},
+            "started_at": "2026-09-30T10:00:00Z",
+            "finished_at": "2026-09-30T10:00:02Z",
+            "latency_ms": 2000,
+            "n8n_execution_id": "1",
+        }
+        response = self.client.post(f"/batches/{BATCH}/runs/svc-llm-call/llm-calls", json=call)
+        self.assertEqual(200, response.status_code, response.text)
+        recorded = [
+            event["llm_call"]
+            for event in read_events(run_store.open_run(self.batch_root, "svc-llm-call"))
+            if event["event"] == "llm_call_observed"
+        ]
+        self.assertEqual(1, len(recorded))
+        self.assertEqual("litellm_unified", recorded[0]["route"])
+        self.assertIsNone(recorded[0]["served_model"])
+        self.assertEqual("vertex_ai/claude-sonnet-5", recorded[0]["litellm_model_name"])
+
+    def test_diagnosis_rejects_unknown_run_and_invalid_classification(self) -> None:
+        valid_payload = {
+            "schema_version": "1.0",
+            "classification": "AMBIGUOUS",
+            "rationale": "Invalid.",
+            "provider": "openai",
+            "model": "gpt-5",
+            "created_at": "2026-07-29T12:00:00Z",
+        }
+        self.assertEqual(
+            404,
+            self.client.post(f"/batches/{BATCH}/runs/nope/diagnoses", json=valid_payload).status_code,
+        )
+        self.client.post(
+            f"/batches/{BATCH}/runs", json=run_payload(run_id="svc-invalid-diagnosis", task="Tree2Graph")
+        )
+        self.assertEqual(
+            422,
+            self.client.post(
+                f"/batches/{BATCH}/runs/svc-invalid-diagnosis/diagnoses",
+                json={**valid_payload, "classification": "NOT_A_CLASSIFICATION"},
+            ).status_code,
+        )
+
+
+if __name__ == "__main__":
+    unittest.main()

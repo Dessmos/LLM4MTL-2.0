@@ -1,0 +1,13 @@
+rule Tree2Node 
+	transform t : Tree!Tree
+	to n : Graph!Node {
+	
+	// If t is not the top tree
+	// create an edge connecting n
+	// with the Node created from t's parent
+	if (t.parent.isDefined()) {
+		var e : new Graph!Edge;
+		e.source ::= t.parent;
+		e.target = n;
+	}	
+}

@@ -1,0 +1,33 @@
+schema_version: 1
+experiment_id: thesis-ablation
+language: etl
+
+# The matrix expands to the cartesian product of these axes; each combination is
+# one run. Significance is computed at the experiment level over the run set.
+tasks:
+  - Tree2Graph
+  - OO2DB
+
+transformation_models:
+  - claude-sonnet-4
+  - gpt-5
+  - gemini-2-5-pro
+transformation_strategies:
+  - only_prompt
+  - grammar
+  - few_shot
+  - few_shots_AND_grammar
+
+test_models:
+  - gpt-5
+test_strategies:
+  - few_shot
+
+variants:
+  - full
+  - no-parser-feedback
+  - no-semantic-feedback
+  - no-failure-diagnosis
+
+seeds:
+  - 1

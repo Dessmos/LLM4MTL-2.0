@@ -1,0 +1,4 @@
+Create a transformation called **familiesToPersons** that reacts to changes in the **families** model and executes actions in the **persons** model.  
+Define a reaction named **InsertedFamilyRegister** that triggers whenever a **FamilyRegister** is inserted as a root element.  
+In this reaction, call a routine named **createPersonRegister**.  
+The routine should ensure that no **PersonRegister** already corresponds to the given **FamilyRegister**, then create a new **PersonRegister**, persist it in the persons model, and establish a correspondence between the two registers.

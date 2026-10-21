@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://llm4mtl/schemas/diagnosis-index.schema.json",
+  "title": "Prepared diagnosis index",
+  "type": "object",
+  "required": ["schema_version", "run_id", "stage", "attempt", "prepared_at", "execution_evidence", "syntax_evidence", "counts", "pairs"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "run_id": {"type": "string", "minLength": 1},
+    "stage": {"const": "execution"},
+    "attempt": {"type": "integer", "minimum": 1},
+    "prepared_at": {"type": "string", "format": "date-time"},
+    "execution_evidence": {"type": ["string", "null"]},
+    "syntax_evidence": {"type": ["string", "null"]},
+    "error": {"type": "string"},
+    "counts": {"type": "object", "required": ["failed_pairs", "reports_created", "reports_refused", "pair_level_reports", "diagnosis_eligible", "pairs_without_reports"], "additionalProperties": false, "properties": {"failed_pairs": {"type": "integer", "minimum": 0}, "reports_created": {"type": "integer", "minimum": 0}, "reports_refused": {"type": "integer", "minimum": 0}, "pair_level_reports": {"type": "integer", "minimum": 0}, "diagnosis_eligible": {"type": "integer", "minimum": 0}, "pairs_without_reports": {"type": "integer", "minimum": 0}}},
+    "pairs": {"type": "array", "items": {"type": "object", "required": ["suite", "transformation", "observation", "failure_stage", "reports", "skipped"], "additionalProperties": false, "properties": {"suite": {}, "transformation": {}, "observation": {}, "failure_stage": {}, "reports": {"type": "array", "items": {"type": "object"}}, "skipped": {"type": "array", "items": {"type": "object"}}}}}
+  }
+}

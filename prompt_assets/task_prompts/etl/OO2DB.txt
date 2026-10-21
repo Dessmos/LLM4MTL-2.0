@@ -1,0 +1,5 @@
+Create an ETL transformation from an object-oriented model to a database model.  
+Include a **pre block** that initializes a new database instance and a **post block** that builds a custom trace model linking each source element with its transformation results.  
+Define the following rules: **Class2Table**, **SingleValuedAttribute2Column**, **MultiValuedAttribute2Table**, and **Reference2ForeignKey**.  
+Implement operations `primaryKeyName`, `valuesTableName`, and `toDbType` to derive names and type mappings.  
+Each rule should populate the appropriate database elements, handling inheritance and foreign keys where needed.

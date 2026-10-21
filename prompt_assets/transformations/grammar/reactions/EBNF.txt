@@ -1,0 +1,92 @@
+ReactionsFile
+         ::= XImportSection? MetamodelImport* ReactionsSegment+
+MetamodelImport
+         ::= 'import' STRING 'as' ValidID ( 'using' 'qualified' 'names' )?
+ReactionsSegment
+         ::= 'reactions:' ValidID 'in' 'reaction' 'to' 'changes' 'in' ID ( 'and' ID )* 'execute' 'actions' 'in' ID ( 'and' ID )* ReactionsImport* ( Reaction | Routine )*
+ReactionsImport
+         ::= 'import' 'routines'? ID ( 'using' 'qualified' 'names' )?
+Reaction ::= ML_COMMENT? 'reaction' ( ID '::' )? ValidID '{' Trigger RoutineCall '}'
+RoutineCall
+         ::= 'call' XExpression
+Trigger  ::= 'after' ( ArbitraryModelChange | ConcreteModelChange )
+ConcreteModelChange
+         ::= ModelElementChange
+           | ModelAttributeChange
+ModelElementChange
+         ::= 'element' UnnamedMetaclassReference? ElementChangeType ( 'with' XExpression )?
+ModelAttributeChange
+         ::= 'attribute' ( 'inserted' 'in' | 'removed' 'from' | 'replaced' 'at' ) MetaclassEAttributeReference ( 'with' XExpression )?
+ArbitraryModelChange
+         ::= 'anychange' ( 'with' XExpression )?
+ElementExistenceChangeType
+         ::= 'created'
+           | 'deleted'
+ElementUsageChangeType
+         ::= ElementInsertionChangeType
+           | ElementRemovalChangeType
+           | ElementReplacementChangeType
+ElementReferenceChangeType
+         ::= MetaclassEReferenceReference
+ElementRootChangeType
+         ::= ElementInsertionAsRootChangeType
+           | ElementRemovalAsRootChangeType
+ElementInsertionChangeType
+         ::= ElementInsertionInListChangeType
+           | ElementInsertionAsRootChangeType
+ElementInsertionInListChangeType
+         ::= 'inserted' 'in' ElementReferenceChangeType
+ElementInsertionAsRootChangeType
+         ::= 'inserted' 'as' 'root'
+ElementRemovalChangeType
+         ::= ElementRemovalAsRootChangeType
+           | ElementRemovalFromListChangeType
+ElementRemovalAsRootChangeType
+         ::= 'removed' 'as' 'root'
+ElementRemovalFromListChangeType
+         ::= 'removed' 'from' ElementReferenceChangeType
+ElementReplacementChangeType
+         ::= 'replaced' 'at' ElementReferenceChangeType
+ElementChangeType
+         ::= ElementExistenceChangeType
+           | ElementUsageChangeType
+Routine  ::= ML_COMMENT? 'routine' ( RoutineOverrideImportPath '::' )? ValidID RoutineInput '{' MatchBlock? CreateBlock? UpdateBlock? '}'
+RoutineOverrideImportPath
+         ::= ID ( '.' ID )*
+RoutineInput
+         ::= '(' ( ( NamedMetaclassReference | 'plain' NamedJavaElementReference ) ( ',' ( NamedMetaclassReference | 'plain' NamedJavaElementReference ) )* )? ')'
+MatchBlock
+         ::= 'match' '{' MatchStatement+ '}'
+MatchStatement
+         ::= RetrieveOrRequireAbscenceOfModelElement
+           | MatchCheckStatement
+RetrieveOrRequireAbscenceOfModelElement
+         ::= RequireAbscenceOfModelElement
+           | RetrieveModelElement
+RequireAbscenceOfModelElement
+         ::= 'require' 'absence' 'of' UnnamedMetaclassReference 'corresponding' 'to' XExpression ( 'tagged' XExpression )? ( 'with' XExpression )?
+RetrieveModelElement
+         ::= ( 'val' ValidID '=' )? 'retrieve' UnnamedMetaclassReference 'corresponding' 'to' XExpression ( 'tagged' XExpression )? ( 'with' XExpression )?
+MatchCheckStatement
+         ::= 'check' XExpression
+CreateBlock
+         ::= 'create' '{' CreateStatement* '}'
+CreateStatement
+         ::= 'val' ValidID '=' 'new' MetaclassReference
+UpdateBlock
+         ::= 'update' XExpression
+MetaclassReference
+         ::= ( ID '::' )? QualifiedName
+UnnamedMetaclassReference
+         ::= MetaclassReference
+NamedMetaclassReference
+         ::= MetaclassReference ValidID
+NamedJavaElementReference
+         ::= JvmTypeReference 'as' ValidID
+MetaclassEAttributeReference
+         ::= MetaclassReference '[' ValidID ']'
+MetaclassEReferenceReference
+         ::= MetaclassReference '[' ValidID ']'
+
+<?TOKENS?>
+

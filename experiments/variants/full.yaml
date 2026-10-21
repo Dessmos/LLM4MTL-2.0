@@ -1,0 +1,6 @@
+schema_version: 1
+variant: full
+# RQ4 ablation: which feedback / refinement stages are enabled for a run.
+parser_feedback: true
+semantic_feedback: true
+failure_diagnosis: true

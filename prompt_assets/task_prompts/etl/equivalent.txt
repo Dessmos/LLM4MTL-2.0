@@ -1,0 +1,7 @@
+Create an ETL transformation that converts a **Flowchart model** into an **HTML model**.  
+Define two rules:  
+
+1. **Flowchart2Div** – For each Flowchart, create a DIV element whose children correspond to all the Transitions contained in that Flowchart.  
+2. **Transition2Heading** – For each Transition, create an H1 element and set its text value to the Transition’s name.  
+
+Ensure that Flowchart elements are represented as containers and that each Transition appears as a heading within its parent DIV.

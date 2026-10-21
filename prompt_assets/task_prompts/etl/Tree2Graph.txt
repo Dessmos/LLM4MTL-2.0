@@ -1,0 +1,3 @@
+Create an ETL transformation rule named **Tree2Node** that converts each **Tree** element into a **Node** in a **Graph** model.  
+Set the Node’s name to match the Tree’s label.  
+Additionally, when a Tree has a parent, generate an **Edge** that connects the Node created from the parent Tree to the current Node, representing the parent–child relationship between Trees as graph links.

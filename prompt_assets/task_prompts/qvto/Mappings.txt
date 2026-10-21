@@ -1,0 +1,4 @@
+Create a QVT-O transformation named **t** that copies an input **EPackage** into an output **EPackage** while preserving its structure.  
+Define a mapping **p2p** from **EPackage** to **EPackage** that copies the package name and maps all its contained classifiers.  
+Then create a mapping **c2c** from **EClassifier** to **EClass** that produces a new class whose name is the original classifier’s name prefixed with “mapped”.  
+In the main operation, apply **p2p** to all root packages of the input model.

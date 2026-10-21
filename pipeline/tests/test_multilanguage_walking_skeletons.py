@@ -1,0 +1,379 @@
+"""Four-language adapter coverage and opt-in real-engine walking skeletons."""
+
+from __future__ import annotations
+
+import json
+import os
+import shutil
+import tempfile
+import unittest
+from pathlib import Path
+
+from llm4mtl.artifact_schemas import validate_artifact
+from llm4mtl.conventions import language_config
+from llm4mtl.domain import ArtifactValidation, GeneratedSuite
+from llm4mtl.languages import (
+    REQUIRED_LANGUAGES,
+    LanguageAdapter,
+    Workspace,
+    language_adapter,
+)
+from llm4mtl.paths import TARGET
+from llm4mtl.semantic_tests.suite_execution import (
+    GENERATED_TRANSFORMATION_ROLE,
+    record_observation,
+    snapshot_dir,
+)
+from llm4mtl.serialization.hashing import file_sha256
+from llm4mtl.task_contracts.build_language_task_contracts import (
+    BUILDERS,
+    REFERENCE_EXTENSIONS,
+)
+from llm4mtl.workspace import materialize_engine
+
+SKELETONS = {
+    "etl": "Tree2Graph",
+    "atl": "NetworkToGraph_All",
+    "qvto": "Mappings",
+    "reactions": "FamiliesToPersons_InsertedFamilyRegister",
+}
+FIXTURES = TARGET.pipeline / "tests/fixtures/walking_skeletons"
+
+
+class FourLanguageCoverageTests(unittest.TestCase):
+
+    def test_every_required_language_resolves_to_its_adapter(self) -> None:
+        for language in REQUIRED_LANGUAGES:
+            with self.subTest(language=language):
+                adapter = language_adapter(language)
+                self.assertIsInstance(adapter, LanguageAdapter)
+                self.assertEqual(language, adapter.language_id)
+
+    def test_every_contracted_task_is_data_complete(self) -> None:
+        for language in REQUIRED_LANGUAGES:
+            with self.subTest(language=language):
+                config = language_config(language)
+                references = {
+                    path.stem
+                    for path in (
+                        TARGET.benchmark / "tasks" / language / "references"
+                    ).glob(
+                        f"*{language_adapter(language).reference_transformation('_').suffix}"
+                    )
+                    if path.name != ".gitkeep"
+                }
+                contracts = {
+                    path.stem
+                    for path in (
+                        TARGET.benchmark / "tasks" / language / "task_contracts"
+                    ).glob("*.json")
+                }
+                tasks = contracts
+                self.assertTrue(tasks)
+                self.assertTrue(tasks <= references)
+                if language != "etl":
+                    self.assertEqual(tasks, references)
+                self.assertTrue(
+                    (
+                        TARGET.prompt_assets / f"tests/grammar/{language}/EBNF.txt"
+                    ).is_file()
+                )
+                self.assertTrue(
+                    (
+                        TARGET.prompt_assets
+                        / f"tests/few_shot/{config.language_key}/test_generation_examples.txt"
+                    ).is_file()
+                )
+                for task in tasks:
+                    contract_path = (
+                        TARGET.benchmark
+                        / "tasks"
+                        / language
+                        / "task_contracts"
+                        / f"{task}.json"
+                    )
+                    contract_payload = json.loads(
+                        contract_path.read_text(encoding="utf-8")
+                    )
+                    validate_artifact(
+                        "contract",
+                        contract_payload,
+                    )
+                    self.assertEqual(language, contract_payload["language"])
+                    for model in contract_payload["models"]:
+                        self.assertIn("typesUsedInTransformation", model)
+                        self.assertNotIn("typesUsedInEtL", model)
+                        if model["kind"] != "emf":
+                            continue
+                        # An EMF slot without a namespace is not usable ground
+                        # truth: enforcement rewrites generated models from it.
+                        # Seven ATL contracts carried "" because their metamodel
+                        # file wraps several packages and only the wrapper was
+                        # read.
+                        self.assertTrue(model["metamodelUri"], model["runtimeName"])
+                        self.assertTrue(model["metamodelFile"], model["runtimeName"])
+
+    def test_all_four_structured_fixtures_render_deterministically(self) -> None:
+        for language, task in SKELETONS.items():
+            with self.subTest(language=language, task=task):
+                adapter = language_adapter(language)
+                extracted = _fixture_files(language, task)
+                first, first_validation = adapter.render_suite_artifacts(
+                    task, extracted
+                )
+                second, second_validation = adapter.render_suite_artifacts(
+                    task, extracted
+                )
+                self.assertEqual(
+                    ArtifactValidation(valid=True, contract_applied=True),
+                    first_validation,
+                )
+                self.assertEqual(first_validation, second_validation)
+                self.assertEqual(first, second)
+                self.assertEqual(
+                    1, len([name for name in first if name.endswith(".java")])
+                )
+                self.assertIn(
+                    adapter.reference_transformation(task).suffix,
+                    json.loads(first["semantic_cases.json"])["transformation"],
+                )
+
+    def test_every_contract_is_reproducible_from_protected_inputs(self) -> None:
+        self.assertEqual(set(REQUIRED_LANGUAGES), set(BUILDERS))
+        for language, builder in BUILDERS.items():
+            references = TARGET.benchmark / "tasks" / language / "references"
+            contracts = TARGET.benchmark / "tasks" / language / "task_contracts"
+            found = sorted(references.glob(f"*{REFERENCE_EXTENSIONS[language]}"))
+            self.assertTrue(found, language)
+            for reference in found:
+                with self.subTest(language=language, task=reference.stem):
+                    expected = json.loads(
+                        (contracts / f"{reference.stem}.json").read_text(
+                            encoding="utf-8"
+                        )
+                    )
+                    self.assertEqual(expected, builder(reference))
+
+    def test_qvto_two_output_slots_remain_distinct(self) -> None:
+        spec = {
+            "schemaVersion": "1.0",
+            "tests": [
+                {
+                    "name": "two_outputs",
+                    "models": [
+                        {
+                            "name": "m",
+                            "kind": "emf",
+                            "role": "source",
+                            "path": "models/in.ecore",
+                            "generated": True,
+                            "metamodelUri": "http://www.eclipse.org/emf/2002/Ecore",
+                        },
+                        {
+                            "name": "x",
+                            "kind": "emf",
+                            "role": "target",
+                            "generated": False,
+                            "metamodelUri": "http://www.eclipse.org/emf/2002/Ecore",
+                        },
+                        {
+                            "name": "y",
+                            "kind": "emf",
+                            "role": "target",
+                            "generated": False,
+                            "metamodelUri": "http://www.eclipse.org/emf/2002/Ecore",
+                        },
+                    ],
+                    "assertions": [
+                        {
+                            "kind": "count",
+                            "model": "x",
+                            "type": "EPackage",
+                            "expected": 1,
+                        },
+                        {
+                            "kind": "count",
+                            "model": "y",
+                            "type": "EPackage",
+                            "expected": 1,
+                        },
+                    ],
+                }
+            ],
+        }
+        extracted = {
+            "semantic_cases.json": json.dumps(spec),
+            "models/in.ecore": (FIXTURES / "qvto/Mappings/models/in.ecore").read_text(
+                encoding="utf-8"
+            ),
+        }
+        rendered, validation = language_adapter("qvto").render_suite_artifacts(
+            "ModelExtents",
+            extracted,
+        )
+        self.assertTrue(validation.valid, validation.violations)
+        normalized = json.loads(rendered["semantic_cases.json"])
+        self.assertEqual(
+            ["m", "x", "y"],
+            [model["runtimeName"] for model in normalized["tests"][0]["models"]],
+        )
+        java = next(
+            content for path, content in rendered.items() if path.endswith(".java")
+        )
+        self.assertIn("executeTransformation2Outputs", java)
+        self.assertIn("outputs[1]", java)
+
+
+@unittest.skipUnless(
+    os.environ.get("LLM4MTL_RUN_ENGINE_TESTS") == "1",
+    "set LLM4MTL_RUN_ENGINE_TESTS=1 for real parser and Maven walking skeletons",
+)
+class RealEngineWalkingSkeletonTests(unittest.TestCase):
+
+    def test_each_language_runs_reference_and_generated_paths(self) -> None:
+        for language, task in SKELETONS.items():
+            with self.subTest(language=language, task=task):
+                with tempfile.TemporaryDirectory() as temp_dir:
+                    root = Path(temp_dir)
+                    adapter = language_adapter(language)
+                    suite = _render_suite(root / "suite", language, task, adapter)
+                    engine_dir = materialize_engine(
+                        TARGET.engine_harness(language),
+                        root / "workspaces",
+                        f"{language}-harness",
+                    )
+                    workspace = Workspace(
+                        engine_dir=engine_dir,
+                        observations_dir=root / "evidence",
+                    )
+                    reference = adapter.reference_transformation(task)
+                    generated = root / "generated" / f"{task}{reference.suffix}"
+                    generated.parent.mkdir(parents=True)
+                    shutil.copyfile(reference, generated)
+
+                    parse = adapter.parse_transformations(
+                        [reference, generated],
+                        workspace,
+                    )
+                    self.assertTrue(
+                        parse[reference].parsed, parse[reference].diagnostic
+                    )
+                    self.assertTrue(
+                        parse[generated].parsed, parse[generated].diagnostic
+                    )
+
+                    reference_observation, reference_evidence = adapter.execute_suite(
+                        suite, reference, workspace, 1200
+                    )
+                    self.assertTrue(
+                        reference_observation.is_technically_executable,
+                        reference_observation.error_summary,
+                    )
+                    self.assertTrue(
+                        reference_observation.is_reference_valid,
+                        reference_observation.error_summary,
+                    )
+                    evidence_path = record_observation(
+                        workspace.observations_dir,
+                        suite,
+                        reference,
+                        reference_observation,
+                        evidence=reference_evidence,
+                    )
+                    self.assertTrue(evidence_path.is_file())
+
+                    generated_root = (
+                        workspace.observations_dir
+                        / "generated_transformations"
+                        / file_sha256(generated)
+                    )
+                    generated_observation, generated_raw_evidence = (
+                        adapter.execute_suite(
+                            suite,
+                            generated,
+                            Workspace(
+                                engine_dir=engine_dir,
+                                observations_dir=generated_root,
+                            ),
+                            1200,
+                        )
+                    )
+                    self.assertTrue(
+                        generated_observation.is_reference_valid,
+                        generated_observation.error_summary,
+                    )
+                    generated_evidence = record_observation(
+                        generated_root,
+                        suite,
+                        generated,
+                        generated_observation,
+                        transformation_role=GENERATED_TRANSFORMATION_ROLE,
+                        evidence=generated_raw_evidence,
+                    )
+                    self.assertTrue(generated_evidence.is_file())
+                    generated_payload = json.loads(
+                        generated_evidence.read_text(encoding="utf-8")
+                    )
+                    self.assertEqual(
+                        GENERATED_TRANSFORMATION_ROLE,
+                        generated_payload["inputs"]["transformation"]["role"],
+                    )
+                    if language in {"atl", "qvto", "reactions"}:
+                        self.assertTrue(
+                            any(
+                                snapshot_dir(workspace.observations_dir, suite).rglob(
+                                    "*.xmi"
+                                )
+                            )
+                        )
+                        self.assertTrue(
+                            any(snapshot_dir(generated_root, suite).rglob("*.xmi"))
+                        )
+
+
+def _fixture_files(language: str, task: str) -> dict[str, str]:
+    root = FIXTURES / language / task
+    return {
+        path.relative_to(root).as_posix(): path.read_text(encoding="utf-8")
+        for path in sorted(root.rglob("*"))
+        if path.is_file()
+    }
+
+
+def _render_suite(
+    destination: Path,
+    language: str,
+    task: str,
+    adapter: LanguageAdapter,
+) -> GeneratedSuite:
+    files, validation = adapter.render_suite_artifacts(
+        task,
+        _fixture_files(language, task),
+    )
+    if not validation.valid:
+        raise AssertionError(validation.violations)
+    destination.mkdir(parents=True)
+    for relative, content in files.items():
+        path = destination / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+    (destination / "metadata.json").write_text(
+        json.dumps({"artifact_validation": validation.as_metadata()}, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    suite = GeneratedSuite(
+        language,
+        destination,
+        task,
+        "walking-skeleton",
+        "deterministic",
+        "suite_001",
+    )
+    static_validation = adapter.validate_suite_artifacts(suite)
+    if not static_validation.valid:
+        raise AssertionError(static_validation.violations)
+    return suite
+
+
+if __name__ == "__main__":
+    unittest.main()

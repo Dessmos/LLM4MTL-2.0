@@ -1,0 +1,3 @@
+Create a transformation called **amaltheaToAscet** that reacts to changes in the **amalthea** model and executes actions in the **ascet** model.  
+Define a reaction named **ComponentContainerInsertedAsRoot** that triggers whenever a **ComponentContainer** is inserted as a root element in amalthea.  
+This reaction should call a routine named **createAndRegisterRootComponentContainer**, which ensures no corresponding **AscetModule** exists yet, then creates a new **AscetModule**, persists it to a project-relative path, and establishes a correspondence between the **ComponentContainer** and the new **AscetModule**.

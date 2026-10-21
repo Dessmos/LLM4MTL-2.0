@@ -1,0 +1,15 @@
+Create an ATL transformation module named `Make2Ant` that transforms a Make model into an Ant model.
+
+Define the module header with `create OUT : Ant from IN : Make`.
+
+Add the following rules:
+
+1. `Makefile2Project`: for each Makefile, create one Project, copying the name, collecting all Macros as properties, all Rules as targets, and setting the first Rule as the default target.
+
+2. `Macro2Property`: map each Macro to a PropertyValue with corresponding name and value.
+
+3. `Rule2Target`: map each Rule to a Target, copying its name, adding all its ShellLines as tasks, and resolving RuleDep dependencies to Target references.
+
+4. `ShellLine2Task_Display`: when a ShellLine has `display = true`, create both an Echo task and an Exec task, each associated to the owning Rule and initialized from `command`.
+
+5. `ShellLine2Task_NoDisplay`: when a ShellLine has `display = false`, create only an Exec task associated to the owning Rule, initialized from `command`.

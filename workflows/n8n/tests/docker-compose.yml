@@ -1,0 +1,52 @@
+services:
+  n8n-test-generation:
+    image: n8nio/n8n:latest
+    container_name: n8n-test-generation
+    ports:
+      - "5679:5678"
+    environment:
+      - GENERIC_TIMEZONE=Europe/Berlin
+      - TZ=Europe/Berlin
+      - N8N_SECURE_COOKIE=false
+      - N8N_RESTRICT_FILE_ACCESS_TO=/data
+    depends_on:
+      - stage-service
+    volumes:
+      # Keep this test-generation n8n instance separate from the baseline n8n.
+      - n8n_test_generation_data:/home/node/.n8n
+
+      # Importable workflows and generated LLM prompts/responses.
+      - "./workflows:/data/workflows:ro"
+      # The master workflow reads its subworkflows back from disk by path, across
+      # the whole n8n tree (tests/, transformations/, subworkflows/), so it needs
+      # the tree itself mounted at the workflow root it is configured with.
+      - "..:/data/repository/workflows/n8n:ro"
+      - "../../../artifacts/work:/data/artifacts"
+      - "../../../prompt_assets/task_prompts:/data/task_prompts:ro"
+
+      # Reference names enumerate tasks; the stage service resolves the matching
+      # contract and exact metamodel files from its read-only repository view.
+      - "../../../benchmark/tasks:/data/benchmark/tasks:ro"
+      # The output contract is not a prompting strategy: every variant must
+      # receive it, so it is mounted unconditionally alongside the examples.
+      - "../../../prompt_assets/tests/contract:/data/contract:ro"
+      - "../../../prompt_assets/tests/few_shot:/data/examples:ro"
+      - "../../../prompt_assets/tests/grammar:/data/grammar:ro"
+      - "../../../prompt_assets/tests/helper_methods:/data/helper_methods:ro"
+      # The master runs the transformation-generation subworkflows in this same
+      # instance, and they read a different asset tree. Both trees used to claim
+      # the three paths above, so only the test one was ever reachable here.
+      - "../../../prompt_assets/transformations/few_shot:/data/transformations/examples:ro"
+      - "../../../prompt_assets/transformations/grammar:/data/transformations/grammar:ro"
+      - "../../../prompt_assets/transformations/helper_methods:/data/transformations/helper_methods:ro"
+      - "../../../prompt_assets/diagnosis:/data/diagnosis_prompts:ro"
+
+  stage-service:
+    build:
+      context: ../../..
+      dockerfile: pipeline/stage_service/Dockerfile
+    volumes:
+      - ../../..:/app
+
+volumes:
+  n8n_test_generation_data:

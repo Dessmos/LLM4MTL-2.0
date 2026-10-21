@@ -1,0 +1,4 @@
+Create a QVT-O transformation named **t** that takes an input model and produces an output model, both typed as **ECORE**.  
+In **main**, iterate over all root objects of type **EPackage** and map each one using a mapping called **p2p**.  
+In **p2p**, copy the package name and transform each contained **EClass** through a mapping named **makeClass**.  
+Define **makeClass** as a disjunctive mapping that delegates either to **makeAClass** (for names starting with “A”) or **makeBClass** (for names starting with “B”), appending the corresponding letter to the class name.

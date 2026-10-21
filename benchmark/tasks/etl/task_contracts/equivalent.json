@@ -1,0 +1,62 @@
+{
+  "schemaVersion": "1.0",
+  "task": "equivalent",
+  "language": "etl",
+  "transformation": "equivalent.etl",
+  "reference": "benchmark/tasks/etl/references/equivalent.etl",
+  "sourceHash": "7fe37829a00079fa9d0e2706f4b61f424a2c99893979e633e1c0ccb2694dfee3",
+  "models": [
+    {
+      "runtimeName": "Flowchart",
+      "roles": [
+        "source"
+      ],
+      "kind": "emf",
+      "metamodelUri": "flowchart",
+      "metamodelNsPrefix": "flowchart",
+      "metamodelAlias": "Flowchart",
+      "metamodelFile": "benchmark/metamodels/additional_models/ETL_model/Flowchart.ecore",
+      "typesUsedInTransformation": [
+        "Flowchart",
+        "Transition"
+      ],
+      "availableTypes": [
+        "NamedElement",
+        "Flowchart",
+        "Node",
+        "Action",
+        "Decision",
+        "Subflow",
+        "Transition"
+      ]
+    },
+    {
+      "runtimeName": "HTML",
+      "roles": [
+        "target"
+      ],
+      "kind": "emf",
+      "metamodelUri": "HTML",
+      "metamodelNsPrefix": "HTML",
+      "metamodelAlias": "HTML",
+      "metamodelFile": "benchmark/metamodels/additional_models/ETL_model/HTML.ecore",
+      "typesUsedInTransformation": [
+        "DIV",
+        "H1"
+      ],
+      "availableTypes": [
+        "HTMLElement",
+        "DIV",
+        "H1",
+        "A"
+      ]
+    }
+  ],
+  "rules": [
+    "semantic_cases model slots must map to runtimeName exactly.",
+    "EMF namespace URIs and prefixes come only from this contract.",
+    "For plainXml slots, use kind='plainXml' and omit metamodelUri.",
+    "Assertions and declarative changes may use only availableTypes.",
+    "The reference transformation remains the behavioural oracle."
+  ]
+}

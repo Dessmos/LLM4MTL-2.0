@@ -1,0 +1,93 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://llm4mtl/schemas/batch-result.schema.json",
+  "title": "Batch result",
+  "description": "How one launch ended, written once when its orchestration completes. One entry per run the launch created, in the order they ran. Each run's own result.json stays authoritative for that run; this file is the launch-level summary a reader opens first.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "batch_id",
+    "status",
+    "run_count",
+    "results",
+    "recorded_at"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "2.0"
+    },
+    "batch_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9._-]+$"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "completed",
+        "completed_with_failures",
+        "failed",
+        "incomplete"
+      ],
+      "description": "The worst run status in the launch: failed over completed_with_failures over incomplete over completed."
+    },
+    "run_mode": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "pipeline_variant": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "run_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "results": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "run_id",
+          "language",
+          "task",
+          "status",
+          "reason"
+        ],
+        "additionalProperties": true,
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9._-]+$"
+          },
+          "language": {
+            "type": "string"
+          },
+          "task": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "completed",
+              "completed_with_failures",
+              "failed",
+              "incomplete"
+            ]
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "recorded_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}

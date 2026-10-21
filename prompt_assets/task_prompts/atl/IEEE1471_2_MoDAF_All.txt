@@ -1,0 +1,11 @@
+Create an ATL transformation module named `IEEE1471_2_MoDAF` that transforms an IEEE1471 architectural description into a MoDAF architecture view.
+
+Use `create OUT : MoDAF from IN : IEEE1471`.
+
+Add a helper attribute `rationale` that concatenates the name and content of the first `Rationale`.
+
+Define rules:
+- `IEEE1471Model2MoDAFModel` mapping IEEE1471Model to MoDAFModel, plus a default `ArchitecturalFramework` containing all Viewpoints without a source.
+- `System2Enterprise`, `Environment2Environment`, `Mission2OperationalMission`, `Architecture2Architecture`, `AD2AD`, `Stakeholder2Stakeholder`, `Viewpoint2View`, `View2ArchitecturalProduct`, `Model2Element`, `Concern2Concern`, `LibraryViewpoint2ArchitecturalFramework`.
+
+Also add a `StakeholderHasConcern` rule that creates a MoDAF `StakeholderHasConcern` link for each consistent Stakeholder–Concern pair, referencing the single target MoDAFModel as owner.

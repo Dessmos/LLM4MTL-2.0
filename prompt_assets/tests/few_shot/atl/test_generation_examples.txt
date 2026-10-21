@@ -1,0 +1,215 @@
+ATL semantic test generation few-shot examples.
+
+These examples are format guidance only. They intentionally use synthetic
+metamodel URIs, type names, features, paths, and transformation names so they
+cannot serve as answers for the benchmark tasks. Runtime model names remain
+`IN` and `OUT`, exactly as required by every current ATL benchmark contract.
+For the current task, replace every other synthetic identifier with an
+identifier from the deterministic model contract and the ATL task context.
+
+The binding output contract is delivered separately and always applies. The
+examples below only illustrate it; where an example looks like it disagrees
+with the contract, the contract wins.
+
+Example 1: canonical EMF source-to-EMF target response shape.
+Use concrete source types from the current contract. Do not instantiate abstract
+types. The target model has no path because the harness creates it.
+
+```json file=semantic_cases.json
+{
+  "schemaVersion": 1,
+  "testClass": "GeneratedSyntheticEmfShapeExample",
+  "transformation": "transformations/synthetic_emf_shape.atl",
+  "metamodels": [
+    {"name": "IN", "uri": "SyntheticSource"},
+    {"name": "OUT", "uri": "SyntheticTarget"}
+  ],
+  "tests": [
+    {
+      "name": "concrete_sources_create_exact_target_objects",
+      "scenarioKind": "batch_transformation",
+      "models": [
+        {
+          "name": "IN",
+          "kind": "emf",
+          "role": "source",
+          "path": "models/synthetic_sources.model",
+          "generated": true,
+          "metamodelUri": "SyntheticSource"
+        },
+        {
+          "name": "OUT",
+          "kind": "emf",
+          "role": "target",
+          "generated": false,
+          "metamodelUri": "SyntheticTarget"
+        }
+      ],
+      "assertions": [
+        {"kind": "count", "model": "OUT", "type": "TargetElement", "expected": 2},
+        {
+          "kind": "featureValues",
+          "model": "OUT",
+          "type": "TargetElement",
+          "feature": "label",
+          "expected": ["alpha", "beta"]
+        },
+        {
+          "kind": "objects",
+          "model": "OUT",
+          "type": "TargetElement",
+          "features": ["label", "category"],
+          "expected": [
+            {"label": "alpha", "category": "primary"},
+            {"label": "beta", "category": "secondary"}
+          ]
+        }
+      ]
+    }
+  ]
+}
+```
+
+```xml file=models/synthetic_sources.model
+<?xml version="1.0" encoding="UTF-8"?>
+<xmi:XMI xmi:version="2.0"
+    xmlns:xmi="http://www.omg.org/XMI"
+    xmlns:src="SyntheticSource">
+  <src:ConcreteSourceElement name="alpha" kind="primary"/>
+  <src:ConcreteSourceElement name="beta" kind="secondary"/>
+</xmi:XMI>
+```
+
+Example 2: canonical EMF reference assertion shape.
+Use references only when the current target metamodel defines them. For source
+models with containment, serialize contained objects first and point references
+to those contained objects with stable fragment paths.
+
+```json file=semantic_cases.json
+{
+  "schemaVersion": 1,
+  "testClass": "GeneratedSyntheticReferenceShapeExample",
+  "transformation": "transformations/synthetic_reference_shape.atl",
+  "metamodels": [
+    {"name": "IN", "uri": "SyntheticInput"},
+    {"name": "OUT", "uri": "SyntheticOutput"}
+  ],
+  "tests": [
+    {
+      "name": "source_relationships_create_exact_target_links",
+      "scenarioKind": "batch_transformation",
+      "models": [
+        {
+          "name": "IN",
+          "kind": "emf",
+          "role": "source",
+          "path": "models/synthetic_references.model",
+          "generated": true,
+          "metamodelUri": "SyntheticInput"
+        },
+        {
+          "name": "OUT",
+          "kind": "emf",
+          "role": "target",
+          "generated": false,
+          "metamodelUri": "SyntheticOutput"
+        }
+      ],
+      "assertions": [
+        {"kind": "count", "model": "OUT", "type": "TargetNode", "expected": 2},
+        {"kind": "count", "model": "OUT", "type": "TargetLink", "expected": 1},
+        {
+          "kind": "referencePairs",
+          "model": "OUT",
+          "type": "TargetLink",
+          "source": "from.label",
+          "target": "to.label",
+          "expected": [{"source": "left", "target": "right"}]
+        }
+      ]
+    }
+  ]
+}
+```
+
+```xml file=models/synthetic_references.model
+<?xml version="1.0" encoding="UTF-8"?>
+<src:SourceRoot xmi:version="2.0"
+    xmlns:xmi="http://www.omg.org/XMI"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:src="SyntheticInput"
+    name="root">
+  <items xsi:type="src:ConcreteItem" label="left" outgoing="#//@links.0"/>
+  <items xsi:type="src:ConcreteItem" label="right" incoming="#//@links.0"/>
+  <links label="left-to-right" source="#//@items.0" target="#//@items.1"/>
+</src:SourceRoot>
+```
+
+Example 3: canonical plainXml source-to-plainXml target response shape.
+For plainXml models, use kind="plainXml" and omit metamodelUri. If the source
+XML uses namespaced elements, declare every prefix on the generated source XML
+root.
+
+```json file=semantic_cases.json
+{
+  "schemaVersion": 1,
+  "testClass": "GeneratedSyntheticPlainXmlShapeExample",
+  "transformation": "transformations/synthetic_plain_xml_shape.atl",
+  "metamodels": [
+    {"name": "IN"},
+    {"name": "OUT"}
+  ],
+  "tests": [
+    {
+      "name": "namespaced_source_xml_creates_exact_target_elements",
+      "scenarioKind": "batch_transformation",
+      "models": [
+        {
+          "name": "IN",
+          "kind": "plainXml",
+          "role": "source",
+          "path": "models/synthetic_source.xml",
+          "generated": true
+        },
+        {
+          "name": "OUT",
+          "kind": "plainXml",
+          "role": "target",
+          "generated": false
+        }
+      ],
+      "assertions": [
+        {"kind": "count", "model": "OUT", "type": "t_targetItem", "expected": 1},
+        {
+          "kind": "pathValues",
+          "model": "OUT",
+          "type": "t_targetTitle",
+          "path": "text",
+          "expected": ["Synthetic title"]
+        },
+        {
+          "kind": "pathValues",
+          "model": "OUT",
+          "type": "t_targetLink",
+          "path": "a_href",
+          "expected": ["https://synthetic.example/item"]
+        }
+      ]
+    }
+  ]
+}
+```
+
+```xml file=models/synthetic_source.xml
+<?xml version="1.0" encoding="UTF-8"?>
+<sourceRoot
+    xmlns:meta="https://synthetic.example/meta"
+    xmlns:content="https://synthetic.example/content">
+  <item>
+    <title>Synthetic title</title>
+    <link>https://synthetic.example/item</link>
+    <meta:author>Example Author</meta:author>
+    <content:body>Example body</content:body>
+  </item>
+</sourceRoot>
+```

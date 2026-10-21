@@ -1,0 +1,224 @@
+    private void writeSnapshot(String relativePath, EmfModel model) throws Exception {
+        String configured = System.getProperty("llm4mtl.observations.dir", "");
+        if (configured.isBlank()) return;
+        java.nio.file.Path target = java.nio.file.Path.of(configured).resolve(relativePath);
+        java.nio.file.Files.createDirectories(target.getParent());
+        ResourceSet snapshotSet = new ResourceSetImpl();
+        snapshotSet.getResourceFactoryRegistry().getExtensionToFactoryMap().put("xmi", new XMIResourceFactoryImpl());
+        Resource snapshot = snapshotSet.createResource(
+            org.eclipse.emf.common.util.URI.createFileURI(target.toString()));
+        snapshot.getContents().addAll(EcoreUtil.copyAll(model.getResource().getContents()));
+        snapshot.save(Map.of());
+    }
+
+    private Collection<?> allOfType(IModel model, String typeName) throws Exception {
+        return model.getAllOfType(typeName);
+    }
+
+    private List<String> pathValues(IModel model, String typeName, String path) throws Exception {
+        List<String> values = new ArrayList<>();
+        for (Object object : allOfType(model, typeName)) {
+            for (Object value : pathValuesFrom(object, path, true)) {
+                values.add(stringValue(value));
+            }
+        }
+        return values;
+    }
+
+    private List<String> referencePairs(IModel model, String typeName, String sourcePath, String targetPath) throws Exception {
+        List<String> pairs = new ArrayList<>();
+        for (Object object : allOfType(model, typeName)) {
+            List<Object> sources = pathValuesFrom(object, sourcePath);
+            List<Object> targets = pathValuesFrom(object, targetPath);
+            for (Object source : sources) {
+                for (Object target : targets) {
+                    pairs.add(stringValue(source) + "->" + stringValue(target));
+                }
+            }
+        }
+        return pairs;
+    }
+
+    private List<String> treePaths(IModel model, String typeName, String labelFeature, String childrenFeature) throws Exception {
+        List<String> paths = new ArrayList<>();
+        for (Object object : allOfType(model, typeName)) {
+            if (object instanceof EObject && ((EObject) object).eContainer() == null) {
+                collectTreePaths(object, "", labelFeature, childrenFeature, paths);
+            }
+        }
+        return paths;
+    }
+
+    private void collectTreePaths(Object object, String prefix, String labelFeature, String childrenFeature, List<String> paths) {
+        String currentPath = prefix + "/" + stringValue(pathValue(object, labelFeature));
+        paths.add(currentPath);
+        for (Object child : pathValuesFrom(object, childrenFeature)) {
+            collectTreePaths(child, currentPath, labelFeature, childrenFeature, paths);
+        }
+    }
+
+    private List<String> signaturesOf(IModel model, String typeName, String[] features) throws Exception {
+        List<String> signatures = new ArrayList<>();
+        for (Object object : allOfType(model, typeName)) {
+            List<String> parts = new ArrayList<>();
+            for (String feature : features) {
+                parts.add(feature + "=" + stringValue(pathValue(object, feature)));
+            }
+            signatures.add(String.join("|", parts));
+        }
+        return signatures;
+    }
+
+    private void assertCollectionSize(IModel model, String typeName, String[] features, String expectedSignature, String path, int expectedSize, String message) throws Exception {
+        boolean matched = false;
+        for (Object object : allOfType(model, typeName)) {
+            if (expectedSignature.equals(signatureOf(object, features))) {
+                matched = true;
+                assertEquals(expectedSize, pathValuesFrom(object, path).size(), message);
+            }
+        }
+        assertTrue(matched, message + " missing object " + expectedSignature);
+    }
+
+    private String signatureOf(Object object, String[] features) {
+        List<String> parts = new ArrayList<>();
+        for (String feature : features) {
+            parts.add(feature + "=" + stringValue(pathValue(object, feature)));
+        }
+        return String.join("|", parts);
+    }
+
+    private Object pathValue(Object object, String path) {
+        Object current = object;
+        for (String part : path.split("\\.")) {
+            if (current instanceof Collection<?>) {
+                List<Object> resolved = new ArrayList<>();
+                for (Object element : (Collection<?>) current) {
+                    addFlattened(resolved, featureValue(element, part));
+                }
+                current = resolved;
+            } else {
+                current = featureValue(current, part);
+            }
+            if (current == null) {
+                return null;
+            }
+        }
+        return current;
+    }
+
+    private List<Object> pathValuesFrom(Object object, String path) {
+        return pathValuesFrom(object, path, false);
+    }
+
+    private List<Object> pathValuesFrom(Object object, String path, boolean keepTerminalNull) {
+        List<Object> values = new ArrayList<>();
+        if (path == null || path.isEmpty()) {
+            addFlattened(values, object);
+            return values;
+        }
+        int dot = path.indexOf('.');
+        String first = dot >= 0 ? path.substring(0, dot) : path;
+        String rest = dot >= 0 ? path.substring(dot + 1) : "";
+        List<Object> currentValues = new ArrayList<>();
+        addFlattened(currentValues, object);
+        for (Object current : currentValues) {
+            Object next = featureValue(current, first);
+            if (!rest.isEmpty()) {
+                values.addAll(pathValuesFrom(next, rest, keepTerminalNull));
+            }
+            else if (next == null && keepTerminalNull) {
+                values.add(null);
+            }
+            else {
+                addFlattened(values, next);
+            }
+        }
+        return values;
+    }
+
+    private void addFlattened(List<Object> values, Object value) {
+        if (value instanceof Collection<?>) {
+            values.addAll((Collection<?>) value);
+        }
+        else if (value != null) {
+            values.add(value);
+        }
+    }
+
+    private Object featureValue(Object object, String featureName) {
+        if (object instanceof EObject) {
+            EObject eObject = (EObject) object;
+            EStructuralFeature feature = eObject.eClass().getEStructuralFeature(featureName);
+            assertNotNull(feature, "Missing feature " + featureName + " on " + eObject.eClass().getName());
+            return eObject.eGet(feature);
+        }
+        if (object instanceof Element) return plainXmlFeatureValue((Element) object, featureName);
+        fail("Feature assertions are only supported for EMF EObject and plain XML Element instances: " + object);
+        return null;
+    }
+
+    private Object plainXmlFeatureValue(Element element, String featureName) {
+        if (featureName.equals("text")) return element.getTextContent();
+        if (featureName.startsWith("a_")) {
+            String attribute = featureName.substring(2);
+            return element.hasAttribute(attribute) ? element.getAttribute(attribute) : null;
+        }
+        if (featureName.startsWith("e_") || featureName.startsWith("c_")) {
+            String tag = featureName.substring(2);
+            List<Object> children = new ArrayList<>();
+            NodeList nodes = element.getChildNodes();
+            for (int i = 0; i < nodes.getLength(); i++) {
+                Node node = nodes.item(i);
+                if (node instanceof Element && ((Element) node).getTagName().equals(tag)) children.add(node);
+            }
+            if (featureName.startsWith("c_")) return children;
+            return children.isEmpty() ? null : children.get(0);
+        }
+        fail("Unknown plain XML feature " + featureName + "; use text, a_<attribute>, e_<tag>, or c_<tag>");
+        return null;
+    }
+
+    private String stringValue(Object value) {
+        if (value == null) {
+            return "null";
+        }
+        if (value instanceof Collection<?>) {
+            List<String> rendered = new ArrayList<>();
+            for (Object element : (Collection<?>) value) {
+                rendered.add(stringValue(element));
+            }
+            return String.join(",", rendered);
+        }
+        if (value instanceof EObject) {
+            EObject object = (EObject) value;
+            for (String candidate : new String[] {"name", "label", "id", "value"}) {
+                EStructuralFeature feature = object.eClass().getEStructuralFeature(candidate);
+                if (feature != null && object.eGet(feature) != null) {
+                    return String.valueOf(object.eGet(feature));
+                }
+            }
+        }
+        if (value instanceof Element) return ((Element) value).getTextContent();
+        return String.valueOf(value);
+    }
+
+    private Map<String, Integer> counts(Collection<String> values) {
+        Map<String, Integer> counts = new LinkedHashMap<>();
+        for (String value : values) {
+            counts.put(value, counts.getOrDefault(value, 0) + 1);
+        }
+        return counts;
+    }
+
+    private void assertContainsCounts(Collection<String> expected, Collection<String> actual, String message) {
+        Map<String, Integer> actualCounts = counts(actual);
+        for (Map.Entry<String, Integer> expectedEntry : counts(expected).entrySet()) {
+            assertTrue(actualCounts.getOrDefault(expectedEntry.getKey(), 0) >= expectedEntry.getValue(), message + " missing " + expectedEntry.getKey());
+        }
+    }
+
+    private List<String> list(String... values) {
+        return Arrays.asList(values);
+    }
+

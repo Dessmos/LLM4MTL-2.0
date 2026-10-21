@@ -1,0 +1,5 @@
+schema_version: 1
+variant: no-parser-feedback
+parser_feedback: false
+semantic_feedback: true
+failure_diagnosis: true

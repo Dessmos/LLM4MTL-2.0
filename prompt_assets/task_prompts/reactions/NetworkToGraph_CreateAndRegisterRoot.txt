@@ -1,0 +1,4 @@
+Create a transformation called **networkToGraph** that reacts to changes in the **network** model and executes actions in the **graph** model.  
+Define a reaction named **SystemInsertedAsRoot** that triggers whenever a **System** element is inserted as the root of the network.  
+In this reaction, call a routine named **createAndRegisterRoot**.  
+The routine should ensure that no **Root** already exists for the given system, then create a new **Root**, persist it to a project-relative file, and establish a correspondence between the system and the root.

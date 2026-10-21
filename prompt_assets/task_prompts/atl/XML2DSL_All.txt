@@ -1,0 +1,7 @@
+Create a transformation module XML2DSL that maps the XML metamodel to the DSL metamodel.
+
+Define helpers on Element: getAttrBool, getAttrVal, get, getType, getEnumId, getText, getSeq, hasChildren, hasAttr, isAbstract, and on the module: dslElementsById, getSubTypes, findType.
+
+Implement rule DomainModel creating DomainModel and the four SimpleType instances.
+
+Implement rule Class, rule Relationship, rule Role, rule ValueProperty, rule Enumeration, and rule EnumerationLiteral, wiring all references (superType/subTypes, roles, owner, types, containment) exactly as in the models.

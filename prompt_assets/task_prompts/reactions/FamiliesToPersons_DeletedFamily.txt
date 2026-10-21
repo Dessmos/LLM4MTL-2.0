@@ -1,0 +1,5 @@
+Create a transformation called **familiesToPersons** that reacts to changes in the **families** model and executes actions in the **persons** model.  
+
+Define a reaction named **DeletedFamily** that, whenever a **Family** element is deleted, ensures that its father, mother, daughters, and sons are also removed from the persons model.  
+
+Provide a routine named **deletePerson** that, given a **Member**, retrieves the corresponding **Person** and its related **Family**, then removes the person object and all correspondences between the person, the member, and the family.

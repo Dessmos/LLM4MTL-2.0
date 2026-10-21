@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "llm4mtl"
+version = "0.0.0"
+description = "LLM4MTL experiment pipeline (v5 skeleton)"
+requires-python = ">=3.11"
+# jsonschema enforces schemas/ on every persisted artifact: the schemas are a
+# contract shared with n8n, not documentation, so writers validate before writing.
+dependencies = ["jsonschema>=4.18"]
+
+[project.optional-dependencies]
+dev = ["pytest>=7", "fastapi", "uvicorn", "httpx"]
+service = ["fastapi", "uvicorn[standard]"]
+
+# src layout: the importable package lives under pipeline/src/llm4mtl.
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["llm4mtl*"]
+
+# Java source that the language renderers copy into generated test harnesses.
+[tool.setuptools.package-data]
+"llm4mtl.languages" = ["java/*.java.txt"]
+"llm4mtl.languages.atl" = ["java/*.java.txt"]
+"llm4mtl.languages.etl" = ["java/*.java.txt"]
+"llm4mtl.languages.qvto" = ["java/*.java.txt"]
+"llm4mtl.languages.reactions" = ["java/*.java.txt"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

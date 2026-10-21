@@ -1,0 +1,166 @@
+ETL semantic test output contract.
+
+This section is binding and complete. It is the input contract of the Python
+semantic-test extractor: a response that deviates from it is rejected before
+anything is executed and is recorded as an invalid artifact, not as a failing
+test. Every allowed field name and every allowed field value of
+semantic_cases.json is stated below. Use no field name and no field value that
+this section does not list.
+
+The generated response must contain semantic test artifacts only:
+- one semantic_cases.json file block,
+- one or more generated source model file blocks,
+- no Java, no JUnit, no Maven files, and no prose outside file blocks.
+
+Always use canonical assertion payloads with the expected field. Do not use
+legacy task-specific assertion fields or alternate primary assertion keys.
+
+REQUIRED OUTPUT CONTRACT
+
+Follow this structure exactly. It is the input contract of the Python
+semantic-test extractor, not optional guidance.
+
+Use the case-sensitive runtime model names from the current ETL task:
+
+- `Tree2Graph`: `Tree` is an EMF source; `Graph` is an EMF target.
+- `base`, `equivalent`, `greedy`, `inheritance`, `lazy`,
+  `multiple_targets`, and `primary`: `Flowchart` is an EMF source; `HTML`
+  is an EMF target.
+- `rss2atom`: `RSS` is a `plainXml` source; `Atom` is a `plainXml` target.
+- `OO2DB`: `OO` and `OO2DB` are EMF sources; `DB` and `Trace` are EMF
+  targets. Do not invent a different runtime name.
+
+Never use synthetic names from the examples in an actual task. Copy each
+`metamodelUri` exactly from the authoritative metamodel input. Do not infer it
+from a filename.
+
+Allowed `models[].kind` values are exactly `"emf"` and `"plainXml"`.
+Direction belongs only in `models[].role`, whose allowed values are `"source"`,
+`"target"`, and `"inout"`.
+
+For every readable source model, include `path` and `"generated": true`. A
+target created by the harness has no `path` and uses `"generated": false`.
+For `plainXml`, omit `metamodelUri`.
+
+A `plainXml` model is read by the Epsilon PlainXml driver, whose names differ
+from the tag names: the type of an element is its tag name prefixed with `t_`,
+the text of an element is the feature `text`, and an attribute is the feature
+`a_<attribute>`. The `feed` element is type `t_feed`, its `href` attribute is
+`a_href`, and a namespaced tag such as `dc:creator` is `t_dc:creator`. Use only
+`t_`-prefixed type names in assertions on a `plainXml` model; a bare tag name
+such as `feed` is not a type there, and the run fails before any assertion is
+evaluated.
+
+Every test must use `"scenarioKind": "batch_transformation"`. Every assertion
+must contain all four common fields:
+
+- `kind`;
+- `model`;
+- `type`;
+- `expected`.
+
+`model` must equal a `models[].name` from the same test. `type` must be an
+unqualified type name from that model's current metamodel. Never use `object`
+instead of `model` plus `type`.
+
+The only allowed assertion shapes are:
+
+```json
+{"kind": "count", "model": "<target runtime name>", "type": "<TargetType>", "expected": 1}
+```
+
+```json
+{
+  "kind": "featureValues",
+  "model": "<target runtime name>",
+  "type": "<TargetType>",
+  "feature": "<feature>",
+  "expected": ["<value>"]
+}
+```
+
+```json
+{
+  "kind": "pathValues",
+  "model": "<target runtime name>",
+  "type": "<TargetType>",
+  "path": "<feature.path>",
+  "expected": ["<value>"]
+}
+```
+
+```json
+{
+  "kind": "objects",
+  "model": "<target runtime name>",
+  "type": "<TargetType>",
+  "features": ["<feature1>", "<feature2>"],
+  "expected": [
+    {"<feature1>": "<value1>", "<feature2>": "<value2>"}
+  ]
+}
+```
+
+```json
+{
+  "kind": "referencePairs",
+  "model": "<target runtime name>",
+  "type": "<TargetLinkType>",
+  "source": "<sourceReference>.<identityFeature>",
+  "target": "<targetReference>.<identityFeature>",
+  "expected": [
+    {"source": "<source identity>", "target": "<target identity>"}
+  ]
+}
+```
+
+`count.expected` must be an integer. All other `expected` values above must be
+arrays. Do not replace `expected` with `value`, `values`, `equals`, `ids`,
+`pairs`, `where`, or `match`.
+
+How the harness reads a value. Every entry of `expected` other than
+`count.expected` is compared as text with what the harness reads from the
+model, rendered the way Java prints it:
+
+- a boolean attribute reads as `"true"` or `"false"`; write these strings,
+  never JSON `true` or `false`;
+- a number reads as Java prints it, for example `"5"`, `"1200.5"`, `"3.0"`;
+- an unset attribute or an empty single-valued reference reads as `"null"`;
+  write the string `"null"`, never JSON `null` and never `""`;
+- a reference reads as the `name`, `label`, `id`, or `value` of the referenced
+  object, whichever of those features the object has first;
+- a multi-valued feature contributes one entry per element, so an empty
+  collection contributes no entry at all.
+
+`type` matches the exact class name and nothing else. An assertion on an
+abstract type or a supertype sees none of its subtypes' instances: to count the
+`InterruptTask` objects a rule creates, name `InterruptTask`, not `Task`, and
+to count `Female` objects name `Female`, not `Person`. When a rule creates one
+of several concrete types, assert the concrete type it creates.
+
+`referencePairs` pairs every value reached through `source` with every value
+reached through `target` on the same link object. It fits a link with two
+distinct single-valued references, such as `from`/`to`. For a link that holds
+its ends in one multi-valued reference, do not name that reference as both
+`source` and `target` (that yields every combination, including an end paired
+with itself); use `pathValues` on the reference instead, for example
+`"path": "<ends>.<identityFeature>"` with one expected entry per end.
+
+The `semantic_cases.json` block has exactly these top-level fields:
+
+- `"schemaVersion": 1`;
+- `testClass`: a Java identifier;
+- `transformation`: `"transformations/<task>.etl"`;
+- `metamodels`: one `{"name": ..., "uri": ...}` entry per runtime model,
+  named by the exact runtime model name, with its exact metamodel URI;
+- `tests`: the array of tests.
+
+Every test has exactly `name`, `"scenarioKind": "batch_transformation"`,
+`models`, and `assertions`. Every `models[]` entry has `name`,
+`"kind": "emf"` or `"kind": "plainXml"`, `role`, `generated`, a `path`
+for a generated source, and `metamodelUri` for an EMF model, as stated above.
+
+For `rss2atom`, use the same structure with `"kind": "plainXml"` for `RSS`
+and `Atom`, and omit `metamodelUri`. After the `semantic_cases.json` block,
+emit exactly the XML file blocks referenced by readable model paths. Emit no
+target model file and no prose outside file blocks.

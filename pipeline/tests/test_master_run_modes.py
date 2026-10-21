@@ -1,0 +1,2604 @@
+"""What the master is asked to run, and what each run mode means.
+
+Two axes are deliberately separate here. ``run_mode`` says which pipeline the
+user intends to execute; the stage flags say which components of that pipeline
+are enabled or ablated for RQ4. Emulating a mode by disabling flags would make
+``full`` with failure diagnosis switched off indistinguishable from
+``transformations_only``, and those are different experiments.
+
+The master workflow is authored in the n8n editor, so these tests drive its
+shipped ``Validate Config and Build Run Queue``, ``State Machine`` and ``Capture
+Action Result`` code under Node instead of restating their rules in Python.
+"""
+
+from __future__ import annotations
+
+import base64
+import json
+import re
+import shutil
+import subprocess
+import tempfile
+import unittest
+from pathlib import Path
+from typing import Any
+
+from llm4mtl.prompt_assembly.refinement import STRATEGY_ASSETS
+from llm4mtl.vocabulary import STRATEGIES
+
+
+REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
+MASTER_WORKFLOW = (
+    REPOSITORY_ROOT / "workflows" / "n8n" / "main" / "llm4mtl-agent-workflow.json"
+)
+HARNESS = Path(__file__).parent / "fixtures" / "run_master_code_node.js"
+TASK_CONTRACTS = REPOSITORY_ROOT / "benchmark" / "tasks"
+SUBWORKFLOW_ADAPTER = "Adapt Subworkflow For This Run"
+TRANSFORMATION_WORKFLOW = (
+    REPOSITORY_ROOT
+    / "workflows"
+    / "n8n"
+    / "transformations"
+    / "workflows"
+    / "etl_variants"
+    / "Prompting_ETL_gpt-5_few_shots_AND_grammar.json"
+)
+
+# What each provider's standard AI Model node looks like once a model is picked
+# in its built-in selector. Google keeps the model under a different parameter.
+PROVIDER_PARAMS = {
+    "OpenAI": {"model": {"value": "gpt-5-2025-08-07"}},
+    "Anthropic": {"model": {"value": "claude-sonnet-4-20250514"}},
+    "Google Gemini": {"modelName": "models/gemini-2.5-pro"},
+}
+PROVIDER_FAMILIES = {
+    "OpenAI": "gpt-5",
+    "Anthropic": "claude-sonnet-4",
+    "Google Gemini": "gemini-2-5-pro",
+}
+PROVIDER_SUFFIX = {
+    "OpenAI": "OpenAI Chat Model",
+    "Anthropic": "Anthropic Chat Model",
+    "Google Gemini": "Google Gemini Chat Model",
+}
+ROLE_NODES = {
+    "transformation": "Transformation Generation",
+    "semantic_test": "Semantic Test Generation",
+    "source_diagnosis": "Source Diagnosis",
+    "refinement": "Refinement",
+}
+# The card label the form shows, against the id every run records.
+STRATEGY_LABELS = {
+    "Prompt only": "only_prompt",
+    "Few-shot": "few_shot",
+    "Grammar": "grammar",
+    "Few-shot + Grammar": "few_shots_AND_grammar",
+}
+CUSTOM_TASK_SLOTS = 5
+# The tick that opens the section, then each slot's own fields. The ticks are
+# presentation: the queue builder reads a slot by whether it was filled in.
+CUSTOM_TASK_FIELDS = ("custom_tasks_enabled",) + tuple(
+    f"custom_task_{slot}_{part}"
+    for slot in range(1, CUSTOM_TASK_SLOTS + 1)
+    for part in ("name", "language", "metamodel", "metamodel_file", "prompt", "more")
+    if not (slot == CUSTOM_TASK_SLOTS and part == "more")
+)
+# The stages a custom task never runs: they all judge against a reference, and
+# nothing in the benchmark implements the custom prompt over the user's
+# metamodel.
+CUSTOM_TASK_DISABLED = (
+    "technical_validation",
+    "reference_validation",
+    "semantic_execution",
+    "source_diagnosis",
+)
+STAGE_FIELDS = (
+    "test_generation",
+    "test_extraction",
+    "technical_validation",
+    "reference_validation",
+    "transformation_generation",
+    "syntax_validation",
+    "semantic_execution",
+    "source_diagnosis",
+    "parser_feedback",
+    "semantic_feedback",
+    "test_refinement",
+    "transformation_refinement",
+)
+
+
+def _master() -> dict[str, Any]:
+    return json.loads(MASTER_WORKFLOW.read_text(encoding="utf-8"))
+
+
+def _form_fields() -> list[dict[str, Any]]:
+    """The one configuration screen's fields."""
+    trigger = next(
+        node
+        for node in _master()["nodes"]
+        if node["type"] == "n8n-nodes-base.formTrigger"
+    )
+    return trigger["parameters"]["formFields"]["values"]
+
+
+def _form_css() -> str:
+    trigger = next(
+        node
+        for node in _master()["nodes"]
+        if node["type"] == "n8n-nodes-base.formTrigger"
+    )
+    return trigger["parameters"]["options"]["customCss"]
+
+
+def _field_options(field_name: str) -> list[str]:
+    field = next(
+        field for field in _form_fields() if field.get("fieldName") == field_name
+    )
+    return [option["option"] for option in field["fieldOptions"]["values"]]
+
+
+def _trigger_type_version() -> float:
+    trigger = next(
+        node
+        for node in _master()["nodes"]
+        if node["type"] == "n8n-nodes-base.formTrigger"
+    )
+    return float(trigger["typeVersion"])
+
+
+def _submitted_key(field: dict[str, Any], type_version: float) -> str:
+    """The json key n8n gives a submitted field.
+
+    This mirrors ``getFieldIdentifier`` in n8n's Form utils: only from
+    typeVersion 2.4 does a field arrive under its ``fieldName``. Below that n8n
+    keys the item by ``fieldLabel`` — presentation text — and every name the queue
+    builder reads arrives undefined. The tests submit through this so they cannot
+    pass on keys the real form never sends.
+    """
+    if type_version >= 2.4 and field.get("fieldName"):
+        return field["fieldName"]
+    return field.get("fieldLabel") or field.get("fieldName") or ""
+
+
+def _as_submitted(values: dict[str, Any]) -> dict[str, Any]:
+    """Re-key a configuration by what n8n would actually post for this form."""
+    version = _trigger_type_version()
+    submitted: dict[str, Any] = {}
+    for field in _form_fields():
+        if field["fieldType"] == "html":
+            continue
+        name = field["fieldName"]
+        if name in values:
+            submitted[_submitted_key(field, version)] = values[name]
+    missing = set(values) - {field.get("fieldName") for field in _form_fields()}
+    assert not missing, f"configuration names no form field: {sorted(missing)}"
+    return submitted
+
+
+def _as_uploaded(files: dict[str, str]) -> dict[str, Any]:
+    """The binary side of a submitted form, one entry per uploaded file.
+
+    n8n hands a Code node an uploaded file base64-encoded under ``data``, keyed
+    by the upload field's label with every non-word character replaced, so the
+    tests submit attachments the same way.
+    """
+    return {
+        key: {"data": base64.b64encode(text.encode("utf-8")).decode("ascii")}
+        for key, text in files.items()
+    }
+
+
+def _run_node(
+    node: str,
+    *,
+    inputs: list[dict[str, Any]] | None = None,
+    nodes: dict[str, Any] | None = None,
+    state: dict[str, Any] | None = None,
+    files: list[Path] | None = None,
+    binary: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    spec: dict[str, Any] = {
+        "master": str(MASTER_WORKFLOW),
+        "node": node,
+        "input": inputs or [],
+        "nodes": nodes or {},
+    }
+    if binary is not None:
+        spec["binary"] = binary
+    if state is not None:
+        spec["state"] = state
+    if files is not None:
+        spec["files"] = [str(path) for path in files]
+    with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as handle:
+        json.dump(spec, handle)
+        spec_path = handle.name
+    try:
+        completed = subprocess.run(
+            ["node", str(HARNESS), spec_path],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    finally:
+        Path(spec_path).unlink()
+    return json.loads(completed.stdout)
+
+REACTIONS_MATRIX = (
+    REPOSITORY_ROOT
+    / "workflows"
+    / "n8n"
+    / "transformations"
+    / "workflows"
+    / "updated_reactions_workflow"
+    / "generate_reactions"
+    / "LLM4MTL_Generate_Reactions_for_all_Configurations.json"
+)
+# The heading each optional prompt part starts with, by the asset it carries.
+PART_HEADINGS = {
+    "examples": "Here are some examples as guideline:",
+    "grammar": "Here is the grammar of the Language:",
+    "helper_methods": "Here are helper methods you can use:",
+}
+# A prompt part the Reactions matrix includes only when the item's flag is set.
+FLAG_GATED_PART = re.compile(
+    r'\$if\(\$json\.(\w+) === true && \$\([^)]*\)\.isExecuted, "([^"\\]+)'
+)
+
+
+def _adapt(
+    workflow_path: Path,
+    *,
+    action: str,
+    current: dict[str, Any],
+    subworkflow_input: dict[str, Any] | None = None,
+    provider: str = "openai",
+    model: str = "gpt-5",
+) -> dict[str, Any]:
+    """Drive the subworkflow adapter the way the canvas does.
+
+    Selecting the variant off disk and rewriting the copy is one node, so a test
+    hands it the two things the canvas hands it: the State Machine's state, and
+    the files the read glob matched. The model is the family the file is already
+    named after, which keeps the model patching a no-op so each test reads its
+    own subject.
+    """
+    return _run_node(
+        SUBWORKFLOW_ADAPTER,
+        state={
+            "action": action,
+            "current": current,
+            "subworkflow_path": str(workflow_path),
+            "subworkflow_input": {
+                "provider": provider,
+                "model": model,
+                **(subworkflow_input or {}),
+            },
+        },
+        files=[workflow_path],
+    )
+
+
+def _llm_user_prompt(nodes: dict[str, Any], chain: str) -> str:
+    """The prompt the direct call that replaced ``chain`` sends as the user message."""
+    return next(
+        assignment["value"]
+        for assignment in nodes[f"{chain} - LLM prompt"]["parameters"]["assignments"]["assignments"]
+        if assignment["name"] == "llm_user_prompt"
+    )
+
+
+def _direct_call(adapted: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    """The settings baked into the adapted copy's request node, and its call node."""
+    nodes = adapted["result"]["workflow_json"]["nodes"]
+    request = next(node for node in nodes if node["name"].endswith(" - LLM request"))
+    call = next(node for node in nodes if node["name"].endswith(" - LLM call"))
+    declaration = request["parameters"]["jsCode"].splitlines()[0]
+    return json.loads(declaration.removeprefix("const call = ").removesuffix(";")), call
+
+
+def _run_llm_response_node(adapted: dict[str, Any], reply: dict[str, Any]) -> dict[str, Any]:
+    """Run the adapted copy's response node on ``reply``, the call node's full response."""
+    nodes = adapted["result"]["workflow_json"]["nodes"]
+    response = next(node for node in nodes if node["name"].endswith(" - LLM response"))
+    script = "\n".join(
+        [
+            "const $input = { first: () => ({ json: REPLY }) };",
+            "const $ = () => ({ first: () => ({ json: { llm_started_at: '2026-01-01T10:00:00Z' } }) });",
+            "const $execution = { id: '1' };",
+            f"console.log(JSON.stringify((() => {{ {response['parameters']['jsCode']} }})()[0].json));",
+        ]
+    ).replace("REPLY", json.dumps(reply), 1)
+    completed = subprocess.run(
+        ["node", "-e", script], capture_output=True, text=True, check=True
+    )
+    return json.loads(completed.stdout)
+
+
+def _model_nodes(
+    unconfigured: tuple[str, ...] = (),
+    reasoning_efforts: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    """Every standard AI Model node on the canvas, as the master reads it.
+
+    A role in ``unconfigured`` has no model picked in any of its provider nodes,
+    which is what a user who never touched that role's nodes actually has.
+    ``reasoning_efforts`` sets, per role, the reasoning effort of its OpenAI node.
+    """
+    nodes: dict[str, Any] = {}
+    for role, prefix in ROLE_NODES.items():
+        for provider, params in PROVIDER_PARAMS.items():
+            name = f"{prefix} - {PROVIDER_SUFFIX[provider]}"
+            configured = {} if role in unconfigured else dict(params)
+            if provider == "OpenAI" and role in (reasoning_efforts or {}):
+                configured["options"] = {"reasoningEffort": reasoning_efforts[role]}
+            nodes[name] = {"params": configured}
+    return nodes
+
+
+def _configure(
+    *,
+    run_mode: str = "Full Pipeline",
+    languages: str = "ETL",
+    tasks: dict[str, str] | None = None,
+    providers: dict[str, str] | None = None,
+    semantic_test_strategy: str = "Few-shot",
+    transformation_strategy: str = "Grammar",
+    max_test_refinement_iterations: str = "2",
+    max_transformation_refinement_iterations: str = "2",
+    ablation_profile: str = "Standard full configuration",
+    disabled_components: str = "",
+    unconfigured_roles: tuple[str, ...] = (),
+    custom_tasks: dict[str, str] | None = None,
+    attached_metamodels: dict[str, str] | None = None,
+    reasoning_efforts: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    """Submit the configuration screen and build the run queue.
+
+    ``attached_metamodels`` maps a binary key the form trigger would create for
+    an upload field to that file's text, which is how a metamodel arrives when
+    the user attaches it instead of writing it.
+    """
+    chosen = {"etl_tasks": "Tree2Graph", **(tasks or {}), **(custom_tasks or {})}
+    provider_choice = {
+        "semantic_test_provider": "OpenAI",
+        "transformation_provider": "Anthropic",
+        "source_diagnosis_provider": "OpenAI",
+        "refinement_provider": "Anthropic",
+        **(providers or {}),
+    }
+    return _run_node(
+        "Validate Config and Build Run Queue",
+        inputs=[
+            _as_submitted(
+                {
+                    "run_mode": run_mode,
+                    "languages": languages,
+                    **chosen,
+                    **provider_choice,
+                    "semantic_test_strategy": semantic_test_strategy,
+                    "transformation_strategy": transformation_strategy,
+                    "max_test_refinement_iterations": max_test_refinement_iterations,
+                    "max_transformation_refinement_iterations": (
+                        max_transformation_refinement_iterations
+                    ),
+                    "ablation_profile": ablation_profile,
+                    "disabled_components": disabled_components,
+                    "n8n_workflow_root": "/data/repository/workflows/n8n",
+                }
+            )
+        ],
+        binary=[_as_uploaded(attached_metamodels or {})],
+        nodes=_model_nodes(unconfigured_roles, reasoning_efforts),
+    )
+
+
+# Where one launch's runs are filed. Python claims the batch and reports both
+# spellings of every directory; the master repeats them and builds none itself.
+BATCH = "batch_001"
+RUN_ID = "etl-tree2graph-0001"
+RUN_DIR = f"artifacts/work/runs/{BATCH}/{RUN_ID}"
+N8N_RUN_DIR = f"/data/artifacts/runs/{BATCH}/{RUN_ID}"
+
+# What each stage reports back when everything succeeds.
+PASSING_RESULTS = {
+    "create_batch": {
+        "batch_id": BATCH,
+        "batch_dir": f"artifacts/work/runs/{BATCH}",
+        "n8n_batch_dir": f"/data/artifacts/runs/{BATCH}",
+    },
+    "create_run": {"run_id": RUN_ID, "run_dir": RUN_DIR, "n8n_run_dir": N8N_RUN_DIR},
+    "generate_tests": {"status": "completed"},
+    "extract": {"stage": "extract", "status": "completed", "outcome_code": "EXTRACTED"},
+    "technical": {
+        "stage": "technical-validation",
+        "status": "completed",
+        "outcome_code": "TECH_VALID",
+    },
+    "reference": {
+        "stage": "reference-validation",
+        "status": "completed",
+        "outcome_code": "REFERENCE_VALIDATED",
+    },
+    "generate_transformations": {"status": "completed"},
+    "record_generation": {"schema_version": "1.0"},
+    "syntax": {
+        "stage": "syntax-validation",
+        "status": "completed",
+        "outcome_code": "SYNTAX_VALID",
+    },
+    "execution": {
+        "stage": "execution",
+        "status": "completed",
+        "outcome_code": "SEMANTIC_PASSED",
+    },
+    # The ending is recorded first; the run view is read back afterwards and is
+    # what lands in `results[].artifacts`.
+    "final": {"status": "completed", "outcome_code": "SEMANTIC_PASSED"},
+    "read_run_artifacts": {"artifacts": {}},
+}
+
+
+def _drive(
+    config: dict[str, Any],
+    results: dict[str, Any] | None = None,
+    limit: int = 60,
+    factories: dict[str, Any] | None = None,
+    observed_states: list[dict[str, Any]] | None = None,
+) -> tuple[list[str], dict[str, Any]]:
+    """Run the real control loop until it reaches ``complete``.
+
+    State Machine -> action -> Capture Action Result -> State Machine is the
+    orchestration core, so the test walks it rather than a paraphrase.
+    """
+    stage_results = {**PASSING_RESULTS, **(results or {})}
+    state = config
+    actions: list[str] = []
+    for _ in range(limit):
+        machine = _run_node("State Machine", inputs=[state])
+        if not machine["ok"]:
+            raise AssertionError(machine["error"])
+        state = machine["result"]
+        if observed_states is not None:
+            observed_states.append(state)
+        action = state["action"]
+        actions.append(action)
+        if action == "complete":
+            return actions, state
+        # A factory lets one action answer differently on each pass, which is how
+        # a failing execution becomes a passing one after a refinement.
+        factory = (factories or {}).get(action)
+        if factory is not None:
+            produced = factory()
+        elif action == "prepare_refinement":
+            artifact_type = state["refinement_request"]["artifact_type"]
+            iteration = state["refinement_request"]["iteration"]
+            produced = {
+                "prompt_path": (
+                    f"{state['current']['n8n_run_dir']}/refinements/"
+                    f"{artifact_type}/iteration-{iteration:03d}/prompt.md"
+                ),
+                "request_path": (
+                    f"refinements/{artifact_type}/iteration-{iteration:03d}/request.json"
+                ),
+            }
+        else:
+            produced = stage_results.get(action, {})
+        captured = _run_node(
+            "Capture Action Result",
+            inputs=[produced],
+            nodes={"State Machine": {"json": state}},
+        )
+        if not captured["ok"]:
+            raise AssertionError(captured["error"])
+        state = captured["result"]
+    raise AssertionError(f"control loop did not terminate: {actions}")
+
+
+@unittest.skipUnless(shutil.which("node"), "the master workflow's Code nodes need Node")
+class OrchestrationFailureTests(unittest.TestCase):
+
+    def test_create_run_persists_the_exact_experiment_configuration(self) -> None:
+        """The run creation request, as the control loop actually builds it.
+
+        A custom task is the case that separates the two sources of the stage
+        flags: it runs under a narrower set than the launch configured, so a
+        request built from `config.stages` instead of the run's own would record
+        a run that judges against a reference it has none of.
+        """
+        configured = _configure(
+            custom_tasks={
+                "custom_task_1_name": "TreeFlattening",
+                "custom_task_1_language": "ETL",
+                "custom_task_1_metamodel": "class Tree { children: Tree[] }",
+                "custom_task_1_prompt": "Flatten every tree.",
+            }
+        )
+        self.assertTrue(configured["ok"], configured.get("error"))
+        create_batch = _run_node("State Machine", inputs=[configured["result"]])
+        self.assertTrue(create_batch["ok"], create_batch.get("error"))
+        batched = _run_node(
+            "Capture Action Result",
+            inputs=[PASSING_RESULTS["create_batch"]],
+            nodes={"State Machine": {"json": create_batch["result"]}},
+        )
+        create_run = _run_node("State Machine", inputs=[batched["result"]])
+        self.assertTrue(create_run["ok"], create_run.get("error"))
+
+        state = create_run["result"]
+        self.assertEqual("create_run", state["action"])
+        request = state["request"]
+        self.assertEqual("POST", request["method"])
+        self.assertEqual(
+            f"http://stage-service:8129/batches/{state['batch_id']}/runs",
+            request["url"],
+        )
+
+        body = request["body"]
+        config = state["config"]
+        self.assertEqual(
+            {
+                "max_test_refinement_iterations": config[
+                    "max_test_refinement_iterations"
+                ],
+                "max_transformation_refinement_iterations": config[
+                    "max_transformation_refinement_iterations"
+                ],
+                "parser_feedback": True,
+                "semantic_feedback": True,
+                # Reference-bound for the custom task, and configured for the
+                # launch: the request carries the run's flag, not the launch's.
+                "source_diagnosis": False,
+            },
+            body["experiment_config"],
+        )
+        self.assertTrue(config["stages"]["source_diagnosis"])
+        self.assertEqual(state["current"]["pipeline_variant"], body["pipeline_variant"])
+        self.assertEqual(
+            {
+                "name": "TreeFlattening",
+                "prompt": "Flatten every tree.",
+                "metamodel": "class Tree { children: Tree[] }",
+            },
+            body["custom_task"],
+        )
+
+    def test_every_stage_service_request_carries_a_body_object(self) -> None:
+        """One node issues every call, so its body switch cannot vary per call.
+
+        n8n keeps no expression in the boolean `Send Body`, so the switch is a
+        literal `true` and a read has to send an empty body rather than none.
+        A `null` here reaches the service as no body at all.
+        """
+        observed: list[dict[str, Any]] = []
+        _drive(_configure()["result"], observed_states=observed)
+        requests = [
+            state["request"]
+            for state in observed
+            if state["route"] == "stage_service"
+        ]
+        self.assertTrue(requests)
+        for request in requests:
+            with self.subTest(url=request["url"]):
+                self.assertIsInstance(request["body"], dict)
+
+    def test_terminal_result_reports_both_artifact_iterations(self) -> None:
+        """Both refinement budgets are reported, not their sum alone.
+
+        The two branches have independent budgets, so a terminal result that
+        only carried the total could not say which branch spent them.
+        """
+        observed: list[dict[str, Any]] = []
+        actions, _ = _drive(_configure()["result"], observed_states=observed)
+        self.assertIn("final", actions)
+        body = next(
+            state["request"]["body"]
+            for state in observed
+            if state["action"] == "final"
+        )
+
+        self.assertEqual(0, body["test_iteration"])
+        self.assertEqual(0, body["transformation_iteration"])
+        self.assertEqual(
+            body["test_iteration"] + body["transformation_iteration"],
+            body["refinement_iterations_used"],
+        )
+        self.assertEqual(4, body["refinement_iterations_allowed"])
+
+    def test_persistence_http_errors_build_a_terminal_result_request(self) -> None:
+        configured = _configure()
+        self.assertTrue(configured["ok"], configured.get("error"))
+        for action in ("prepare_refinement", "record_generation"):
+            with self.subTest(action=action):
+                state = json.loads(json.dumps(configured["result"]))
+                state["action"] = action
+                state["current"]["run_id"] = "terminal-error-1"
+                state["current"]["suite_id"] = "terminal-error-1_001"
+                state["current"]["test_iteration"] = 1
+                state["current"]["transformation_iteration"] = 0
+                state["current"]["timeline"] = [
+                    {
+                        "stage": "reference-validation",
+                        "outcome_code": "REFERENCE_VALIDATION_FAILED",
+                    }
+                ]
+                captured = _run_node(
+                    "Capture Orchestration Error",
+                    inputs=[{"error": {"httpCode": 409}}],
+                    nodes={"State Machine": {"json": state}},
+                )
+
+                self.assertTrue(captured["ok"], captured.get("error"))
+                terminal = captured["result"]["orchestration_terminal_request"]
+                self.assertEqual("failed", terminal["status"])
+                self.assertEqual(
+                    f"ORCHESTRATION_ERROR:{action}", terminal["terminal_state"]
+                )
+                self.assertEqual(action, terminal["failed_component"])
+                self.assertEqual(
+                    "reference-validation", terminal["last_completed_stage"]
+                )
+                self.assertEqual(1, terminal["refinement_iterations_used"])
+                self.assertEqual(4, terminal["refinement_iterations_allowed"])
+                self.assertEqual(1, terminal["test_iteration"])
+                self.assertEqual(0, terminal["transformation_iteration"])
+
+    def test_orchestration_error_reaches_the_shared_final_result_contract(self) -> None:
+        configured = _configure()
+        self.assertTrue(configured["ok"], configured.get("error"))
+        state = configured["result"]
+        state["results"] = [
+            {
+                "run_id": "previous-run",
+                "language": "etl",
+                "status": "completed",
+            }
+        ]
+        state["action"] = "record_generation"
+        state["current"]["run_id"] = "terminal-error-2"
+        state["current"]["language"] = "etl"
+        state["current"]["task"] = "Tree2Graph"
+
+        captured = _run_node(
+            "Capture Orchestration Error",
+            inputs=[{"error": {"httpCode": 409}}],
+            nodes={"State Machine": {"json": state}},
+        )
+        self.assertTrue(captured["ok"], captured.get("error"))
+        terminal = {
+            **captured["result"]["orchestration_terminal_request"],
+            "run_id": "terminal-error-2",
+        }
+        finalized = _run_node(
+            "Finalize Orchestration Error",
+            inputs=[terminal],
+            nodes={"Capture Orchestration Error": {"json": captured["result"]}},
+        )
+        self.assertTrue(finalized["ok"], finalized.get("error"))
+        self.assertEqual(2, len(finalized["result"]["results"]))
+        self.assertEqual(
+            "terminal-error-2", finalized["result"]["results"][-1]["run_id"]
+        )
+
+        summary = _run_node("Final Result and Artifacts", inputs=[finalized["result"]])
+        self.assertTrue(summary["ok"], summary.get("error"))
+        self.assertEqual("failed", summary["result"]["status"])
+        self.assertEqual(2, summary["result"]["run_count"])
+        self.assertEqual(terminal, summary["result"]["results"][-1]["artifacts"])
+
+
+@unittest.skipUnless(shutil.which("node"), "the master workflow's Code nodes need Node")
+class TransformationWorkflowCompatibilityTests(unittest.TestCase):
+    """The master adapts legacy transformation workflows without editing them."""
+
+    def test_every_external_transformation_workflow_has_adapter_anchors(self) -> None:
+        workflows_root = (
+            REPOSITORY_ROOT / "workflows" / "n8n" / "transformations" / "workflows"
+        )
+        workflows = sorted(
+            path
+            for language in ("etl", "atl", "qvto")
+            for path in (workflows_root / f"{language}_variants").glob(
+                "Prompting_*.json"
+            )
+        )
+        workflows.append(
+            workflows_root
+            / "updated_reactions_workflow"
+            / "generate_reactions"
+            / "LLM4MTL_Generate_Reactions_for_all_Configurations.json"
+        )
+
+        for path in workflows:
+            with self.subTest(workflow=path):
+                nodes = json.loads(path.read_text(encoding="utf-8"))["nodes"]
+                prompt_readers = [
+                    node for node in nodes if node["name"] == "Read prompt files"
+                ]
+                response_writers = [
+                    node for node in nodes if node["name"] == "Write response to disk"
+                ]
+                save_names = [
+                    node
+                    for node in nodes
+                    if node["name"] in {"Save file name", "Save reaction name"}
+                ]
+                self.assertEqual(1, len(prompt_readers))
+                self.assertEqual(1, len(response_writers))
+                self.assertEqual(
+                    "n8n-nodes-base.readWriteFile", response_writers[0]["type"]
+                )
+                self.assertEqual(1, len(save_names))
+                self.assertEqual("n8n-nodes-base.set", save_names[0]["type"])
+
+    def test_every_external_test_workflow_has_generation_adapter_anchors(self) -> None:
+        workflows = sorted(
+            path
+            for path in (
+                REPOSITORY_ROOT / "workflows" / "n8n" / "tests" / "workflows"
+            ).glob("*_variants/test_generation/Prompting_tests_*.json")
+            if "qwen2-5-coder-7b" not in path.name
+        )
+        self.assertTrue(workflows)
+
+        for path in workflows:
+            with self.subTest(workflow=path):
+                nodes = json.loads(path.read_text(encoding="utf-8"))["nodes"]
+                for name in (
+                    "Read prompt files",
+                    "Write response to disk",
+                    "Write prompt to disk",
+                ):
+                    matched = [node for node in nodes if node["name"] == name]
+                    self.assertEqual(1, len(matched), f"{path}: {name}")
+                    self.assertEqual("n8n-nodes-base.readWriteFile", matched[0]["type"])
+
+    def test_selected_task_path_and_binary_are_adapted_in_memory(self) -> None:
+        original_text = TRANSFORMATION_WORKFLOW.read_text(encoding="utf-8")
+
+        adapted = _adapt(
+            TRANSFORMATION_WORKFLOW,
+            action="generate_transformations",
+            current={
+                "language": "etl",
+                "task": "Tree2Graph",
+                "run_id": "run-transform-1",
+                "n8n_run_dir": "/data/artifacts/runs/batch_001/run-transform-1",
+                "refinement_iteration": 1,
+            },
+            subworkflow_input={
+                "refinement_iteration": 1,
+                "prompt_path": "/data/artifacts/runs/batch_001/run-transform-1/refinements/transformation/iteration-001/prompt.md",
+            },
+        )
+
+        self.assertTrue(adapted["ok"], adapted.get("error"))
+        nodes = {
+            node["name"]: node for node in adapted["result"]["workflow_json"]["nodes"]
+        }
+        self.assertEqual(
+            "=/data/artifacts/runs/batch_001/run-transform-1/refinements/"
+            "transformation/iteration-001/prompt.md",
+            nodes["Read prompt files"]["parameters"]["fileSelector"],
+        )
+        self.assertEqual(
+            "={{ $json.prompt }}",
+            _llm_user_prompt(nodes, "(Re-)Generate code"),
+        )
+        save_name = nodes["Save file name"]
+        base_name = next(
+            assignment
+            for assignment in save_name["parameters"]["assignments"]["assignments"]
+            if assignment["name"] == "baseName"
+        )
+        self.assertEqual("=Tree2Graph", base_name["value"])
+        self.assertTrue(save_name["parameters"]["includeOtherFields"])
+        self.assertFalse(save_name["parameters"]["options"]["stripBinary"])
+        self.assertEqual(
+            "=/data/artifacts/runs/batch_001/run-transform-1/responses/"
+            "transformation-generation/iteration-001/Tree2Graph.etl",
+            nodes["Write response to disk"]["parameters"]["fileName"],
+        )
+        self.assertEqual(
+            original_text,
+            TRANSFORMATION_WORKFLOW.read_text(encoding="utf-8"),
+        )
+
+    def test_selected_semantic_test_task_and_response_are_run_scoped(self) -> None:
+        workflow_path = (
+            REPOSITORY_ROOT
+            / "workflows"
+            / "n8n"
+            / "tests"
+            / "workflows"
+            / "etl_variants"
+            / "test_generation"
+            / "Prompting_tests_ETL_gpt-5_few_shot.json"
+        )
+        original_text = workflow_path.read_text(encoding="utf-8")
+
+        adapted = _adapt(
+            workflow_path,
+            action="generate_tests",
+            current={
+                "language": "etl",
+                "task": "Tree2Graph",
+                "run_id": "run-tests-1",
+                "n8n_run_dir": "/data/artifacts/runs/batch_001/run-tests-1",
+                "refinement_iteration": 2,
+            },
+            subworkflow_input={
+                "refinement_iteration": 2,
+                "prompt_path": "/data/artifacts/runs/batch_001/run-tests-1/refinements/semantic-test/iteration-002/prompt.md",
+            },
+        )
+        self.assertTrue(adapted["ok"], adapted.get("error"))
+        nodes = {
+            node["name"]: node for node in adapted["result"]["workflow_json"]["nodes"]
+        }
+        self.assertEqual(
+            "=/data/artifacts/runs/batch_001/run-tests-1/refinements/"
+            "semantic-test/iteration-002/prompt.md",
+            nodes["Read prompt files"]["parameters"]["fileSelector"],
+        )
+        self.assertEqual(
+            "={{ $json.prompt }}",
+            _llm_user_prompt(nodes, "(Re-)Generate test suite"),
+        )
+        self.assertEqual(
+            "=/data/artifacts/runs/batch_001/run-tests-1/responses/"
+            "semantic-test-generation/iteration-002/Tree2Graph.md",
+            nodes["Write response to disk"]["parameters"]["fileName"],
+        )
+        self.assertEqual(
+            original_text,
+            workflow_path.read_text(encoding="utf-8"),
+        )
+
+    def test_initial_semantic_test_writes_only_to_the_prepared_run_directory(
+        self,
+    ) -> None:
+        workflow_path = (
+            REPOSITORY_ROOT
+            / "workflows"
+            / "n8n"
+            / "tests"
+            / "workflows"
+            / "etl_variants"
+            / "test_generation"
+            / "Prompting_tests_ETL_gpt-5_few_shot.json"
+        )
+        adapted = _adapt(
+            workflow_path,
+            action="generate_tests",
+            current={
+                "language": "etl",
+                "task": "Tree2Graph",
+                "run_id": "run-tests-initial",
+                "n8n_run_dir": "/data/artifacts/runs/batch_001/run-tests-initial",
+                "refinement_iteration": 0,
+            },
+            subworkflow_input={"refinement_iteration": 0},
+        )
+
+        self.assertTrue(adapted["ok"], adapted.get("error"))
+        nodes = {
+            node["name"]: node for node in adapted["result"]["workflow_json"]["nodes"]
+        }
+        response_directory = (
+            "=/data/artifacts/runs/batch_001/run-tests-initial/responses/"
+            "semantic-test-generation/iteration-000"
+        )
+        self.assertEqual(
+            "=/data/task_prompts/etl/Tree2Graph.txt",
+            nodes["Read prompt files"]["parameters"]["fileSelector"],
+        )
+        self.assertEqual(
+            f"{response_directory}/prompt.md",
+            nodes["Write prompt to disk"]["parameters"]["fileName"],
+        )
+        self.assertEqual(
+            f"{response_directory}/Tree2Graph.md",
+            nodes["Write response to disk"]["parameters"]["fileName"],
+        )
+
+    def test_non_generation_subworkflows_are_not_modified(self) -> None:
+        """The generation rewrites stop at the actions that generate.
+
+        The diagnosis subworkflow carries none of the anchors they look for -
+        no `Read prompt files`, no task-name Set node - so the adapter throws on
+        it the moment those rewrites reach a non-generation subworkflow.
+        """
+        diagnosis = (
+            REPOSITORY_ROOT
+            / "workflows"
+            / "n8n"
+            / "subworkflows"
+            / "diagnosis"
+            / "llm-diagnosis.json"
+        )
+        original = json.loads(diagnosis.read_text(encoding="utf-8"))
+        self.assertNotIn(
+            "Read prompt files", [node["name"] for node in original["nodes"]]
+        )
+
+        adapted = _adapt(
+            diagnosis,
+            action="diagnose",
+            current={"language": "etl", "task": "Tree2Graph"},
+        )
+        self.assertTrue(adapted["ok"], adapted.get("error"))
+        callable_workflow = adapted["result"]["workflow_json"]
+        # Only the LLM call is rebuilt, as in every subworkflow: the selected
+        # model node goes, and the direct call's nodes follow the originals.
+        kept = [
+            node["name"]
+            for node in original["nodes"]
+            if node["name"] != "OpenAI Diagnosis Model"
+        ]
+        self.assertEqual(
+            kept,
+            [node["name"] for node in callable_workflow["nodes"]][: len(kept)],
+        )
+        self.assertNotIn(
+            "semantic-test-generation", json.dumps(callable_workflow)
+        )
+        self.assertNotIn(
+            "transformation-generation", json.dumps(callable_workflow)
+        )
+
+
+@unittest.skipUnless(shutil.which("node"), "the master workflow's Code nodes need Node")
+class RunModeTests(unittest.TestCase):
+
+    def test_one_launch_claims_one_batch_and_files_every_run_below_it(self) -> None:
+        """Two queued runs share the batch Python claimed once."""
+        config = _configure(
+            run_mode="Semantic Tests Only",
+            tasks={"etl_tasks": "Tree2Graph,OO2DB"},
+        )
+        self.assertTrue(config["ok"], config.get("error"))
+        created: list[dict[str, Any]] = []
+
+        def next_run() -> dict[str, Any]:
+            run_id = f"etl-run-{len(created)}"
+            created.append(
+                {
+                    "run_id": run_id,
+                    "run_dir": f"artifacts/work/runs/{BATCH}/{run_id}",
+                    "n8n_run_dir": f"/data/artifacts/runs/{BATCH}/{run_id}",
+                }
+            )
+            return created[-1]
+
+        actions, state = _drive(config["result"], factories={"create_run": next_run})
+        self.assertEqual(1, actions.count("create_batch"))
+        self.assertEqual(2, actions.count("create_run"))
+        self.assertEqual("create_batch", actions[0])
+        self.assertEqual(BATCH, state["batch_id"])
+        self.assertEqual(
+            [
+                f"artifacts/work/runs/{BATCH}/etl-run-0",
+                f"artifacts/work/runs/{BATCH}/etl-run-1",
+            ],
+            [result["run_dir"] for result in state["results"]],
+        )
+
+    def test_a_run_directory_python_did_not_mount_is_refused(self) -> None:
+        config = _configure(run_mode="Semantic Tests Only")
+        self.assertTrue(config["ok"], config.get("error"))
+        for field, value in (
+            ("n8n_run_dir", "/etc/passwd"),
+            ("n8n_run_dir", "/data/artifacts/../secrets"),
+            ("run_dir", "/absolute/run"),
+        ):
+            with self.subTest(field=field):
+                with self.assertRaises(AssertionError) as refused:
+                    _drive(
+                        config["result"],
+                        results={
+                            "create_run": {**PASSING_RESULTS["create_run"], field: value}
+                        },
+                    )
+                self.assertIn(field, str(refused.exception))
+
+    def test_the_master_spells_no_artifact_path_of_its_own(self) -> None:
+        """Every run path n8n uses is one Python reported for that run.
+
+        The mount prefix and the runs layout used to be repeated inside the
+        workflow, so a layout change had to be made in two languages at once.
+        """
+        master = _master()
+        nodes = {node["name"]: node for node in master["nodes"]}
+        for name in (
+            "State Machine",
+            "Adapt Subworkflow For This Run",
+            "Validate Config and Build Run Queue",
+        ):
+            code = nodes[name]["parameters"]["jsCode"]
+            with self.subTest(node=name):
+                self.assertNotIn("/data/artifacts/runs", code)
+                self.assertNotIn("artifacts/work/runs", code)
+        self.assertEqual(
+            "Record Batch Result",
+            master["connections"]["Final Result and Artifacts"]["main"][0][0]["node"],
+        )
+        batch_result = nodes["Record Batch Result"]["parameters"]
+        self.assertIn("/batches/{{ $json.batch_id }}/result", batch_result["url"])
+        self.assertIn("results: $json.results", batch_result["jsonBody"])
+
+    def test_tests_only_never_routes_into_transformation_generation(self) -> None:
+        config = _configure(run_mode="Semantic Tests Only")
+        self.assertTrue(config["ok"], config.get("error"))
+        actions, state = _drive(config["result"])
+        for action in ("generate_transformations", "syntax", "execution", "diagnose"):
+            self.assertNotIn(action, actions)
+        self.assertEqual(
+            [
+                "create_batch",
+                "create_run",
+                "generate_tests",
+                "record_generation",
+                "extract",
+                "technical",
+                "reference",
+                "final",
+                "read_run_artifacts",
+                "complete",
+            ],
+            actions,
+        )
+        self.assertEqual("completed", state["results"][0]["status"])
+        self.assertEqual("TESTS_ONLY_PIPELINE_COMPLETE", state["results"][0]["reason"])
+
+    def test_transformations_only_never_routes_into_test_generation(self) -> None:
+        config = _configure(run_mode="Transformations Only")
+        self.assertTrue(config["ok"], config.get("error"))
+        actions, state = _drive(config["result"])
+        for action in (
+            "generate_tests",
+            "extract",
+            "technical",
+            "reference",
+            "execution",
+            "diagnose",
+        ):
+            self.assertNotIn(action, actions)
+        self.assertEqual(
+            [
+                "create_batch",
+                "create_run",
+                "generate_transformations",
+                "record_generation",
+                "syntax",
+                "final",
+                "read_run_artifacts",
+                "complete",
+            ],
+            actions,
+        )
+        self.assertEqual("completed", state["results"][0]["status"])
+        self.assertEqual(
+            "TRANSFORMATIONS_ONLY_PIPELINE_COMPLETE", state["results"][0]["reason"]
+        )
+
+    def test_full_reaches_both_branches_and_semantic_execution(self) -> None:
+        config = _configure(run_mode="Full Pipeline")
+        self.assertTrue(config["ok"], config.get("error"))
+        actions, state = _drive(config["result"])
+        self.assertEqual(
+            [
+                "create_batch",
+                "create_run",
+                "generate_tests",
+                "record_generation",
+                "extract",
+                "technical",
+                "reference",
+                "generate_transformations",
+                "record_generation",
+                "syntax",
+                "execution",
+                "final",
+                "read_run_artifacts",
+                "complete",
+            ],
+            actions,
+        )
+        self.assertEqual("completed", state["results"][0]["status"])
+        self.assertEqual("SEMANTIC_PASSED", state["results"][0]["reason"])
+
+    def test_a_failure_without_a_prepared_index_says_so(self) -> None:
+        """The shortcut report alone is no longer enough to diagnose on."""
+        config = _configure(run_mode="Full Pipeline")
+        _, state = _drive(
+            config["result"],
+            results={
+                "execution": {
+                    "stage": "execution",
+                    "status": "completed",
+                    "outcome_code": "SEMANTIC_EXECUTION_FAILED",
+                    "artifacts": {
+                        "failure_report_path": "artifacts/work/runs/x/r.json"
+                    },
+                }
+            },
+        )
+        result = state["results"][0]
+        self.assertEqual("incomplete", result["status"])
+        self.assertEqual("SOURCE_DIAGNOSIS_EVIDENCE_NOT_EXPOSED", result["reason"])
+
+    def test_disabled_semantic_feedback_cannot_reach_diagnosis_or_refinement(
+        self,
+    ) -> None:
+        config = _configure(ablation_profile="No semantic feedback")
+        self.assertTrue(config["ok"], config.get("error"))
+        actions, state = _drive(
+            config["result"],
+            results={"execution": _failing_execution()},
+        )
+
+        self.assertNotIn("read_diagnosis_index", actions)
+        self.assertNotIn("diagnose", actions)
+        self.assertNotIn("prepare_refinement", actions)
+        self.assertEqual(
+            "SEMANTIC_EXECUTION_FAILED:SEMANTIC_FEEDBACK_DISABLED",
+            state["results"][0]["reason"],
+        )
+
+
+@unittest.skipUnless(shutil.which("node"), "the master workflow's Code nodes need Node")
+class RefinementOutcomeRoutingTests(unittest.TestCase):
+
+    def test_test_failures_share_one_target_budget_and_keep_their_source(self) -> None:
+        cases = (
+            ("extract", "TEST_SPEC_INVALID", "technical", "technical_refinement"),
+            ("technical", "TECH_COMPILE_FAILED", "technical", "technical_refinement"),
+            (
+                "reference",
+                "REFERENCE_VALIDATION_FAILED",
+                "reference",
+                "reference_refinement",
+            ),
+        )
+        for action, outcome_code, source, purpose in cases:
+            with self.subTest(action=action, outcome_code=outcome_code):
+                calls = 0
+
+                def fail_once() -> dict[str, Any]:
+                    nonlocal calls
+                    calls += 1
+                    if calls == 1:
+                        return {
+                            "stage": PASSING_RESULTS[action]["stage"],
+                            "status": "completed",
+                            "outcome_code": outcome_code,
+                        }
+                    return PASSING_RESULTS[action]
+
+                configured = _configure()
+                self.assertTrue(configured["ok"], configured.get("error"))
+                _, state = _drive(
+                    configured["result"],
+                    factories={action: fail_once},
+                )
+                refined = next(
+                    entry
+                    for entry in state["results"][0]["timeline"]
+                    if entry.get("action") == "generate_tests"
+                    and entry.get("refinement_iteration") == 1
+                )
+
+                self.assertEqual("tests", refined["refinement_target"])
+                self.assertEqual(source, refined["refinement_source"])
+                self.assertEqual(purpose, refined["purpose"])
+
+    def test_syntax_failure_routes_to_transformation_refinement(self) -> None:
+        calls = 0
+
+        def fail_once() -> dict[str, Any]:
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                return {
+                    "stage": "syntax-validation",
+                    "status": "completed",
+                    "outcome_code": "SYNTAX_INVALID",
+                }
+            return PASSING_RESULTS["syntax"]
+
+        configured = _configure()
+        self.assertTrue(configured["ok"], configured.get("error"))
+        _, state = _drive(
+            configured["result"],
+            factories={"syntax": fail_once},
+        )
+        refined = next(
+            entry
+            for entry in state["results"][0]["timeline"]
+            if entry.get("action") == "generate_transformations"
+            and entry.get("refinement_iteration") == 1
+        )
+
+        self.assertEqual("transformations", refined["refinement_target"])
+        self.assertEqual("syntax", refined["refinement_source"])
+        self.assertEqual("syntax_refinement", refined["purpose"])
+
+
+def _diagnosis_index(*reports: dict[str, Any]) -> dict[str, Any]:
+    """One prepared attempt's index, shaped as diagnosis_preparation writes it."""
+    return {
+        "eligible_reports": [
+            {
+                "failure_report_path": report["path"],
+                "scope": report.get("scope", "test_case"),
+                "reason": "parser_passed_and_semantic_test_failed",
+                "test_case_id": report.get("test_case_id", "case-1"),
+                "assertion_id": report.get("assertion_id", "assertion-001"),
+                "suite": "suite_001",
+                "transformation": "generated.atl",
+            }
+            for report in reports
+        ],
+        "eligible_count": len(reports),
+        "diagnosis_eligible_declared": len(reports),
+    }
+
+
+def _failing_execution() -> dict[str, Any]:
+    return {
+        "stage": "execution",
+        "status": "completed",
+        "outcome_code": "SEMANTIC_EXECUTION_FAILED",
+        "attempt": 1,
+        "artifacts": {
+            "failure_report_index": (
+                "artifacts/work/runs/batch_001/etl-tree2graph-0001/diagnosis/execution/"
+                "attempt-001/index.json"
+            ),
+            "failure_report_path": (
+                "artifacts/work/runs/batch_001/etl-tree2graph-0001/diagnosis/execution/"
+                "attempt-001/reports/first.json"
+            ),
+        },
+    }
+
+
+def _drive_diagnosis(
+    classifications: list[str],
+    *,
+    eligible: int | None = None,
+    verdicts: list[dict[str, Any]] | None = None,
+    observed_states: list[dict[str, Any]] | None = None,
+) -> tuple[list[str], dict[str, Any]]:
+    """A full-mode run whose first execution fails with N eligible reports.
+
+    The second execution passes, so the run terminates and the action counts are
+    the counts of one diagnosis round rather than of a refinement loop.
+    """
+    count = len(classifications) if eligible is None else eligible
+    reports = [
+        {
+            "path": "artifacts/work/runs/batch_001/etl-tree2graph-0001/diagnosis/execution/"
+            f"attempt-001/reports/r{index}.json"
+        }
+        for index in range(count)
+    ]
+    supplied = (
+        verdicts
+        if verdicts is not None
+        else [
+            {
+                "classification": value,
+                "confidence": "high",
+                "test_case_id": "case-1",
+                "assertion_id": "assertion-001",
+            }
+            for value in classifications
+        ]
+    )
+    calls = {"diagnose": 0, "execution": 0}
+
+    def next_verdict() -> dict[str, Any]:
+        index = calls["diagnose"]
+        calls["diagnose"] += 1
+        return supplied[index] if index < len(supplied) else {}
+
+    def next_execution() -> dict[str, Any]:
+        calls["execution"] += 1
+        if calls["execution"] == 1:
+            return _failing_execution()
+        return PASSING_RESULTS["execution"]
+
+    config = _configure(run_mode="Full Pipeline")
+    assert config["ok"], config.get("error")
+    return _drive(
+        config["result"],
+        {"read_diagnosis_index": _diagnosis_index(*reports)},
+        factories={"diagnose": next_verdict, "execution": next_execution},
+        observed_states=observed_states,
+    )
+
+
+@unittest.skipUnless(shutil.which("node"), "the master workflow's Code nodes need Node")
+class SourceDiagnosisAggregationTests(unittest.TestCase):
+    """Every eligible report is diagnosed, and the verdicts combine conservatively.
+
+    An execution attempt can fail several suite/transformation pairs at once, and
+    the pairs need not agree. Repairing the transformation because the first
+    report happened to blame it, while another report blamed the test, is exactly
+    the mistake source diagnosis exists to prevent - so a mixed or ambiguous set
+    is ambiguous, never a majority vote.
+    """
+
+    def test_one_transformation_defect_refines_the_transformation(self) -> None:
+        actions, state = _drive_diagnosis(["transformation_defect"])
+        self.assertEqual(1, actions.count("diagnose"))
+        self.assertEqual("prepare_refinement", actions[actions.index("diagnose") + 1])
+        self.assertEqual(
+            "generate_transformations", actions[actions.index("diagnose") + 2]
+        )
+
+    def test_agreeing_transformation_defects_refine_the_transformation(self) -> None:
+        actions, _ = _drive_diagnosis(
+            ["transformation_defect", "transformation_defect"]
+        )
+        self.assertEqual(2, actions.count("diagnose"))
+        last = len(actions) - 1 - actions[::-1].index("diagnose")
+        self.assertEqual("prepare_refinement", actions[last + 1])
+        self.assertEqual("generate_transformations", actions[last + 2])
+
+    def test_one_test_defect_refines_the_tests(self) -> None:
+        actions, _ = _drive_diagnosis(["test_defect"])
+        self.assertEqual("prepare_refinement", actions[actions.index("diagnose") + 1])
+        self.assertEqual("generate_tests", actions[actions.index("diagnose") + 2])
+
+    def test_semantic_refinement_request_names_its_execution_attempt(self) -> None:
+        observed: list[dict[str, Any]] = []
+        _drive_diagnosis(["test_defect"], observed_states=observed)
+        request = next(
+            state["refinement_request"]
+            for state in observed
+            if state["action"] == "prepare_refinement"
+        )
+        self.assertEqual(1, request["execution_attempt"])
+
+    def test_refinement_trajectory_names_target_and_feedback_source(self) -> None:
+        _, state = _drive_diagnosis(["test_defect"])
+        refined_generation = next(
+            entry
+            for entry in state["results"][0]["timeline"]
+            if entry.get("action") == "generate_tests"
+            and entry.get("refinement_iteration") == 1
+        )
+
+        self.assertEqual("tests", refined_generation["refinement_target"])
+        self.assertEqual("semantic", refined_generation["refinement_source"])
+
+    def test_agreeing_test_defects_refine_the_tests(self) -> None:
+        actions, _ = _drive_diagnosis(["test_defect", "test_defect"])
+        self.assertEqual(2, actions.count("diagnose"))
+        last = len(actions) - 1 - actions[::-1].index("diagnose")
+        self.assertEqual("prepare_refinement", actions[last + 1])
+        self.assertEqual("generate_tests", actions[last + 2])
+
+    def test_a_refined_suite_gets_its_own_id(self) -> None:
+        _, state = _drive_diagnosis(["test_defect"])
+        result = state["results"][0]
+
+        self.assertEqual(1, result["refinement_iterations"])
+        self.assertEqual("etl-tree2graph-0001_001", result["suite_id"])
+
+    def test_test_refinement_does_not_invent_a_transformation_iteration(self) -> None:
+        """A new suite is executed against the transformation already generated."""
+        _, state = _drive_diagnosis(["test_defect"])
+        syntax_attempts = [
+            entry
+            for entry in state["results"][0]["timeline"]
+            if entry.get("action") == "syntax"
+        ]
+
+        self.assertEqual(
+            [0],
+            [entry["refinement_iteration"] for entry in syntax_attempts],
+        )
+
+    def test_test_budget_cannot_exhaust_transformation_budget(self) -> None:
+        reference_calls = 0
+        execution_calls = 0
+
+        def reference_result() -> dict[str, Any]:
+            nonlocal reference_calls
+            reference_calls += 1
+            if reference_calls <= 2:
+                return {
+                    "stage": "reference-validation",
+                    "status": "completed",
+                    "outcome_code": "REFERENCE_VALIDATION_FAILED",
+                }
+            return PASSING_RESULTS["reference"]
+
+        def execution_result() -> dict[str, Any]:
+            nonlocal execution_calls
+            execution_calls += 1
+            if execution_calls == 1:
+                return _failing_execution()
+            return PASSING_RESULTS["execution"]
+
+        configured = _configure(
+            max_test_refinement_iterations="2",
+            max_transformation_refinement_iterations="1",
+        )
+        self.assertTrue(configured["ok"], configured.get("error"))
+        actions, state = _drive(
+            configured["result"],
+            results={
+                "read_diagnosis_index": _diagnosis_index(
+                    {
+                        "path": (
+                            "artifacts/work/runs/batch_001/etl-tree2graph-0001/diagnosis/"
+                            "execution/attempt-001/reports/r0.json"
+                        )
+                    }
+                )
+            },
+            factories={
+                "reference": reference_result,
+                "execution": execution_result,
+                "diagnose": lambda: {
+                    "classification": "transformation_defect",
+                    "confidence": "high",
+                    "test_case_id": "case-1",
+                    "assertion_id": "assertion-001",
+                },
+            },
+        )
+
+        result = state["results"][0]
+        self.assertEqual("completed", result["status"])
+        self.assertEqual(2, result["test_refinement_iterations"])
+        self.assertEqual(1, result["transformation_refinement_iterations"])
+        self.assertEqual(3, result["refinement_iterations"])
+        self.assertEqual(3, actions.count("prepare_refinement"))
+
+    def test_unknown_refinement_reason_is_an_orchestration_error(self) -> None:
+        configured = _configure()
+        self.assertTrue(configured["ok"], configured.get("error"))
+        state = configured["result"]
+        state["current"]["run_id"] = "unknown-refinement-reason"
+        state["current"]["test_iteration"] = 1
+        state["current"]["refinement_reason"] = "UNRECOGNIZED_TEST_FAILURE"
+        state["subworkflow_input"] = {
+            "provider": "anthropic",
+            "model": "claude-sonnet-4-20250514",
+            "strategy": "few_shot",
+        }
+        state["completed_action"] = "generate_tests"
+        state["last_result"] = {"status": "completed"}
+
+        routed = _run_node("State Machine", inputs=[state])
+
+        self.assertFalse(routed["ok"])
+        self.assertIn("Unknown refinement reason", routed["error"])
+
+    def test_transformation_refinement_keeps_the_test_iteration(self) -> None:
+        """A refined transformation stays paired with the validated suite."""
+        _, state = _drive_diagnosis(["transformation_defect"])
+        syntax_attempts = [
+            entry
+            for entry in state["results"][0]["timeline"]
+            if entry.get("action") == "syntax"
+        ]
+
+        self.assertEqual(
+            [0, 1],
+            [entry["refinement_iteration"] for entry in syntax_attempts],
+        )
+        self.assertEqual(1, state["results"][0]["refinement_iterations"])
+        self.assertEqual("etl-tree2graph-0001_000", state["results"][0]["suite_id"])
+
+    def test_test_refinement_does_not_change_the_initial_transformation_model(
+        self,
+    ) -> None:
+        """Artifact-specific iterations select provider and model as one pair."""
+        reference_calls = 0
+
+        def reference_result() -> dict[str, Any]:
+            nonlocal reference_calls
+            reference_calls += 1
+            if reference_calls == 1:
+                return {
+                    "stage": "reference-validation",
+                    "status": "completed",
+                    "outcome_code": "REFERENCE_VALIDATION_FAILED",
+                }
+            return PASSING_RESULTS["reference"]
+
+        configured = _configure(
+            run_mode="Full Pipeline",
+            providers={"refinement_provider": "Google Gemini"},
+        )
+        self.assertTrue(configured["ok"], configured.get("error"))
+        observed: list[dict[str, Any]] = []
+        _, final_state = _drive(
+            configured["result"],
+            factories={"reference": reference_result},
+            observed_states=observed,
+        )
+        initial_transformation = next(
+            state for state in observed if state["action"] == "generate_transformations"
+        )
+
+        self.assertEqual(
+            0, initial_transformation["current"]["transformation_iteration"]
+        )
+        self.assertEqual(
+            initial_transformation["config"]["llms"]["transformation"]["provider"],
+            initial_transformation["subworkflow_input"]["provider"],
+        )
+        self.assertEqual(
+            initial_transformation["config"]["llms"]["transformation"]["model"],
+            initial_transformation["subworkflow_input"]["model"],
+        )
+        transformation_generation = next(
+            entry
+            for entry in final_state["results"][0]["timeline"]
+            if entry["action"] == "generate_transformations"
+        )
+        self.assertEqual("initial", transformation_generation["purpose"])
+
+    def test_a_mixed_set_is_ambiguous_and_refines_nothing(self) -> None:
+        actions, state = _drive_diagnosis(["transformation_defect", "test_defect"])
+        self.assertEqual(2, actions.count("diagnose"))
+        result = state["results"][0]
+        self.assertEqual("completed_with_failures", result["status"])
+        self.assertEqual("AMBIGUOUS_SOURCE_DIAGNOSIS", result["reason"])
+        self.assertNotIn(
+            "generate_transformations", actions[actions.index("diagnose") :]
+        )
+
+    def test_one_ambiguous_verdict_makes_the_whole_set_ambiguous(self) -> None:
+        for others in (["transformation_defect"], ["test_defect"]):
+            with self.subTest(others=others):
+                actions, state = _drive_diagnosis([*others, "ambiguous"])
+                result = state["results"][0]
+                self.assertEqual("completed_with_failures", result["status"])
+                self.assertEqual("AMBIGUOUS_SOURCE_DIAGNOSIS", result["reason"])
+
+    def test_a_majority_never_outvotes_a_dissenting_report(self) -> None:
+        """T, T, X is ambiguous - the evidence still says a test may be at fault."""
+        actions, state = _drive_diagnosis(
+            ["transformation_defect", "transformation_defect", "test_defect"]
+        )
+        self.assertEqual(3, actions.count("diagnose"))
+        self.assertEqual("AMBIGUOUS_SOURCE_DIAGNOSIS", state["results"][0]["reason"])
+
+    def test_every_eligible_report_is_diagnosed_not_only_the_first(self) -> None:
+        """The regression this whole stage exists for.
+
+        Python's index names every diagnosable report and also offers
+        ``failure_report_path`` as a shortcut to the first one. Routing on the
+        shortcut decided a refinement from one failure while the attempt had
+        recorded several.
+        """
+        actions, state = _drive_diagnosis(
+            ["transformation_defect", "transformation_defect", "transformation_defect"]
+        )
+        self.assertEqual(3, actions.count("diagnose"))
+        verdicts = state["results"][0]["timeline"]
+        diagnosed = [entry for entry in verdicts if entry.get("action") == "diagnose"]
+        self.assertEqual(3, len(diagnosed))
+        # Each invocation named its own report, so no report was diagnosed twice.
+        paths = [entry["failure_report_path"] for entry in diagnosed]
+        self.assertEqual(3, len(set(paths)), paths)
+
+    def test_every_individual_verdict_is_recorded(self) -> None:
+        actions, state = _drive_diagnosis(["transformation_defect", "test_defect"])
+        timeline = state["results"][0]["timeline"]
+        diagnosed = [entry for entry in timeline if entry.get("action") == "diagnose"]
+        self.assertEqual(
+            ["transformation_defect", "test_defect"],
+            [entry["classification"] for entry in diagnosed],
+        )
+        aggregated = [
+            entry for entry in timeline if entry.get("action") == "aggregate_diagnosis"
+        ]
+        self.assertEqual(1, len(aggregated))
+        self.assertEqual("ambiguous", aggregated[0]["aggregate"])
+        self.assertEqual(
+            ["transformation_defect", "test_defect"], aggregated[0]["classifications"]
+        )
+
+    def test_no_eligible_report_gets_an_explicit_terminal_reason(self) -> None:
+        actions, state = _drive_diagnosis([], eligible=0)
+        self.assertNotIn("diagnose", actions)
+        result = state["results"][0]
+        self.assertEqual("completed_with_failures", result["status"])
+        self.assertEqual("NO_ELIGIBLE_SOURCE_DIAGNOSIS_REPORTS", result["reason"])
+
+    def test_a_failed_invocation_never_aggregates_a_partial_set(self) -> None:
+        """Two verdicts out of three decide nothing."""
+        actions, state = _drive_diagnosis(
+            ["transformation_defect", "transformation_defect", "transformation_defect"],
+            verdicts=[
+                {"classification": "transformation_defect", "confidence": "high"},
+                {"classification": "transformation_defect", "confidence": "high"},
+                {},
+            ],
+        )
+        result = state["results"][0]
+        self.assertEqual("incomplete", result["status"])
+        self.assertEqual("INCOMPLETE_SOURCE_DIAGNOSIS_SET", result["reason"])
+        self.assertNotIn(
+            "generate_transformations", actions[actions.index("diagnose") :]
+        )
+
+
+@unittest.skipUnless(shutil.which("node"), "the master workflow's Code nodes need Node")
+class RunQueueTests(unittest.TestCase):
+
+    def test_the_queue_is_the_selected_languages_and_tasks(self) -> None:
+        config = _configure(
+            languages="ETL,QVT-O",
+            tasks={"etl_tasks": "OO2DB,rss2atom", "qvto_tasks": "ModelExtents"},
+        )
+        self.assertTrue(config["ok"], config.get("error"))
+        queue = [
+            (spec["language"], spec["task"]) for spec in config["result"]["run_specs"]
+        ]
+        self.assertEqual(
+            [("etl", "OO2DB"), ("etl", "rss2atom"), ("qvto", "ModelExtents")], queue
+        )
+
+    def test_no_hidden_default_task_survives_an_explicit_selection(self) -> None:
+        """The old master ran Tree2Graph for ETL whatever the user asked for."""
+        config = _configure(languages="ETL", tasks={"etl_tasks": "greedy"})
+        tasks = [spec["task"] for spec in config["result"]["run_specs"]]
+        self.assertEqual(["greedy"], tasks)
+        self.assertNotIn("Tree2Graph", tasks)
+
+    def test_a_selected_language_without_a_task_is_refused(self) -> None:
+        config = _configure(languages="ETL,ATL", tasks={"atl_tasks": ""})
+        self.assertFalse(config["ok"])
+        self.assertIn("at least one task for atl", config["error"])
+
+    def test_the_form_offers_exactly_the_benchmark_task_contracts(self) -> None:
+        """The form's task names are static, so they are held to the benchmark.
+
+        n8n form fields carry their options in the workflow JSON. Adding a task
+        contract without adding it here would silently make it unselectable, so
+        the two are asserted equal rather than left to drift.
+        """
+        for language in ("etl", "atl", "qvto", "reactions"):
+            with self.subTest(language=language):
+                contracts = sorted(
+                    path.stem
+                    for path in (TASK_CONTRACTS / language / "task_contracts").glob(
+                        "*.json"
+                    )
+                )
+                self.assertEqual(contracts, sorted(_field_options(f"{language}_tasks")))
+
+
+@unittest.skipUnless(shutil.which("node"), "the master workflow's Code nodes need Node")
+class ConditionalLlmRoleTests(unittest.TestCase):
+
+    def test_tests_only_does_not_require_a_transformation_model(self) -> None:
+        config = _configure(
+            run_mode="Semantic Tests Only",
+            unconfigured_roles=("transformation", "source_diagnosis"),
+        )
+        self.assertTrue(config["ok"], config.get("error"))
+        llms = config["result"]["config"]["llms"]
+        self.assertNotIn("transformation", llms)
+        self.assertNotIn("source_diagnosis", llms)
+        self.assertIn("semantic_test", llms)
+        spec = config["result"]["run_specs"][0]
+        self.assertIsNone(spec["transformation_model"])
+        self.assertIsNone(spec["transformation_strategy"])
+
+    def test_transformations_only_does_not_require_a_test_generation_model(
+        self,
+    ) -> None:
+        config = _configure(
+            run_mode="Transformations Only",
+            unconfigured_roles=("semantic_test", "source_diagnosis"),
+        )
+        self.assertTrue(config["ok"], config.get("error"))
+        llms = config["result"]["config"]["llms"]
+        self.assertNotIn("semantic_test", llms)
+        self.assertIn("transformation", llms)
+        self.assertIsNone(config["result"]["run_specs"][0]["test_generation_model"])
+
+    def test_a_reachable_role_still_fails_when_its_model_node_is_empty(self) -> None:
+        config = _configure(
+            run_mode="Semantic Tests Only",
+            unconfigured_roles=("semantic_test",),
+        )
+        self.assertFalse(config["ok"])
+        self.assertIn(
+            "Select a model in the built-in selector of "
+            "Semantic Test Generation - OpenAI Chat Model",
+            config["error"],
+        )
+
+    def test_disabling_diagnosis_removes_its_model_requirement(self) -> None:
+        config = _configure(
+            ablation_profile="No failure diagnosis",
+            unconfigured_roles=("source_diagnosis",),
+        )
+        self.assertTrue(config["ok"], config.get("error"))
+        self.assertNotIn("source_diagnosis", config["result"]["config"]["llms"])
+
+    def test_zero_refinement_iterations_remove_the_refinement_requirement(self) -> None:
+        config = _configure(
+            max_test_refinement_iterations="0",
+            max_transformation_refinement_iterations="0",
+            unconfigured_roles=("refinement",),
+        )
+        self.assertTrue(config["ok"], config.get("error"))
+        self.assertNotIn("refinement", config["result"]["config"]["llms"])
+
+    def test_a_reachable_refinement_role_is_still_required(self) -> None:
+        config = _configure(unconfigured_roles=("refinement",))
+        self.assertFalse(config["ok"])
+        self.assertIn("Refinement - Anthropic Chat Model", config["error"])
+
+    def test_the_resolved_model_comes_from_the_standard_ai_model_node(self) -> None:
+        """Provider is chosen in the form; the exact model is read off the canvas."""
+        config = _configure(providers={"semantic_test_provider": "Google Gemini"})
+        semantic_test = config["result"]["config"]["llms"]["semantic_test"]
+        self.assertEqual("google", semantic_test["provider"])
+        self.assertEqual("models/gemini-2.5-pro", semantic_test["model"])
+        self.assertEqual("gemini-2-5-pro", semantic_test["artifact_model"])
+        self.assertEqual(
+            "Semantic Test Generation - Google Gemini Chat Model",
+            semantic_test["configuration_node"],
+        )
+
+    def test_python_receives_the_family_while_n8n_keeps_the_exact_model(self) -> None:
+        """Filesystem selection and provider invocation use distinct identities."""
+        for provider, family in PROVIDER_FAMILIES.items():
+            with self.subTest(provider=provider):
+                configured = PROVIDER_PARAMS[provider]
+                raw_model = configured.get("model") or configured["modelName"]
+                exact_model = (
+                    raw_model["value"] if isinstance(raw_model, dict) else raw_model
+                )
+                config = _configure(
+                    run_mode="Semantic Tests Only",
+                    providers={"semantic_test_provider": provider},
+                    max_test_refinement_iterations="0",
+                    max_transformation_refinement_iterations="0",
+                )
+                self.assertTrue(config["ok"], config.get("error"))
+                state = config["result"]
+                semantic_test = state["config"]["llms"]["semantic_test"]
+                self.assertEqual(exact_model, semantic_test["model"])
+                self.assertEqual(family, semantic_test["artifact_model"])
+                self.assertEqual(
+                    family,
+                    state["run_specs"][0]["test_generation_model"],
+                )
+
+                create_batch = _run_node("State Machine", inputs=[state])
+                self.assertTrue(create_batch["ok"], create_batch.get("error"))
+                self.assertEqual("create_batch", create_batch["result"]["action"])
+                batched = _run_node(
+                    "Capture Action Result",
+                    inputs=[PASSING_RESULTS["create_batch"]],
+                    nodes={"State Machine": {"json": create_batch["result"]}},
+                )
+                create_run = _run_node("State Machine", inputs=[batched["result"]])
+                self.assertTrue(create_run["ok"], create_run.get("error"))
+                captured = _run_node(
+                    "Capture Action Result",
+                    inputs=[
+                        {
+                            "run_id": "etl-tree2graph-family-test",
+                            "run_dir": f"artifacts/work/runs/{BATCH}/etl-tree2graph-family-test",
+                            "n8n_run_dir": f"/data/artifacts/runs/{BATCH}/etl-tree2graph-family-test",
+                        }
+                    ],
+                    nodes={"State Machine": {"json": create_run["result"]}},
+                )
+                self.assertTrue(captured["ok"], captured.get("error"))
+                generate_tests = _run_node("State Machine", inputs=[captured["result"]])
+                self.assertTrue(generate_tests["ok"], generate_tests.get("error"))
+                self.assertEqual("generate_tests", generate_tests["result"]["action"])
+                self.assertEqual(
+                    exact_model,
+                    generate_tests["result"]["subworkflow_input"]["model"],
+                )
+
+
+@unittest.skipUnless(shutil.which("node"), "the master workflow's Code nodes need Node")
+class AblationIdentityTests(unittest.TestCase):
+
+    def test_an_ablated_full_run_is_not_a_transformations_only_run(self) -> None:
+        ablated = _configure(ablation_profile="No failure diagnosis")["result"][
+            "config"
+        ]
+        narrowed = _configure(run_mode="Transformations Only")["result"]["config"]
+
+        self.assertEqual("full", ablated["run_mode"])
+        self.assertFalse(ablated["stages"]["source_diagnosis"])
+        self.assertEqual("full:no-failure-diagnosis", ablated["pipeline_variant"])
+
+        self.assertEqual("transformations_only", narrowed["run_mode"])
+        self.assertTrue(narrowed["stages"]["source_diagnosis"])
+        self.assertEqual("transformations_only", narrowed["pipeline_variant"])
+
+        self.assertNotEqual(ablated["pipeline_variant"], narrowed["pipeline_variant"])
+
+    def test_a_standard_full_run_keeps_the_recorded_variant_id(self) -> None:
+        config = _configure()["result"]["config"]
+        self.assertEqual("full", config["pipeline_variant"])
+        self.assertEqual([], config["disabled_stages"])
+        self.assertTrue(all(config["stages"][stage] for stage in STAGE_FIELDS))
+
+    def test_a_custom_ablation_names_every_disabled_component(self) -> None:
+        config = _configure(
+            ablation_profile="Custom ablation",
+            disabled_components="reference_validation,parser_feedback",
+        )["result"]["config"]
+        self.assertEqual(
+            ["reference_validation", "parser_feedback"], config["disabled_stages"]
+        )
+        self.assertEqual(
+            "full:custom:reference_validation+parser_feedback",
+            config["pipeline_variant"],
+        )
+        self.assertFalse(config["stages"]["reference_validation"])
+        self.assertFalse(config["stages"]["parser_feedback"])
+
+    def test_a_named_profile_refuses_an_extra_component_selection(self) -> None:
+        """An ablation the variant id does not name would be a silent one."""
+        config = _configure(
+            ablation_profile="No parser feedback",
+            disabled_components="semantic_execution",
+        )
+        self.assertFalse(config["ok"])
+        self.assertIn("Custom ablation", config["error"])
+
+    def test_every_component_flag_is_still_expressible(self) -> None:
+        config = _configure(
+            ablation_profile="Custom ablation",
+            disabled_components=",".join(STAGE_FIELDS),
+        )["result"]["config"]
+        self.assertEqual(list(STAGE_FIELDS), config["disabled_stages"])
+        self.assertTrue(not any(config["stages"][stage] for stage in STAGE_FIELDS))
+
+    def test_the_form_offers_every_component_flag_for_custom_ablation(self) -> None:
+        self.assertEqual(
+            sorted(STAGE_FIELDS), sorted(_field_options("disabled_components"))
+        )
+
+    def test_run_mode_and_stage_flags_stay_separate_in_the_config(self) -> None:
+        config = _configure(run_mode="Semantic Tests Only")["result"]["config"]
+        # The mode narrows what executes; it does not pretend the transformation
+        # components were ablated.
+        self.assertEqual("tests_only", config["run_mode"])
+        self.assertTrue(config["stages"]["transformation_generation"])
+        self.assertTrue(config["stages"]["syntax_validation"])
+
+
+@unittest.skipUnless(shutil.which("node"), "the master workflow's Code nodes need Node")
+class ConfigurationPresentationTests(unittest.TestCase):
+    """The cards are presentation; the recorded values are the canonical ids.
+
+    Every option is a native n8n radio or checkbox styled as a card, so the
+    submitted value is still the field value n8n would submit unstyled. What the
+    form calls a strategy and what a run records are allowed to differ, and that
+    mapping is pinned here so a nicer label can never quietly become the value a
+    variant workflow is selected by.
+    """
+
+    def test_the_strategy_cards_map_onto_the_canonical_strategy_ids(self) -> None:
+        for field in ("semantic_test_strategy", "transformation_strategy"):
+            with self.subTest(field=field):
+                self.assertEqual(sorted(STRATEGY_LABELS), sorted(_field_options(field)))
+
+    def test_a_selected_strategy_card_records_its_canonical_id(self) -> None:
+        for label, expected in STRATEGY_LABELS.items():
+            with self.subTest(label=label):
+                config = _configure(
+                    semantic_test_strategy=label, transformation_strategy=label
+                )
+                self.assertTrue(config["ok"], config.get("error"))
+                llms = config["result"]["config"]["llms"]
+                self.assertEqual(expected, llms["semantic_test"]["strategy"])
+                self.assertEqual(expected, llms["transformation"]["strategy"])
+                # The variant workflow is selected by that id, not by the label.
+                spec = config["result"]["run_specs"][0]
+                self.assertTrue(
+                    spec["test_generation_workflow"].endswith(f"_{expected}.json"), spec
+                )
+
+    def test_an_unknown_strategy_label_is_refused(self) -> None:
+        config = _configure(semantic_test_strategy="few_shot")
+        self.assertFalse(config["ok"])
+        self.assertIn("Semantic Test Generation strategy", config["error"])
+
+    def test_each_refinement_budget_offers_the_evaluation_range(self) -> None:
+        for field in (
+            "max_test_refinement_iterations",
+            "max_transformation_refinement_iterations",
+        ):
+            with self.subTest(field=field):
+                self.assertEqual(["0", "1", "2", "3"], _field_options(field))
+
+    def test_the_form_submits_the_names_the_queue_builder_reads(self) -> None:
+        """The submitted key has to be the field name, not the field label.
+
+        n8n's ``getFieldIdentifier`` only returns ``fieldName`` from typeVersion
+        2.4 on. On 2.3 the same form posts ``{"Run mode": "Full Pipeline"}``, the
+        queue builder reads ``form.run_mode``, and the run dies on the first
+        validation with every field undefined.
+        """
+        version = _trigger_type_version()
+        self.assertGreaterEqual(
+            version, 2.4, "below 2.4 n8n keys the submitted item by fieldLabel"
+        )
+        for field in _form_fields():
+            if field["fieldType"] == "html":
+                continue
+            with self.subTest(field=field.get("fieldName")):
+                self.assertEqual(field["fieldName"], _submitted_key(field, version))
+
+    def test_the_form_feeds_the_run_queue_directly(self) -> None:
+        connections = _master()["connections"]
+        self.assertEqual(
+            "Validate Config and Build Run Queue",
+            connections["Configure and Start Pipeline"]["main"][0][0]["node"],
+        )
+
+    def test_the_screen_collects_every_field_the_run_queue_reads(self) -> None:
+        submitted = {
+            field["fieldName"]
+            for field in _form_fields()
+            if field["fieldType"] != "html"
+        }
+        self.assertEqual(
+            {
+                "run_mode",
+                "languages",
+                "etl_tasks",
+                "atl_tasks",
+                "qvto_tasks",
+                "reactions_tasks",
+                "semantic_test_provider",
+                "transformation_provider",
+                "source_diagnosis_provider",
+                "refinement_provider",
+                "anthropic_effort",
+                "google_thinking_level",
+                "semantic_test_strategy",
+                "transformation_strategy",
+                "max_test_refinement_iterations",
+                "max_transformation_refinement_iterations",
+                "ablation_profile",
+                "disabled_components",
+                "n8n_workflow_root",
+                *CUSTOM_TASK_FIELDS,
+            },
+            submitted,
+        )
+
+
+@unittest.skipUnless(shutil.which("node"), "the master workflow's Code nodes need Node")
+class CustomTaskTests(unittest.TestCase):
+    """A custom task is a user prompt run over a user-supplied metamodel.
+
+    The slot carries everything the run needs: the language, the metamodel —
+    written into the form or attached as a file — and the prompt, so the run's
+    identity is the custom task's own name rather than a borrowed benchmark
+    task. Nothing implements that prompt, so everything reference-bound is
+    disabled for it while the benchmark tasks of the same launch keep the
+    configured set.
+    """
+
+    METAMODEL = "class Tree { children: Tree[] }"
+    CUSTOM = {
+        "custom_task_1_name": "TreeFlattening",
+        "custom_task_1_language": "ETL",
+        "custom_task_1_metamodel": METAMODEL,
+        "custom_task_1_prompt": "Flatten every tree into one graph node per leaf.",
+    }
+    # How n8n keys the upload field of slot 1: the field's label with every
+    # non-word character replaced, and the file's index appended.
+    ATTACHMENT_KEY = "Custom_task_1___metamodel_file_0"
+
+    def test_the_section_is_closed_until_a_custom_task_is_added(self) -> None:
+        """Nothing of a custom task is on screen until its tick is set.
+
+        The fields are static in the workflow JSON, so the section is collapsed
+        by the same `:has()` rule that opens slot n+1: while a tick is unset,
+        every following field is hidden. A closed section still submits its
+        empty inputs, which the queue builder reads as no custom task at all.
+        """
+        fields = _form_fields()
+        names = [field.get("fieldName") or field.get("elementName") for field in fields]
+        opener = names.index("custom_tasks_enabled")
+        heading = names.index("custom_tasks_heading")
+        end = names.index("custom_tasks_end")
+        self.assertLess(heading, opener, "the section says what it is before the tick")
+        # Everything a custom task needs sits between the tick and the marker
+        # that restores the rest of the screen.
+        for slot in range(1, CUSTOM_TASK_SLOTS + 1):
+            for part in ("name", "language", "metamodel", "metamodel_file", "prompt"):
+                with self.subTest(field=f"custom_task_{slot}_{part}"):
+                    self.assertLess(opener, names.index(f"custom_task_{slot}_{part}"))
+                    self.assertLess(names.index(f"custom_task_{slot}_{part}"), end)
+        self.assertLess(opener, names.index("custom_tasks_note"))
+
+        css = _form_css()
+        # The wrappers have to be addressed as `.inputs-wrapper > div`. n8n's
+        # form template gives `.form-group` to every field type except a
+        # checkbox group, which it wraps in a bare div — so a rule written
+        # against `.form-group` never sees the tick it has to react to, and the
+        # section renders fully expanded however the tick is set.
+        self.assertIn(
+            ".inputs-wrapper > div:has(input.multiselect-checkbox"
+            "[value='+ Add a custom task']:not(:checked)) ~ div",
+            css,
+        )
+        self.assertIn(
+            ".inputs-wrapper > div:has(input.multiselect-checkbox"
+            "[value='+ Add another custom task']:not(:checked)) ~ div",
+            css,
+        )
+        self.assertNotIn(".form-group:has(input.multiselect-checkbox", css)
+
+    def test_the_section_ends_on_the_id_n8n_actually_renders(self) -> None:
+        """The rest of the screen is restored by position, because it must be.
+
+        Those two ticks hide every field that follows them, so something has to
+        say where the section stops. It cannot say so with an id of its own: n8n
+        puts every html field through sanitize-html, which allows no attributes
+        on a div, so `id="custom-tasks-end"` is stripped before it reaches the
+        page and the rule silently matches nothing — which hides sections 3
+        through 6 along with the slots.
+
+        What n8n does render for every field is a hidden input keyed by
+        position, `field-<index>`. That is the anchor, and this test recomputes
+        the index so that inserting a field above the marker fails here instead
+        of blanking the second half of the form.
+        """
+        fields = _form_fields()
+        end = next(
+            index
+            for index, field in enumerate(fields)
+            if field.get("elementName") == "custom_tasks_end"
+        )
+        css = _form_css()
+        self.assertIn(f".inputs-wrapper > div:has(#field-{end}) ~ div", css)
+        self.assertIn(f".inputs-wrapper > div:has(#field-{end}),", css)
+        # The marker carries no id of its own, so nothing may rely on one.
+        self.assertNotIn("#custom-tasks-end", css)
+
+    def test_a_launch_that_never_opens_the_section_queues_no_custom_task(self) -> None:
+        config = _configure()
+        self.assertTrue(config["ok"], config.get("error"))
+        self.assertEqual([], config["result"]["config"]["custom_tasks"])
+        self.assertIsNone(config["result"]["run_specs"][0]["custom_task"])
+
+    def test_the_slot_offers_every_supported_language(self) -> None:
+        for slot in range(1, CUSTOM_TASK_SLOTS + 1):
+            with self.subTest(slot=slot):
+                self.assertEqual(
+                    ["ETL", "ATL", "QVT-O", "Reactions"],
+                    _field_options(f"custom_task_{slot}_language"),
+                )
+
+    def test_the_slot_takes_the_metamodel_as_text_or_as_a_file(self) -> None:
+        fields = {
+            field.get("fieldName"): field
+            for field in _form_fields()
+            if field.get("fieldName")
+        }
+        for slot in range(1, CUSTOM_TASK_SLOTS + 1):
+            with self.subTest(slot=slot):
+                self.assertEqual(
+                    "textarea", fields[f"custom_task_{slot}_metamodel"]["fieldType"]
+                )
+                upload = fields[f"custom_task_{slot}_metamodel_file"]
+                self.assertEqual("file", upload["fieldType"])
+                self.assertFalse(upload["multipleFiles"])
+                self.assertNotIn(f"custom_task_{slot}_base", fields)
+
+    def test_a_custom_task_runs_under_its_own_name_and_flags(self) -> None:
+        config = _configure(custom_tasks=self.CUSTOM)
+        self.assertTrue(config["ok"], config.get("error"))
+        custom, benchmark = config["result"]["run_specs"]
+
+        self.assertEqual("etl", custom["language"])
+        self.assertEqual("TreeFlattening", custom["task"])
+        self.assertEqual(
+            {
+                "name": "TreeFlattening",
+                "prompt": self.CUSTOM["custom_task_1_prompt"],
+                "metamodel": self.METAMODEL,
+            },
+            custom["custom_task"],
+        )
+        self.assertEqual("full:custom-task:TreeFlattening", custom["pipeline_variant"])
+        for stage in CUSTOM_TASK_DISABLED:
+            with self.subTest(stage=stage):
+                self.assertFalse(custom["stages"][stage])
+        for stage in set(STAGE_FIELDS) - set(CUSTOM_TASK_DISABLED):
+            with self.subTest(stage=stage):
+                self.assertTrue(custom["stages"][stage])
+
+        self.assertIsNone(benchmark["custom_task"])
+        self.assertEqual("full", benchmark["pipeline_variant"])
+        self.assertEqual(config["result"]["config"]["stages"], benchmark["stages"])
+        self.assertEqual(
+            [
+                {
+                    "name": "TreeFlattening",
+                    "language": "etl",
+                    "metamodel_source": "form",
+                }
+            ],
+            config["result"]["config"]["custom_tasks"],
+        )
+
+    def test_an_attached_metamodel_is_read_from_the_uploaded_file(self) -> None:
+        written = {**self.CUSTOM}
+        del written["custom_task_1_metamodel"]
+        config = _configure(
+            custom_tasks=written,
+            attached_metamodels={self.ATTACHMENT_KEY: self.METAMODEL},
+        )
+        self.assertTrue(config["ok"], config.get("error"))
+        custom = config["result"]["run_specs"][0]
+        self.assertEqual(self.METAMODEL, custom["custom_task"]["metamodel"])
+        self.assertEqual(
+            "file", config["result"]["config"]["custom_tasks"][0]["metamodel_source"]
+        )
+
+    def test_a_slot_with_a_written_and_an_attached_metamodel_is_refused(self) -> None:
+        config = _configure(
+            custom_tasks=self.CUSTOM,
+            attached_metamodels={self.ATTACHMENT_KEY: "class Other {}"},
+        )
+        self.assertFalse(config["ok"])
+        self.assertIn("keep one", config["error"])
+
+    def test_a_custom_task_keeps_the_ablation_the_launch_chose(self) -> None:
+        config = _configure(
+            custom_tasks=self.CUSTOM, ablation_profile="No parser feedback"
+        )
+        self.assertTrue(config["ok"], config.get("error"))
+        custom = config["result"]["run_specs"][0]
+        self.assertFalse(custom["stages"]["parser_feedback"])
+        self.assertEqual(
+            "full:no-parser-feedback:custom-task:TreeFlattening",
+            custom["pipeline_variant"],
+        )
+
+    def test_a_launch_of_only_custom_tasks_needs_no_language_and_no_diagnosis_model(
+        self,
+    ) -> None:
+        config = _configure(
+            languages="",
+            custom_tasks=self.CUSTOM,
+            unconfigured_roles=("source_diagnosis",),
+        )
+        self.assertTrue(config["ok"], config.get("error"))
+        self.assertEqual(1, len(config["result"]["run_specs"]))
+        self.assertNotIn("source_diagnosis", config["result"]["config"]["llms"])
+
+    def test_a_launch_with_nothing_to_run_is_refused(self) -> None:
+        config = _configure(languages="")
+        self.assertFalse(config["ok"])
+        self.assertIn("at least one language or define a custom task", config["error"])
+
+    def test_a_half_filled_or_repeated_slot_is_refused(self) -> None:
+        METAMODEL = self.METAMODEL
+        cases = {
+            "name only": {"custom_task_1_name": "Lonely"},
+            "no name": {
+                "custom_task_1_language": "ETL",
+                "custom_task_1_metamodel": METAMODEL,
+                "custom_task_1_prompt": "prompt",
+            },
+            "bad name": {**self.CUSTOM, "custom_task_1_name": "no spaces allowed"},
+            "no metamodel": {**self.CUSTOM, "custom_task_1_metamodel": ""},
+            "no language": {**self.CUSTOM, "custom_task_1_language": "Nope"},
+            "repeated name": {
+                **self.CUSTOM,
+                "custom_task_2_name": "TreeFlattening",
+                "custom_task_2_language": "ATL",
+                "custom_task_2_metamodel": METAMODEL,
+                "custom_task_2_prompt": "prompt",
+            },
+        }
+        for label, slots in cases.items():
+            with self.subTest(case=label):
+                config = _configure(custom_tasks=slots)
+                self.assertFalse(config["ok"], label)
+
+    def test_a_custom_task_stops_before_the_reference_bound_stages(self) -> None:
+        config = _configure(custom_tasks=self.CUSTOM)
+        self.assertTrue(config["ok"], config.get("error"))
+        actions, state = _drive(config["result"])
+
+        custom, benchmark = state["results"]
+        self.assertEqual("TreeFlattening", custom["custom_task"])
+        self.assertEqual("incomplete", custom["status"])
+        self.assertEqual("SEMANTIC_EXECUTION_DISABLED", custom["reason"])
+        custom_actions = [entry["action"] for entry in custom["timeline"]]
+        self.assertEqual(
+            ["generate_tests", "extract", "generate_transformations", "syntax"],
+            custom_actions,
+        )
+
+        self.assertIsNone(benchmark["custom_task"])
+        self.assertEqual("completed", benchmark["status"])
+        self.assertEqual("SEMANTIC_PASSED", benchmark["reason"])
+        self.assertIn("execution", [entry["action"] for entry in benchmark["timeline"]])
+
+    def test_a_custom_task_reads_the_prompt_and_metamodel_it_was_created_with(
+        self,
+    ) -> None:
+        adapted = _adapt(
+            TRANSFORMATION_WORKFLOW,
+            action="generate_transformations",
+            current={
+                "language": "etl",
+                "task": "TreeFlattening",
+                "run_id": "run-custom-1",
+                "n8n_run_dir": "/data/artifacts/runs/batch_001/run-custom-1",
+                "transformation_iteration": 0,
+                "custom_task": {
+                    "name": "TreeFlattening",
+                    "prompt": "p",
+                    "metamodel": self.METAMODEL,
+                },
+            },
+            subworkflow_input={"refinement_iteration": 0},
+        )
+        self.assertTrue(adapted["ok"], adapted.get("error"))
+        nodes = {
+            node["name"]: node for node in adapted["result"]["workflow_json"]["nodes"]
+        }
+        self.assertEqual(
+            "=/data/artifacts/runs/batch_001/run-custom-1/task-prompt.md",
+            nodes["Read prompt files"]["parameters"]["fileSelector"],
+        )
+        # A literal body, not an expression: metamodel text is arbitrary, and
+        # `{{` in it would otherwise be evaluated by n8n.
+        body = nodes["Resolve exact task inputs"]["parameters"]["jsonBody"]
+        self.assertFalse(body.startswith("="))
+        self.assertEqual(
+            {
+                "language": "etl",
+                "task": "TreeFlattening",
+                "metamodel": self.METAMODEL,
+            },
+            json.loads(body),
+        )
+
+    def test_a_benchmark_task_resolves_through_its_contract_as_before(self) -> None:
+        adapted = _adapt(
+            TRANSFORMATION_WORKFLOW,
+            action="generate_transformations",
+            current={
+                "language": "etl",
+                "task": "Tree2Graph",
+                "run_id": "run-benchmark-1",
+                "n8n_run_dir": "/data/artifacts/runs/batch_001/run-benchmark-1",
+                "transformation_iteration": 0,
+                "custom_task": None,
+            },
+            subworkflow_input={"refinement_iteration": 0},
+        )
+        self.assertTrue(adapted["ok"], adapted.get("error"))
+        nodes = {
+            node["name"]: node for node in adapted["result"]["workflow_json"]["nodes"]
+        }
+        self.assertEqual(
+            "=/data/task_prompts/etl/Tree2Graph.txt",
+            nodes["Read prompt files"]["parameters"]["fileSelector"],
+        )
+        self.assertEqual(
+            "={{ { language: 'etl', task: $json.baseName } }}",
+            nodes["Resolve exact task inputs"]["parameters"]["jsonBody"],
+        )
+
+
+class ReactionsMatrixStrategyTests(unittest.TestCase):
+    """The Reactions matrix sends each strategy its own parts, as every language does.
+
+    One matrix workflow serves all four strategies, so a part cannot depend on
+    whether its file was read: every file is read for every item. The master
+    narrows the matrix to the run's strategy; the parts that strategy's flags
+    then select must be the ones the refinement prompt uses for it too.
+    """
+
+    def test_each_strategy_gets_exactly_its_own_prompt_parts(self) -> None:
+        for strategy in STRATEGIES:
+            with self.subTest(strategy=strategy):
+                adapted = _adapt(
+                    REACTIONS_MATRIX,
+                    action="generate_transformations",
+                    current={
+                        "language": "reactions",
+                        "task": "FamiliesToPersons_CreatedFather",
+                        "run_id": "run-reactions-1",
+                        "n8n_run_dir": "/data/artifacts/runs/batch_001/run-reactions-1",
+                        "refinement_iteration": 0,
+                    },
+                    subworkflow_input={"refinement_iteration": 0, "strategy": strategy},
+                )
+                self.assertTrue(adapted["ok"], adapted.get("error"))
+                nodes = adapted["result"]["workflow_json"]["nodes"]
+                declared = next(
+                    json.loads(node["parameters"]["jsonOutput"])["strategies"]
+                    for node in nodes
+                    if node["name"] == "Define Strategies"
+                )
+                self.assertEqual([strategy], [entry["name"] for entry in declared])
+                expected = {PART_HEADINGS[asset] for asset in STRATEGY_ASSETS[strategy]}
+                prompts = [
+                    node["parameters"]["text"]
+                    for node in nodes
+                    if node["type"] == "@n8n/n8n-nodes-langchain.chainLlm"
+                ]
+                self.assertTrue(prompts)
+                for prompt in prompts:
+                    gated = FLAG_GATED_PART.findall(prompt)
+                    # Every optional part is chosen by a flag, none by "it ran".
+                    self.assertEqual(len(PART_HEADINGS), len(gated))
+                    included = {
+                        heading
+                        for flag, heading in gated
+                        if declared[0][flag] is True
+                    }
+                    self.assertEqual(expected, included)
+
+    def test_the_matrix_declares_the_four_shared_strategies_only(self) -> None:
+        nodes = json.loads(REACTIONS_MATRIX.read_text(encoding="utf-8"))["nodes"]
+        declared = next(
+            json.loads(node["parameters"]["jsonOutput"])["strategies"]
+            for node in nodes
+            if node["name"] == "Define Strategies"
+        )
+        self.assertEqual(list(STRATEGIES), [entry["name"] for entry in declared])
+        self.assertFalse(any(entry["Helper_methods"] for entry in declared))
+
+
+# Every role on OpenAI, so each role's own reasoning effort can be told apart.
+ALL_OPENAI = {
+    "semantic_test_provider": "OpenAI",
+    "transformation_provider": "OpenAI",
+    "source_diagnosis_provider": "OpenAI",
+    "refinement_provider": "OpenAI",
+}
+DISTINCT_EFFORTS = {
+    "semantic_test": "low",
+    "transformation": "max",
+    "source_diagnosis": "high",
+    "refinement": "medium",
+}
+DIAGNOSIS_WORKFLOW = (
+    REPOSITORY_ROOT / "workflows" / "n8n" / "subworkflows" / "diagnosis" / "llm-diagnosis.json"
+)
+INITIAL_ETL_GENERATION = {
+    "language": "etl",
+    "task": "Tree2Graph",
+    "run_id": "run-effort-1",
+    "n8n_run_dir": "/data/artifacts/runs/batch_001/run-effort-1",
+    "transformation_iteration": 0,
+}
+
+
+@unittest.skipUnless(shutil.which("node"), "the master workflow's Code nodes need Node")
+class ReasoningEffortTests(unittest.TestCase):
+    """The effort set on a role's OpenAI node reaches every call that role makes."""
+
+    def test_each_role_records_the_effort_of_its_openai_node(self) -> None:
+        config = _configure(providers=ALL_OPENAI, reasoning_efforts=DISTINCT_EFFORTS)
+        self.assertTrue(config["ok"], config.get("error"))
+        llms = config["result"]["config"]["llms"]
+        self.assertEqual(
+            DISTINCT_EFFORTS,
+            {role: llms[role]["reasoning_effort"] for role in DISTINCT_EFFORTS},
+        )
+
+    def test_a_level_typed_in_expression_mode_is_read_as_its_literal(self) -> None:
+        config = _configure(providers=ALL_OPENAI, reasoning_efforts={"transformation": "=max"})
+        self.assertTrue(config["ok"], config.get("error"))
+        self.assertEqual(
+            "max", config["result"]["config"]["llms"]["transformation"]["reasoning_effort"]
+        )
+
+    def test_an_expression_is_refused_rather_than_sent_as_its_source(self) -> None:
+        config = _configure(
+            providers=ALL_OPENAI,
+            reasoning_efforts={"transformation": "={{ $json.effort }}"},
+        )
+        self.assertFalse(config["ok"])
+        self.assertIn("Transformation Generation - OpenAI Chat Model", config["error"])
+
+    def test_no_effort_is_recorded_when_none_is_set_or_the_provider_has_none(self) -> None:
+        # OpenAI serves tests and diagnosis without an effort; Anthropic serves
+        # transformation and refinement.
+        config = _configure()
+        self.assertTrue(config["ok"], config.get("error"))
+        llms = config["result"]["config"]["llms"]
+        for role in ROLE_NODES:
+            with self.subTest(role=role):
+                self.assertIsNone(llms[role]["reasoning_effort"])
+
+    def test_every_llm_call_receives_the_effort_of_the_role_making_it(self) -> None:
+        config = _configure(providers=ALL_OPENAI, reasoning_efforts=DISTINCT_EFFORTS)
+        self.assertTrue(config["ok"], config.get("error"))
+        executions = 0
+
+        def next_execution() -> dict[str, Any]:
+            nonlocal executions
+            executions += 1
+            return _failing_execution() if executions == 1 else PASSING_RESULTS["execution"]
+
+        observed: list[dict[str, Any]] = []
+        _drive(
+            config["result"],
+            {
+                "read_diagnosis_index": _diagnosis_index(
+                    {
+                        "path": "artifacts/work/runs/batch_001/etl-tree2graph-0001/"
+                        "diagnosis/execution/attempt-001/reports/r0.json"
+                    }
+                )
+            },
+            factories={
+                "execution": next_execution,
+                "diagnose": lambda: {
+                    "classification": "transformation_defect",
+                    "confidence": "high",
+                    "test_case_id": "case-1",
+                    "assertion_id": "assertion-001",
+                },
+            },
+            observed_states=observed,
+        )
+        calls = [
+            (
+                state["action"],
+                state["subworkflow_input"]["llm_role"],
+                state["subworkflow_input"]["reasoning_effort"],
+            )
+            for state in observed
+            if state["action"] in ("generate_tests", "generate_transformations", "diagnose")
+        ]
+        self.assertEqual(
+            [
+                ("generate_tests", "semantic_test", "low"),
+                ("generate_transformations", "transformation", "max"),
+                ("diagnose", "source_diagnosis", "high"),
+                ("generate_transformations", "refinement", "medium"),
+            ],
+            calls,
+        )
+
+    def test_an_effort_moves_the_openai_call_to_the_responses_api(self) -> None:
+        """The direct call sends the model and a level such as max to the Responses API."""
+        cases = (
+            (
+                TRANSFORMATION_WORKFLOW,
+                "generate_transformations",
+                INITIAL_ETL_GENERATION,
+                {"refinement_iteration": 0},
+            ),
+            (
+                REACTIONS_MATRIX,
+                "generate_transformations",
+                {
+                    **INITIAL_ETL_GENERATION,
+                    "language": "reactions",
+                    "task": "FamiliesToPersons_CreatedFather",
+                },
+                {"refinement_iteration": 0, "strategy": "few_shots_AND_grammar"},
+            ),
+            (DIAGNOSIS_WORKFLOW, "diagnose", {"language": "etl", "task": "Tree2Graph"}, {}),
+        )
+        for workflow, action, current, subworkflow_input in cases:
+            with self.subTest(workflow=workflow.name):
+                exported = next(
+                    node
+                    for node in json.loads(workflow.read_text(encoding="utf-8"))["nodes"]
+                    if node["type"] == "@n8n/n8n-nodes-langchain.lmChatOpenAi"
+                )
+                adapted = _adapt(
+                    workflow,
+                    action=action,
+                    current=current,
+                    subworkflow_input={**subworkflow_input, "reasoning_effort": "max"},
+                    model="gpt-5.6-luna",
+                )
+                self.assertTrue(adapted["ok"], adapted.get("error"))
+                call, call_node = _direct_call(adapted)
+                self.assertEqual(
+                    "https://api.openai.com/v1/responses", call_node["parameters"]["url"]
+                )
+                self.assertEqual("gpt-5.6-luna", call["model"])
+                self.assertEqual("max", call["reasoning_effort"])
+                self.assertEqual(
+                    exported["parameters"]["options"]["timeout"],
+                    call_node["parameters"]["options"]["timeout"],
+                )
+
+    def test_claude_and_gemini_are_called_directly_on_the_providers_apis(self) -> None:
+        """The provider-reported model version is recorded; no proxy model is."""
+        variants = REPOSITORY_ROOT / "workflows" / "n8n" / "transformations" / "workflows" / "etl_variants"
+        cases = (
+            (
+                "anthropic",
+                "claude-sonnet-5",
+                variants / "Prompting_ETL_claude-sonnet-4_few_shots_AND_grammar.json",
+                "https://api.anthropic.com/v1/messages",
+                "claude-sonnet-5-20260901",
+                {"model": "claude-sonnet-5-20260901", "content": [{"type": "text", "text": "rules"}]},
+            ),
+            (
+                "google",
+                "gemini-3.8-flash",
+                variants / "Prompting_ETL_gemini-2-5-pro_few_shots_AND_grammar.json",
+                "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent",
+                "gemini-3.8-flash-001",
+                {
+                    "modelVersion": "gemini-3.8-flash-001",
+                    "candidates": [{"content": {"parts": [{"text": "rules"}]}}],
+                },
+            ),
+        )
+        for provider, model, workflow, url, served_model, body in cases:
+            with self.subTest(provider=provider):
+                adapted = _adapt(
+                    workflow,
+                    action="generate_transformations",
+                    current=INITIAL_ETL_GENERATION,
+                    subworkflow_input={"refinement_iteration": 0},
+                    provider=provider,
+                    model=model,
+                )
+                self.assertTrue(adapted["ok"], adapted.get("error"))
+                _, call_node = _direct_call(adapted)
+                self.assertEqual(url, call_node["parameters"]["url"])
+                self.assertTrue(
+                    call_node["parameters"]["options"]["response"]["response"]["fullResponse"]
+                )
+                observed = _run_llm_response_node(adapted, {"body": body, "headers": {}})
+                self.assertEqual("rules", observed["text"])
+                self.assertEqual("direct", observed["llm_call"]["route"])
+                self.assertEqual(served_model, observed["llm_call"]["served_model"])
+                self.assertIsNone(observed["llm_call"]["litellm_model_name"])
+
+    def test_without_an_effort_the_openai_request_carries_none(self) -> None:
+        adapted = _adapt(
+            TRANSFORMATION_WORKFLOW,
+            action="generate_transformations",
+            current=INITIAL_ETL_GENERATION,
+            subworkflow_input={"refinement_iteration": 0, "reasoning_effort": None},
+        )
+        self.assertTrue(adapted["ok"], adapted.get("error"))
+        call, _ = _direct_call(adapted)
+        self.assertIsNone(call["reasoning_effort"])
+
+    def test_a_level_the_provider_does_not_accept_is_refused(self) -> None:
+        # Gemini's thinking levels stop at high.
+        config = _configure(
+            providers={
+                "semantic_test_provider": "Google Gemini",
+                "google_thinking_level": "max",
+            }
+        )
+        self.assertFalse(config["ok"])
+        self.assertIn("google_thinking_level", config["error"])
+
+
+if __name__ == "__main__":
+    unittest.main()

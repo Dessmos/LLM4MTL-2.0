@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "testClass": "GeneratedTree2GraphWalkingSkeletonTest",
+  "tests": [
+    {
+      "name": "two_tree_elements_create_two_nodes_and_one_edge",
+      "models": [
+        {
+          "name": "Tree",
+          "kind": "emf",
+          "role": "source",
+          "path": "models/tree.model",
+          "generated": true,
+          "metamodelUri": "Tree"
+        },
+        {
+          "name": "Graph",
+          "kind": "emf",
+          "role": "target",
+          "generated": false,
+          "metamodelUri": "Graph"
+        }
+      ],
+      "assertions": [
+        {"kind": "count", "model": "Graph", "type": "Node", "expected": 2},
+        {"kind": "count", "model": "Graph", "type": "Edge", "expected": 1}
+      ]
+    }
+  ]
+}

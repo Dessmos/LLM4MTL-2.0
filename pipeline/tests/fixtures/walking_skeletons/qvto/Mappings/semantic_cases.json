@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "testClass": "GeneratedQvtoWalkingSkeletonTest",
+  "tests": [
+    {
+      "name": "ecore_classifiers_are_mapped_to_classes",
+      "models": [
+        {
+          "name": "inModel",
+          "kind": "emf",
+          "role": "source",
+          "path": "models/in.ecore",
+          "generated": true,
+          "metamodelUri": "http://www.eclipse.org/emf/2002/Ecore"
+        },
+        {
+          "name": "outModel",
+          "kind": "emf",
+          "role": "target",
+          "generated": false,
+          "metamodelUri": "http://www.eclipse.org/emf/2002/Ecore"
+        }
+      ],
+      "assertions": [
+        {"kind": "count", "model": "outModel", "type": "EPackage", "expected": 1},
+        {
+          "kind": "featureValues",
+          "model": "outModel",
+          "type": "EClass",
+          "feature": "name",
+          "expected": ["mappedA", "mappedB", "mappedC"]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,231 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://llm4mtl/schemas/manifest.schema.json",
+  "title": "Run manifest",
+  "description": "Immutable resolved configuration and provenance for one run. Written once and never replaced. A run = ONE combination of language + task + transformation model/strategy + test-generation model/strategy + seed + pipeline variant. An axis may be null only when no stage in the run consumes it; null never means unconstrained.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "run_id",
+    "language",
+    "task",
+    "transformation_model",
+    "test_generation_model",
+    "transformation_strategy",
+    "test_generation_strategy",
+    "seed",
+    "pipeline_variant",
+    "provenance",
+    "started_at"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "2.0"
+    },
+    "run_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9._-]+$"
+    },
+    "batch_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9._-]+$",
+      "description": "The launch this run was created in; the run lives below that batch's directory. Optional only so manifests recorded before batches existed remain readable."
+    },
+    "preset": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "language": {
+      "type": "string",
+      "enum": [
+        "etl",
+        "atl",
+        "qvto",
+        "reactions"
+      ]
+    },
+    "task": {
+      "type": "string",
+      "not": {
+        "const": "all"
+      },
+      "description": "The one concrete task fixed by this run. Multi-task experiments are expanded into one run per task."
+    },
+    "transformation_model": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "The one value this run fixes for this axis, or null when the axis is not applicable to the stages this run executes. Null never means 'any value': a stage that needs an axis the run left null must refuse rather than select every value."
+    },
+    "test_generation_model": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "The one value this run fixes for this axis, or null when the axis is not applicable to the stages this run executes. Null never means 'any value': a stage that needs an axis the run left null must refuse rather than select every value."
+    },
+    "transformation_strategy": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "The one transformation-generation strategy fixed by this run, or null when no stage consumes it."
+    },
+    "test_generation_strategy": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "The one semantic-test-generation strategy fixed by this run, or null when no stage consumes it."
+    },
+    "seed": {
+      "type": "integer"
+    },
+    "pipeline_variant": {
+      "type": "string",
+      "default": "full"
+    },
+    "experiment_config": {
+      "description": "Exact bounded-loop and feedback configuration selected for this run. Optional only so manifests recorded before this field was introduced remain readable.",
+      "type": "object",
+      "required": [
+        "max_test_refinement_iterations",
+        "max_transformation_refinement_iterations",
+        "parser_feedback",
+        "semantic_feedback",
+        "source_diagnosis"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "max_test_refinement_iterations": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3
+        },
+        "max_transformation_refinement_iterations": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3
+        },
+        "parser_feedback": {
+          "type": "boolean"
+        },
+        "semantic_feedback": {
+          "type": "boolean"
+        },
+        "source_diagnosis": {
+          "type": "boolean"
+        }
+      }
+    },
+    "limits": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "max_syntax_repairs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "max_semantic_repairs": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "git_commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40,64}$"
+        },
+        "git_dirty": {
+          "type": "boolean"
+        },
+        "renderer_version": {
+          "type": "string"
+        },
+        "tool_versions": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "source_revisions": {
+          "type": "object"
+        },
+        "schema_versions": {
+          "type": "object"
+        },
+        "input_hashes": {
+          "type": "object",
+          "description": "Content hashes of the hand-authored inputs that decide the run's outcome: the reference transformation, the task contract, and the metamodels. Without them a stored result cannot be tied to the inputs it was produced from. A custom task hashes the metamodel supplied with the run instead, and records null for the two it has none of.",
+          "required": [
+            "reference_transformation",
+            "task_contract",
+            "metamodels"
+          ],
+          "additionalProperties": true,
+          "properties": {
+            "reference_transformation": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "pattern": "^[0-9a-f]{64}$",
+              "description": "Content hash of this input. Null exactly when the run names no benchmark task: a custom task supplies its own metamodel, so it resolves through no contract and is judged against no reference, and every stage that would read them is disabled for it."
+            },
+            "task_contract": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "pattern": "^[0-9a-f]{64}$",
+              "description": "Content hash of this input. Null exactly when the run names no benchmark task: a custom task supplies its own metamodel, so it resolves through no contract and is judged against no reference, and every stage that would read them is disabled for it."
+            },
+            "metamodels": {
+              "type": "object",
+              "description": "Hash per metamodel file the task contract names, keyed by repository-relative path. The key is always present, so a run that recorded nothing is distinguishable from one that never recorded. It is empty exactly when the contract names no metamodel file at all \u2014 a task whose models are all metamodel-less, such as the plainXml slots of etl/rss2atom. Requiring at least one entry here made such a task impossible to run: provenance has no file to hash, so the manifest could never be written. For a custom task this holds the one metamodel the run was created with, keyed by the name the prompt pastes it under rather than a repository path.",
+              "additionalProperties": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              }
+            }
+          }
+        }
+      },
+      "required": [
+        "git_commit",
+        "git_dirty",
+        "schema_versions",
+        "input_hashes",
+        "renderer_version",
+        "tool_versions"
+      ]
+    },
+    "n8n": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "workflow_id": {
+          "type": "string"
+        },
+        "execution_id": {
+          "type": "string"
+        },
+        "workflow_version": {
+          "type": "string"
+        }
+      }
+    },
+    "started_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}

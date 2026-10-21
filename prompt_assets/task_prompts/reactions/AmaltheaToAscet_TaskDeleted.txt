@@ -1,0 +1,4 @@
+Create a transformation named **amaltheaToAscet** that reacts to changes in the **amalthea** model and executes actions in the **ascet** model.  
+Define a reaction **TaskDeleted** that triggers after an **amalthea::Task** is deleted.  
+In this reaction, call a routine **deleteTask**.  
+The routine should retrieve the corresponding **ascet::Task** for the deleted **amalthea::Task**, and if it exists, remove the **ascet::Task** and also remove the correspondence between the two tasks.

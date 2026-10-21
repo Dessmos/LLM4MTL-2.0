@@ -1,0 +1,85 @@
+{
+  "schemaVersion": "1.0",
+  "task": "rss2atom",
+  "language": "etl",
+  "transformation": "rss2atom.etl",
+  "reference": "benchmark/tasks/etl/references/rss2atom.etl",
+  "sourceHash": "562fd158e4dc8506955f44f9b5fed060eeb48b4e928d500baefd1069e2454e6a",
+  "models": [
+    {
+      "runtimeName": "Atom",
+      "roles": [
+        "target"
+      ],
+      "kind": "plainXml",
+      "metamodelUri": null,
+      "metamodelNsPrefix": null,
+      "metamodelAlias": "Atom",
+      "metamodelFile": null,
+      "typesUsedInTransformation": [
+        "t_author",
+        "t_content",
+        "t_entry",
+        "t_feed",
+        "t_generator",
+        "t_link",
+        "t_name",
+        "t_published",
+        "t_summary",
+        "t_title"
+      ],
+      "availableTypes": [
+        "t_author",
+        "t_content",
+        "t_entry",
+        "t_feed",
+        "t_generator",
+        "t_link",
+        "t_name",
+        "t_published",
+        "t_summary",
+        "t_title"
+      ]
+    },
+    {
+      "runtimeName": "RSS",
+      "roles": [
+        "source"
+      ],
+      "kind": "plainXml",
+      "metamodelUri": null,
+      "metamodelNsPrefix": null,
+      "metamodelAlias": "RSS",
+      "metamodelFile": null,
+      "typesUsedInTransformation": [
+        "t_content:encoded",
+        "t_dc:creator",
+        "t_description",
+        "t_generator",
+        "t_item",
+        "t_link",
+        "t_pubDate",
+        "t_rss",
+        "t_title"
+      ],
+      "availableTypes": [
+        "t_content:encoded",
+        "t_dc:creator",
+        "t_description",
+        "t_generator",
+        "t_item",
+        "t_link",
+        "t_pubDate",
+        "t_rss",
+        "t_title"
+      ]
+    }
+  ],
+  "rules": [
+    "semantic_cases model slots must map to runtimeName exactly.",
+    "EMF namespace URIs and prefixes come only from this contract.",
+    "For plainXml slots, use kind='plainXml' and omit metamodelUri.",
+    "Assertions and declarative changes may use only availableTypes.",
+    "The reference transformation remains the behavioural oracle."
+  ]
+}

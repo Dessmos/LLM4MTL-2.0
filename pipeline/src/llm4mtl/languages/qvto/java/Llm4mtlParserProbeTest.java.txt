@@ -1,0 +1,20 @@
+package org.qvto.parser;
+
+import java.nio.file.Path;
+import org.junit.jupiter.api.Test;
+
+public class Llm4mtlParserProbeTest {
+    @Test
+    void parseRequestedFiles() throws Exception {
+        String raw = System.getProperty("llm4mtl.files", "");
+        for (String item : raw.split(java.io.File.pathSeparator)) {
+            if (item.isBlank()) continue;
+            QVTOParserFacade facade = new QVTOParserFacade();
+            facade.parseFile(Path.of(item));
+            System.out.println("LLM4MTL_PARSE\t" + item + "\t" + facade.getProblemCount());
+            for (String problem : facade.getProblems()) {
+                System.out.println("LLM4MTL_PROBLEM\t" + item + "\t" + problem);
+            }
+        }
+    }
+}

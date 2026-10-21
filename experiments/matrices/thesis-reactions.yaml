@@ -1,0 +1,24 @@
+schema_version: 1
+experiment_id: thesis-reactions
+language: reactions
+
+tasks:
+  - AmaltheaToAscet_ComponentContainerInsertedAsRoot
+  - AmaltheaToAscet_TaskCreated
+  - AmaltheaToAscet_TaskDeleted
+  - FamiliesToPersons_CreatedFather
+  - FamiliesToPersons_DeletedFamily
+  - FamiliesToPersons_DeletedMember
+  - FamiliesToPersons_InsertedDaughter
+  - FamiliesToPersons_InsertedFamilyRegister
+  - NetworkToGraph_ComponentDeleted
+  - NetworkToGraph_ComponentInsertedIntoSystem
+  - NetworkToGraph_ComponentRenamed
+  - NetworkToGraph_CreateAndRegisterRoot
+
+transformation_models: [claude-sonnet-4, gpt-5, gemini-2-5-pro]
+transformation_strategies: [only_prompt, grammar, few_shot, few_shots_AND_grammar]
+test_models: [gpt-5]
+test_strategies: [few_shot]
+variants: [full]
+seeds: [1]

@@ -1,0 +1,286 @@
+Reactions semantic test output contract.
+
+This section is binding and complete. It is the input contract of the Python
+semantic-test extractor: a response that deviates from it is rejected before
+anything is executed and is recorded as an invalid artifact, not as a failing
+test. Every allowed field name and every allowed field value of
+semantic_cases.json is stated below. Use no field name and no field value that
+this section does not list.
+
+The generated response must contain semantic test artifacts only:
+- one semantic_cases.json file block,
+- one generated model file block for every path in models[],
+- no Java, no Xtend, no Maven files, and no prose outside file blocks.
+
+REQUIRED OUTPUT CONTRACT
+
+Follow this structure exactly. It is the input contract of the Python
+semantic-test extractor, not optional guidance.
+
+Use the case-sensitive runtime model names and URIs selected by the current
+Reactions task:
+
+- `AmaltheaToAscet_*`: `amalthea` uses
+  `http://vitruv.tools/methodologisttemplate/amalthea`; `ascet` uses
+  `http://vitruv.tools/methodologisttemplate/ascet`.
+- `FamiliesToPersons_*`: `families` uses
+  `http://vitruv.tools/methodologisttemplate/families`; `persons` uses
+  `http://vitruv.tools/methodologisttemplate/persons`.
+- `NetworkToGraph_*`: `network` uses
+  `http://vitruv.tools/methodologisttemplate/network`; `graph` uses
+  `http://vitruv.tools/methodologisttemplate/graph`.
+
+Both models are always EMF `"inout"` models. Every model entry must contain
+`path`, `"generated": true`, and its exact `metamodelUri`. Never rename the
+runtime slots to `sourceSlot`, `targetSlot`, `input`, or `output` in an actual
+task.
+
+NEITHER GENERATED MODEL FILE MAY CONTAIN A ROOT OBJECT
+
+Every generated model file is an empty XMI wrapper. It declares the metamodel
+prefix and nothing else:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<xmi:XMI xmi:version="2.0"
+    xmlns:xmi="http://www.omg.org/XMI"
+    xmlns:<prefix>="<exact model URI>"/>
+```
+
+The whole initial state is built by `changes`, never by the file. Begin the
+`changes` array with a `create` of the root object, then add the elements the
+test needs, and only then perform the change under test. A `create` without
+`feature` registers its value as a new root.
+
+Two rules follow, and both are absolute:
+
+- The observed model must never receive content of its own. Everything in it
+  has to arrive through change propagation, because that propagation is exactly
+  what the test measures. A test that writes the expected observed elements into
+  its own initial file asserts what it planted and passes even when the
+  transformation does nothing.
+- The changed model must not be seeded either. Vitruv records changes made
+  inside a view; a root loaded from a file and handed to `registerRoot` records
+  nothing, and the run fails with "Cannot identify the packages of this change:
+  TransactionalChangeImpl (empty)" before a single assertion is evaluated.
+
+Building the initial state through `changes` also propagates it, so the
+observed side of the pre-state is produced by the transformation rather than
+asserted into existence.
+
+Every test must use `"scenarioKind": "change_propagation"` and must contain a
+non-empty `changes` array. The only allowed `changes[].kind` values are:
+
+- `"create"`;
+- `"delete"`;
+- `"set_feature"`;
+- `"add_to_collection"`;
+- `"remove_from_collection"`;
+- `"move"`.
+
+Every change has `kind` and `target`. `target` has the exact runtime slot in
+`slot`, an unqualified metamodel type in `type`, and may have a `where` object
+that uniquely identifies an existing element. Use `feature` for
+`set_feature`, `add_to_collection`, `remove_from_collection`, and `move`.
+Use `value` for every change except `delete`. A `value` has one of exactly two
+shapes, and choosing the wrong one is the most common way to produce a suite
+that cannot run.
+
+A created object value builds a new object:
+
+```json
+{
+  "type": "<unqualified created type>",
+  "features": {"<single-valued attribute>": "<initial value>"}
+}
+```
+
+A reference value names an element that already exists:
+
+```json
+{
+  "slot": "<runtime slot>",
+  "type": "<unqualified type>",
+  "where": {"<identity feature>": "<value>"}
+}
+```
+
+Four rules govern which to use:
+
+- `features` sets single-valued attributes only. A multi-valued feature or a
+  reference is never set there; establish it with its own `add_to_collection`
+  change afterwards. Passing a plain string for a multi-valued feature fails
+  with "class java.lang.String cannot be cast to class java.util.Collection".
+- Use a created object value only for a containment feature. For a
+  non-containment reference the value must be a reference value naming an
+  element an earlier change already created; a created object value there
+  builds an object that no container holds, and the run then fails with
+  "dangling object ... detected".
+- Each runtime slot has exactly one root object for the whole test. Create it
+  with a single `create` that has no `feature`, before anything else. Never
+  create a second root in the same slot and never `delete` a root: both
+  produce an empty change and fail with "Cannot identify the packages of this
+  change: TransactionalChangeImpl (empty)".
+- `changes` only ever touch the changed slot. The observed slot receives no
+  `create` and no `add_to_collection` of its own, exactly as its file receives
+  no root: everything observed there must be the transformation's work, or the
+  test proves nothing.
+
+A routine may ask the user which of several elements to create, through a
+single-selection dialog. Such a test must say which option it means, or the
+interaction has no answer, throws, and no assertion is ever evaluated. Add the
+answers to the test, in the order the dialog asks for them, as zero-based
+indices into the option list the task specification gives:
+
+```json
+"userSelections": [0]
+```
+
+The specification lists the options in the order the dialog offers them, so
+index 0 is the first option it names. Leave the field out when the task asks
+the user nothing. The assertions must then expect what that option produces,
+and name the concrete type it creates: an option that creates an
+`InterruptTask` is asserted as `InterruptTask`, not as its supertype `Task`.
+
+Every assertion must contain `kind`, `model`, `type`, and `expected`. `model`
+must equal one of the exact runtime slot names in the same test. `type` is
+unqualified. Never use `object` instead of `model` plus `type`.
+
+Every assertion of a test is evaluated once, after all of that test's changes
+have run. Assertions are never interleaved with changes, so one test cannot
+both watch something appear and watch it disappear: `"expected": 1` and
+`"expected": 0` for the same type in the same test contradict each other and
+one of them always fails.
+
+A test whose only assertion is `"expected": 0` proves nothing either: the
+observed slot starts empty, so the count is zero whether or not the
+transformation ran at all.
+
+A reaction that removes something therefore needs two tests in the `tests`
+array, not one:
+
+1. the first stops at the pre-state -- the changes that make the
+   transformation create the observed element, and an assertion that it exists,
+   `count` with a non-zero `expected` or `featureValues` naming it;
+2. the second repeats those same changes, adds the change that removes the
+   source element, and asserts only that the observed element is gone.
+
+The first test is what separates a proved removal from a test that would pass
+against an empty transformation; the second is the removal itself. Anything a
+test needs in order to run -- `userSelections` above all -- belongs to both,
+because each test starts from an empty virtual model of its own. Give every
+test at least one assertion whose `expected` is non-zero and non-empty, except
+the removal test, whose whole point is the zero.
+
+The pre-state test also decides whether the scenario is expressible at all.
+The observed element must be one the transformation actually produces from the
+change you made. If the presence assertion would come out zero, the source
+element you chose is not one this transformation reacts to, and no later change
+rescues the test. Where a metamodel offers several places to hold the same
+source type -- a single-valued reference and a list, or several lists -- they
+are not interchangeable: a reaction covers the one its trigger
+names and nothing else.
+Put the source element where the task specification puts it; where the
+specification names no place, pick one and let the presence assertion prove
+the choice, instead of assuming every place is covered.
+
+The allowed assertion shapes are:
+
+```json
+{"kind": "count", "model": "<runtime slot>", "type": "<Type>", "expected": 1}
+```
+
+```json
+{
+  "kind": "featureValues",
+  "model": "<runtime slot>",
+  "type": "<Type>",
+  "feature": "<feature>",
+  "expected": ["<value>"]
+}
+```
+
+```json
+{
+  "kind": "pathValues",
+  "model": "<runtime slot>",
+  "type": "<Type>",
+  "path": "<feature.path>",
+  "expected": ["<value>"]
+}
+```
+
+```json
+{
+  "kind": "objects",
+  "model": "<runtime slot>",
+  "type": "<Type>",
+  "features": ["<feature1>", "<feature2>"],
+  "expected": [
+    {"<feature1>": "<value1>", "<feature2>": "<value2>"}
+  ]
+}
+```
+
+```json
+{
+  "kind": "referencePairs",
+  "model": "<runtime slot>",
+  "type": "<LinkType>",
+  "source": "<sourceReference>.<identityFeature>",
+  "target": "<targetReference>.<identityFeature>",
+  "expected": [
+    {"source": "<source identity>", "target": "<target identity>"}
+  ]
+}
+```
+
+`count.expected` must be an integer. All other `expected` values above must be
+arrays. Do not replace `expected` with `value`, `values`, `equals`, `ids`,
+`pairs`, `where`, or `match`.
+
+How the harness reads a value. Every entry of `expected` other than
+`count.expected` is compared as text with what the harness reads from the
+model, rendered the way Java prints it:
+
+- a boolean attribute reads as `"true"` or `"false"`; write these strings,
+  never JSON `true` or `false`;
+- a number reads as Java prints it, for example `"5"`, `"1200.5"`, `"3.0"`;
+- an unset attribute or an empty single-valued reference reads as `"null"`;
+  write the string `"null"`, never JSON `null` and never `""`;
+- a reference reads as the `name`, `label`, `id`, or `value` of the referenced
+  object, whichever of those features the object has first;
+- a multi-valued feature contributes one entry per element, so an empty
+  collection contributes no entry at all.
+
+`type` matches the exact class name and nothing else. An assertion on an
+abstract type or a supertype sees none of its subtypes' instances: to count the
+`InterruptTask` objects a rule creates, name `InterruptTask`, not `Task`, and
+to count `Female` objects name `Female`, not `Person`. When a rule creates one
+of several concrete types, assert the concrete type it creates.
+
+`referencePairs` pairs every value reached through `source` with every value
+reached through `target` on the same link object. It fits a link with two
+distinct single-valued references, such as `from`/`to`. For a link that holds
+its ends in one multi-valued reference, do not name that reference as both
+`source` and `target` (that yields every combination, including an end paired
+with itself); use `pathValues` on the reference instead, for example
+`"path": "<ends>.<identityFeature>"` with one expected entry per end.
+
+The `semantic_cases.json` block has exactly these top-level fields:
+
+- `"schemaVersion": 1`;
+- `testClass`: a Java identifier;
+- `transformation`: `"transformations/<task>.reactions"`;
+- `metamodels`: one `{"name": ..., "uri": ...}` entry for the changed runtime
+  slot and one for the observed runtime slot, each with its exact model URI;
+- `tests`: the array of tests.
+
+Every test has `name`, `"scenarioKind": "change_propagation"`, `models`,
+`changes`, and `assertions`, plus `userSelections` only as described above.
+Every `models[]` entry has `name`, `"kind": "emf"`, `"role": "inout"`,
+`path`, `"generated": true`, and `metamodelUri`.
+
+After the `semantic_cases.json` block, emit exactly one XML file block for
+every path in `models[]`. Each of those blocks is the empty XMI wrapper shown
+above and contains no root object. Emit no prose outside file blocks.

@@ -1,0 +1,5 @@
+Create a transformation named **amaltheaToAscet** that reacts to changes in the **amalthea** model and executes actions in the **ascet** model.  
+
+Define a reaction **TaskCreated** that triggers whenever a **Task** is inserted into a **ComponentContainer**. This reaction should call a routine **createAscetTask**, which asks the user via a selection dialog whether to create an **InterruptTask**, **PeriodicTask**, **SoftwareTask**, **TimeTableTask**.  
+
+Implement routines **createInterruptTask**, **createPeriodicTask**, **createSoftwareTask**, and **createTimeTableTask** that each retrieve the corresponding **AscetModule**, ensure no duplicate task exists, create the chosen task type, add it to the module, and establish the correspondence.
