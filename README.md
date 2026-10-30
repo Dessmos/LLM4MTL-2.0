@@ -254,5 +254,3 @@ QVT-O, or Reactions code. The full set of dependency rules is explained in
 | Adding a task | [docs/adding-task.md](docs/adding-task.md) |
 | Adding a provider | [docs/adding-provider.md](docs/adding-provider.md) |
 | Offline evaluation | [evaluation/README.md](evaluation/README.md) |
-
-Contributor and repository rules are documented in [AGENTS.md](AGENTS.md).
