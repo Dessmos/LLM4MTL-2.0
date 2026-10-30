@@ -246,11 +246,6 @@ QVT-O, or Reactions code. The full set of dependency rules is explained in
 | --- | --- |
 | Architecture and ownership | [docs/architecture.md](docs/architecture.md) |
 | End-to-end data flow | [docs/data-flow.md](docs/data-flow.md) |
-| Measurement and evaluation | [docs/measurement-spec.md](docs/measurement-spec.md) |
-| n8n/Python stage contract | [docs/n8n-python-contract.md](docs/n8n-python-contract.md) |
-| Stage service API | [docs/runner-api.md](docs/runner-api.md) |
-| Model and provider selection | [docs/model-selection.md](docs/model-selection.md) |
 | Adding a language | [docs/adding-language.md](docs/adding-language.md) |
 | Adding a task | [docs/adding-task.md](docs/adding-task.md) |
 | Adding a provider | [docs/adding-provider.md](docs/adding-provider.md) |
-| Offline evaluation | [evaluation/README.md](evaluation/README.md) |
